@@ -213,7 +213,7 @@ def _arrow_type_eq(a: str, b: str) -> bool:
     return norm(a) == norm(b)
 
 
-# JSON-Schema keyword sets that hold sub-schemas (mirrors
+# JSON-Schema keyword sets that hold sub-schemas (imported from
 # analitiq.contracts.shared.json_schema):
 # a schema-aware walk recurses only through these — never through data keywords
 # like `const`/`default`/`enum`, and it treats `properties` children as field

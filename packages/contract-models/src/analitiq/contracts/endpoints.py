@@ -1589,7 +1589,7 @@ def _validate_schema_refs(
 
     Walks the same structural positions as
     :func:`_validate_arrow_type_in_json_schema` — the shared
-    ``_JSON_SCHEMA_*_KEYS`` sets, so the two cannot disagree about what counts
+    ``JSON_SCHEMA_*_KEYS`` sets, so the two cannot disagree about what counts
     as a schema position. Never follows a `$ref` itself: the walk is over the
     document's own tree, and every local target is already part of it.
     """

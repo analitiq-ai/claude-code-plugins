@@ -435,9 +435,8 @@ def _json_schema_node_properties() -> dict[str, Any]:
 
     The vocabulary has one owner, `analitiq.contracts.shared.json_schema`; this
     renderer, the contract's walkers and the validator's `_SUBSCHEMA_*_KEYS` all
-    import it. Nothing here restates it: a keyword landing in the sets reaches
-    this node and its description (below) together, and a pinned `X.Y.Z.json`
-    is immutable once published, so a copy that lagged could never be corrected.
+    import it. Nothing here restates it, so a keyword landing in the sets
+    reaches this node and its description (below) together.
     """
     properties: dict[str, Any] = {
         "arrow_type": {"type": "string", "pattern": ARROW_TYPE_PATTERN},

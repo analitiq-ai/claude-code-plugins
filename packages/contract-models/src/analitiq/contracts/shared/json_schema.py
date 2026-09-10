@@ -1,14 +1,20 @@
 """Reading an embedded JSON Schema: pointers, composition, declared-path queries.
 
-Everything this package knows about the inside of a JSON Schema document is
-here: resolving an RFC 6901 pointer, folding `$ref` and `allOf` into the node
-they compose, and asking a composed node what it declares. The endpoint
-document is not known here. Callers own the rule ids, the messages an author
-reads, and the unknowable-to-skip convention; this module answers in JSON
-Schema terms and raises :class:`SchemaResolutionError` where the document
-contradicts itself. The one contract-specific fact it carries is the set of
-type markers in ``_CONTRACT_TYPE_MARKERS``, because composition has to know
-that an explicit `null` marker spells "not declared".
+Resolving an RFC 6901 pointer, folding `$ref` and `allOf` into the node they
+compose, and asking a composed node what it declares all live here. The walks
+that grade an embedded schema against the endpoint contract's own rules stay
+beside the models that call them, in `analitiq.contracts.endpoints`. The
+endpoint document is not imported here and its error dialect is not spoken
+here: callers own the rule ids and the messages an author reads, and this
+module answers in JSON Schema terms, raising :class:`SchemaResolutionError`
+where it refuses to answer — a contradiction it can prove, or a path the
+document does not unconditionally declare. The contract facts it carries are
+the type markers in ``_CONTRACT_TYPE_MARKERS`` and what they spell: an
+explicit `null` marker is "not declared", a node carrying every marker is
+typed, and an `arrow_type` other than `Object` rules out an object-shaped
+node. The one concession to callers is that a materialized node keeps an
+explicit empty `properties` map, so a caller can tell "zero declared fields"
+from "unknowable".
 
 **Structural positions.** A walk descends only through the keywords in
 ``JSON_SCHEMA_SUBSCHEMA_KEYS`` (maps of schemas), ``JSON_SCHEMA_LIST_OF_SCHEMA_KEYS``
@@ -23,11 +29,13 @@ composition walks is a DAG with back-edges, not a tree: `$defs` entries are
 reached from several places, `allOf` multiplies the routes, and a recursive
 `$defs` is legal and common. Every fold reads its sources in ONE order — the
 `$ref` target, then the `allOf` branches in document order, then the node
-itself — with the last contributor winning. Flattening that into a single
-pre-order and reversing it inverts precedence between a direct later branch
-and a transitively reached contributor of an earlier one, so a nearby `allOf`
-override silently loses to a distant base and a column changes type with no
-error anywhere. :func:`_contributors` and :func:`_materialize` are one fold
+itself — with the last contributor winning for scalar and list values;
+object values merge, and `type` INTERSECTS, because `$ref` and `allOf` are
+intersections in 2020-12 (:func:`composed_schema_keys`). Flattening that into
+a single pre-order and reversing it inverts precedence between a direct later
+branch and a transitively reached contributor of an earlier one, so a nearby
+`allOf` override silently loses to a distant base and nothing here raises.
+:func:`_contributors` and :func:`_materialize` are one fold
 seen from two angles — one keeps each name's declarations as a list, the
 other folds them into a value — and they disagree, silently, the moment they
 are computed differently.
@@ -35,30 +43,34 @@ are computed differently.
 **The fold's memo and cycle scheme.** Expanding each route separately is
 exponential in depth. The fold is memoised on its RESULT, keyed by node
 identity with the node held beside its result so a freed identity cannot be
-reused mid-walk, and it carries a separate `on_path` set. The two answer
-different questions: a node already VISITED returns its cached result, while a
+reused mid-walk, and it carries a separate `on_path` set. The memo and the
+on-path set answer different questions: a node already VISITED returns its
+cached result, while a
 node on the CURRENT path contributes nothing — a cycle contributes nothing the
 second time it is met. Memoising per node while refusing to cache any result
 computed under a cycle does not work: the "under a cycle" flag propagates to
 every ancestor, so one back-edge leaves the whole walk uncached and
-exponential again, slower than no memo at all. Memoising the result
+exponential again, slower than no memo at all because it also pays for the
+bookkeeping. Memoising the result
 reproduces the fold exactly on an acyclic document and visits each node once,
 so cyclic and acyclic cost the same.
 
-**Two walks that are not the fold.** :func:`_composed_unions` enumerates the
+**Walks that are not the fold.** :func:`_composed_unions` enumerates the
 `anyOf`/`oneOf` lists a node inherits through `$ref` and `allOf`, and keeps a
 VISITED set with no memo: every union must hold, so yielding a shared node's
 unions once is enough, and visiting each node once is what keeps a `$defs`
 subgraph reached from several branches linear rather than exponential.
 :func:`_declares_a_type_walk` descends `anyOf`/`oneOf` branches asking whether
-every branch is typed, materialising each branch first; it tracks the RAW
+every branch is typed, materialising each branch first when a root is in
+hand; it tracks the RAW
 branch object on its path, because every materialization builds a fresh memo,
 so a materialised result has a new identity each time and a recursive alias
 through a union is a cycle the fold's own guard never sees.
 
 **Declared-path resolution.** ONE algorithm answers "does this dotted path
-address something the document declares?" for every caller that asks
-(:func:`resolve_declared_path`, over :func:`effective_properties`). A segment
+address something the document declares?" for every caller that asks —
+:func:`resolve_declared_path` and :func:`effective_properties`, each over
+:func:`_property_contributors` and :func:`_compose_declarations`. A segment
 resolves when the current node declares it under `properties`, counting the
 declarations `allOf` branches and an in-document `$ref` target contribute,
 because those always apply. It deliberately does NOT guess: `anyOf` /
@@ -87,8 +99,9 @@ from urllib.parse import unquote
 
 
 # Sentinel for "key absent", distinct from a key present with value null: a
-# pointer can legitimately land on a JSON null, and a `null` type marker counts
-# as "not declared" for pairing purposes.
+# pointer can legitimately land on a JSON null.
+# `analitiq.contracts.endpoints._validate_arrow_type_in_json_schema` reads the
+# same sentinel off a type marker for the same reason.
 _MISSING = object()
 
 
@@ -138,8 +151,8 @@ class DeclarationConflictError(SchemaResolutionError):
     """Contributors for one name cannot all hold. Carries NO path coordinates.
 
     Raised wherever composition proves a contradiction — `_refuse_disjoint_types`
-    (from :func:`_compose_declarations`, :func:`_combine_schema_values` and
-    :func:`_materialize`) and `_reject_unsatisfiable_branch` (from BOTH walkers).
+    (from every fold and per-name merge that composes declarations) and
+    `_reject_unsatisfiable_branch` (from every fold).
     Each inspects a node or a name; none knows where it sits in anyone's path.
     :func:`resolve_declared_path` catches every one of them and re-raises a
     :class:`DeclaredPathError` carrying the segment it was resolving, so a
@@ -231,14 +244,14 @@ def resolve_local_pointer(root: Any, ref: str) -> Any:
     * array indices follow RFC 6901 §4 exactly (:func:`_pointer_array_index`);
     * a plain-name fragment (`#name`) resolves to nothing here. It is an
       `$anchor` reference, and this contract does not author anchors — the
-      guard rejects both the anchor declaration and the reference to it with
+      guard (:func:`analitiq.contracts.endpoints._validate_schema_refs`)
+      rejects both the anchor declaration and the reference to it with
       their own message, so an author is never told a working anchor is
       "dangling".
 
     A non-local `ref` (anything not starting with `#`) is never resolved here:
-    the contract refuses those outright
-    (:func:`analitiq.contracts.endpoints._validate_schema_refs`), because
-    nothing in the offline validate/author/execute path can fetch them.
+    the same guard refuses those outright, because nothing in the offline
+    validate/author/execute path can fetch them.
 
     This walk is position-blind: it will happily land inside a `default` or an
     `examples` payload. Everything that *follows* a ref goes through
@@ -290,13 +303,14 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
     """Resolve an in-document `$ref` that lands on a SCHEMA, or ``_MISSING``.
 
     :func:`resolve_local_pointer` restricted to pointers that stay inside
-    schema positions — the same ``_JSON_SCHEMA_*_KEYS`` inventory both
-    structural walkers recurse through, plus the `$defs`/`definitions` maps.
+    schema positions — the same ``JSON_SCHEMA_*_KEYS`` inventory every walk
+    over an embedded schema recurses through, plus the `$defs`/`definitions`
+    maps.
 
-    Why the restriction is load-bearing: the walkers deliberately do NOT descend
-    into `default`, `examples`, `const` or `enum`, because those carry arbitrary
-    user data that may be shaped exactly like a schema. A pointer such as
-    `#/properties/x/default` would therefore reach a subtree that no walker ever
+    Why the restriction is load-bearing: no walk descends into `default`,
+    `examples`, `const` or `enum`, because those carry arbitrary user data that
+    may be shaped exactly like a schema. A pointer such as
+    `#/properties/x/default` would therefore reach a subtree that nothing ever
     annotation-checked and no type map ever covered — and declared-path
     resolution would then hand that unvalidated node to its callers as if it
     were a declaration. Refusing to resolve there is what makes the guarantee
@@ -398,7 +412,7 @@ def composed_schema_keys(
 
     Source order is `$ref` target, then `allOf` branches in document order, then
     the node itself, with the last contributor winning — the order the module
-    comment above states for both walkers. `type` is the exception and
+    docstring states for every fold. `type` is the exception and
     INTERSECTS: `$ref` and `allOf` are intersections in 2020-12, so a node
     reached through both `{"type": ["string", "null"]}` and
     `{"type": ["object", "string"]}` can only be a string. Last-wins on that key
@@ -424,7 +438,7 @@ def _compose_schema_keys(
 ) -> dict[str, Any]:
     """:func:`composed_schema_keys`' memoized worker. Same memo-and-`on_path`
     scheme as :func:`_materialize` and :func:`_contributors`, stated in the
-    module comment above: the result is cached, and a node met again while it is
+    module docstring: the result is cached, and a node met again while it is
     still on the current path contributes nothing."""
     key = id(node)
     cached = memo.get(key)
@@ -652,7 +666,7 @@ def _contributors(
     memo: dict[int, tuple[Any, dict[str, list[Any]]]],
     on_path: set[int],
 ) -> dict[str, list[Any]]:
-    """Memoized worker. See :func:`_materialize` for the memo/cycle scheme."""
+    """Memoized worker. See the module docstring for the memo/cycle scheme."""
     key = id(node)
     cached = memo.get(key)
     if cached is not None:
@@ -703,7 +717,7 @@ def _contributors(
 def _reject_unsatisfiable_branch(branch: Any) -> None:
     """`allOf: [false, …]` is an empty intersection.
 
-    Checked in BOTH walkers rather than only the materializing one: a rule
+    Checked in every fold rather than only the materializing one: a rule
     enforced by one view and not the other is how `effective_properties` came to
     answer `{}` where `materialize_node` raised, which crashed a public helper on
     a document the gate had accepted. `true` is vacuous and is simply skipped.
@@ -749,7 +763,8 @@ def _compose_declarations(key: str, declarations: list[Any]) -> Any:
     sets are disjoint cannot both hold, so nothing satisfies the intersection
     and no answer about the field is honest. Proof is required — mere
     inequality is not a contradiction — because rejecting on difference alone
-    would break monotonicity with the `properties`-only walk this replaced.
+    would break monotonicity: a path a `properties`-only walk resolves must
+    still resolve here, to the same node.
     """
     if not declarations:
         # Unreachable via `_property_contributors`, which only creates a bucket
@@ -778,16 +793,18 @@ _MATERIALIZED_NODE = "<this node>"
 def _refuse_disjoint_types(where: str, sources: list[Any]) -> None:
     """Raise when ``sources`` declare `type` sets whose intersection is empty.
 
-    The one contradiction declared-path resolution can PROVE. Shared by
-    :func:`_compose_declarations` (the contributors of one property name) and
-    :func:`materialize_node` (a node folded with its `$ref`/`allOf` sources) so
-    that the two agree: composing and materializing are the same intersection
-    seen from two directions, and a rule enforced by only one of them is a gate
-    the other walks past. Proof is required — mere inequality is not a
-    contradiction — or monotonicity with the `properties`-only walk breaks.
+    The one contradiction declared-path resolution can PROVE. Shared by every
+    site that composes declarations — the contributors of one property name
+    (:func:`_compose_declarations`) and a node folded with its `$ref`/`allOf`
+    sources (:func:`_compose_schema_keys`, :func:`_combine_schema_values`,
+    :func:`_materialize`) — so that they agree: composing and materializing
+    are the same intersection seen from two directions, and a rule enforced by
+    only one of them is a gate the other walks past. Proof is required — mere
+    inequality is not a contradiction — or monotonicity breaks: a path a
+    `properties`-only walk resolves must still resolve here, to the same node.
 
     Raises :class:`DeclarationConflictError`, which carries no path coordinates:
-    both callers inspect a node or a name and neither knows where it sits in
+    every caller inspects a node or a name and none knows where it sits in
     anyone's path. :func:`resolve_declared_path` re-raises it with the segment
     it was resolving.
     """
@@ -1145,7 +1162,7 @@ def resolve_declared_path(
 ) -> Any:
     """Resolve ``segments`` against ``start_node`` by declared-path resolution.
 
-    THE contract's path-resolution rule (see the module comment above). For each
+    THE contract's path-resolution rule (see the module docstring). For each
     segment: the current node must be an object schema; the segment must be
     declared by one of that node's unconditional contributors
     (:func:`_property_contributors`); resolution moves to the composition of
@@ -1228,7 +1245,7 @@ def _declares_a_type(node: Any, root: Any = None) -> bool:
     (`materialize_node` does not recurse into `anyOf`/`oneOf` branches on its
     own), so `root` — the same root `node` was materialized against — resolves
     each branch before it is inspected; a caller with no root in scope simply
-    cannot recognise a `$ref` branch's type, same as before this recursed.
+    cannot recognise a `$ref` branch's type.
     """
     return _declares_a_type_walk(node, root, set())
 
