@@ -359,18 +359,13 @@ class TestScalarNodePropertiesAreNotTraversable:
         schema = {"type": "string", "properties": {"email": {"type": "string"}}}
         assert _json_schema_top_level_fields(schema) == set()
 
-    def test_the_object_permission_check_does_not_leak_across_sibling_nodes(self):
-        # `_composed_permits_object`'s memo must be FRESH per gate-check, not
-        # threaded across the whole `_contributors` walk the way `_contributors`'
-        # own memo is: `BranchA` sits on a `$ref` cycle through `Cycler` and is
-        # itself string-typed, so `Cycler`'s composed type is correctly "string"
-        # once BranchA fully resolves — but computed WHILE BranchA is still
-        # "on path" (mid-resolution), the cycle rule truncates that contribution
-        # to nothing. A memo shared across BOTH `BranchA`'s and `BranchB`'s gate
-        # checks caches that truncated `{}` for `Cycler` and serves it, wrongly,
-        # to `BranchB` — which never had BranchA on ITS path — making a
-        # string-typed node's `properties` look untyped and therefore
-        # trustworthy. `leakB` must be excluded exactly like `leakA` is.
+    def test_a_cyclic_ref_does_not_hide_a_sibling_branchs_scalar_type(self):
+        # `BranchA` is string-typed and sits on a `$ref` cycle through
+        # `Cycler`, so folding it truncates `Cycler`'s contribution to nothing
+        # — the cycle rule every walker in this file shares. That truncation
+        # must not cost the composed node its type: `BranchA`'s own
+        # `type: "string"` still reaches the verdict, and `BranchB`'s
+        # `properties` are excluded by it exactly as `BranchA`'s own are.
         defs = {
             "BranchA": {
                 "$ref": "#/$defs/Cycler",
@@ -388,11 +383,12 @@ class TestScalarNodePropertiesAreNotTraversable:
         assert effective_properties(node, root) == {}
 
     def test_a_non_object_arrow_type_with_no_bare_type_key_does_not_permit_properties(self):
-        # `arrow_type` is the contract's own type marker and stands in for a
-        # bare `type` key — a scalar `arrow_type` (`Utf8`, here reached through
-        # a `$ref` so no OTHER walker's same-dict sibling check catches it
-        # first) must not be read as "no type declared" just because there is
-        # no literal `type` key on the composed node.
+        # `arrow_type` is the contract's own type marker, so a scalar one
+        # excludes `object` even where the composed node carries no literal
+        # `type` key to say so. Reached through a `$ref` here on purpose:
+        # `_validate_arrow_type_in_json_schema` rejects a scalar `arrow_type`
+        # beside a SAME-DICT `properties` map, so only the composed spelling
+        # reaches this gate at all.
         root = {
             "$defs": {"Str": {"native_type": "text", "arrow_type": "Utf8"}},
             "$ref": "#/$defs/Str",
@@ -401,118 +397,16 @@ class TestScalarNodePropertiesAreNotTraversable:
         assert effective_properties(root, root) == {}
         assert materialize_node(root)["properties"] == {}
 
-    def test_a_bare_type_excluding_object_is_not_overruled_by_arrow_type_object(self):
-        # `_validate_arrow_type_in_json_schema` checks `arrow_type` against
-        # its OWN sibling `properties`/`items` shape but never against a
-        # sibling bare `type`, so a node pairing `type: "string"` with
-        # `native_type`/`arrow_type: "Object"` passes that walker — reading
-        # `arrow_type` alone here would trust `properties` for an instance
-        # the `type` assertion already rules out. Both markers are
-        # intersected: either excluding `object` excludes it.
-        node = {
-            "type": "string",
-            "native_type": "text",
-            "arrow_type": "Object",
-            "properties": {"age": {"type": "integer"}},
-        }
-        assert effective_properties(node) == {}
-        assert materialize_node(node)["properties"] == {}
-        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
-            resolve_declared_path(node, ["age"])
-
-    def test_an_explicit_null_annotation_does_not_override_an_inherited_exclusion(self):
-        # `_validate_arrow_type_in_json_schema` treats an explicit `null` on
-        # `native_type`/`arrow_type` as "not declared", the same convention
-        # `own_markers` must follow: a sibling `"native_type": null` beside a
-        # `$ref` to a scalar base is not a substantive override and must not
-        # replace the base's inherited exclusion with the vacuous "no markers
-        # at all" default — a bare KEY present with a `None` value is not the
-        # same as the key being absent.
+    def test_an_explicit_null_arrow_type_is_not_read_as_a_declaration(self):
+        # `_validate_arrow_type_in_json_schema` reads an explicit `null` on
+        # `arrow_type` as "not declared", and the composed-type fold follows
+        # the same convention: a key present with a `None` value must not
+        # count as a marker and blank the exclusion inherited from the scalar
+        # `$ref` base.
         root = {
             "$defs": {"Scalar": {"type": "string"}},
             "$ref": "#/$defs/Scalar",
-            "native_type": None,
-            "properties": {"age": {"type": "integer"}},
-        }
-        assert effective_properties(root, root) == {}
-        assert materialize_node(root)["properties"] == {}
-        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
-            resolve_declared_path(root, ["age"], root=root)
-
-    def test_an_own_type_disjoint_from_an_inherited_one_is_rejected_not_overridden(self):
-        # A `$ref` carries no "override the base" license by itself: per
-        # 2020-12, `{"$ref": Base, "type": "object"}` composes to Base's
-        # constraints AND this node's own, so `Base: {type: "string"}` beside
-        # an own `type: "object"` is the same provable contradiction
-        # `materialize_node` already refuses via `_refuse_disjoint_types` — the
-        # own-marker override must be checked against what it would override,
-        # not applied unconditionally, or `resolve_declared_path`/
-        # `effective_properties` resolve a path through a node no instance can
-        # ever have while `materialize_node` refuses the same document.
-        root = {
-            "$defs": {"Scalar": {"type": "string"}},
-            "$ref": "#/$defs/Scalar",
-            "type": "object",
-            "properties": {"age": {"type": "integer"}},
-        }
-        with pytest.raises(DeclarationConflictError, match="conflicting redeclaration"):
-            materialize_node(root)
-        with pytest.raises(DeclarationConflictError, match="conflicting redeclaration"):
-            effective_properties(root, root)
-        # `resolve_declared_path` never lets a `DeclarationConflictError`
-        # escape raw — it re-raises with the segment/index it was resolving
-        # (see the function's own docstring), so the same contradiction
-        # surfaces here as a `DeclaredPathError` instead.
-        with pytest.raises(DeclaredPathError, match="conflicting redeclaration"):
-            resolve_declared_path(root, ["age"], root=root)
-
-    def test_a_scalar_only_anyof_union_does_not_permit_properties(self):
-        # A node can express its scalar type through `anyOf`/`oneOf` instead
-        # of a bare `type` key: an instance satisfying the union need only
-        # match ONE branch, so the union's possible types are its branches'
-        # types UNIONED — `{string, null}` here, neither of which is
-        # `object`. `_fold_permits_object` must fold this union the same as
-        # any other composition keyword, or a node with no bare `type` of its
-        # own and no `object`-permitting branch anywhere still defaults to
-        # "permits object".
-        node = {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "properties": {"age": {"type": "integer"}},
-        }
-        assert effective_properties(node) == {}
-        assert materialize_node(node)["properties"] == {}
-        # `anyOf` is also a CONDITIONAL_DECLARATION_KEYWORD: once "age" is
-        # correctly excluded from `properties`, the ambiguity check (not the
-        # plain "not declared" one) is what fires — see
-        # TestNotStaticallyResolvable for that message's own coverage.
-        with pytest.raises(DeclaredPathError, match="not statically resolvable"):
-            resolve_declared_path(node, ["age"])
-
-    def test_a_oneof_union_with_no_object_branch_does_not_permit_properties(self):
-        # `oneOf`'s exclusivity ("exactly one branch") is irrelevant to which
-        # types are POSSIBLE — an instance still need only match one branch,
-        # so `oneOf` folds identically to `anyOf` here.
-        node = {
-            "oneOf": [{"arrow_type": "Utf8"}, {"arrow_type": "Int64"}],
-            "properties": {"age": {"type": "integer"}},
-        }
-        assert effective_properties(node) == {}
-        assert materialize_node(node)["properties"] == {}
-
-    def test_an_own_arrow_type_object_does_not_override_an_inherited_bare_type(self):
-        # The two tracks this predicate composes — bare `type` and
-        # `arrow_type` — never merge: an own `arrow_type: "Object"` overrides
-        # an INHERITED `arrow_type` exclusion (the legitimate "enclosing
-        # override" idiom, see the `arrow_type: "Utf8"` rescue test above),
-        # but must never override an inherited BARE `type` exclusion moved
-        # into the `$ref` target instead of restated on this node — `Scalar:
-        # {type: "string"}` still excludes `object` for a referencing node
-        # whose own declaration never repeats a bare `type` of its own.
-        root = {
-            "$defs": {"Scalar": {"type": "string"}},
-            "$ref": "#/$defs/Scalar",
-            "native_type": "record",
-            "arrow_type": "Object",
+            "arrow_type": None,
             "properties": {"age": {"type": "integer"}},
         }
         assert effective_properties(root, root) == {}
@@ -569,34 +463,14 @@ class TestScalarNodePropertiesAreNotTraversable:
         assert effective_properties(node) == {}
         assert materialize_node(node)["properties"] == {}
 
-    def test_an_excluding_arrow_type_sibling_is_not_overruled_by_a_later_one(self):
-        # `_declared_types`/`_refuse_disjoint_types` only reads a bare `type`
-        # key, so two `allOf` siblings disagreeing over `arrow_type` slip past
-        # that contradiction check — the composed-type fold is the only
-        # remaining place order could still decide the verdict. A
-        # last-source-wins fold let the LATER sibling's `arrow_type: "Object"`
-        # overrule the EARLIER sibling's `arrow_type: "Utf8"` and treated the
-        # later sibling's `properties` as trustworthy, for a node no
-        # conforming instance can ever have both types at once.
-        node = {
-            "allOf": [
-                {"arrow_type": "Utf8"},
-                {"arrow_type": "Object", "properties": {"age": {"type": "integer"}}},
-            ],
-        }
-        assert effective_properties(node) == {}
-        assert materialize_node(node)["properties"] == {}
-        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
-            resolve_declared_path(node, ["age"])
-
     def test_an_enclosing_arrow_type_override_rescues_a_scalar_refs_properties(self):
-        # The mirror of the test above: `node`'s OWN `arrow_type` is not one
-        # more contributor to intersect against its `$ref` target — it
-        # OVERRIDES the target, the same "node's own statements win" rule
-        # every other key in this fold follows. Pruning `Scalar`'s `properties`
-        # from ITS OWN local (scalar) type, before `node`'s override to
-        # `"Object"` is applied, discarded them permanently and left `node`
-        # with none even though `node` itself is object-shaped.
+        # The composed type is folded last-wins over the shared source order,
+        # the same rule `_combine_schema_values` applies to every other scalar
+        # key — so a node re-declaring `arrow_type: "Object"` over a scalar
+        # `$ref` base composes to `Object`, and the base's `properties` are
+        # reachable through it. `materialize_node` reports the same
+        # `arrow_type` for this document, which is what keeps the gate and the
+        # materialized node agreeing.
         root = {
             "$defs": {
                 "Scalar": {

@@ -4173,213 +4173,126 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
 
 
 def _composed_permits_object(node: dict[str, Any], root: Any) -> bool:
-    """Whether ANY `properties` map in ``node``'s composition tree may be
-    trusted — the one predicate `resolve_declared_path`/`effective_properties`
-    (via :func:`_property_contributors`/`_contributors`) and `materialize_node`
-    (via :func:`_materialize`) both gate `properties` behind, so the two walks
-    cannot disagree about whether a node is object-shaped.
+    """Whether ``node``'s `properties` map describes fields an instance can
+    actually carry — the one gate `resolve_declared_path`/`effective_properties`
+    (via :func:`_property_contributors`/:func:`_contributors`) and
+    `materialize_node` (via :func:`_materialize`) both put in front of
+    `properties`, so the two walks cannot disagree about whether a node is
+    object-shaped.
 
-    THE SPEC, stated once because :func:`_fold_permits_object` implements it
-    across several keywords and would otherwise re-derive it per branch:
+    JSON Schema applies `properties` only to object instances, so
+    `{"type": "string", "properties": {"age": …}}` describes a string and
+    nothing more: the map is written down, and no conforming instance carries a
+    single name out of it.
 
-    A node's possible JSON types are TWO independent tracks, both of which
-    must include `"object"` for its `properties` to be trustworthy:
+    A node permits object when it declares no type at all (`properties` with no
+    `type` is JSON Schema's own implicit-object idiom), when its declared `type`
+    includes `object`, or when its `arrow_type` is `Object`. `arrow_type` is the
+    contract's own type marker and answers ahead of the bare JSON `type`, so a
+    scalar one — `Utf8` reached through a `$ref`, say — excludes object even
+    where no bare `type` key exists to say so.
 
-    * **The bare-`type` track**, composed by TRUE intersection — `$ref`
-      target, every `allOf` branch, every `anyOf`/`oneOf` branch-UNION (an
-      instance satisfying a union can be shaped like ANY ONE branch, so the
-      union's possible types are those branches' types UNIONED together,
-      then that union is intersected into the rest like any other
-      contributor), and the node's OWN bare `type` — ALL apply
-      simultaneously, none overriding another, because 2020-12 composes a
-      `$ref` with its sibling keywords by intersection, not replacement.
-      `None` at any point means "asserts no bare type" (vacuous — narrows
-      nothing); the whole track is `None` (unconstrained, permits object)
-      only if NOTHING anywhere in the tree asserts a bare `type`. An empty
-      intersection is a provable contradiction — the same one
-      `_refuse_disjoint_types` raises for a materialized node's sources —
-      raised here too, so `resolve_declared_path`/`effective_properties`
-      cannot resolve a path through a node `materialize_node` refuses.
-    * **The `arrow_type` track**, composed by intersection EXCEPT that the
-      node's OWN `arrow_type` — a substantive (non-`null`) one, the contract's
-      OWN authoritative type marker, layered independently of bare JSON
-      `type` — OVERRIDES whatever `$ref`/`allOf`/`anyOf`/`oneOf` sources
-      computed, the same "node's own statements win" rule this file's shared
-      source order applies to every other key. This is what lets
-      `allOf: [{$ref: Base}, {arrow_type: "Object"}]` re-permit a scalar
-      `arrow_type: "Utf8"` base's `properties`. An explicit `null` on
-      `arrow_type` is the contract's OWN "not declared" spelling
-      (`_validate_arrow_type_in_json_schema` reads it the same way) and is
-      not a substantive override.
+    The verdict is read off the COMPOSED node, never off its literal keys:
+    `{"$ref": "#/$defs/Str", "properties": {…}}` states no `type` of its own and
+    is scalar all the same. :func:`_fold_type_markers` composes the markers with
+    the same source order and the same last-wins rule :func:`_materialize`
+    applies to every other scalar key, so this predicate and a materialized node
+    report the same type for the same document.
 
-    The two tracks never merge: an OWN `arrow_type: "Object"` can widen past
-    an INHERITED `arrow_type` exclusion, but never past an inherited (or
-    sibling own) bare-`type` exclusion — `{"$ref": Base, "arrow_type":
-    "Object"}` over `Base: {"type": "string"}` still excludes `object`, since
-    nothing here overrides the bare-`type` track.
+    Deliberately a separate fold rather than a call to :func:`materialize_node`:
+    that fold is what this predicate gates, so it cannot also be what decides
+    the gate.
 
-    :func:`_property_contributors` calls this exactly once per walk, on the
-    ORIGINAL top-level node, and threads the one verdict down through every
-    recursive `_contributors` call unchanged — computing it per branch
-    instead let a `properties`-only branch (which alone declares no type and
-    would default to "permits object") escape a sibling branch's exclusion.
+    Sources that contradict each other are :func:`_refuse_disjoint_types`'
+    subject, not this one's. This gate answers which types a node composes to;
+    it does not fold in that refusal, and a document it calls scalar is
+    well-formed rather than contradictory.
 
-    Deliberately a separate walk rather than a call to :func:`materialize_node`:
-    that fold is what this predicate exists to gate, so it cannot be the thing
-    consulted to make that decision — calling it here would re-enter the
-    property fold this function is upstream of.
-
-    Memoized only WITHIN this call's own recursion (a fresh memo dict per
-    call, never reused across separate calls to this function) via
-    :func:`_fold_permits_object` — a `$ref`/`allOf` DAG with shared `$defs`
-    reached from several branches of the same tree would otherwise re-walk
-    the shared subgraph once per branch. `TestCompositionIsLinearNotExponential`
-    in `test_response_path_resolution.py` is the regression test pinning that
-    a shared diamond stays linear, cyclic or not.
+    :func:`_property_contributors` and :func:`materialize_node` each call this
+    ONCE, on the node the walk starts at, and thread the single verdict through
+    every recursive call unchanged. Per-branch is wrong: `type` on one `allOf`
+    branch and `properties` on a sibling describe the same instance, and the
+    `properties`-only branch judged alone declares no type and would permit
+    object on its own.
     """
-    arrow_permits, bare_types = _fold_permits_object(node, root, {}, frozenset())
-    return arrow_permits and (bare_types is None or "object" in bare_types)
+    arrow_type, declared_types = _fold_type_markers(node, root, {}, frozenset())
+    if arrow_type is not None:
+        return arrow_type == "Object"
+    if declared_types is None:
+        return True
+    return "object" in declared_types
 
 
-def _fold_permits_object(
+def _fold_type_markers(
     node: dict[str, Any],
     root: Any,
-    memo: dict[int, tuple[bool, frozenset[str] | None]],
+    memo: dict[int, tuple[str | None, frozenset[str] | None]],
     on_path: frozenset[int],
-) -> tuple[bool, frozenset[str] | None]:
-    """:func:`_composed_permits_object`'s memoized worker for ONE call's own
-    recursion; see that function for the full spec this implements.
+) -> tuple[str | None, frozenset[str] | None]:
+    """The `arrow_type` and the bare `type` set ``node`` composes to, either
+    ``None`` where nothing in the composition declares it.
 
-    Returns ``(arrow_permits, bare_types)`` — the `arrow_type` track's
-    verdict and the bare-`type` track's composed set — SEPARATELY, because an
-    ancestor's own `arrow_type` may override an inherited `arrow_permits` but
-    must intersect (never override) an inherited `bare_types`. The caller
-    combines them; nothing on this fold's own path needs their conjunction.
+    :func:`_composed_permits_object`'s worker, and restricted to those two keys:
+    the gate asks what kind of value lives at this node, and every other key a
+    full materialization would fold is irrelevant to that.
+
+    Same source order as :func:`_materialize` — `$ref` target, `allOf` branches
+    in document order, then the node itself — and the same last-wins rule, so
+    the markers reported here are the ones the materialized node carries. A
+    source declaring neither marker contributes neither; it never blanks one
+    inherited from an earlier source.
+
+    An `arrow_type` explicitly set to `null` spells "not declared" in this
+    contract (:func:`_validate_arrow_type_in_json_schema` reads it the same
+    way), so only a string value composes.
+
+    `anyOf`/`oneOf` are not folded. A node stating its type only through a union
+    declares none here and so permits object, which is what it did before this
+    gate existed; unions are the conditional-construct question this file
+    answers separately, in :func:`_conditional_declaration_keywords`.
+
+    Memoized on the RESULT within one fold, with `on_path` separately tracking
+    the `$ref`/`allOf` chain currently being folded — the two sets answer
+    different questions, per the module comment above. A node met again while
+    still on the path is a cycle and contributes nothing the second time.
     """
     key = id(node)
     cached = memo.get(key)
     if cached is not None:
         return cached
     if key in on_path:
-        return True, None  # a cycle contributes nothing the second time it is met
+        return None, None
     on_path = on_path | {key}
 
-    arrow_permits = True
-    bare_types: frozenset[str] | None = None
+    arrow_type: str | None = None
+    declared_types: frozenset[str] | None = None
 
+    sources: list[dict[str, Any]] = []
     ref = node.get("$ref")
     if isinstance(ref, str):
         target = resolve_schema_ref(root, ref)
         if isinstance(target, dict):
-            target_arrow, target_types = _fold_permits_object(target, root, memo, on_path)
-            arrow_permits = arrow_permits and target_arrow
-            bare_types = _intersect_declared_types(bare_types, target_types)
-
+            sources.append(target)
     branches = node.get("allOf")
     if isinstance(branches, list):
-        for branch in branches:
-            if isinstance(branch, dict):
-                branch_arrow, branch_types = _fold_permits_object(branch, root, memo, on_path)
-                arrow_permits = arrow_permits and branch_arrow
-                bare_types = _intersect_declared_types(bare_types, branch_types)
+        sources.extend(branch for branch in branches if isinstance(branch, dict))
 
-    # `anyOf`/`oneOf`: a UNION of branches, folded once into a single
-    # (arrow_permits, bare_types) pair — see :func:`_fold_union_permits_object`
-    # — then intersected into this node exactly like a `$ref` target or an
-    # `allOf` branch. Both keywords carry the same "possible types" question
-    # for this predicate: an instance need only match ONE branch, `oneOf`'s
-    # exclusivity is irrelevant to what types are POSSIBLE.
-    for union_keyword in ("anyOf", "oneOf"):
-        union_branches = node.get(union_keyword)
-        if isinstance(union_branches, list):
-            union_arrow, union_types = _fold_union_permits_object(
-                union_branches, root, memo, on_path
-            )
-            arrow_permits = arrow_permits and union_arrow
-            bare_types = _intersect_declared_types(bare_types, union_types)
+    for source in sources:
+        source_arrow, source_types = _fold_type_markers(source, root, memo, on_path)
+        if source_arrow is not None:
+            arrow_type = source_arrow
+        if source_types is not None:
+            declared_types = source_types
 
-    # The node's own bare `type` INTERSECTS — never overrides — everything
-    # inherited: `{"$ref": Base, "type": "object"}` composes, by 2020-12's own
-    # rules, to `Base`'s constraints AND this node's own, so a `$ref` carries
-    # no "override the base" license by itself. `materialize_node` already
-    # raises for a document whose composed bare types are disjoint; leaving
-    # this walk silent is what let `resolve_declared_path`/`effective_properties`
-    # resolve a path through a node no instance can ever have.
-    if bare_types is not None:
-        _refuse_disjoint_types(_MATERIALIZED_NODE, [{"type": sorted(bare_types)}, node])
-    bare_types = _intersect_declared_types(bare_types, _declared_types(node))
+    own_arrow = node.get("arrow_type")
+    if isinstance(own_arrow, str):
+        arrow_type = own_arrow
+    own_types = _declared_types(node)
+    if own_types is not None:
+        declared_types = frozenset(own_types)
 
-    # The node's own `arrow_type` — substantive, i.e. present and not `null`,
-    # the contract's OWN "not declared" spelling
-    # (`_validate_arrow_type_in_json_schema` reads it the same way) — OVERRIDES
-    # the inherited `arrow_permits` verdict, same as every other key in this
-    # file's shared source order ("$ref target, then allOf branches, then the
-    # node itself, own statements win"). Without this, a node re-declaring
-    # `arrow_type: "Object"` over a scalar `$ref` base could never un-exclude
-    # the base's `properties` — the "enclosing override" idiom
-    # `allOf: [{$ref: Base}, {arrow_type: "Object"}]` exists to support. It
-    # overrides `arrow_permits` ONLY, never `bare_types` — an own `arrow_type:
-    # "Object"` cannot widen past an inherited bare-`type` exclusion.
-    own_arrow_type = node.get("arrow_type")
-    if own_arrow_type is not None:
-        arrow_permits = own_arrow_type == "Object"
-
-    memo[key] = (arrow_permits, bare_types)
-    return arrow_permits, bare_types
-
-
-def _fold_union_permits_object(
-    branches: list[Any],
-    root: Any,
-    memo: dict[int, tuple[bool, frozenset[str] | None]],
-    on_path: frozenset[int],
-) -> tuple[bool, frozenset[str] | None]:
-    """One `anyOf`/`oneOf` branch list, folded to the single
-    ``(arrow_permits, bare_types)`` pair :func:`_fold_permits_object` treats
-    as one more intersected contributor.
-
-    A UNION, not an intersection: an instance satisfying the list need only
-    match ONE branch, so `object` is possible for the union iff at least ONE
-    branch permits it (`arrow_permits` is ORed), and the union's possible bare
-    types are the branches' types UNIONED together — one branch asserting no
-    bare `type` (`None`) makes the whole union unconstrained, the same way
-    "no type asserted" is vacuous everywhere else in this fold.
-
-    No branches (an empty list, or one with no dict members — both malformed
-    JSON Schema surfaced elsewhere) asserts nothing: vacuous, not "excludes
-    everything".
-    """
-    dict_branches = [b for b in branches if isinstance(b, dict)]
-    if not dict_branches:
-        return True, None
-    union_arrow = False
-    union_types: frozenset[str] | None = frozenset()
-    for branch in dict_branches:
-        branch_arrow, branch_types = _fold_permits_object(branch, root, memo, on_path)
-        union_arrow = union_arrow or branch_arrow
-        if union_types is not None:
-            union_types = None if branch_types is None else union_types | branch_types
-    return union_arrow, union_types
-
-
-def _intersect_declared_types(
-    inherited: frozenset[str] | None, contributor: set[str] | None
-) -> frozenset[str] | None:
-    """Fold one more bare-`type` set into a running intersection.
-
-    `None` means "asserts no bare `type`" — vacuous, so it never narrows the
-    running set. Two non-`None` sets intersect, the same proof
-    :func:`_refuse_disjoint_types` applies to a materialized node's sources;
-    this is that same intersection computed incrementally, without
-    materializing, so :func:`_fold_permits_object` can check it before
-    deciding whether a node's own `arrow_type` may override the inherited
-    `arrow_permits` verdict.
-    """
-    if contributor is None:
-        return inherited
-    if inherited is None:
-        return frozenset(contributor)
-    return inherited & frozenset(contributor)
+    memo[key] = (arrow_type, declared_types)
+    return arrow_type, declared_types
 
 
 def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[Any]]:
@@ -4407,19 +4320,12 @@ def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[An
     the first occurrence is NOT safe and was one of the three bugs above; the
     inline comment at the dedup states the failure.
     """
-    # Computed ONCE, from `node` — the composed type of the WHOLE `$ref`/`allOf`
-    # tree this call walks, not of whichever branch happens to carry the
-    # `properties` key. `type: "string"` on one `allOf` branch and `properties`
-    # on a SIBLING branch with no type marker of its own both describe the same
-    # instance: a properties-only branch, `_composed_permits_object`'d in
-    # isolation, always "permits object" by default, so gating each branch
-    # against its OWN composed type alone would never let the sibling's
-    # scalar `type` reach it. One verdict, applied uniformly to every
-    # `properties` source this walk finds, is what keeps this fold agreeing
-    # with `_materialize`'s own gate, which threads the same tree-wide verdict
-    # through its recursion instead of deciding it per level.
-    permits_object = _composed_permits_object(node, root)
-    return _contributors(node, root, {}, set(), permits_object)
+    # One verdict for the whole `$ref`/`allOf` tree, threaded through the
+    # recursion below — `_composed_permits_object` states why it cannot be
+    # taken per branch.
+    return _contributors(
+        node, root, {}, set(), _composed_permits_object(node, root)
+    )
 
 
 def _contributors(
@@ -4431,12 +4337,10 @@ def _contributors(
 ) -> dict[str, list[Any]]:
     """Memoized worker. See :func:`_materialize` for the memo/cycle scheme.
 
-    ``permits_object`` is fixed for the whole walk (computed once by
-    :func:`_property_contributors` from the ORIGINAL top-level node) and
-    threaded down unchanged — never recomputed per `$ref` target or `allOf`
-    branch. See the comment there for why: it must reflect the composed type
-    of the whole `$ref`/`allOf` tree, not of whichever branch is currently
-    being visited.
+    ``permits_object`` is the whole walk's verdict, computed once by
+    :func:`_property_contributors` and threaded down unchanged. See
+    :func:`_composed_permits_object` for why it is never recomputed per `$ref`
+    target or `allOf` branch.
     """
     key = id(node)
     cached = memo.get(key)
@@ -4459,10 +4363,9 @@ def _contributors(
             if isinstance(branch, dict):
                 sources.append(_contributors(branch, root, memo, on_path, permits_object))
     own = node.get("properties")
-    # `properties` is ignored by every JSON Schema instance whose composed
-    # `type` excludes `object` — a `{"type": "string", "properties": {...}}`
-    # node's `properties` map describes a shape no conforming instance can
-    # ever carry, so it is not a real contributor.
+    # A `properties` map on a node whose composed type excludes `object`
+    # describes a shape no conforming instance carries, so it contributes
+    # nothing — see :func:`_composed_permits_object`.
     if isinstance(own, dict) and permits_object:
         sources.append({name: [declaration] for name, declaration in own.items()})
 
@@ -4714,16 +4617,11 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     if not isinstance(node, dict):
         return node
     root = node if root is None else root
-    # Computed ONCE, from `node`'s whole `$ref`/`allOf` tree — the same verdict
-    # :func:`_property_contributors` threads through :func:`_contributors`, and
-    # for the same reason: deciding it per RECURSIVE CALL instead let a `$ref`
-    # target's own local (scalar) type prune its `properties` before the
-    # enclosing node's own `allOf` branch — processed only after the target
-    # returns — had a chance to override that type back to `object`. The
-    # target's fold ran and returned first, so the override arrived too late to
-    # rescue properties already discarded from the result it returned.
-    permits_object = _composed_permits_object(node, root)
-    return _materialize(node, root, {}, set(), permits_object)
+    # The same one-verdict-per-walk gate `_property_contributors` applies, so
+    # the two folds agree about which nodes are object-shaped.
+    return _materialize(
+        node, root, {}, set(), _composed_permits_object(node, root)
+    )
 
 
 def _materialize(
@@ -4756,12 +4654,10 @@ def _materialize(
     time it is met, which is the rule the contract states. The memo holds the
     node beside its result so a freed node's `id()` cannot be reused mid-walk.
 
-    ``permits_object`` is fixed for the whole call (computed once by
-    :func:`materialize_node` from the ORIGINAL top-level node) and threaded
-    down unchanged — never recomputed per `$ref` target or `allOf` branch. See
-    that function for why: recomputing it locally per recursive call let a
-    `$ref` target's own scalar type prune its `properties` before an
-    enclosing `allOf` branch's override was applied.
+    ``permits_object`` is the whole call's verdict, computed once by
+    :func:`materialize_node` and threaded down unchanged. See
+    :func:`_composed_permits_object` for why it is never recomputed per `$ref`
+    target or `allOf` branch.
     """
     key = id(node)
     cached = memo.get(key)
@@ -4831,24 +4727,16 @@ def _materialize(
         source["properties"] for source in sources
         if isinstance(source, dict) and isinstance(source.get("properties"), dict)
     ]
-    # `permits_object` is the WHOLE tree's composed verdict, threaded in from
-    # :func:`materialize_node` (see that function and :func:`_property_contributors`
-    # for why it cannot be recomputed from this call's own local `merged`,
-    # which would let a `$ref` target's OWN local type prune its `properties`
-    # before an enclosing override was applied). A node whose composed type
-    # excludes `object` ignores `properties` under every JSON Schema instance,
-    # however many sources declared one — `properties` inherited from an
-    # object-typed `$ref` base is not this case (the base's own type is what
-    # the tree-wide verdict already reflects), only a node whose WHOLE tree
-    # excludes `object` is.
+    # A node whose composed type excludes `object` (`permits_object`, threaded
+    # in from :func:`materialize_node`) reports a KNOWN-EMPTY map rather than
+    # none at all. `_json_schema_top_level_fields` tells those apart, and a
+    # scalar instance carrying no named field is as knowable as an explicit
+    # `properties: {}`; dropping the key instead would answer "unknowable,
+    # skip" and turn off the `conflict_keys` and `from_input` membership
+    # checks for exactly the documents this gate exists to catch.
     if own_properties and not permits_object:
-        # Declared and known-empty, not "no `properties` map anywhere": a
-        # non-object instance carries none of these fields, which is exactly
-        # as knowable as an explicit `properties: {}` and must read the same
-        # to `_json_schema_top_level_fields` — omitting the key here is what
-        # collapsed this case into its unknowable→skip case.
         merged["properties"] = {}
-    elif own_properties and permits_object:
+    elif own_properties:
         # The proof reads the RAW contributors — the same list
         # `_compose_declarations` proves — and NOT the maps hanging off
         # `sources`. Those sources have each already been materialized, and
