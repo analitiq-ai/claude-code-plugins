@@ -13,6 +13,8 @@ This module owns the parts that are independent of any particular artifact kind:
   pair plus its own validator ids; `_dispatch` consults the registry rather than
   hard-coding any kind's branches, so a new kind is *register, done*. A kind whose
   entire validity is its contract model registers via `register_model_kind()`;
+- `_bounded()` — the one width every borrowed diagnostic is clipped to, so a
+  finding is bounded the same way whichever route the text arrived by;
 - `_run_guarded()` — a crash in one check becomes a single error finding so the
   others survive;
 - the `main()` CLI: read the document, validate, print `{"passed", "findings"}`,
@@ -95,6 +97,20 @@ def contract_model_domain() -> Iterator[None]:
             os.environ.pop("DOMAIN", None)
         else:
             os.environ["DOMAIN"] = ambient
+
+
+def _bounded(text: str, limit: int = 200) -> str:
+    """A diagnostic sentence borrowed from another library, bounded.
+
+    `jsonschema` renders the failing instance AND the failing keyword's own value
+    into `ValidationError.message`, so an oversized sample or a long `enum` comes
+    back whole — and it is emitted once per recorded entry. Bounding the sample
+    alone leaves the same unbounded text arriving by the other route.
+
+    Plain slicing rather than `textwrap.shorten`, which drops the text entirely
+    when it holds no whitespace to break on — a provider record is exactly that
+    shape."""
+    return text if len(text) <= limit else f"{text[:limit]}…"
 
 
 def finding(validator: str, severity: str, path: str, message: str) -> dict:
