@@ -23,8 +23,8 @@ rationale: >
   this method and its write-side sibling — this record alone is what
   registers the obligation. The pinned reachability manifest claims a read of
   both `ResponseExtraction.records` and `RefExpression.ref`, so no
-  `RecordAffirmation` is needed. The JSON-Schema-side mirror
-  (`{"pattern": r"^response\.body(?:\..+)?$"}`) is a bare inline literal,
+  `RecordAffirmation` is needed. The JSON-Schema-side mirror in
+  `ResponseExtraction`'s `model_config` is a bare inline pattern literal,
   never assigned to a module-level name and never compiled or matched against
   in Python — the actual Python-side enforcement uses plain string equality
   and `.startswith()`, not a regex — so `mechanism`/`symbol` are left
