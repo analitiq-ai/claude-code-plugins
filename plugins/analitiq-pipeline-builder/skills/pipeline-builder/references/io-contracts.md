@@ -168,6 +168,13 @@ stage, and `path`/`message` name which stage crashed and why — or the process
 printed no `Diagnostics` JSON at all and the driving agent reconstructed this
 finding from a stderr excerpt, carried in `message` with `path` empty.
 
+This id names only a crash reaching a guard in this adapter. A crash inside
+the published validator's own single-document dispatch (the `database_endpoint`
+/ `type_map_read` / `type_map_write` routes, which call it directly) is already
+caught there and returned as an ordinary `contract-model` finding whose
+`message` says the check itself crashed — that finding never reaches this
+adapter as an exception, so no guard here fires and it is not relabeled.
+
 Some findings name the rule they apply, as a leading `[RULE-<AREA>-NNN]` in
 `message`. Quote the id verbatim whenever one is present — `pipeline-spec` and
 `stream-spec` list the rules by id.
