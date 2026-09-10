@@ -1,21 +1,22 @@
 """Pin the researcher's grounding instructions to the ProviderFacts fragment.
 
 `io-contracts.md` owns the ProviderFacts JSON Schema fragment;
-`connector-provider-researcher.md` restates several of its database-branch
-field names as grounding instructions ("report ... `sqlalchemy_driver` ...").
-Nothing else ties their field names together, so a partial rename would leave
-the researcher grounding fields the fragment no longer names — the
-`async_sqlalchemy_driver` → `sqlalchemy_driver` rename happened to land in both
-files consistently, but only by care, not by any check.
+`connector-provider-researcher.md` restates several of its api-branch and
+database-branch field names as grounding instructions ("report ...
+`sqlalchemy_driver` ..."). Nothing else ties their field names together, so a
+partial rename would leave the researcher grounding fields the fragment no
+longer names — the `async_sqlalchemy_driver` → `sqlalchemy_driver` rename
+happened to land in both files consistently, but only by care, not by any
+check.
 
-Convention this guard enforces: inside the researcher's `- For databases:`
-hard-rule bullets, a backticked snake_case token (`` `like_this` ``) or dotted
-path (`` `tls.supported_modes` ``) is a ProviderFacts field reference and must
-resolve in the fragment (dotted paths resolve through nested object
-`properties`). Backticked text that is not a bare snake_case identifier or
-dotted path (`dialect+driver`, `COPY FROM stdin`, `mysql+aiomysql`) is prose,
-not a field reference, and is ignored. The researcher prose carries a
-maintainer comment pointing back here.
+Convention this guard enforces: inside the researcher's `- For APIs:` and
+`- For databases:` hard-rule bullets, a backticked snake_case token
+(`` `like_this` ``) or dotted path (`` `tls.supported_modes` ``) is a
+ProviderFacts field reference and must resolve in the fragment (dotted paths
+resolve through nested object `properties`). Backticked text that is not a
+bare snake_case identifier or dotted path (`dialect+driver`, `COPY FROM
+stdin`, `mysql+aiomysql`) is prose, not a field reference, and is ignored. The
+researcher prose carries a maintainer comment pointing back here.
 
 Pure text-vs-text: no contract packages involved, so no `_pins` skip guard —
 this always runs.
@@ -54,8 +55,8 @@ def _provider_facts_schema() -> dict:
     return json.loads(fence.group(1))
 
 
-def _known_fields(schema: dict) -> set[str]:
-    """Dotted property paths from the top level plus the database branch.
+def _walk_fields(props: dict) -> set[str]:
+    """Dotted property paths for one `properties` object.
 
     Nested object `properties` contribute dotted paths (`tls` and
     `tls.supported_modes` are both known), so a rename inside a sub-object is
@@ -63,23 +64,42 @@ def _known_fields(schema: dict) -> set[str]:
     """
     fields: set[str] = set()
 
-    def walk(props: dict, prefix: str) -> None:
-        for name, sub in props.items():
+    def walk(node: dict, prefix: str) -> None:
+        for name, sub in node.items():
             fields.add(prefix + name)
             if isinstance(sub, dict):
                 walk(sub.get("properties", {}), f"{prefix}{name}.")
 
-    walk(schema.get("properties", {}), "")
+    walk(props, "")
+    return fields
+
+
+def _branch_fields(schema: dict, kind: str) -> set[str]:
+    """Dotted property paths from the top level plus one kind branch only.
+
+    Per-branch, not merged: a field genuinely on the `api` branch (like
+    `documented_http_errors`) must not validate a `- For databases:` bullet
+    referencing it, and vice versa — merging would let prose ground a field
+    on the wrong `ProviderFacts` variant and still pass.
+    """
+    fields = _walk_fields(schema.get("properties", {}))
     for branch in schema.get("oneOf", []):
         props = branch.get("properties", {})
-        if props.get("kind", {}).get("const") == "database":
-            walk(props, "")
-            return fields
-    pytest.fail(f"{IO_CONTRACTS}: ProviderFacts has no kind=database oneOf branch")
+        if props.get("kind", {}).get("const") == kind:
+            return fields | _walk_fields(props)
+    pytest.fail(f"{IO_CONTRACTS}: ProviderFacts has no kind={kind!r} oneOf branch")
 
 
-def _database_bullets() -> list[str]:
-    """Each `- For databases:` bullet in ## Hard rules, continuations joined."""
+def _known_fields(schema: dict) -> set[str]:
+    """Dotted property paths from the top level plus both kind branches,
+    merged. Used only where a field's presence anywhere is what matters
+    (the reverse-anchor test) — see `_branch_fields` for the per-kind check
+    that actually validates the researcher's grounding bullets."""
+    return _branch_fields(schema, "api") | _branch_fields(schema, "database")
+
+
+def _grounding_bullets(prefix: str) -> list[str]:
+    """Each `<prefix>` bullet in ## Hard rules, continuations joined."""
     text = RESEARCHER.read_text(encoding="utf-8")
     section = re.search(r"^## Hard rules$(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
     assert section, f"{RESEARCHER}: no '## Hard rules' section"
@@ -99,53 +119,72 @@ def _database_bullets() -> list[str]:
             current = None
     if current:
         bullets.append("\n".join(current))
-    return [b for b in bullets if b.startswith("- For databases:")]
+    return [b for b in bullets if b.startswith(prefix)]
+
+
+def _api_bullets() -> list[str]:
+    return _grounding_bullets("- For APIs:")
+
+
+def _database_bullets() -> list[str]:
+    return _grounding_bullets("- For databases:")
 
 
 def test_extraction_finds_the_grounding_bullets() -> None:
     """Guard the extraction itself: if the researcher prose restructures its
-    database bullets, this fails loudly instead of the field check passing
-    vacuously on an empty or shrunken token set."""
-    bullets = _database_bullets()
+    api or database bullets, this fails loudly instead of the field check
+    passing vacuously on an empty or shrunken token set."""
+    api_bullets = _api_bullets()
+    db_bullets = _database_bullets()
     # Exact count, not a floor: with a floor, one of N>2 bullets could be
     # reworded away and its tokens would silently leave the guard. Adding or
-    # removing a `- For databases:` bullet is a recorded decision — update
-    # this count with it.
-    assert len(bullets) == 3, (
-        f"expected exactly 3 '- For databases:' bullets under '## Hard rules' "
-        f"in {RESEARCHER.relative_to(REPO_ROOT)}, found {len(bullets)} — if the "
-        "prose restructured deliberately, update this count."
+    # removing a `- For APIs:` / `- For databases:` bullet is a recorded
+    # decision — update the matching count with it.
+    assert len(api_bullets) == 1, (
+        f"expected exactly 1 '- For APIs:' bullet under '## Hard rules' "
+        f"in {RESEARCHER.relative_to(REPO_ROOT)}, found {len(api_bullets)} — if "
+        "the prose restructured deliberately, update this count."
     )
-    tokens = {t for b in bullets for t in _FIELD_TOKEN.findall(b)}
+    assert len(db_bullets) == 4, (
+        f"expected exactly 4 '- For databases:' bullets under '## Hard rules' "
+        f"in {RESEARCHER.relative_to(REPO_ROOT)}, found {len(db_bullets)} — if "
+        "the prose restructured deliberately, update this count."
+    )
+    tokens = {t for b in api_bullets + db_bullets for t in _FIELD_TOKEN.findall(b)}
     assert tokens, "no backticked field tokens extracted from the bullets"
-    # Canaries: the field renamed from `async_sqlalchemy_driver`, and a dotted
-    # nested path (proves dotted extraction works). If either renames again,
-    # all three sites (fragment, prose, these literals) move together as a
-    # recorded decision.
+    # Canaries: one per branch, plus a dotted nested path (proves dotted
+    # extraction works). If any renames again, all sites (fragment, prose,
+    # these literals) move together as a recorded decision.
+    assert "documented_http_errors" in tokens
     assert "sqlalchemy_driver" in tokens
     assert "tls.supported_modes" in tokens
 
 
-def test_prose_grounded_fields_exist_in_provider_facts() -> None:
-    """Every field the researcher prose instructs grounding must exist in the
-    ProviderFacts fragment — a rename landing in only one file fails here in
-    both directions (prose keeps the old name, or prose moves ahead of the
-    fragment)."""
-    known = _known_fields(_provider_facts_schema())
-    tokens = {t for b in _database_bullets() for t in _FIELD_TOKEN.findall(b)}
+@pytest.mark.parametrize(
+    "kind, bullets_fn", [("api", _api_bullets), ("database", _database_bullets)]
+)
+def test_prose_grounded_fields_exist_in_provider_facts(kind: str, bullets_fn) -> None:
+    """Every field a kind's researcher bullets instruct grounding must exist
+    on THAT kind's ProviderFacts branch — a rename landing in only one file
+    fails here in both directions (prose keeps the old name, or prose moves
+    ahead of the fragment), and a field genuinely valid on the other branch
+    does not silently validate a bullet naming it on the wrong one."""
+    known = _branch_fields(_provider_facts_schema(), kind)
+    tokens = {t for b in bullets_fn() for t in _FIELD_TOKEN.findall(b)}
     unknown = sorted(tokens - known)
     assert not unknown, (
-        f"researcher prose grounds field(s) {unknown} that the ProviderFacts "
-        f"fragment in {IO_CONTRACTS.name} does not define. Either the fragment "
-        "renamed a field without the prose following, or the prose references "
-        "a field that was never added — fix whichever file is stale."
+        f"researcher bullets for kind={kind!r} ground field(s) {unknown} that "
+        f"ProviderFacts's {kind!r} branch in {IO_CONTRACTS.name} does not "
+        "define. Either the fragment renamed a field without the prose "
+        "following, the prose references a field that was never added, or "
+        "the field belongs to the other kind branch — fix whichever is stale."
     )
 
 
-def test_provider_facts_database_branch_still_names_the_driver_fields() -> None:
-    """The reverse anchor: the fragment's database branch keeps the fields the
-    pipeline depends on by name — including the nested TLS mode carrier, which
-    three prose files reference (`spec-tls.md`, `db-connector-creator.md`,
+def test_provider_facts_still_names_the_grounded_fields() -> None:
+    """The reverse anchor: the fragment keeps the fields the pipeline depends
+    on by name, across both branches — including the nested TLS mode carrier,
+    which three prose files reference (`spec-tls.md`, `db-connector-creator.md`,
     `connector-provider-researcher.md`). Removing one from the fragment
     without touching the prose would otherwise only fail once the prose is
     next edited."""
@@ -162,13 +201,21 @@ def test_provider_facts_database_branch_still_names_the_driver_fields() -> None:
                 "sql_write_path.qualified_statement_targeting",
                 "sql_write_path.temp_table_support",
                 "sql_write_path.transactional_ddl",
-                "sql_write_path.identifier_limits"}
+                "sql_write_path.identifier_limits",
+                # The RESEARCHED subset of error_map's inputs — the category
+                # mapping itself is the creator's decision, never the
+                # researcher's, so it carries no field here. database-branch
+                # (error_signals) and api-branch (documented_http_errors).
+                "error_signals", "error_signals.native_code_attrs",
+                "error_signals.documented_codes",
+                "documented_http_errors"}
     missing = sorted(expected - known)
     assert not missing, (
-        f"ProviderFacts database branch lost field(s) {missing} — if the "
-        "rename/removal is intentional, update the fragment in "
-        f"{IO_CONTRACTS.relative_to(REPO_ROOT)}, the grounding bullets in "
-        f"{RESEARCHER.relative_to(REPO_ROOT)}, the per-fact sources in "
-        "plugins/analitiq-connector-builder/agents/db-connector-creator.md, "
+        f"ProviderFacts lost field(s) {missing} — if the rename/removal is "
+        f"intentional, update the fragment in {IO_CONTRACTS.relative_to(REPO_ROOT)}, "
+        f"the grounding bullets in {RESEARCHER.relative_to(REPO_ROOT)}, the "
+        "per-fact sources in "
+        "plugins/analitiq-connector-builder/agents/db-connector-creator.md and "
+        "plugins/analitiq-connector-builder/agents/api-connector-creator.md, "
         "and this expectation together."
     )

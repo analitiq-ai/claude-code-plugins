@@ -66,6 +66,13 @@
       "path": "connection_contract.inputs.client_id.storage",
       "equals": "connection.parameters",
       "rule": "RULE-CONN-006"
+    },
+    {
+      "doc": "connector",
+      "path": "error_map.http.429",
+      "equals": "rate_limited",
+      "rule": "intent",
+      "note": "Xero's own API docs document 429 as rate limiting, so a grounded pass should classify it correctly; a specific correct entry (not just block presence) proves the new authoring step actually applied error-classification.md's procedure to researched facts rather than declaring an empty or null block"
     }
   ],
   "artifacts": [

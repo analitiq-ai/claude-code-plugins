@@ -60,6 +60,13 @@
       "present": true,
       "rule": "RULE-CTOR-040",
       "note": "the contract leaves it optional and the engine requires it before running any write mode"
+    },
+    {
+      "doc": "connector",
+      "path": "error_map.key_attrs",
+      "min_length": 1,
+      "rule": "intent",
+      "note": "MySQL's DBAPI exception hierarchy always grounds at least an __exception_class__-keyed classification, so a grounded pass should declare error_map — a non-empty key_attrs proves the new authoring step actually declared a classification, not merely an empty or null block"
     }
   ],
   "artifacts": [

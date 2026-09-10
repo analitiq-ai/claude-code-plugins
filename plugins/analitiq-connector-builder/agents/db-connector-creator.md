@@ -75,6 +75,7 @@ artifacts, not the plugin's.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/connection-contract.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/error-classification.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector-package.md`
@@ -229,6 +230,11 @@ artifacts, not the plugin's.
      (`RULE-PKG-007`), source dependencies dynamically from
      `requirements.txt` (`RULE-PKG-006`), and register the entry-point
      groups `RULE-PKG-008` names.
+10. **Error classification (optional)** — declare the top-level `error_map`
+    block per `error-classification.md` §Classifying a driver exception
+    (`key_attrs` / `codes`) when `provider_facts.error_signals` grounds it.
+    Omit the block entirely when the researcher reported no error signals —
+    never fabricate a code the docs don't establish.
 
 ## Definition of Done
 

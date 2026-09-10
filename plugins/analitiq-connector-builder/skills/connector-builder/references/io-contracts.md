@@ -131,6 +131,11 @@ fan-out and returned as `EndpointFacts` (below).
             "max_requests": { "type": "integer" },
             "time_window_seconds": { "type": "integer" }
           }
+        },
+        "documented_http_errors": {
+          "type": "object",
+          "description": "Per-status documented meaning, verbatim, from the provider's own API docs (an errors/status-codes reference page, or per-endpoint error notes) — the creator's grounding for `error_map.http` (`references/error-classification.md`). One entry per status the docs describe; never a failure category — that judgment is the creator's, per `references/error-classification.md`'s procedure. No status may be classified in `error_map.http` without a corresponding entry here. `error_map.http` carries no per-endpoint scoping, so when the docs establish DIFFERENT meanings for the same status depending on the call (an operation, an endpoint), the entry must say so rather than picking one — record every documented meaning and which call(s) each applies to, verbatim, so the creator can see the conflict and refuse to classify that status generically instead of silently applying whichever meaning happened to be recorded.",
+          "additionalProperties": { "type": "string" }
         }
       },
       "required": ["auth_model"]
@@ -186,6 +191,22 @@ fan-out and returned as `EndpointFacts` (below).
                 "max_identifier_len": { "type": "integer" },
                 "max_bind_params": { "type": "integer" }
               }
+            }
+          }
+        },
+        "error_signals": {
+          "type": ["object", "null"],
+          "description": "Documented facts about how the driver's exception(s) expose a native error signal, and what each signal value means — the creator's grounding for `error_map.key_attrs`/`codes` (`references/error-classification.md`). The researcher reports only what the docs establish exists, verbatim, never a failure category — that judgment is the creator's; a signal's meaning is grounded from whichever source actually defines it (the driver's own docs, or the database/server's own published catalog when the server owns that meaning, per `documented_codes` below). Same omit-vs-null discipline as `sql_write_path`: OMIT a fact the docs do not establish (a research gap), and use NULL only where a field admits it to record a documented ABSENCE.",
+          "properties": {
+            "native_code_attrs": {
+              "type": ["array", "null"],
+              "items": { "type": "string" },
+              "description": "Attribute name(s) the driver's exception class documents as carrying its native error code (e.g. `sqlstate`, `pgcode`, `errno`), most-specific first when the docs establish more than one. NULL when the docs establish the exception carries no such attribute at all — the fact that routes the creator to the `__exception_class__` sentinel instead."
+            },
+            "documented_codes": {
+              "type": "object",
+              "description": "The documented meaning, verbatim, from whichever source actually defines it — the driver's own docs for how it exposes a signal, or, for what a given code VALUE means, the database/server's own published documentation when the server (not the driver) owns that catalog (e.g. a SQLSTATE class). One entry per signal value grounded above: a native-code value (e.g. `\"23505\": \"unique_violation\"`) for anything `native_code_attrs` names, and/or a documented exception class name (e.g. `\"IntegrityError\": \"constraint violation\"`) for anything worth classifying by the exception's type instead. Both kinds of key may appear in the same map: a driver whose docs ground an attribute AND a meaningful class hierarchy reports both, grounding the creator's mixed `key_attrs` (an attribute plus the `__exception_class__` fallback, `references/error-classification.md`). `error_map` carries no per-driver scoping, so when a connector ships more than one driver (`skills/connector-spec-db/spec-driver-selection.md`) and their docs establish DIFFERENT meanings for what would resolve to the same key — most often a shared exception class name under `__exception_class__` — the entry must say so rather than picking one: record every documented meaning and which driver each applies to, verbatim, so the creator can see the conflict and refuse that entry instead of silently applying whichever meaning happened to be recorded. Never a failure category either way; the creator applies `references/error-classification.md`'s procedure to produce `error_map.codes`.",
+              "additionalProperties": { "type": "string" }
             }
           }
         },

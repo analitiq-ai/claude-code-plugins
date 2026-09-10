@@ -61,3 +61,8 @@ shared core.
   entry-point registrations (`RULE-PKG-008`).
 - [ ] **Version is consistent**: first release → `RULE-CTOR-032`; otherwise
   the drift verdict the orchestrator computed was applied.
+- [ ] **`error_map` is declared wherever grounded facts support it**
+  (`references/error-classification.md`) — `provider_facts.documented_http_errors`
+  for `http`, or `provider_facts.error_signals` for `key_attrs`/`codes` — and
+  left entirely
+  unset otherwise. Additive: never fabricated to fill the block.

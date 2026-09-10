@@ -134,6 +134,50 @@ EXPECTED_SQL_BULK_MECHANISMS = {
     "sqlalchemy": {"copy_from", "load_data_local_infile", "load_job"},
     "adbc": {"adbc_ingest", "copy_from", "load_data_local_infile", "load_job"},
 }
+# The closed failure-category vocabulary `ErrorMap.codes`/`.http` values are
+# drawn from (capability block v2, `RULE-CTOR-058`). Restated as decision
+# logic in error-classification.md's classification tables — the "mapping
+# logic" exemption, same as enum-mappers.md — so pin it here too.
+EXPECTED_ERROR_CATEGORIES = {
+    "transient", "config", "auth", "unreachable", "rate_limited", "write_rejected",
+}
+# plugin-prose.md rung-5 exemption: the sections named below in
+# error-classification.md restate analitiq-core engine runtime behavior with
+# no model in this repo and no published/vendored artifact to pin against
+# (unlike ErrorCategory itself,
+# which this file does pin, above). Declared here per plugin-prose.md's
+# allowlist-entry rung, each stated in the prose as a reading of the engine,
+# not a permanent guarantee (`.claude/rules/engine-behaviour-claims.md`); each
+# resolved (file + heading exist) by test_engine_restatement_exemptions_resolve
+# below.
+ENGINE_RESTATEMENT_EXEMPTIONS = {
+    "skills/connector-builder/references/error-classification.md#Classifying an HTTP status":
+        "restates analitiq-core's error_map.http call-site coverage — read "
+        "and write HTTP requests both classify through the same path "
+        "(cdk/cdk/api/verdicts.py's classify_status/failure_facts, called "
+        "from cdk/cdk/api/generic.py's read and write paths), while the "
+        "health-check probe (cdk/cdk/api/http.py's HttpSender.probe()) "
+        "bypasses error_map entirely and the engine has no executor at all "
+        "for the contract's OAuth2 token_exchange operation, so there is no "
+        "call for error_map.http to classify there either; none of this is "
+        "enforced by the contract model, which types http as a plain "
+        "status-keyed map with no call-site semantics of its own",
+    "skills/connector-builder/references/error-classification.md#Operational consequence":
+        "restates analitiq-core's ErrorCategory write/read verdict tables "
+        "(DECLARED_WRITE_VERDICTS / DECLARED_READ_DETERMINISTIC); the category "
+        "*names* are pinned by test_mapper_target_columns_match_the_contract "
+        "above, the verdict semantics beside them are not mechanically "
+        "checkable from this repo",
+    "skills/connector-builder/references/error-classification.md#Classifying a driver exception (`key_attrs` / `codes`)":
+        "restates analitiq-core's key_attrs match order (the first entry "
+        "whose resolved value has a matching codes entry wins; a resolved "
+        "value with no codes entry falls through to the next entry exactly "
+        "as if it had been absent) and codes' exact-string lookup (no prefix "
+        "or class-level wildcard); neither is enforced by the contract "
+        "model, which types key_attrs as a plain ordered tuple and codes as "
+        "a plain string-keyed map with no order or matching semantics of "
+        "its own",
+}
 EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
 # WriteOperation.idempotency `in` targets. No prose site restates them: the
 # plugin's documents cite `RULE-ENDP-039`, whose `literal_enum` mechanism prints
@@ -276,6 +320,67 @@ def _pattern_at(schema: dict, *path: str) -> str | None:
         pattern = cand.get("pattern")
         if isinstance(pattern, str):
             return pattern
+    return None
+
+
+def _error_category_values(schema: dict) -> set[str] | None:
+    """Return the closed `ErrorCategory` vocabulary via `ErrorMap.codes`'s value enum.
+
+    `ErrorCategory` is a bare `Literal` alias, not a named `$def` — pydantic
+    inlines it at every usage site instead of giving it one, so there is no
+    `$defs.ErrorCategory` to walk to. `codes` is a `dict[str, ErrorCategory]`;
+    its value enum renders under the non-null `anyOf` branch's
+    `additionalProperties`. Same restructure tolerance as `_enum_at`: any
+    missing key, a non-dict node, or a non-list `enum` yields None.
+    """
+    node = schema.get("$defs", {}).get("ErrorMap")
+    if not isinstance(node, dict):
+        return None
+    codes = node.get("properties", {}).get("codes")
+    if not isinstance(codes, dict):
+        return None
+    branches = codes.get("anyOf")
+    if not isinstance(branches, list):
+        return None
+    for branch in branches:
+        if not isinstance(branch, dict):
+            continue
+        additional = branch.get("additionalProperties")
+        if isinstance(additional, dict) and isinstance(additional.get("enum"), list):
+            return set(additional["enum"])
+    return None
+
+
+def _http_category_values(schema: dict) -> set[str] | None:
+    """Return the closed `ErrorCategory` vocabulary via `ErrorMap.http`'s value enum.
+
+    `http` is `dict[str, ErrorCategory]` too, but renders under
+    `patternProperties` (a status-code key pattern) rather than `codes`'s
+    `additionalProperties` — a differently-shaped node `_error_category_values`
+    does not walk. `codes` and `http` share the same `ErrorCategory` Literal
+    today, so the two extractors return the same set now; reading `http`'s own
+    branch here, rather than reusing `_error_category_values`, is what catches
+    the day a future contract change gives them different vocabularies. Same
+    restructure tolerance as `_enum_at`.
+    """
+    node = schema.get("$defs", {}).get("ErrorMap")
+    if not isinstance(node, dict):
+        return None
+    http = node.get("properties", {}).get("http")
+    if not isinstance(http, dict):
+        return None
+    branches = http.get("anyOf")
+    if not isinstance(branches, list):
+        return None
+    for branch in branches:
+        if not isinstance(branch, dict):
+            continue
+        pattern_props = branch.get("patternProperties")
+        if not isinstance(pattern_props, dict):
+            continue
+        for value_schema in pattern_props.values():
+            if isinstance(value_schema, dict) and isinstance(value_schema.get("enum"), list):
+                return set(value_schema["enum"])
     return None
 
 
@@ -438,6 +543,17 @@ def test_auth_types_match_schema(connector_schema: dict) -> None:
         "update the Supported kinds table in "
         "plugins/analitiq-connector-builder/README.md and AuthTypeMapper in "
         "plugins/analitiq-connector-builder/skills/connector-builder/references/enum-mappers.md.",
+    )
+
+
+def test_error_categories_match_schema(connector_schema: dict) -> None:
+    schema_set = _error_category_values(connector_schema)
+    assert schema_set == EXPECTED_ERROR_CATEGORIES, _diff_msg(
+        "ErrorMap.codes value (ErrorCategory)",
+        schema_set,
+        EXPECTED_ERROR_CATEGORIES,
+        "update the classification tables in "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/error-classification.md.",
     )
 
 
@@ -1882,6 +1998,9 @@ def test_slug_pattern_governs_the_restated_fields(
 ENUM_MAPPERS = (
     PLUGIN_ROOT / "skills" / "connector-builder" / "references" / "enum-mappers.md"
 )
+ERROR_CLASSIFICATION = (
+    PLUGIN_ROOT / "skills" / "connector-builder" / "references" / "error-classification.md"
+)
 DSN_BINDINGS = (
     PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-dsn-bindings.md"
 )
@@ -1908,6 +2027,24 @@ def _section(doc: Path, heading: str) -> str:
         "restructured, so this guard would have graded nothing."
     )
     return match.group(1)
+
+
+def test_engine_restatement_exemptions_resolve() -> None:
+    """Every `ENGINE_RESTATEMENT_EXEMPTIONS` key must locate a real section.
+
+    Locating only, per `.claude/rules/guards.md`: this does not decide whether
+    the prose still reads as a reading rather than a guarantee — that is a
+    reader's job — it only keeps the declaration from rotting silently. A
+    section renamed or removed while an exemption still claims it would
+    otherwise leave the allowlist entry pointing at nothing, with nothing here
+    to notice.
+    """
+    for key in ENGINE_RESTATEMENT_EXEMPTIONS:
+        relpath, _, heading = key.partition("#")
+        assert heading, f"{key!r}: exemption key carries no '#<heading>' fragment"
+        doc = PLUGIN_ROOT / relpath
+        assert doc.is_file(), f"{key!r}: {relpath} does not exist under {PLUGIN_ROOT}"
+        _section(doc, heading)  # asserts the heading exists
 
 
 _SEPARATOR_ROW = re.compile(r"^\|[\s:|-]+\|$")
@@ -1952,6 +2089,29 @@ def _target_column(section: str) -> set[str]:
         ("enum-mappers", "KindMapper", EXPECTED_KINDS, {"nosql", "document"}),
         ("enum-mappers", "AuthTypeMapper", EXPECTED_AUTH_TYPES, set()),
         ("enum-mappers", "TransportTypeMapper", EXPECTED_TRANSPORT_TYPES, set()),
+        # The operational-consequence table is an exhaustive per-category
+        # verdict listing (every ErrorCategory has an engine verdict) —
+        # exact-match is the right assertion here. The driver-exception
+        # section's category table is the same shape (one row per category,
+        # decision logic rather than a literal-code lookup) and pins the same
+        # way. The HTTP classification table (also exhaustive, by the same
+        # design) gets its own dedicated test below instead of joining this
+        # list: its expected set must come from ErrorMap.http's own schema
+        # branch, not the codes-derived EXPECTED_ERROR_CATEGORIES this list's
+        # other entries share, and this parametrize mechanism only takes
+        # plain values, not a schema fixture.
+        (
+            "error-classification",
+            "Operational consequence",
+            EXPECTED_ERROR_CATEGORIES,
+            set(),
+        ),
+        (
+            "error-classification",
+            "Classifying a driver exception (`key_attrs` / `codes`)",
+            EXPECTED_ERROR_CATEGORIES,
+            set(),
+        ),
     ],
 )
 def test_mapper_target_columns_match_the_contract(
@@ -1964,7 +2124,7 @@ def test_mapper_target_columns_match_the_contract(
     left stale in the table an orchestrator classifies against — which is the
     one copy that decides what gets authored.
     """
-    doc = {"enum-mappers": ENUM_MAPPERS}[doc_name]
+    doc = {"enum-mappers": ENUM_MAPPERS, "error-classification": ERROR_CLASSIFICATION}[doc_name]
     section = _section(doc, heading)
     documented = _target_column(section)
     if extra:
@@ -1975,6 +2135,39 @@ def test_mapper_target_columns_match_the_contract(
         f"contract-only={sorted(expected - documented)}. The mapper is the only "
         "route from a researched fact to a schema value, so a member missing "
         "here cannot be authored at all."
+    )
+
+
+def test_http_classification_table_matches_the_contract(connector_schema: dict) -> None:
+    """The HTTP table's Category column must be exactly `ErrorMap.http`'s vocabulary.
+
+    Compared against `http`'s own value enum, not the `codes`-derived
+    `EXPECTED_ERROR_CATEGORIES` constant: `codes` and `http` share one
+    `ErrorCategory` Literal today, but coupling this check to `codes` instead
+    of `http` would miss the day a future contract change gives them
+    different vocabularies (`test_error_categories_match_schema` above already
+    pins `codes`; this pins `http` independently rather than assuming the two
+    stay identical).
+
+    Exact match, not subset: this table is a decision procedure ("what the
+    docs establish about this status" -> category), one row per category, not
+    a lookup keyed by literal status codes — so, like the operational-
+    consequence table, it is exhaustive by design and a missing or invented
+    row is equally wrong. A non-empty check on both sides guards against a
+    deleted or reformatted table passing vacuously.
+    """
+    schema_set = _http_category_values(connector_schema)
+    assert schema_set, _diff_msg(
+        "ErrorMap.http value (ErrorCategory)", schema_set, EXPECTED_ERROR_CATEGORIES,
+        "the contract was restructured; re-point _http_category_values at the new shape.",
+    )
+    section = _section(ERROR_CLASSIFICATION, "Classifying an HTTP status")
+    documented = _target_column(section)
+    assert documented == schema_set, (
+        f"{ERROR_CLASSIFICATION.relative_to(REPO_ROOT)} §Classifying an HTTP "
+        f"status maps onto different members than ErrorMap.http — "
+        f"prose-only={sorted(documented - schema_set)} "
+        f"contract-only={sorted(schema_set - documented)}."
     )
 
 
