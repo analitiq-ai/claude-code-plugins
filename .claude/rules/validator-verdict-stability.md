@@ -51,9 +51,9 @@ accepts, whatever the change is called:
 ## What does not
 
 - **A new finding id.** A new `validator` id (the `VALIDATOR_IDS` registry in
-  `analitiq.validator`) arriving at severity `warning` is compatible: a
-  consumer that does not know an id handles it as it handles any warning,
-  which is why a new check may arrive only as one.
+  `analitiq.validator`) arriving at severity `warning` is compatible: the
+  promise binds a consumer to handle an id it does not know as it handles any
+  warning, which is why a new check may arrive only as one.
 - **A loosening.** Accepting a document the current release rejects.
 - **A reworded message, a moved `path`.** The verdict is the promise; the
   finding's wording is not.
@@ -85,5 +85,4 @@ falls on is decided once, for the pair.
   it can see.
 - **A change on the breaking side.** Say so in the PR description, and the
   release that carries it is a major of both packages — the one coordinated
-  release the root `CLAUDE.md` describes under "Releases and credentials". The
-  first stable release is `1.0.0`.
+  release the root `CLAUDE.md` describes under "Releases and credentials".

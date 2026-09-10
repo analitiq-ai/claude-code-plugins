@@ -246,11 +246,11 @@ matches what you are editing:
 - `validator-verdict-stability.md` — before changing a check's severity, a
   contract-model constraint, or a package version.
 
-`no-drift-surfaces.md`, `plugin-prose.md`, `contract-prose.md`,
-`reachability-dispositions.md` and `validator-verdict-stability.md` are keyed to
-the surface you are editing; `resolvable-referents.md`,
-`engine-behaviour-claims.md` and `no-cardinality-restatements.md` to a class of
-sentence that rots on any surface; `guards.md` to the mechanism that reads them.
+`plugin-prose.md`, `contract-prose.md`, `reachability-dispositions.md` and
+`validator-verdict-stability.md` are keyed to the surface you are editing;
+`no-drift-surfaces.md`, `resolvable-referents.md`, `engine-behaviour-claims.md`
+and `no-cardinality-restatements.md` to a class of sentence that rots on any
+surface; `guards.md` to the mechanism that reads them.
 
 ## Conventions
 

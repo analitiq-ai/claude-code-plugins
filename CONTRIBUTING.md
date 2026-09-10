@@ -136,8 +136,7 @@ rejects.*
 `.claude/rules/validator-verdict-stability.md` is the policy: within a major
 version of `analitiq-validator` and `analitiq-contract-models`, a document that
 passes keeps passing, so any change after which the validator rejects a
-document the current release accepts — a check promoted to `error`, a model
-constraint tightened, a hole closed — is a major bump of both packages. Two
+document the current release accepts is a major bump of both packages. Two
 things follow for the PR:
 
 - **Its description says which side it lands on.** "Fix" is not a side: a
