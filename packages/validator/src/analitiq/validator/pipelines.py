@@ -585,11 +585,11 @@ def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> l
     return findings
 
 
-def _validate_pipeline_bundle(doc: Any, doc_path: Any = None,  # skipcq: PYL-W0613
-                              schema_url: Any = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature; a bundle has no filesystem anchor
+def _validate_pipeline_bundle(doc: Any, where: Any = None,  # skipcq: PYL-W0613
+                              schema_url: Any = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature; a bundle has no tree location
     """Kind entry point: dispatch a bundle document to the referential validator.
 
-    A bundle carries no filesystem anchor, so `doc_path`/`schema_url` (the
+    A bundle is already the assembled set, so `where`/`schema_url` (the
     registry's per-kind signature) are unused here.
     """
     return validate_pipeline_bundle(doc)
@@ -599,4 +599,4 @@ def _validate_pipeline_bundle(doc: Any, doc_path: Any = None,  # skipcq: PYL-W06
 # detector claims an assembled-run mapping first; `is_pipeline_doc` then only sees
 # a `connections`-bearing mapping with no nested `pipeline` document.
 register_kind(is_pipeline_bundle, _validate_pipeline_bundle)
-register_model_kind(is_pipeline_doc, _PIPELINE_ADAPTER)
+register_model_kind(is_pipeline_doc, _PIPELINE_ADAPTER, entity="pipeline")

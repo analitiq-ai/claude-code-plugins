@@ -213,8 +213,8 @@ EXPECTED_KINDS = {"api", "database", "nosql", "document", "file", "s3", "stdout"
 EXPECTED_TRANSPORT_TYPES = {"http", "sqlalchemy", "adbc", "s3", "file", "stdout"}
 # Validator ids a connector/endpoint/type-map finding may carry — restated in
 # io-contracts.md's `Diagnostics` enum and README.md § Validation. Owned by
-# `analitiq.validator.VALIDATOR_IDS`, minus the `bundle-*` ids, which only apply
-# to pipeline bundles this plugin never validates.
+# `analitiq.validator.VALIDATOR_IDS`, minus the ids only a pipeline run emits
+# (`PIPELINE_RUN_ONLY_IDS`), which this plugin never invokes.
 EXPECTED_VALIDATOR_IDS = {
     "contract-model",
     "document",
@@ -228,6 +228,23 @@ EXPECTED_VALIDATOR_IDS = {
     "embedded-json-schema",
     "embedded-schema-example",
 }
+# Ids only a pipeline run — `validate_tree` over a pipeline tree, or the
+# pipeline plugin's entity routes — can emit: the `bundle-*` referential
+# checks, the connection-scoped type-map gate, connector-side endpoint
+# verification, and the per-stage crash containment. Carrying them in an
+# authoring reference here would imply findings a connector author can never
+# see, since this plugin validates one connector document by path.
+PIPELINE_RUN_ONLY_IDS = {"adapter-crash", "connection-type-map", "connector-endpoint-ref"}
+
+
+def _connector_run_ids() -> set[str]:
+    """The package's ids a connector-document run can emit."""
+    from analitiq.validator import VALIDATOR_IDS
+
+    return {vid for vid in VALIDATOR_IDS
+            if not vid.startswith("bundle-") and vid not in PIPELINE_RUN_ONLY_IDS}
+
+
 # Resolution scopes a `ref` / `${...}` placeholder may lead with — restated as the
 # scope table in references/value-expressions.md.
 EXPECTED_RESOLUTION_SCOPES = {
@@ -1756,10 +1773,8 @@ def test_diagnostics_enum_matches_the_package() -> None:
     constant and names io-contracts.md only in its fix text, so the fragment
     could drift to a stale id set with that gate green.
     """
-    from analitiq.validator import VALIDATOR_IDS
-
     documented = set(_diagnostics_finding_item()["properties"]["validator"]["enum"])
-    package_set = {vid for vid in VALIDATOR_IDS if not vid.startswith("bundle-")}
+    package_set = _connector_run_ids()
     assert documented == package_set, _diff_msg(
         "Diagnostics validator enum",
         package_set,
@@ -1832,13 +1847,11 @@ def test_diagnostics_properties_match_the_finding_constructor() -> None:
 def test_validator_ids_match_package() -> None:
     """The finding ids the plugin's prose enumerates must be the ones emitted.
 
-    `bundle-*` ids are excluded: they belong to pipeline-bundle validation, which
-    this plugin never invokes, so carrying them in an authoring reference would
-    imply findings an author can never see.
+    The pipeline-run ids (`PIPELINE_RUN_ONLY_IDS` and `bundle-*`) are excluded:
+    they belong to a run this plugin never invokes, so carrying them in an
+    authoring reference would imply findings an author can never see.
     """
-    from analitiq.validator import VALIDATOR_IDS
-
-    package_set = {vid for vid in VALIDATOR_IDS if not vid.startswith("bundle-")}
+    package_set = _connector_run_ids()
     assert package_set == EXPECTED_VALIDATOR_IDS, _diff_msg(
         "validator ids",
         package_set,

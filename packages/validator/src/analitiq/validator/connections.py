@@ -42,4 +42,4 @@ def is_connection_doc(doc: Any) -> bool:
     )
 
 
-register_model_kind(is_connection_doc, _CONNECTION_ADAPTER)
+register_model_kind(is_connection_doc, _CONNECTION_ADAPTER, entity="connection")

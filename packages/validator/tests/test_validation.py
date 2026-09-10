@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
+from analitiq.validator._tree import disk_location
 from analitiq.validator.connectors import (
     _DATABASE_KINDS,
     _READ_MAP_FILENAME,
@@ -566,7 +567,7 @@ def _min_connector(kind: str):
 def test_coverage_database_requires_write_map(tmp_path, validator):
     (tmp_path / "type-map-read.json").write_text('[{"match":"exact","native_type":"BIGINT","arrow_type":"Int64"}]')
     (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
+    errors = _errors(validator.check_coverage(_min_connector("database"), disk_location(tmp_path / "connector.json")))
     assert any("type-map-write.json" in e["message"] for e in errors)
 
 
@@ -576,7 +577,7 @@ def test_coverage_api_rejects_write_map(tmp_path, validator):
     (tmp_path / "endpoints").mkdir()
     (tmp_path / "endpoints" / "w.json").write_text("{}")
     (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("api"), tmp_path / "connector.json"))
+    errors = _errors(validator.check_coverage(_min_connector("api"), disk_location(tmp_path / "connector.json")))
     assert any("must not ship" in e["message"] for e in errors)
 
 
@@ -585,7 +586,7 @@ def test_coverage_flags_legacy_type_map(tmp_path, validator):
     (tmp_path / "type-map-read.json").write_text('[{"match":"exact","native_type":"X","arrow_type":"Utf8"}]')
     (tmp_path / "endpoints").mkdir()
     (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("api"), tmp_path / "connector.json"))
+    errors = _errors(validator.check_coverage(_min_connector("api"), disk_location(tmp_path / "connector.json")))
     assert any("pre-split name" in e["message"] for e in errors)
 
 
@@ -594,7 +595,7 @@ def test_coverage_database_family_requires_write_map(tmp_path, kind, validator):
     # nosql/document are database-family kinds — same read+write map requirement.
     (tmp_path / "type-map-read.json").write_text('[{"match":"exact","native_type":"BIGINT","arrow_type":"Int64"}]')
     (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage({"kind": kind, "transports": {}}, tmp_path / "connector.json"))
+    errors = _errors(validator.check_coverage({"kind": kind, "transports": {}}, disk_location(tmp_path / "connector.json")))
     assert any("type-map-write.json" in e["message"] for e in errors)
 
 
@@ -701,7 +702,7 @@ def test_coverage_flags_nested_endpoint_file(tmp_path, connector_base, validator
 def test_coverage_flags_unparseable_read_map(tmp_path, validator):
     (tmp_path / "type-map-read.json").write_text("{ not json")
     (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
+    errors = _errors(validator.check_coverage(_min_connector("database"), disk_location(tmp_path / "connector.json")))
     assert any("could not be read or parsed" in e["message"] for e in errors)
 
 
@@ -892,10 +893,10 @@ def _defects_reported(findings) -> set[str]:
             if any(f["validator"] == vid and fragment in f["message"] for f in findings)}
 
 
-def _database_tree(root: Path, *, read_map: str | None, write_map: bool, endpoints: bool) -> Path:
+def _database_tree(root: Path, *, read_map: str | None, write_map: bool, endpoints: bool):
     """A database-family connector tree, with the read map's text, the write map
     and an `endpoints/` directory the kind has no business shipping each optional.
-    Returns the connector.json path."""
+    Returns the connector.json location."""
     root.mkdir(parents=True)
     (root / "connector.json").write_text("{}")
     if read_map is not None:
@@ -907,7 +908,7 @@ def _database_tree(root: Path, *, read_map: str | None, write_map: bool, endpoin
         (root / "endpoints").mkdir()
         (root / "endpoints" / "misnamed.json").write_text(
             json.dumps(_endpoint("STRING", "Utf8", endpoint_id="widgets", path="/v1/widgets")))
-    return root / "connector.json"
+    return disk_location(root / "connector.json")
 
 
 @pytest.mark.parametrize("state,text,reported", _BROKEN_READ_MAPS, ids=[s for s, _, _ in _BROKEN_READ_MAPS])
@@ -989,7 +990,7 @@ def test_database_family_never_enumerates_endpoints(tmp_path, kind, validator):
 @pytest.mark.parametrize("kind", _STORAGE_KINDS)
 def test_storage_kinds_need_no_read_map(tmp_path, kind, validator):
     (tmp_path / "connector.json").write_text("{}")
-    assert validator.check_coverage({"kind": kind, "transports": {}}, tmp_path / "connector.json") == []
+    assert validator.check_coverage({"kind": kind, "transports": {}}, disk_location(tmp_path / "connector.json")) == []
 
 
 # --- CLI / exit-code contract (the integration surface consumers depend on) ---

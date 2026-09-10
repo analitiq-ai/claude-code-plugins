@@ -1,0 +1,654 @@
+"""`validate_tree` — one path-free entry point over a keyed document tree.
+
+The path-based entry points (`validate_document(..., doc_path=...)`, the
+`analitiq-validate` CLI) and the tree entry point are two readers over the same
+checks, so the first thing pinned here is that they agree byte for byte: every
+fixture this repo ships, staged on disk and handed over as a tree, yields the
+same envelope by both routes — finding order and `path` strings included. A
+consumer that receives a tree over the wire is then graded exactly as the
+author's own checkout is.
+
+The rest pins what a tree can do that a bare document cannot (the
+whole-connector checks), what happens to a key whose text does not parse, that
+one crashing stage costs exactly one finding, and which trees are refused.
+"""
+from __future__ import annotations
+
+import json
+import shutil
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+CORPUS = Path(__file__).resolve().parent / "corpus"
+RULE_FIXTURES = REPO_ROOT / "packages" / "contract-models" / "tests" / "fixtures" / "rules"
+CONNECTOR_EXAMPLES = REPO_ROOT / "plugins" / "analitiq-connector-builder" / "skills"
+API_EXAMPLE = CONNECTOR_EXAMPLES / "connector-spec-api" / "examples" / "api-key"
+DB_EXAMPLE = CONNECTOR_EXAMPLES / "connector-spec-db" / "examples" / "postgresql"
+
+SRC = "22222222-2222-4222-8222-222222222222"
+DST = "33333333-3333-4333-8333-333333333333"
+PID = "11111111-1111-4111-8111-111111111111"
+SID = "44444444-4444-4444-8444-444444444444"
+H = "https://schemas.analitiq.ai"
+
+
+def _fixture_files() -> list[Path]:
+    files = sorted(CORPUS.glob("*.json")) + sorted(RULE_FIXTURES.rglob("*.json"))
+    assert files, "no fixtures found — the corpus or the rule fixtures moved"
+    return files
+
+
+def _text_tree(root: Path) -> dict[str, str]:
+    """Every file under `root`, keyed by its POSIX path relative to `root`."""
+    return {
+        p.relative_to(root).as_posix(): p.read_text(encoding="utf-8")
+        for p in sorted(root.rglob("*")) if p.is_file()
+    }
+
+
+def _canonical(envelope: dict) -> str:
+    return json.dumps(envelope, sort_keys=True)
+
+
+def _stage_connector(example_dir: Path, dest: Path) -> Path:
+    """An example connector laid out as `definition/` — the registry layout."""
+    definition = dest / "definition"
+    definition.mkdir(parents=True)
+    body = next(example_dir.glob("*.example.json"))
+    shutil.copy(body, definition / "connector.json")
+    for name in ("type-map-read.json", "type-map-write.json"):
+        if (example_dir / name).exists():
+            shutil.copy(example_dir / name, definition / name)
+    if (example_dir / "endpoints").is_dir():
+        shutil.copytree(example_dir / "endpoints", definition / "endpoints")
+    return definition / "connector.json"
+
+
+# ---------------------------------------------------------------------------
+# Byte identity: the path route and the tree route are one set of checks
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("fixture", _fixture_files(),
+                         ids=lambda p: p.relative_to(REPO_ROOT).as_posix())
+def test_every_fixture_grades_the_same_by_path_and_by_tree(validator, tmp_path, fixture):
+    doc_path = tmp_path / "definition" / "connector.json"
+    doc_path.parent.mkdir()
+    shutil.copy(fixture, doc_path)
+    doc = json.loads(doc_path.read_text(encoding="utf-8"))
+    by_path = validator.diagnostics(validator.validate_document(doc, doc_path=doc_path))
+    by_tree = validator.validate_tree(_text_tree(tmp_path))
+    assert _canonical(by_path) == _canonical(by_tree)
+
+
+@pytest.mark.parametrize("example", [API_EXAMPLE, DB_EXAMPLE], ids=lambda p: p.name)
+def test_connector_tree_grades_the_same_by_path_by_cli_and_by_tree(
+        validator, validator_cli, tmp_path, example):
+    doc_path = _stage_connector(example, tmp_path)
+    doc = json.loads(doc_path.read_text(encoding="utf-8"))
+    by_path = validator.diagnostics(validator.validate_document(doc, doc_path=doc_path))
+    by_tree = validator.validate_tree(_text_tree(tmp_path))
+    result = validator_cli.run("--document", str(doc_path))
+    assert result.returncode == 0, result.stderr
+    assert _canonical(by_path) == _canonical(by_tree)
+    assert _canonical(json.loads(result.stdout)) == _canonical(by_tree)
+
+
+# ---------------------------------------------------------------------------
+# A connector tree runs the whole-connector checks; a bare document cannot
+# ---------------------------------------------------------------------------
+
+def _api_tree(tmp_path: Path) -> dict[str, str]:
+    _stage_connector(API_EXAMPLE, tmp_path)
+    return _text_tree(tmp_path)
+
+
+def _ids(envelope: dict, severity: str | None = None) -> list[str]:
+    return [f["validator"] for f in envelope["findings"]
+            if severity is None or f["severity"] == severity]
+
+
+def test_connector_tree_is_clean_when_the_shipped_example_is(validator, tmp_path):
+    assert validator.validate_tree(_api_tree(tmp_path))["passed"]
+
+
+def test_connector_tree_reports_a_duplicate_endpoint_id(validator, tmp_path):
+    tree = _api_tree(tmp_path)
+    original = next(k for k in tree if k.startswith("definition/endpoints/"))
+    tree["definition/endpoints/copy.json"] = tree[original]
+    envelope = validator.validate_tree(tree)
+    assert not envelope["passed"]
+    assert "endpoint-id-unique" in _ids(envelope, "error"), envelope["findings"]
+
+
+def test_connector_tree_reports_a_misnamed_endpoint_file(validator, tmp_path):
+    tree = _api_tree(tmp_path)
+    original = next(k for k in tree if k.startswith("definition/endpoints/"))
+    tree["definition/endpoints/misnamed.json"] = tree.pop(original)
+    envelope = validator.validate_tree(tree)
+    assert "endpoint-filename" in _ids(envelope, "error"), envelope["findings"]
+
+
+def test_connector_tree_reports_a_missing_read_map(validator, tmp_path):
+    tree = _api_tree(tmp_path)
+    del tree["definition/type-map-read.json"]
+    envelope = validator.validate_tree(tree)
+    missing = [f for f in envelope["findings"]
+               if f["validator"] == "type-map-coverage" and "missing" in f["message"]]
+    assert missing, envelope["findings"]
+
+
+def test_bare_connector_document_still_reports_coverage_skipped(validator):
+    body = next(API_EXAMPLE.glob("*.example.json"))
+    findings = validator.validate_document(json.loads(body.read_text(encoding="utf-8")))
+    skipped = [f for f in findings if f["validator"] == "type-map-coverage"]
+    assert [(f["severity"], f["path"]) for f in skipped] == [("warning", "/")], findings
+    assert "skipped" in skipped[0]["message"]
+
+
+# ---------------------------------------------------------------------------
+# A pipeline tree
+# ---------------------------------------------------------------------------
+
+CONN_WISE = {
+    "$schema": f"{H}/connection/latest.json", "connection_id": SRC, "connector_id": "wise",
+    "display_name": "Wise", "parameters": {"environment": "live"},
+    "secret_refs": {"api_token": "env:ANALITIQ_WISE_API_TOKEN"},
+}
+CONN_PG = {
+    "$schema": f"{H}/connection/latest.json", "connection_id": DST, "connector_id": "postgresql",
+    "display_name": "Prod Postgres",
+    "parameters": {"host": "db.example.com", "port": 5432, "database": "analytics",
+                   "ssl_mode": "verify-full"},
+    "secret_refs": {"password": "env:ANALITIQ_POSTGRESQL_PASSWORD"},
+}
+PIPELINE = {
+    "$schema": f"{H}/pipeline/latest.json", "pipeline_id": PID, "display_name": "Wise to Postgres",
+    "connections": {"source": SRC, "destinations": [DST]}, "streams": [SID],
+    "schedule": {"type": "manual", "timezone": "UTC"}, "status": "draft",
+}
+
+
+def _db_endpoint():
+    from analitiq.contracts.endpoint_identity import build_database_object, derive_db_endpoint_id
+    eid = derive_db_endpoint_id(None, "public", "orders")
+    obj = build_database_object(None, "public", "orders")
+    doc = {
+        "$schema": f"{H}/database-endpoint/latest.json", "endpoint_id": eid,
+        "display_name": "public.orders", "database_object": obj,
+        "columns": [{"name": "id", "native_type": "bigint", "arrow_type": "Int64",
+                     "nullable": False, "ordinal_position": 1}],
+        "primary_keys": ["id"],
+    }
+    return eid, obj, doc
+
+
+def _pipeline_tree() -> dict[str, str]:
+    eid, obj, endpoint = _db_endpoint()
+    stream = {
+        "$schema": f"{H}/stream/latest.json", "stream_id": SID, "pipeline_id": PID,
+        "display_name": "orders",
+        "source": {
+            "endpoint_ref": {"scope": "connector", "connection_id": SRC, "endpoint_id": "transfers"},
+            "replication": {"method": "incremental", "cursor_field": "updated_at"},
+        },
+        "destinations": [{
+            "endpoint_ref": {"scope": "connection", "connection_id": DST,
+                             "endpoint_id": eid, "database_object": obj},
+            "write": {"mode": "upsert", "conflict_keys": ["id"]},
+        }],
+        "status": "draft",
+    }
+    docs = {
+        "pipeline.json": PIPELINE,
+        "streams/orders.json": stream,
+        "connections/wise/connection.json": CONN_WISE,
+        "connections/postgresql/connection.json": CONN_PG,
+        f"connections/postgresql/definition/endpoints/{eid}.json": endpoint,
+        "connectors/wise/definition/connector.json": {"connector_id": "wise", "kind": "api"},
+        "connectors/wise/definition/endpoints/transfers.json": {"endpoint_id": "transfers"},
+        "connectors/postgresql/definition/connector.json": {"connector_id": "postgresql",
+                                                            "kind": "database"},
+    }
+    return {key: json.dumps(doc) for key, doc in docs.items()}
+
+
+def test_pipeline_tree_draft_bundle_passes(validator):
+    envelope = validator.validate_tree(_pipeline_tree())
+    assert envelope["passed"], envelope["findings"]
+    assert not any(f["path"] == "/pipeline/status" for f in envelope["findings"])
+
+
+def test_pipeline_tree_runs_the_referential_checks(validator):
+    tree = _pipeline_tree()
+    stream = json.loads(tree["streams/orders.json"])
+    stream["source"]["endpoint_ref"]["connection_id"] = "99999999-9999-4999-8999-999999999999"
+    tree["streams/orders.json"] = json.dumps(stream)
+    envelope = validator.validate_tree(tree)
+    assert "bundle-connection-ref" in _ids(envelope, "error"), envelope["findings"]
+
+
+def test_pipeline_tree_warns_on_an_unpublished_connector_endpoint(validator):
+    tree = _pipeline_tree()
+    stream = json.loads(tree["streams/orders.json"])
+    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"
+    tree["streams/orders.json"] = json.dumps(stream)
+    envelope = validator.validate_tree(tree)
+    warned = [f for f in envelope["findings"] if f["validator"] == "connector-endpoint-ref"]
+    assert [(f["severity"], f["path"]) for f in warned] == [("warning", "/streams/0/source/endpoint_ref")]
+    assert "transfers" in warned[0]["message"]
+    assert envelope["passed"]
+
+
+def test_pipeline_tree_rejects_the_pre_split_type_map_name(validator):
+    tree = _pipeline_tree()
+    tree["connections/postgresql/definition/type-map.json"] = "[]"
+    envelope = validator.validate_tree(tree)
+    legacy = [f for f in envelope["findings"] if f["validator"] == "connection-type-map"]
+    assert [(f["severity"], f["path"]) for f in legacy] == [
+        ("error", "connections/postgresql/definition/type-map.json")]
+
+
+def test_pipeline_tree_active_status_requires_runnability(validator):
+    tree = _pipeline_tree()
+    tree["pipeline.json"] = json.dumps({**PIPELINE, "status": "active"})
+    envelope = validator.validate_tree(tree)
+    assert not envelope["passed"]
+    assert "bundle-pipeline" in _ids(envelope, "error"), envelope["findings"]
+
+
+# ---------------------------------------------------------------------------
+# Text that does not parse is a finding naming its key
+# ---------------------------------------------------------------------------
+
+def test_malformed_stream_text_is_a_finding_naming_the_key(validator):
+    tree = _pipeline_tree()
+    tree["streams/orders.json"] = "{ not valid json"
+    envelope = validator.validate_tree(tree)
+    bad = [f for f in envelope["findings"] if f["validator"] == "document"]
+    assert [(f["severity"], f["path"]) for f in bad] == [("error", "streams/orders.json")]
+    assert "orders.json" in bad[0]["message"]
+    assert not envelope["passed"]
+
+
+def test_malformed_connector_sibling_is_reported_under_the_reading_check(validator, tmp_path):
+    tree = _api_tree(tmp_path)
+    tree["definition/type-map-read.json"] = "[ not valid json"
+    envelope = validator.validate_tree(tree)
+    bad = [f for f in envelope["findings"]
+           if f["validator"] == "type-map-coverage" and "could not be read or parsed" in f["message"]]
+    assert bad, envelope["findings"]
+    assert "type-map-read.json" in bad[0]["message"]
+
+
+def test_malformed_root_document_is_a_finding_naming_the_key(validator, tmp_path):
+    tree = _api_tree(tmp_path)
+    tree["definition/connector.json"] = "{ not valid json"
+    envelope = validator.validate_tree(tree)
+    assert [(f["validator"], f["severity"], f["path"]) for f in envelope["findings"]] == [
+        ("document", "error", "definition/connector.json")]
+
+
+def test_a_parsed_value_is_taken_as_the_document(validator):
+    tree = _pipeline_tree()
+    tree["pipeline.json"] = json.loads(tree["pipeline.json"])
+    assert validator.validate_tree(tree)["passed"]
+
+
+# ---------------------------------------------------------------------------
+# One crashing stage costs exactly one finding
+# ---------------------------------------------------------------------------
+
+def test_one_crashing_stage_is_one_finding_and_the_rest_still_report(validator, monkeypatch):
+    from analitiq.validator import trees
+
+    tree = _pipeline_tree()
+    tree["connections/postgresql/definition/type-map.json"] = "[]"  # decided first
+    stream = json.loads(tree["streams/orders.json"])
+    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # decided last
+    tree["streams/orders.json"] = json.dumps(stream)
+
+    original = trees._connection_type_map_findings
+
+    def boom(tree_, slug, findings):
+        if slug == "wise":
+            raise TypeError("simulated crash")
+        return original(tree_, slug, findings)
+
+    monkeypatch.setattr(trees, "_connection_type_map_findings", boom)
+    envelope = validator.validate_tree(tree)
+    crashes = [f for f in envelope["findings"] if f["validator"] == "adapter-crash"]
+    assert [(f["severity"], f["path"]) for f in crashes] == [("error", "connections/wise")]
+    assert "TypeError" in crashes[0]["message"] and "simulated crash" in crashes[0]["message"]
+    ids = _ids(envelope)
+    assert "connection-type-map" in ids, envelope["findings"]
+    assert "connector-endpoint-ref" in ids, envelope["findings"]
+
+
+def test_a_crash_that_excludes_a_member_skips_the_referential_pass(validator, monkeypatch):
+    from analitiq.validator import _tree
+
+    tree = _pipeline_tree()
+    original = _tree.MemoryTree.read
+
+    def boom(self, key):
+        if key == "streams/orders.json":
+            raise TypeError("simulated crash")
+        return original(self, key)
+
+    monkeypatch.setattr(_tree.MemoryTree, "read", boom)
+    envelope = validator.validate_tree(tree)
+    crashes = [f["path"] for f in envelope["findings"] if f["validator"] == "adapter-crash"]
+    assert crashes == ["streams/orders.json", "pipeline"], envelope["findings"]
+    assert "bundle-stream-ref" not in _ids(envelope), envelope["findings"]
+
+
+# ---------------------------------------------------------------------------
+# Which trees are refused
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("key", ["/definition/connector.json", "definition/../connector.json",
+                                 "", "definition//connector.json", "./pipeline.json"])
+def test_a_bad_key_refuses_the_whole_tree(validator, key):
+    envelope = validator.validate_tree({key: "{}", "pipeline.json": "{}"})
+    assert [(f["validator"], f["severity"], f["path"]) for f in envelope["findings"]] == [
+        ("document", "error", "")]
+    assert repr(key) in envelope["findings"][0]["message"]
+
+
+def test_a_tree_matching_neither_layout_is_refused(validator):
+    envelope = validator.validate_tree({"connector.json": "{}"})
+    assert [(f["validator"], f["severity"]) for f in envelope["findings"]] == [("document", "error")]
+
+
+def test_a_tree_matching_both_layouts_is_refused(validator):
+    envelope = validator.validate_tree({"pipeline.json": "{}", "definition/connector.json": "{}"})
+    assert [(f["validator"], f["severity"]) for f in envelope["findings"]] == [("document", "error")]
+
+
+# ---------------------------------------------------------------------------
+# The envelope, entity routing and gap resolution
+# ---------------------------------------------------------------------------
+
+def test_diagnostics_passes_only_without_an_error(validator):
+    warning = validator.finding("document", "warning", "", "w")
+    error = validator.finding("document", "error", "", "e")
+    assert validator.diagnostics([]) == {"passed": True, "findings": []}
+    assert validator.diagnostics(iter([warning]))["passed"] is True
+    assert validator.diagnostics([warning, error])["passed"] is False
+
+
+def test_entities_are_the_six_routes(validator):
+    assert validator.ENTITIES == ("pipeline", "stream", "connection", "database_endpoint",
+                                  "type_map_read", "type_map_write")
+
+
+def test_entity_routing_reaches_the_model_without_the_discriminating_key(validator):
+    # No `connector_id`: shape detection would call this an unrecognised
+    # document; the entity route grades it as the connection it was meant to be.
+    findings = validator.validate_document({"$schema": f"{H}/connection/latest.json"},
+                                           entity="connection")
+    assert findings and all(f["validator"] == "contract-model" for f in findings), findings
+    assert any(f["path"] == "/connector_id" for f in findings), findings
+
+
+def test_entity_routing_grades_a_type_map_in_its_own_direction(validator, tmp_path):
+    write_rules = [{"match": "regex", "arrow_type": r"^Decimal(128|256)\((?<p>\d+),\s*(?<s>\d+)\)$",
+                    "native_type": "NUMERIC(${p}, ${s})"}]
+    path = tmp_path / "type-map-write.json"
+    assert not validator.validate_document(write_rules, doc_path=path, entity="type_map_write")
+    misnamed = validator.validate_document(write_rules, doc_path=tmp_path / "type-map.json",
+                                           entity="type_map_write")
+    assert [f["validator"] for f in misnamed] == ["connection-type-map"], misnamed
+    assert not any(f["validator"] == "type-map-write-coverage"
+                   for f in validator.validate_document(write_rules, entity="type_map_write"))
+
+
+def test_an_unknown_entity_is_a_caller_error(validator):
+    with pytest.raises(ValueError, match="entity"):
+        validator.validate_document({}, entity="connector")
+
+
+READ_MAP = [
+    {"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"},
+    {"match": "regex",
+     "native_type": r"^NUMERIC\((?<precision>[1-9]|[12]\d|3[0-8]),\s*(?<scale>\d|[12]\d|3[0-8])\)$",
+     "arrow_type": "Decimal128(${precision}, ${scale})"},
+]
+WRITE_MAP = [
+    {"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"},
+    {"match": "regex", "arrow_type": r"^Decimal(128|256)\((?<p>\d+),\s*(?<s>\d+)\)$",
+     "native_type": "NUMERIC(${p}, ${s})"},
+]
+
+
+def test_resolve_type_map_gaps_read(validator):
+    assert validator.resolve_type_map_gaps("read", ["citext", "vector(3)", "numeric(10,2)", "citext"],
+                                           [READ_MAP]) == {
+        "direction": "read",
+        "resolved": {"citext": "Utf8", "vector(3)": None, "numeric(10,2)": "Decimal128(10, 2)"},
+        "gaps": ["vector(3)"],
+    }
+
+
+def test_resolve_type_map_gaps_write_is_case_preserving_and_primary_first(validator):
+    primary = [{"match": "exact", "arrow_type": "Utf8", "native_type": "CITEXT"}]
+    assert validator.resolve_type_map_gaps("write", ["Utf8", "utf8", "Decimal128(20, 4)"],
+                                           [primary, WRITE_MAP]) == {
+        "direction": "write",
+        "resolved": {"Utf8": "CITEXT", "utf8": None, "Decimal128(20, 4)": "NUMERIC(20, 4)"},
+        "gaps": ["utf8"],
+    }
+
+
+@pytest.mark.parametrize("maps,match", [
+    ([{"match": "exact"}], "not a JSON array"),
+    ([[{"match": "exact", "native_type": "CITEXT"}]], "not a valid read type map"),
+    ([WRITE_MAP], "not a valid read type map"),
+])
+def test_resolve_type_map_gaps_refuses_a_broken_map(validator, maps, match):
+    with pytest.raises(ValueError, match=match):
+        validator.resolve_type_map_gaps("read", ["citext"], maps)
+
+
+def test_resolve_type_map_gaps_refuses_an_unknown_direction(validator):
+    with pytest.raises(ValueError, match="direction"):
+        validator.resolve_type_map_gaps("sideways", ["citext"], [READ_MAP])
+
+
+def test_the_lifted_ids_are_registered(validator):
+    assert {"adapter-crash", "connection-type-map", "connector-endpoint-ref"} <= validator.VALIDATOR_IDS
+
+
+# ---------------------------------------------------------------------------
+# Where each pipeline-tree guard sits: a crash costs exactly the unit it is in
+# ---------------------------------------------------------------------------
+
+def _memory_tree(validator, documents):
+    from analitiq.validator._tree import MemoryTree
+    return MemoryTree(documents)
+
+
+def _crash_reading(monkeypatch, key):
+    """Make the tree's read of `key` raise, the way a pathologically deep
+    document would inside the parse."""
+    from analitiq.validator import _tree
+
+    original = _tree.MemoryTree.read
+
+    def boom(self, key_):
+        if key_ == key:
+            raise TypeError("simulated crash")
+        return original(self, key_)
+
+    monkeypatch.setattr(_tree.MemoryTree, "read", boom)
+
+
+def test_endpoint_read_crash_preserves_its_sibling_endpoint(validator, monkeypatch):
+    from analitiq.validator import trees
+
+    eid, _, _ = _db_endpoint()
+    tree = _pipeline_tree()
+    second = json.loads(tree[f"connections/postgresql/definition/endpoints/{eid}.json"])
+    second["endpoint_id"] = "customers"
+    tree["connections/postgresql/definition/endpoints/customers.json"] = json.dumps(second)
+    _crash_reading(monkeypatch, f"connections/postgresql/definition/endpoints/{eid}.json")
+
+    bundle, findings, complete, crashed = trees._assemble_bundle(
+        _memory_tree(validator, tree), json.loads(tree["pipeline.json"]))
+    assert not complete and crashed
+    assert {e["endpoint_id"] for e in bundle["endpoints"]} == {"customers"}
+    assert [f["path"] for f in findings if f["validator"] == "adapter-crash"] == [
+        f"connections/postgresql/definition/endpoints/{eid}.json"]
+
+
+def test_connector_read_crash_preserves_the_other_connectors_identity(validator, monkeypatch):
+    from analitiq.validator import trees
+
+    tree = _pipeline_tree()
+    tree["connectors/wise/definition/connector.json"] = json.dumps(
+        {"connector_id": "wise-live", "kind": "api"})
+    _crash_reading(monkeypatch, "connectors/postgresql/definition/connector.json")
+
+    bundle, findings, complete, crashed = trees._assemble_bundle(
+        _memory_tree(validator, tree), json.loads(tree["pipeline.json"]))
+    # the crash cost only the connector_id alias: the slug is recorded before
+    # the guarded read, and a connection could still name the id, so assembly
+    # is marked incomplete out of caution
+    assert not complete and crashed
+    assert [f["path"] for f in findings if f["validator"] == "adapter-crash"] == [
+        "connectors/postgresql"]
+    assert {"postgresql", "wise", "wise-live"} <= set(bundle["connectors"])
+
+
+def test_stream_read_crash_preserves_siblings_and_later_sections(validator, monkeypatch):
+    tree = _pipeline_tree()
+    tree["streams/second.json"] = json.dumps(
+        {**json.loads(tree["streams/orders.json"]), "stream_id": "55555555-5555-4555-8555-555555555555"})
+    tree["connections/postgresql/definition/type-map.json"] = "[]"
+    _crash_reading(monkeypatch, "streams/orders.json")
+
+    envelope = validator.validate_tree(tree)
+    ids = _ids(envelope)
+    crashes = [f["path"] for f in envelope["findings"] if f["validator"] == "adapter-crash"]
+    # the connections section, after the crashed stream, still decided its finding
+    assert "connection-type-map" in ids, envelope["findings"]
+    # the bundle is short the crashed stream the pipeline still references, so the
+    # referential pass is skipped rather than blame a reference that never broke
+    assert "bundle-stream-ref" not in ids, envelope["findings"]
+    assert crashes == ["streams/orders.json", "pipeline"], envelope["findings"]
+
+
+def test_type_map_direction_crash_preserves_legacy_finding_and_sibling_direction(validator, monkeypatch):
+    from analitiq.validator import trees
+
+    tree = _pipeline_tree()
+    site = "connections/postgresql/definition"
+    tree[f"{site}/type-map.json"] = "[]"
+    tree[f"{site}/type-map-read.json"] = json.dumps(READ_MAP)
+    tree[f"{site}/type-map-write.json"] = json.dumps(
+        [{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}])  # invalid casing
+    original = trees._validate_connection_type_map
+
+    def boom(direction, doc, where, schema_url=None):
+        if direction == "read":
+            raise TypeError("simulated crash")
+        return original(direction, doc, where, schema_url)
+
+    monkeypatch.setattr(trees, "_validate_connection_type_map", boom)
+    envelope = validator.validate_tree(tree)
+    crashes = [f["path"] for f in envelope["findings"] if f["validator"] == "adapter-crash"]
+    assert crashes == [f"{site}/type-map-read.json"], envelope["findings"]
+    legacy = [f for f in envelope["findings"]
+              if f["validator"] == "connection-type-map" and "pre-split" in f["message"]]
+    assert legacy, envelope["findings"]  # decided before the crash, still present
+    bad_write = [f for f in envelope["findings"] if f["validator"] == "contract-model"
+                 and f["path"].startswith(f"{site}/type-map-write.json")]
+    assert bad_write, envelope["findings"]  # processed after the crash, still got its turn
+
+
+def test_filename_gate_crash_keeps_the_endpoint_in_the_bundle(validator, monkeypatch):
+    from analitiq.validator import trees
+
+    eid, _, _ = _db_endpoint()
+    tree = _pipeline_tree()
+    tree["connections/postgresql/definition/type-map.json"] = "[]"
+    original = trees.endpoint_filename_findings
+
+    def boom(endpoint, filename):
+        if filename == f"{eid}.json":
+            raise TypeError("simulated crash")
+        return original(endpoint, filename)
+
+    monkeypatch.setattr(trees, "endpoint_filename_findings", boom)
+    envelope = validator.validate_tree(tree)
+    ids = _ids(envelope)
+    assert "adapter-crash" in ids, envelope["findings"]
+    # the endpoint kept its place -> no false bundle-endpoint-ref for the
+    # stream's legitimate reference to it; the connection's trailing type-map
+    # check still ran
+    assert "bundle-endpoint-ref" not in ids, envelope["findings"]
+    assert "connection-type-map" in ids, envelope["findings"]
+
+
+def test_connector_endpoint_sets_crash_isolated_to_one_connector(validator, monkeypatch):
+    tree = _pipeline_tree()
+    tree["connectors/postgresql/definition/endpoints/orders.json"] = json.dumps({"endpoint_id": "orders"})
+    stream = json.loads(tree["streams/orders.json"])
+    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"
+    tree["streams/orders.json"] = json.dumps(stream)
+    _crash_reading(monkeypatch, "connectors/postgresql/definition/endpoints/orders.json")
+
+    envelope = validator.validate_tree(tree)
+    crashes = [f["path"] for f in envelope["findings"] if f["validator"] == "adapter-crash"]
+    assert crashes == ["connectors/postgresql/definition/endpoints"], envelope["findings"]
+    # wise's connector-endpoint-ref check still ran despite postgresql's crash
+    warned = [f for f in envelope["findings"] if f["validator"] == "connector-endpoint-ref"]
+    assert len(warned) == 1 and "transfers" in warned[0]["message"], envelope["findings"]
+
+
+def test_referential_pass_crash_preserves_the_connector_ref_warning(validator, monkeypatch):
+    from analitiq.validator import trees
+
+    tree = _pipeline_tree()
+    stream = json.loads(tree["streams/orders.json"])
+    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"
+    tree["streams/orders.json"] = json.dumps(stream)
+
+    def boom(*a, **kw):
+        raise TypeError("simulated crash")
+
+    monkeypatch.setattr(trees, "validate_pipeline_bundle", boom)
+    envelope = validator.validate_tree(tree)
+    crashes = [f["path"] for f in envelope["findings"] if f["validator"] == "adapter-crash"]
+    assert crashes == ["pipeline"], envelope["findings"]
+    assert "connector-endpoint-ref" in _ids(envelope), envelope["findings"]
+
+
+def test_one_ref_crash_preserves_the_warning_decided_before_it(validator, monkeypatch):
+    import difflib
+
+    tree = _pipeline_tree()
+    first = json.loads(tree["streams/orders.json"])
+    first["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # resolves first
+    second = {**first, "stream_id": "55555555-5555-4555-8555-555555555555",
+              "source": {**first["source"],
+                         "endpoint_ref": {**first["source"]["endpoint_ref"], "endpoint_id": "wiring"}}}
+    tree["streams/orders.json"] = json.dumps(first)
+    tree["streams/second.json"] = json.dumps(second)
+    pipeline = json.loads(tree["pipeline.json"])
+    pipeline["streams"].append(second["stream_id"])
+    tree["pipeline.json"] = json.dumps(pipeline)
+    original = difflib.get_close_matches
+
+    def boom(word, possibilities, *a, **kw):
+        if word == "wiring":
+            raise TypeError("simulated crash")
+        return original(word, possibilities, *a, **kw)
+
+    monkeypatch.setattr(difflib, "get_close_matches", boom)
+    envelope = validator.validate_tree(tree)
+    assert "adapter-crash" in _ids(envelope), envelope["findings"]
+    warned = [f for f in envelope["findings"] if f["validator"] == "connector-endpoint-ref"]
+    assert any("transfers" in w["message"] for w in warned), envelope["findings"]

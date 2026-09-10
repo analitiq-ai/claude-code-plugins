@@ -35,4 +35,4 @@ def is_stream_doc(doc: Any) -> bool:
     return isinstance(doc, dict) and "source" in doc and "destinations" in doc
 
 
-register_model_kind(is_stream_doc, _STREAM_ADAPTER)
+register_model_kind(is_stream_doc, _STREAM_ADAPTER, entity="stream")

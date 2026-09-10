@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds a **`stream`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 29 of the 57 below have no validator, so nothing rejects
+all hold: 29 of the 58 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **15** structural · **15** advisory · **16** referential · **5** procedural · **6** judgment.
+In this file: **15** structural · **15** advisory · **17** referential · **5** procedural · **6** judgment.
 
 ## Contents
 
@@ -104,6 +104,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-STRM-032 | A stream MUST name as its parent the pipeline that references it. | `stream` | error | validator |
 | RULE-STRM-033 | A stream's source connection MUST be the one its pipeline declares as the source, and each of its destination connections MUST be one the pipeline declares as a destination. | `stream` | error | validator |
 | RULE-STRM-034 | A connection-scoped endpoint reference MUST resolve to an endpoint document belonging to the connection it names. | `stream` | error | validator |
+| RULE-STRM-042 | A connector-scoped endpoint reference SHOULD name an endpoint the referenced connector publishes. | `stream` | warning | validator |
 
 ## Procedural
 

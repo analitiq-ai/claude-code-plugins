@@ -38,6 +38,11 @@ EXEMPT_VALIDATOR_IDS = {
         "not a rule about a document but the verdict that there is no document "
         "to judge: unrecognized kind, unreadable file, unparseable JSON"
     ),
+    "adapter-crash": (
+        "not a rule but the report that a stage of a multi-document run was "
+        "not evaluated: a containment guard fired, and path/message name which "
+        "stage and why"
+    ),
 }
 
 

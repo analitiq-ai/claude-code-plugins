@@ -1,0 +1,23 @@
+id: RULE-TMAP-023
+statement: >
+  A connection-scoped type map MUST be a JSON array of rules at the exact
+  filename its direction is loaded from — `type-map-read.json` or
+  `type-map-write.json` under the connection's `definition/` — and the
+  pre-split `type-map.json` MUST NOT be present there.
+tier: referential
+severity: error
+scopes: [type-map]
+validator: "analitiq.validator.trees::_connection_type_map_findings"
+owners: [pipeline-plugin, engine]
+rationale: >
+  The engine loads each direction from its own filename and reads nothing else
+  in the directory, so a map under any other name — the pre-split name
+  included — is silently inert: the file is present and valid, and every
+  stream on the connection runs without it. The filename also decides which
+  direction a rule set is graded in, so a misnamed file is reported for its
+  name alone rather than graded in a direction its author never meant. A
+  document that is not an array fails at the loader, the most expensive place
+  to learn a file's shape. If the engine came to read a further name, this
+  check would reject a map it accepts; it would never pass one it refuses.
+status: active
+superseded_by: null

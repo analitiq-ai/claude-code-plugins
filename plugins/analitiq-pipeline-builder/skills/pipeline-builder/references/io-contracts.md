@@ -145,35 +145,32 @@ does not fail validation.
 <!-- BEGIN GENERATED: validator-ids -->
 Finding ids the validator can emit:
 
-`bundle-connection-ref`, `bundle-connector-ref`, `bundle-endpoint-ref`, `bundle-pipeline`, `bundle-stream-ref`, `contract-model`, `document`, `embedded-json-schema`, `embedded-schema-example`, `endpoint-filename`, `endpoint-id-locator`, `endpoint-id-unique`, `endpoint-transport-ref`, `type-map-coverage`, `type-map-rule`, `type-map-write-coverage`
+`adapter-crash`, `bundle-connection-ref`, `bundle-connector-ref`, `bundle-endpoint-ref`, `bundle-pipeline`, `bundle-stream-ref`, `connection-type-map`, `connector-endpoint-ref`, `contract-model`, `document`, `embedded-json-schema`, `embedded-schema-example`, `endpoint-filename`, `endpoint-id-locator`, `endpoint-id-unique`, `endpoint-transport-ref`, `type-map-coverage`, `type-map-rule`, `type-map-write-coverage`
 <!-- END GENERATED: validator-ids -->
 
 Pass `--bundle-root` when validating the stitched pipeline; that is what runs
-the cross-document checks and what makes the `bundle-*` ids reachable.
-
-The adapter adds ids of its own, for checks the published bundle validator
-structurally cannot make:
+the cross-document checks and what makes the `bundle-*` ids reachable, along
+with the ids only a bundle run can decide:
 
 - `connector-endpoint-ref` — **warning-only**: a `scope: "connector"` stream ref
-  naming an endpoint the downloaded connector does not publish. The message
-  carries an alignment suggestion. See `stream-spec/spec-endpoint-refs.md`.
+  naming an endpoint the downloaded connector does not publish
+  (`RULE-STRM-042`). The message carries an alignment suggestion. See
+  `stream-spec/spec-endpoint-refs.md`.
 - `connection-type-map` — **error**: file-level gates on the connection-scoped
-  type maps the engine loads beside `connection.json`. See
+  type maps the engine loads beside `connection.json` (`RULE-TMAP-023`). See
   `endpoint-spec/spec-type-map-gaps.md`.
 
 One further id names not a check but a failure mode: `adapter-crash` —
 **error**: the run could not be evaluated normally. Either a containment guard
-inside `scripts/validate.py` fired — the document was not evaluated for that
-stage, and `path`/`message` name which stage crashed and why — or the process
-printed no `Diagnostics` JSON at all and the driving agent reconstructed this
-finding from a stderr excerpt, carried in `message` with `path` empty.
+around one stage of the bundle run fired — that stage was not evaluated, and
+`path`/`message` name which stage crashed and why — or the process printed no
+`Diagnostics` JSON at all and the driving agent reconstructed this finding from
+a stderr excerpt, carried in `message` with `path` empty.
 
-This id names only a crash reaching a guard in this adapter. A crash inside
-the published validator's own single-document dispatch (the `database_endpoint`
-/ `type_map_read` / `type_map_write` routes, which call it directly) is already
-caught there and returned as an ordinary `contract-model` finding whose
-`message` says the check itself crashed — that finding never reaches this
-adapter as an exception, so no guard here fires and it is not relabeled.
+A crash inside a single-document check — any `entity` run, or the pipeline
+document's own model check within a bundle run — is caught there and returned
+as an ordinary `contract-model` finding whose `message` says the check itself
+crashed; it is never relabeled `adapter-crash`.
 
 Some findings name the rule they apply, as a leading `[RULE-<AREA>-NNN]` in
 `message`. Quote the id verbatim whenever one is present — `pipeline-spec` and
