@@ -257,8 +257,15 @@ def _connection_type_map_findings(conn_dir: Path) -> list[dict]:
             findings.append(_finding("connection-type-map", "error", f"{site}/{fname}",
                                      f"Cannot read {fname}: {exc}"))
             continue
-        findings.extend({**f, "path": f"{site}/{fname}{f.get('path', '')}"}
-                        for f in _type_map_findings(entity, doc, path))
+        # Each direction is its own independently-decidable unit: a crash grading
+        # type-map-read.json must not discard the legacy-filename finding already
+        # decided above, nor cost type-map-write.json its own turn in this loop.
+        entity_findings: list[dict] = []
+        with _contained(findings, f"{site}/{fname}") as outcome:
+            entity_findings = _type_map_findings(entity, doc, path)
+        if not outcome.crashed:
+            findings.extend({**f, "path": f"{site}/{fname}{f.get('path', '')}"}
+                            for f in entity_findings)
     return findings
 
 
@@ -491,33 +498,6 @@ def _check_connector_endpoint_refs(streams, connections,
     return findings
 
 
-def _unresolved_pipeline_refs(pipeline_doc: dict, bundle: dict) -> bool:
-    """True if `pipeline_doc` names a stream or connection id that no bundled
-    document declares. An incomplete assembly cannot rule out that a missing
-    reference like this IS the excluded document — so this is the narrow
-    signal deciding whether skipping `validate_pipeline_bundle` below is
-    actually warranted. An exclusion the pipeline never referenced (a stray
-    malformed stream file with no matching entry in `pipeline.streams`, say)
-    cannot be the cause of any `bundle-stream-ref` / `bundle-connection-ref`
-    finding, so on its own it must not cost the referential pass for the rest
-    of a bundle whose own references already resolve cleanly."""
-    from analitiq.validator.pipelines import _base_id
-
-    stream_ids = {_base_id(s.get("stream_id")) for s in bundle["streams"] if isinstance(s, dict)}
-    for ref in pipeline_doc.get("streams") or []:
-        if _base_id(ref) not in stream_ids:
-            return True
-
-    connection_ids = {_base_id(c.get("connection_id")) for c in bundle["connections"] if isinstance(c, dict)}
-    wiring = pipeline_doc.get("connections")
-    refs = [wiring.get("source"), *(wiring.get("destinations") or [])] if isinstance(wiring, dict) else []
-    for ref in refs:
-        if isinstance(ref, str) and _base_id(ref) not in connection_ids:
-            return True
-
-    return False
-
-
 def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> list[dict]:
     from analitiq.validator import validate_pipeline_bundle
     bundle, findings, complete = _assemble_bundle(pipeline_doc, document_path, root)
@@ -527,26 +507,31 @@ def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> lis
     # (require_runnable=False) while the pipeline is a draft, and enforce runnability
     # once it is authored 'active'. Every referential finding stays blocking either way.
     require_runnable = pipeline_doc.get("status") == "active"
-    if complete or not _unresolved_pipeline_refs(pipeline_doc, bundle):
+    if complete:
         # Each of these two is its own unit: a crash in one must not discard the
         # per-connection findings _assemble_bundle already decided above, nor the
         # other unit's result.
         with _contained(findings, "pipeline"):
             findings.extend(validate_pipeline_bundle(bundle, require_runnable=require_runnable))
-    else:
-        # A crash or read error above excluded at least one on-disk member from
-        # the bundle (that finding names which one and why), AND the pipeline
-        # names a stream or connection id no bundled document resolves. The
-        # published validator has no way to tell "that id is the excluded
-        # document" from "that id was never valid", so running it here would
-        # risk reporting a reference as broken that a crash, not the author,
-        # made unresolvable. Referential integrity is not evaluated against a
-        # bundle this ambiguous, rather than risk that report.
+    elif any(f["validator"] == "adapter-crash" for f in findings):
+        # A containment guard above actually fired and excluded an on-disk member
+        # (that finding already names which one and why). The published validator
+        # has no way to tell "excluded here" from "genuinely missing", so running
+        # it against a bundle this ambiguous risks reporting a reference as broken
+        # that the crash, not the author, made unresolvable. Telling which specific
+        # references an exclusion could taint would mean re-deriving the published
+        # validator's own reference-resolution logic locally, so the whole
+        # referential pass is skipped instead of risking that drift.
         findings.append(_finding(
             "adapter-crash", "error", "pipeline",
-            "bundle assembly excluded at least one on-disk document that pipeline.streams "
-            "or pipeline.connections references; cross-document referential integrity was "
-            "not evaluated against a bundle this incomplete."))
+            "a containment guard excluded at least one on-disk document from the "
+            "bundle; cross-document referential integrity was not evaluated against "
+            "a bundle this incomplete."))
+    # else: assembly is incomplete only from ordinary, already-reported read errors
+    # (no guard fired) — those findings (validator "document") already name the
+    # defect precisely. Skipping the referential pass here is the same caution as
+    # the crash case, but adding a second, adapter-crash-labeled finding would
+    # claim a containment guard fired when nothing actually crashed.
     # Plugin-local aid the published bundle can't make: it receives connector identity
     # only, so scope='connector' endpoint refs go unresolved. The plugin has the
     # downloaded connector endpoint files, so verify those refs here and warn (with an

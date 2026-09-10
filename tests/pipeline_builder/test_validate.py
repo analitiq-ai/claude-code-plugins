@@ -658,6 +658,39 @@ def test_bundle_type_map_crash_does_not_orphan_connection_from_referential_check
     assert "bundle-endpoint-ref" not in validators, diag["findings"]
 
 
+def test_type_map_entity_crash_preserves_legacy_finding_and_sibling_direction(tmp_path, monkeypatch):
+    # each type-map direction is its own independently-decidable unit inside
+    # _connection_type_map_findings — a crash grading type-map-read.json must
+    # not discard the legacy-filename finding already decided just above it,
+    # nor cost type-map-write.json its own turn later in the same loop
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
+    _write(tmp_path, "connections/postgresql/definition/type-map-read.json", TYPE_MAP_READ)
+    _write(tmp_path, "connections/postgresql/definition/type-map-write.json",
+           [{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}])  # invalid casing
+
+    original = V._type_map_findings
+
+    def boom(entity, doc_, document_path):
+        if entity == "type_map_read":
+            raise TypeError("simulated crash")
+        return original(entity, doc_, document_path)
+
+    monkeypatch.setattr(V, "_type_map_findings", boom)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    validators = [f["validator"] for f in diag["findings"]]
+    assert "adapter-crash" in validators, diag["findings"]
+    crash = [f for f in diag["findings"] if f["validator"] == "adapter-crash"
+             and f["path"].endswith("type-map-read.json")]
+    assert crash, diag["findings"]
+    migration = [f for f in diag["findings"] if f["validator"] == "connection-type-map"
+                 and "pre-split filename" in f["message"]]
+    assert migration, diag["findings"]  # decided before the crashing entity, still present
+    bad_write = [f for f in diag["findings"] if f["validator"] == "contract-model"
+                 and f["path"].startswith("connections/postgresql/definition/type-map-write.json")]
+    assert bad_write, diag["findings"]  # processed after the crash, still got its turn
+
+
 def test_bundle_endpoint_filename_crash_preserves_endpoint_and_siblings(tmp_path, monkeypatch):
     # a crash in one endpoint's filename gate must not cost that endpoint its
     # place in the bundle passed to the referential check, nor the remaining
@@ -823,14 +856,19 @@ def test_bundle_type_map_validated_when_connection_json_unreadable(tmp_path):
     assert "connection-type-map" in validators, diag["findings"]  # legacy filename, still checked
 
 
-def test_bundle_unreferenced_malformed_stream_does_not_hide_unrelated_referential_error(tmp_path):
-    # an orphaned malformed stream file — never named in pipeline.streams —
-    # marks assembly incomplete, but it cannot be the cause of any
-    # bundle-*-ref finding since the pipeline never referenced it; a genuine,
-    # unrelated referential defect elsewhere in the bundle must still surface
+def test_bundle_unrelated_malformed_stream_skips_referential_pass_without_crash_label(tmp_path):
+    # an orphaned malformed stream file marks assembly incomplete (a document
+    # never referenced by pipeline.streams can still exclude a member the
+    # pipeline DOES reference — telling those apart would mean re-deriving the
+    # published validator's own reference resolution locally), so the whole
+    # referential pass is skipped, even though this particular defect could
+    # not have been the cause of any bundle-*-ref finding. Nothing crashed —
+    # _read_bundle_member handled the bad JSON normally — so no adapter-crash
+    # finding is added on top of the "document" finding that already names it.
     doc = _build_bundle(tmp_path)
     (tmp_path / "pipelines/p/streams/orphan.json").write_text("{not valid json")
-    # a second, referenced stream wired to the WRONG source connection
+    # a second, referenced stream wired to the WRONG source connection — a
+    # genuine, unrelated referential defect the skipped pass does not surface
     bad_stream = {**STREAM, "stream_id": "55555555-5555-4555-8555-555555555555",
                   "source": {**STREAM["source"],
                              "endpoint_ref": {**STREAM["source"]["endpoint_ref"], "connection_id": DST}}}
@@ -842,7 +880,8 @@ def test_bundle_unreferenced_malformed_stream_does_not_hide_unrelated_referentia
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = [f["validator"] for f in diag["findings"]]
     assert "document" in validators, diag["findings"]  # the orphaned malformed stream
-    assert "bundle-connection-ref" in validators, diag["findings"]  # unrelated genuine defect
+    assert "bundle-connection-ref" not in validators, diag["findings"]  # referential pass skipped
+    assert "adapter-crash" not in validators, diag["findings"]  # nothing actually crashed
 
 
 def test_connector_endpoint_sets_crash_isolated_to_one_connector(tmp_path, monkeypatch):
