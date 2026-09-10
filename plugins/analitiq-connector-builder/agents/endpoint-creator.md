@@ -39,7 +39,8 @@ not the plugin's.
   run's per-endpoint research pass. Shape and field meanings:
   `connector-builder/references/io-contracts.md` § EndpointFacts. A field the
   provider's payloads show a value for carries a real `sample_value`; a
-  temporal also carries its `tz_aware` flag — step 3 depends on both.
+  date-time field sampled as a date-time string also carries its `tz_aware`
+  flag — step 3 depends on both.
 - `connector` — the assembled connector document (for `transports`, `auth`,
   and `connection_contract` reference paths).
 
@@ -146,11 +147,15 @@ was raised.
      field: declare neither on the node here too, rather than half a pair
      (`RULE-ENDP-006`) or a guess, and report the gap. This holds on both
      schemas an endpoint declares — the read record and a write mode's input.
-     - **Temporal fields follow the sample value, never a default**
-       (`RULE-SHRD-002`). Use the field's
-       `tz_aware` flag (set by research from a real `sample_value`): a
-       zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an
-       offset/`Z` → `Timestamp(<unit>, UTC)`. The read map is first-match-wins,
+     - **Date-time fields follow the sample value, never a default**
+       (`RULE-SHRD-002`). A date-only field settles on its documented
+       `format` as `Date32` and has no zone question to answer. For a
+       date-time field, use the `tz_aware` flag research sets from an
+       observed date-time string: a zoneless wire value → bare
+       `Timestamp(<unit>)`; a value carrying an offset/`Z` →
+       `Timestamp(<unit>, UTC)`. An absent flag is missing evidence rather
+       than a zoneless value, and leaves the field untyped like any other
+       ungrounded one. The read map is first-match-wins,
        so one native token resolves to exactly one canonical: two entries
        that differ in zone-awareness reach different canonicals only under
        different tokens. Compare tokens the way an `exact` read rule does,
