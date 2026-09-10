@@ -414,6 +414,74 @@ class TestScalarNodePropertiesAreNotTraversable:
         with pytest.raises(DeclaredPathError, match="'age' is not declared"):
             resolve_declared_path(root, ["age"], root=root)
 
+    def test_a_scalar_only_anyof_union_does_not_permit_properties(self):
+        # A node can say what kind of value it holds through `anyOf`/`oneOf`
+        # instead of a bare `type` key. An instance need only match ONE branch,
+        # so the union permits object as soon as any branch does — and here
+        # neither does.
+        node = {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {}
+        assert materialize_node(node)["properties"] == {}
+        # `anyOf` is also a conditional-declaration keyword, so once "age" is
+        # correctly excluded from `properties` the ambiguity message fires
+        # rather than the plain "not declared" one — TestNotStaticallyResolvable
+        # covers that message itself.
+        with pytest.raises(DeclaredPathError, match="not statically resolvable"):
+            resolve_declared_path(node, ["age"])
+
+    def test_a_oneof_union_with_no_object_branch_does_not_permit_properties(self):
+        # `oneOf`'s exclusivity decides which branch an instance matches, never
+        # which kinds of value are possible, so it folds identically to `anyOf`.
+        node = {
+            "oneOf": [{"arrow_type": "Utf8"}, {"arrow_type": "Int64"}],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {}
+        assert materialize_node(node)["properties"] == {}
+
+    def test_a_nullable_object_union_still_permits_properties(self):
+        # The nullable-record idiom: one branch is object-typed, so the union
+        # permits object and the record's fields stay reachable. The regression
+        # case for gating on unions at all.
+        node = {
+            "anyOf": [{"type": "object"}, {"type": "null"}],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {"age": {"type": "integer"}}
+        assert materialize_node(node)["properties"] == {"age": {"type": "integer"}}
+
+    def test_an_object_branch_reached_through_a_ref_still_permits_properties(self):
+        # The same idiom with the object branch behind a `$ref`, so the union
+        # fold has to resolve each branch rather than read its literal keys.
+        root = {
+            "$defs": {"Rec": {"type": "object"}},
+            "anyOf": [{"$ref": "#/$defs/Rec"}, {"type": "null"}],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(root, root) == {"age": {"type": "integer"}}
+
+    def test_a_union_declaring_nothing_still_permits_properties(self):
+        # Branches that say nothing about the kind of value narrow nothing —
+        # the union stays silent instead of excluding everything.
+        node = {
+            "anyOf": [{"description": "a"}, {"description": "b"}],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {"age": {"type": "integer"}}
+
+    def test_an_own_type_answers_ahead_of_a_sibling_union(self):
+        # A node's own markers are its last word, the same "own statements win"
+        # order every other key in this fold follows.
+        node = {
+            "type": "object",
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {"age": {"type": "integer"}}
+
     def test_type_on_one_allof_branch_gates_properties_on_a_sibling_branch(self):
         # The type marker and the `properties` map can be declared on
         # DIFFERENT sibling `allOf` branches of the same node — `_contributors`
@@ -462,6 +530,23 @@ class TestScalarNodePropertiesAreNotTraversable:
         }
         assert effective_properties(node) == {}
         assert materialize_node(node)["properties"] == {}
+
+    def test_the_gate_reports_the_kind_of_value_a_materialized_node_carries(self):
+        # Two `allOf` siblings disagreeing over `arrow_type` is not this gate's
+        # subject. `_refuse_disjoint_types` proves contradictions from the bare
+        # `type` key alone, so this document composes rather than being refused
+        # — last-wins, the rule `_combine_schema_values` applies to every scalar
+        # key — and the node it composes to IS object-shaped. The gate must
+        # report exactly what the materialized node declares, or the two views
+        # of one document disagree.
+        node = {"allOf": [
+            {"arrow_type": "Utf8"},
+            {"arrow_type": "Object", "properties": {"age": {"type": "integer"}}},
+        ]}
+        materialized = materialize_node(node)
+        assert materialized["arrow_type"] == "Object"
+        assert effective_properties(node) == {"age": {"type": "integer"}}
+        assert materialized["properties"] == {"age": {"type": "integer"}}
 
     def test_an_enclosing_arrow_type_override_rescues_a_scalar_refs_properties(self):
         # The composed type is folded last-wins over the shared source order,
