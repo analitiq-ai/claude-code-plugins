@@ -752,7 +752,6 @@ def test_type_map_read_crash_preserves_legacy_finding_and_sibling_direction(tmp_
 
     monkeypatch.setattr(V, "_read_json", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
     crash = [f for f in diag["findings"] if f["validator"] == "adapter-crash"
              and f["path"].endswith("type-map-read.json")]
     assert crash, diag["findings"]
