@@ -37,10 +37,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        ensure_deps_or_reexec(__file__)
+        reentered = ensure_deps_or_reexec(__file__)
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    # The child printed the result and its code says how it went. Carrying on here
+    # would reach the lazy contract-model import below in the very interpreter the
+    # child was spawned because it lacks them.
+    if reentered is not None:
+        return reentered
 
     from analitiq.contracts.endpoint_identity import build_database_object, derive_db_endpoint_id
     result = {

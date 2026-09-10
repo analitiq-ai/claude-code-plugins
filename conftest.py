@@ -50,8 +50,9 @@ for _src in (REPO_ROOT / "packages" / "contract-models" / "src",
         sys.path.insert(0, _p)
 
 # The pipeline plugin's helpers bootstrap the PUBLISHED validator into a managed
-# venv and `os.execv` into it when `importlib.metadata` can't find the pin. Source
-# on sys.path has no metadata, so without this the bootstrap would replace the
-# pytest process mid-run. See `_FROM_SOURCE` in
+# venv and run the calling script again under it when `importlib.metadata` cannot
+# find the pin. Source on sys.path has no metadata, so without this the bootstrap
+# would build a venv mid-run and grade the published release instead of the source
+# under test. See `_FROM_SOURCE` in
 # plugins/analitiq-pipeline-builder/scripts/_bootstrap.py.
 os.environ["ANALITIQ_VALIDATOR_FROM_SOURCE"] = "1"

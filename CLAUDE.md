@@ -77,7 +77,7 @@ while the in-repo tree deliberately has none, making it a *namespace portion* â€
 a regular package wins regardless of `sys.path`, so an installed copy silently
 shadows the source and the suite grades the wrong code. The repo-root `conftest.py`
 puts both source trees on the path and sets `ANALITIQ_VALIDATOR_FROM_SOURCE=1` so a
-helper run from a checkout does not bootstrap a venv and `os.execv` out of pytest.
+helper run from a checkout does not bootstrap a venv and run itself again under it.
 `requirements-dev.txt` carries only the packages' runtime deps.
 
 The plugins **self-install a published release at runtime** â€” end users have no

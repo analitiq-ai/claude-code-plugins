@@ -1444,7 +1444,7 @@ def _pipeline_adapter():
     status in `scripts/validate.py`, so a probe that called
     `validate_pipeline_bundle` directly would measure the wrong side of the
     sentence. Import is side-effect-free — `_bootstrap`'s venv build and
-    re-exec only fire from the adapter's `main()`.
+    re-entry only fire from the adapter's `main()`.
     """
     import importlib.util
 

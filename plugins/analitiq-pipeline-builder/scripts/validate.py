@@ -623,7 +623,9 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
 
 
 def _read_json(path: Path):
-    return json.loads(Path(path).read_text())
+    # JSON is UTF-8 by specification; the platform default is the system
+    # codepage on Windows, which would mis-decode any authored non-ASCII.
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 # ---------------------------------------------------------------------------
@@ -650,7 +652,13 @@ def main(argv: list[str] | None = None) -> int:
     # uncontained — the driving agent's stderr-excerpt fallback is for exactly
     # that case.
     try:
-        ensure_deps_or_reexec(__file__)
+        # A code back means a child already ran this script under the managed
+        # interpreter and wrote its own Diagnostics to the stdout this process
+        # shares. Returning it adds nothing; printing here would put a second
+        # object on a stream whose contract is one.
+        reentered = ensure_deps_or_reexec(__file__)
+        if reentered is not None:
+            return reentered
         bundle_root = Path(args.bundle_root) if args.bundle_root else None
         diagnostics = diagnostics_for(args.entity, Path(args.document), bundle_root)
         # Serialized inside the guard: a backend finding carrying a

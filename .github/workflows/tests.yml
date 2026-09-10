@@ -128,6 +128,47 @@ jobs:
       - name: Grade a pathological sample
         run: pytest -v -rs packages/validator/tests/test_embedded_schema_examples.py
 
+  plugin-helpers-portability:
+    name: the pipeline plugin's helpers run on ${{ matrix.os }}
+    # The helpers build a managed virtualenv and run themselves again under it.
+    # Both halves are platform-shaped, and neither was reachable by any test until
+    # one existed: the repo-root conftest short-circuits the bootstrap for the
+    # whole suite. So this job is the other half — it runs a helper the way a user
+    # gets it, with the published pin installed rather than the source tree on the
+    # path, and asserts the contract the driving agent depends on: one Diagnostics
+    # JSON object on stdout.
+    #
+    # The interpreter is invoked directly, with no shell constructs, because the
+    # commands the agents document are a separate question from whether the
+    # helpers work at all.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Validate a document through the plugin adapter
+        # No ANALITIQ_VALIDATOR_FROM_SOURCE: the bootstrap must do its real work,
+        # which is what this job exists to exercise.
+        shell: python
+        run: |
+          import json, subprocess, sys, pathlib
+          document = pathlib.Path("doc.json")
+          document.write_text(json.dumps({"$schema": "x"}), encoding="utf-8")
+          adapter = "plugins/analitiq-pipeline-builder/scripts/validate.py"
+          proc = subprocess.run(
+              [sys.executable, adapter, "--entity", "pipeline",
+               "--document", str(document)],
+              capture_output=True, text=True)
+          sys.stderr.write(proc.stderr)
+          report = json.loads(proc.stdout)
+          assert "passed" in report and "findings" in report, report
+          print("one Diagnostics object, passed =", report["passed"])
+
   engine-grammar-pin-guard:
     # The canonical Arrow type vocabulary derives from a VENDORED copy of the
     # engine-published arrow-type-grammar manifest. pytest pins

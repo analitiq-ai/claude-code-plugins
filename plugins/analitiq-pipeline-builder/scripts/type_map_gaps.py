@@ -60,7 +60,7 @@ def _load_rules(path: Path, direction: str) -> list:
     uncovered probe, and a false gap makes the authoring agent shadow the very
     rule the map intended. Failing loud keeps a reported gap unambiguous."""
     try:
-        doc = json.loads(path.read_text())
+        doc = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
     if not isinstance(doc, list):
@@ -115,9 +115,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        ensure_deps_or_reexec(__file__)
+        reentered = ensure_deps_or_reexec(__file__)
     except RuntimeError as exc:
         return _fail(str(exc))
+    # The child ran with this process's stdin, so the probes it was piped were
+    # read there. Reading them again here would block on a stream already consumed.
+    if reentered is not None:
+        return reentered
 
     # Read and write rules share the {match, native_type, arrow_type} key set, so a
     # wrong-direction map would not error — it would resolve, plausibly and
@@ -131,7 +135,8 @@ def main(argv: list[str] | None = None) -> int:
                          f"--direction is {args.direction}")
 
     try:
-        raw = Path(args.probes_file).read_text() if args.probes_file else sys.stdin.read()
+        raw = (Path(args.probes_file).read_text(encoding="utf-8")
+               if args.probes_file else sys.stdin.read())
         probes = json.loads(raw)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         return _fail(f"cannot read probes: {exc}")
