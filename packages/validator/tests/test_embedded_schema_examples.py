@@ -17,11 +17,11 @@ import pytest
 
 from conftest import CLI_DEADLINE_SECONDS
 
-from analitiq.contracts.endpoints import (
+from analitiq.contracts.endpoints import WRITE_MODES
+from analitiq.contracts.shared.json_schema import (
     JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
     JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
     JSON_SCHEMA_SUBSCHEMA_KEYS,
-    WRITE_MODES,
 )
 
 API = "https://schemas.analitiq.ai/api-endpoint/latest.json"

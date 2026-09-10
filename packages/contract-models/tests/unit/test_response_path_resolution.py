@@ -27,12 +27,14 @@ from pydantic import ValidationError
 
 from analitiq.contracts.endpoints import (
     _REQUEST_EXPRESSION_SLOTS,
+    _json_schema_top_level_fields,
+    parse_endpoint,
+)
+from analitiq.contracts.shared.json_schema import (
     DeclarationConflictError,
     DeclaredPathError,
-    _json_schema_top_level_fields,
     effective_properties,
     materialize_node,
-    parse_endpoint,
     resolve_declared_path,
     resolve_local_pointer,
 )
@@ -1406,7 +1408,7 @@ class TestConditionalKeywordPartitionIsPinnedToTheWalkerSets:
     }
 
     def test_every_conditional_keyword_is_a_known_schema_position(self):
-        from analitiq.contracts.endpoints import (
+        from analitiq.contracts.shared.json_schema import (
             _CONDITIONAL_DECLARATION_KEYWORDS,
             JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
             JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
@@ -1428,7 +1430,7 @@ class TestConditionalKeywordPartitionIsPinnedToTheWalkerSets:
         )
 
     def test_every_walker_keyword_is_triaged(self):
-        from analitiq.contracts.endpoints import (
+        from analitiq.contracts.shared.json_schema import (
             _CONDITIONAL_DECLARATION_KEYWORDS,
             JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
             JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
