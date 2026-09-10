@@ -221,52 +221,52 @@ def _type_map_findings(entity: str, doc, document_path: Path) -> list[dict]:
     return findings
 
 
-def _connection_type_map_findings(conn_dir: Path) -> list[dict]:
+def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
     """Validate the connection-scoped type maps beside one connection.json —
     file-level checks the published bundle validator structurally cannot make
     (it receives assembled documents, never the connection's directory). A
     present map is validated in full via the published validator; the dead
     pre-split filename is rejected with a migration finding, mirroring the
-    published connector-side check."""
-    findings: list[dict] = []
+    published connector-side check.
+
+    Appends directly to the caller's shared `findings` list rather than
+    building a local one to return: the legacy check and each type-map
+    direction are independently-decidable units, each in its own `_contained`
+    guard, so a crash in one costs only its own finding — never a list of
+    already-decided results a crash partway through would otherwise discard
+    before this function got the chance to return it."""
     definition = conn_dir / "definition"
     site = f"connections/{conn_dir.name}/definition"
     legacy = definition / _LEGACY_TYPE_MAP_FILENAME
-    if legacy.exists() or legacy.is_symlink():
-        findings.append(_finding(
-            "connection-type-map", "error", f"{site}/{_LEGACY_TYPE_MAP_FILENAME}",
-            f"{_LEGACY_TYPE_MAP_FILENAME} is the pre-split filename; the engine never "
-            "reads it. Split it into type-map-read.json (native → Arrow) and, for the "
-            "write direction, type-map-write.json (Arrow → native)."))
+    with _contained(findings, f"{site}/{_LEGACY_TYPE_MAP_FILENAME}"):
+        if legacy.exists() or legacy.is_symlink():
+            findings.append(_finding(
+                "connection-type-map", "error", f"{site}/{_LEGACY_TYPE_MAP_FILENAME}",
+                f"{_LEGACY_TYPE_MAP_FILENAME} is the pre-split filename; the engine never "
+                "reads it. Split it into type-map-read.json (native → Arrow) and, for the "
+                "write direction, type-map-write.json (Arrow → native)."))
     for entity, fname in _TYPE_MAP_FILENAMES.items():
         path = definition / fname
-        if not (path.exists() or path.is_symlink()):
-            continue
-        if not path.is_file():
-            # A directory or dangling symlink under a load-bearing name would
-            # pass silently here and fail at the engine's loader — the most
-            # expensive place to find out.
-            findings.append(_finding(
-                "connection-type-map", "error", f"{site}/{fname}",
-                f"{fname} exists but is not a readable file (directory or dangling "
-                "symlink); the engine's loader will fail to open it."))
-            continue
-        try:
-            doc = _read_json(path)
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-            findings.append(_finding("connection-type-map", "error", f"{site}/{fname}",
-                                     f"Cannot read {fname}: {exc}"))
-            continue
-        # Each direction is its own independently-decidable unit: a crash grading
-        # type-map-read.json must not discard the legacy-filename finding already
-        # decided above, nor cost type-map-write.json its own turn in this loop.
-        entity_findings: list[dict] = []
-        with _contained(findings, f"{site}/{fname}") as outcome:
-            entity_findings = _type_map_findings(entity, doc, path)
-        if not outcome.crashed:
+        with _contained(findings, f"{site}/{fname}"):
+            if not (path.exists() or path.is_symlink()):
+                continue
+            if not path.is_file():
+                # A directory or dangling symlink under a load-bearing name would
+                # pass silently here and fail at the engine's loader — the most
+                # expensive place to find out.
+                findings.append(_finding(
+                    "connection-type-map", "error", f"{site}/{fname}",
+                    f"{fname} exists but is not a readable file (directory or dangling "
+                    "symlink); the engine's loader will fail to open it."))
+                continue
+            try:
+                doc = _read_json(path)
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                findings.append(_finding("connection-type-map", "error", f"{site}/{fname}",
+                                         f"Cannot read {fname}: {exc}"))
+                continue
             findings.extend({**f, "path": f"{site}/{fname}{f.get('path', '')}"}
-                            for f in entity_findings)
-    return findings
+                            for f in _type_map_findings(entity, doc, path))
 
 
 def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:
@@ -285,17 +285,21 @@ def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:
     return doc
 
 
-def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tuple[dict, list[dict], bool]:
+def _assemble_bundle(pipeline_doc: dict, document_path: Path,
+                     root: Path) -> tuple[dict, list[dict], bool, bool]:
     """Gather the on-disk pipeline bundle the way the engine resolves it at load:
     the pipeline plus its sibling stream documents, every connection, the
     connection-scoped endpoint documents (stamped with their owning connection's
     id, which endpoint documents do not carry themselves), and the downloaded
     connector identities. Returns the bundle, any read-error findings for
-    malformed siblings, and whether every member on disk actually made it into
-    the bundle — a crash or read error that excludes a member leaves the
-    published bundle validator unable to tell "genuinely missing" from
-    "excluded here", so a caller must know before trusting its referential
-    verdicts."""
+    malformed siblings, whether every member on disk actually made it into the
+    bundle, and whether a containment guard is the reason any didn't — a crash
+    or read error that excludes a member leaves the published bundle validator
+    unable to tell "genuinely missing" from "excluded here", so a caller must
+    know before trusting its referential verdicts, and separately must know
+    whether that exclusion came from an actual crash (worth its own labeled
+    finding) or an already-reported ordinary read error (which needs no second,
+    misleading one)."""
     # The engine locates a connection-scoped endpoint by its filename stem, so a file
     # named other than <endpoint_id>.json won't resolve at runtime. validate_document
     # gates this for a stem-addressed file, but validate_pipeline_bundle takes a
@@ -304,6 +308,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
 
     findings: list[dict] = []
     complete = True
+    crashed = False
 
     streams: list[dict] = []
     for p in sorted((document_path.parent / "streams").glob("*.json")):
@@ -315,6 +320,8 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
             doc = _read_bundle_member(p, findings)
             if doc is not None:
                 streams.append(doc)
+        if outcome.crashed:
+            crashed = True
         if outcome.crashed or doc is None:
             complete = False
 
@@ -344,6 +351,8 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
                     endpoint = None
                     with _contained(findings, ep_site) as ep_outcome:
                         endpoint = _read_bundle_member(ep_json, findings)
+                    if ep_outcome.crashed:
+                        crashed = True
                     if ep_outcome.crashed or endpoint is None:
                         complete = False
                         continue
@@ -360,18 +369,21 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
                     # here costs only this one finding, not the bundle's completeness.
                     with _contained(findings, ep_site):
                         findings.extend(endpoint_filename_findings(endpoint, ep_json.name))
+        if outcome.crashed:
+            crashed = True
         if outcome.crashed or conn is None:
             complete = False
         # Connection-scoped type maps are files the engine loads beside the
         # connection, invisible to the assembled-document bundle, and depend
         # only on conn_json.parent — never on whether connection.json itself
-        # parsed — so they are checked unconditionally, in their own guard: a
-        # crash here costs only this finding, never the bundle's completeness
+        # parsed — so they are checked unconditionally: a crash inside is
+        # contained per-direction by _connection_type_map_findings itself, so
+        # this outer guard is a backstop, never costs the bundle's completeness
         # (which would otherwise misreport a live connection as unresolved),
         # and a genuinely malformed or legacy type-map file is still reported
         # even when connection.json itself is unreadable.
         with _contained(findings, f"connections/{conn_json.parent.name}"):
-            findings.extend(_connection_type_map_findings(conn_json.parent))
+            _connection_type_map_findings(conn_json.parent, findings)
 
     # Connectors supply identity only, and the directory slug already is that
     # identity — so a malformed connector.json is best-effort skipped (its slug
@@ -391,6 +403,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
             if isinstance(cid, str) and cid:
                 connectors.add(cid)
         if outcome.crashed:
+            crashed = True
             complete = False
 
     bundle = {
@@ -400,7 +413,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
         "connectors": sorted(connectors),
         "endpoints": endpoints,
     }
-    return bundle, findings, complete
+    return bundle, findings, complete, crashed
 
 
 def _connector_endpoint_sets(root: Path, findings: list[dict]) -> dict[str, set[str]]:
@@ -447,7 +460,8 @@ def _connector_endpoint_sets(root: Path, findings: list[dict]) -> dict[str, set[
 
 
 def _check_connector_endpoint_refs(streams, connections,
-                                   connector_endpoint_sets: dict[str, set[str]]) -> list[dict]:
+                                   connector_endpoint_sets: dict[str, set[str]],
+                                   findings: list[dict]) -> None:
     """Verify every `scope='connector'` stream endpoint_ref names an endpoint that
     actually exists in the referenced connector's on-disk endpoint set. Emits a
     `connector-endpoint-ref` **warning** (never an error) per unresolved ref, with a
@@ -457,63 +471,73 @@ def _check_connector_endpoint_refs(streams, connections,
     Skipped silently when the endpoint set is unknown (connector not downloaded), so
     absence never produces a false positive. Reuses the published ref iterator and
     version-suffix normaliser so ref paths and connection-id matching stay identical
-    to the bundle validator's own resolution."""
+    to the bundle validator's own resolution.
+
+    Appends directly to the caller's shared `findings` list: each ref is its own
+    independently-decidable unit, contained on its own, so a crash checking one
+    ref (a validator regression in `_base_id`, say) costs only that ref's
+    warning — never the warnings already decided for refs checked earlier in
+    this same loop, which building a local list and returning it once at the
+    end would risk losing entirely."""
     import difflib
     from analitiq.validator.pipelines import _base_id, _iter_endpoint_refs
 
     conn_to_connector: dict = {}
-    for conn in connections if isinstance(connections, list) else []:
-        if not isinstance(conn, dict):
-            continue
-        cid, connector = conn.get("connection_id"), conn.get("connector_id")
-        if isinstance(cid, str) and isinstance(connector, str):
-            conn_to_connector[_base_id(cid)] = connector
+    with _contained(findings, "connector-endpoint-refs"):
+        for conn in connections if isinstance(connections, list) else []:
+            if not isinstance(conn, dict):
+                continue
+            cid, connector = conn.get("connection_id"), conn.get("connector_id")
+            if isinstance(cid, str) and isinstance(connector, str):
+                conn_to_connector[_base_id(cid)] = connector
 
-    findings: list[dict] = []
     for path, ref in _iter_endpoint_refs(streams):
-        if ref.get("scope") != "connector":
-            continue
-        cid, eid = ref.get("connection_id"), ref.get("endpoint_id")
-        if not (isinstance(cid, str) and cid and isinstance(eid, str) and eid):
-            continue  # missing ids are contract-model / bundle-connection-ref concerns
-        connector = conn_to_connector.get(_base_id(cid))
-        if connector is None:
-            continue  # unresolved connection — already flagged by the connection check
-        endpoint_ids = connector_endpoint_sets.get(connector)
-        if not endpoint_ids:
-            continue  # endpoint set unknown (connector not downloaded) — cannot verify
-        if eid in endpoint_ids:
-            continue
-        available = sorted(endpoint_ids)
-        case_match = next((e for e in available if e.lower() == eid.lower()), None)
-        close = difflib.get_close_matches(eid, available, n=1, cutoff=0.6)
-        suggestion = case_match or (close[0] if close else None)
-        hint = f" Did you mean {suggestion!r}?" if suggestion else ""
-        findings.append(_finding(
-            "connector-endpoint-ref", "warning", path,
-            f"endpoint_id {eid!r} is not among connector {connector!r}'s published "
-            f"endpoints {available}.{hint} Align the stream's endpoint_ref to the "
-            f"connector's endpoint name; the plugin never edits the connector.",
-        ))
-    return findings
+        with _contained(findings, path):
+            if ref.get("scope") != "connector":
+                continue
+            cid, eid = ref.get("connection_id"), ref.get("endpoint_id")
+            if not (isinstance(cid, str) and cid and isinstance(eid, str) and eid):
+                continue  # missing ids are contract-model / bundle-connection-ref concerns
+            connector = conn_to_connector.get(_base_id(cid))
+            if connector is None:
+                continue  # unresolved connection — already flagged by the connection check
+            endpoint_ids = connector_endpoint_sets.get(connector)
+            if not endpoint_ids:
+                continue  # endpoint set unknown (connector not downloaded) — cannot verify
+            if eid in endpoint_ids:
+                continue
+            available = sorted(endpoint_ids)
+            case_match = next((e for e in available if e.lower() == eid.lower()), None)
+            close = difflib.get_close_matches(eid, available, n=1, cutoff=0.6)
+            suggestion = case_match or (close[0] if close else None)
+            hint = f" Did you mean {suggestion!r}?" if suggestion else ""
+            findings.append(_finding(
+                "connector-endpoint-ref", "warning", path,
+                f"endpoint_id {eid!r} is not among connector {connector!r}'s published "
+                f"endpoints {available}.{hint} Align the stream's endpoint_ref to the "
+                f"connector's endpoint name; the plugin never edits the connector.",
+            ))
 
 
 def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> list[dict]:
     from analitiq.validator import validate_pipeline_bundle
-    bundle, findings, complete = _assemble_bundle(pipeline_doc, document_path, root)
+    bundle, findings, complete, crashed = _assemble_bundle(pipeline_doc, document_path, root)
     # This plugin authors draft bundles by design: a draft pipeline is not yet
     # runnable, so its runnability verdicts are an author-time expectation, not a
     # defect. Ask the bundle validator for referential integrity only
     # (require_runnable=False) while the pipeline is a draft, and enforce runnability
-    # once it is authored 'active'. Every referential finding stays blocking either way.
-    require_runnable = pipeline_doc.get("status") == "active"
+    # once it is authored 'active'. Every referential finding stays blocking either
+    # way. A non-dict pipeline_doc already earned its own contract-model finding at
+    # the single-document stage (see diagnostics_for) — treat it as not-yet-active
+    # here rather than raising and discarding what _assemble_bundle just decided.
+    require_runnable = isinstance(pipeline_doc, dict) and pipeline_doc.get("status") == "active"
     if complete:
         # Each of these two is its own unit: a crash in one must not discard the
         # per-connection findings _assemble_bundle already decided above, nor the
         # other unit's result.
         with _contained(findings, "pipeline"):
             findings.extend(validate_pipeline_bundle(bundle, require_runnable=require_runnable))
-    elif any(f["validator"] == "adapter-crash" for f in findings):
+    elif crashed:
         # A containment guard above actually fired and excluded an on-disk member
         # (that finding already names which one and why). The published validator
         # has no way to tell "excluded here" from "genuinely missing", so running
@@ -535,10 +559,12 @@ def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> lis
     # Plugin-local aid the published bundle can't make: it receives connector identity
     # only, so scope='connector' endpoint refs go unresolved. The plugin has the
     # downloaded connector endpoint files, so verify those refs here and warn (with an
-    # alignment suggestion) rather than error — connectors are trusted, pinned at runtime.
+    # alignment suggestion) rather than error — connectors are trusted, pinned at
+    # runtime. _check_connector_endpoint_refs contains each ref on its own; this
+    # outer guard is a backstop, e.g. against _connector_endpoint_sets itself.
     with _contained(findings, "connector-endpoint-refs"):
-        findings.extend(_check_connector_endpoint_refs(
-            bundle["streams"], bundle["connections"], _connector_endpoint_sets(root, findings)))
+        _check_connector_endpoint_refs(
+            bundle["streams"], bundle["connections"], _connector_endpoint_sets(root, findings), findings)
     return findings
 
 
