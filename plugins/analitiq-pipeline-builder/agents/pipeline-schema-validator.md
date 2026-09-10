@@ -64,11 +64,15 @@ published contract structurally cannot make (see its module docstring).
 - If the command prints valid `Diagnostics` JSON on stdout, return it as-is even
   when it exits non-zero (`passed: false`). The orchestrator interprets the
   verdict.
-- If the command prints no JSON on stdout (the adapter crashed before it could
-  emit diagnostics), return the stderr excerpt as a single error finding; never
-  forward partial or non-JSON stdout:
+- The adapter contains every crash it can reach into an `adapter-crash` finding
+  on stdout — see `skills/pipeline-builder/references/io-contracts.md` §
+  `Diagnostics`. If the command still
+  prints no JSON on stdout (a `SystemExit` or another fatal interpreter failure
+  before any guard runs — not something Python exception handling can contain),
+  return the stderr excerpt as a single error finding; never forward partial or
+  non-JSON stdout:
 
   <!-- illustrative -->
   ```jsonc
-  {"passed": false, "findings": [{"validator": "contract-model", "severity": "error", "path": "", "message": "<stderr excerpt>"}]}
+  {"passed": false, "findings": [{"validator": "adapter-crash", "severity": "error", "path": "", "message": "<stderr excerpt>"}]}
   ```
