@@ -96,7 +96,7 @@ single field looks wrong.
 | RULE-CTOR-011 | Every placeholder in a url_template DSN MUST have a binding, and every binding MUST be referenced by the template. | `connector` | error | validator |
 | RULE-CTOR-012 | A connection condition predicate MUST name the input it tests and MUST declare exactly one operator key per predicate. | `connector` | error | validator |
 | RULE-CTOR-013 | A stage placed in a schema of its own MUST name that schema, and a stage co-located with the target MUST NOT name one. | `connector` | error | validator |
-| RULE-CTOR-014 | A write_unit MUST declare at least one bound; a block declaring none states no preference and MUST be omitted instead. | `connector` | warning | validator |
+| RULE-CTOR-014 | A write_unit MUST declare at least one bound; a block declaring none states no preference and MUST be omitted instead. | `connector` | error | validator |
 | RULE-CTOR-015 | A transport family that lands through the default path MUST be omitted from the bulk-load declaration rather than declared with a null mechanism. | `connector` | error | validator |
 | RULE-CTOR-029 | A connector whose `ssl_mode` input enum admits a mode that verifies the server certificate MUST also declare a CA-certificate input in the same connection contract. | `connector` | error | — |
 | RULE-CTOR-034 | A DSN binding's `value` MUST resolve to the unencoded value, because the binding's declared `encoding` is applied once, by the runtime, when the DSN is rendered. | `connector` | error | — |

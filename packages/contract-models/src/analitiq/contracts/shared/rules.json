@@ -581,7 +581,7 @@
    "id": "RULE-CTOR-014",
    "statement": "A write_unit MUST declare at least one bound; a block declaring none states no preference and MUST be omitted instead.\n",
    "tier": "advisory",
-   "severity": "warning",
+   "severity": "error",
    "scopes": [
     "connector"
    ],
@@ -597,7 +597,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "write_unit exists to tell the engine's batch coalescer what to aim for, and absence of the whole block already means \"no preference\". An empty block is therefore a second spelling of the default that reads like a declared one: nothing breaks, the coalescer behaves exactly as it would with no block at all, and only the bound the author meant to state is missing. That is why the cost here is a lost preference rather than a broken run — unlike the rest of the declared-capability rules, whose violations reach the write path.\n",
+   "rationale": "write_unit exists to tell the engine's batch coalescer what to aim for, and absence of the whole block already means \"no preference\". An empty block is therefore a second spelling of the default that reads like a declared one: the coalescer sees no preference either way, and only the bound the author meant to state is missing. Whether that author forgot the value or meant the default is not knowable from the document, so the model refuses the ambiguous spelling rather than let it pass as a declaration — the document does not validate until the bound is stated or the block is dropped, the same cost every other declared-capability rule imposes.\n",
    "status": "active",
    "superseded_by": null
   },
