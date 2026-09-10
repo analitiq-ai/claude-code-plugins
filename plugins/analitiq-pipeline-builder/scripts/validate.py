@@ -450,32 +450,39 @@ def _connector_endpoint_sets(root: Path, findings: list[dict]) -> dict[str, set[
     not read as "no endpoints", which would warn on every ref. Callers treat a
     missing key as "cannot verify — skip" — the same treatment a crash reading
     one connector's endpoints gets here (contained per connector, so it costs
-    only that connector's set, never every other connector's)."""
+    only that connector's set, never every other connector's).
+
+    The enumeration itself (`sorted(root.glob(...))`, which materializes the
+    full listing before the loop runs) is wrapped in its own outer guard too:
+    a filesystem failure there would otherwise escape every per-connector
+    guard below and return nothing at all, rather than whatever connectors
+    were already found before it."""
     sets: dict[str, set[str]] = {}
-    for ep_dir in sorted(root.glob("connectors/*/definition/endpoints")):
-        slug_dir = ep_dir.parent.parent  # connectors/<slug>
-        with _contained(findings, f"connectors/{slug_dir.name}/definition/endpoints"):
-            if not ep_dir.is_dir():
-                continue
-            ids: set[str] = set()
-            for ep_json in sorted(ep_dir.glob("*.json")):
-                ids.add(ep_json.stem)
-                try:
-                    eid = _read_json(ep_json).get("endpoint_id")
-                except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
-                    eid = None
-                if isinstance(eid, str) and eid:
-                    ids.add(eid)
-            if ids:
-                keys = {slug_dir.name}
-                try:
-                    cid = _read_json(slug_dir / "definition" / "connector.json").get("connector_id")
-                except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
-                    cid = None
-                if isinstance(cid, str) and cid:
-                    keys.add(cid)
-                for key in keys:
-                    sets[key] = ids
+    with _contained(findings, "connectors"):
+        for ep_dir in sorted(root.glob("connectors/*/definition/endpoints")):
+            slug_dir = ep_dir.parent.parent  # connectors/<slug>
+            with _contained(findings, f"connectors/{slug_dir.name}/definition/endpoints"):
+                if not ep_dir.is_dir():
+                    continue
+                ids: set[str] = set()
+                for ep_json in sorted(ep_dir.glob("*.json")):
+                    ids.add(ep_json.stem)
+                    try:
+                        eid = _read_json(ep_json).get("endpoint_id")
+                    except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+                        eid = None
+                    if isinstance(eid, str) and eid:
+                        ids.add(eid)
+                if ids:
+                    keys = {slug_dir.name}
+                    try:
+                        cid = _read_json(slug_dir / "definition" / "connector.json").get("connector_id")
+                    except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+                        cid = None
+                    if isinstance(cid, str) and cid:
+                        keys.add(cid)
+                    for key in keys:
+                        sets[key] = ids
     return sets
 
 

@@ -887,6 +887,35 @@ def test_connector_endpoint_sets_directory_probe_crash_isolated_to_one_connector
                for f in diag["findings"]), diag["findings"]
 
 
+def test_connector_endpoint_sets_enumeration_crash_returns_partial_result(tmp_path, monkeypatch):
+    # the top-level enumeration (sorted(root.glob(...))) is its own guarded
+    # unit, same as _assemble_bundle's sections — a filesystem failure there
+    # must not escape every per-connector guard below it and abort the whole
+    # function; it should return whatever it has (nothing, if the enumeration
+    # itself never got going) instead of raising past its caller
+    doc = _build_bundle(tmp_path)
+
+    original_glob = Path.glob
+
+    def boom(self, pattern):
+        if pattern == "connectors/*/definition/endpoints":
+            raise TypeError("simulated crash")
+        return original_glob(self, pattern)
+
+    monkeypatch.setattr(Path, "glob", boom)
+    findings: list = []
+    sets = V._connector_endpoint_sets(tmp_path, findings)
+    assert sets == {}
+    crash = [f for f in findings if f["validator"] == "adapter-crash" and f["path"] == "connectors"]
+    assert crash, findings
+
+    # confirmed the same way through the full pipeline: the crash is contained,
+    # not left to propagate out of _bundle_findings
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    validators = [f["validator"] for f in diag["findings"]]
+    assert "adapter-crash" in validators, diag["findings"]
+
+
 def test_bundle_connections_section_crash_preserves_streams_and_reaches_connectors(tmp_path, monkeypatch):
     # a failure enumerating the connections/ directory itself (not a single
     # connection's own read) must not abort _assemble_bundle before it can
