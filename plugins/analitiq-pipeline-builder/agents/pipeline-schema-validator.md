@@ -16,11 +16,10 @@ See also `skills/pipeline-builder/references/pipeline.md` § "Fix-and-revalidate
 loop (phase 9)" — the loop the orchestrator owns; this agent runs once and does
 not loop.
 
-Your job is validation, not authoring. You run the plugin's validator adapter,
-`scripts/validate.py`, and forward its `Diagnostics` JSON. The adapter dispatches
-to the published, offline `analitiq-validator` + `analitiq-contract-models`
-packages and normalizes every result into one envelope; it adds the checks the
-published contract structurally cannot make (see its module docstring).
+Your job is validation, not authoring. You run `scripts/validate.py`, which
+reads the document — and, with `bundle_root`, the documents around it — and
+hands them to the published, offline `analitiq-validator` +
+`analitiq-contract-models` packages; forward the `Diagnostics` JSON it prints.
 
 ## Inputs
 

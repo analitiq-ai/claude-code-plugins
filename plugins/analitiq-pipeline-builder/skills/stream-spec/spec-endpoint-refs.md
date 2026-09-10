@@ -109,9 +109,9 @@ neither can be settled from the stream document alone.
 ## Connector-side endpoint verification (`connector-endpoint-ref`)
 
 <!-- PROBE: connector-endpoint-ref-warned -->
-With `--bundle-root`, the plugin also checks each `scope: "connector"` ref
-against the connector's endpoint set on disk (`scripts/validate.py`, check id
-`connector-endpoint-ref`). It is a **warning**, carrying a closest-match
+With `--bundle-root`, the bundle run also checks each `scope: "connector"` ref
+against the connector's endpoint set on disk (check id `connector-endpoint-ref`,
+`RULE-STRM-042`). It is a **warning**, carrying a closest-match
 alignment suggestion ("Did you mean `transfers`?"): the orchestrator surfaces
 it and, on the user's confirmation, aligns the stream's
 `endpoint_ref.endpoint_id` to the connector's endpoint name. The plugin never
