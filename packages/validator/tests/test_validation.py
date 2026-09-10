@@ -7,10 +7,7 @@ instead of the record. The model rejects it, so the validator now catches it —
 the gap the old validator missed.
 """
 import json
-import os
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest

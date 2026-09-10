@@ -8,9 +8,6 @@ document passes and an invalid one fails. Detection is also checked to be mutual
 exclusive: no authored kind claims another's shape.
 """
 import json
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]

@@ -158,7 +158,10 @@ def _encoded(message: dict) -> str | None:
     """
     try:
         line = json.dumps(message)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
+        # RecursionError belongs with the other two: nesting deep enough to
+        # exhaust the stack is a shape no JSON document this check was handed
+        # could have, and it is the document's defect rather than a lost worker.
         return None
     return line + "\n" if _json_native(message.get("value")) else None
 
@@ -214,18 +217,25 @@ class BudgetedGrader:
     def __exit__(self, *_exc) -> None:
         self.close()
 
+    @property
+    def _short_of_a_sample(self) -> bool:
+        """Whether what is left will not cover a whole sample.
+
+        A partial budget is not a per-sample budget: spending it would report a
+        breach the sample did not commit, under a number naming no rule. Asked
+        both when a sample arrives and again after a restart it had to pay for.
+        """
+        return self._remaining < self._sample_budget
+
     def grade(self, schema: Any, node: dict, sample: Any) -> dict:
         """This sample's verdict — one of the worker's, or the budget's own.
 
         Every kind other than `graded` says nothing was decided about the sample.
         None of them is a pass, and the caller renders each as a finding naming it.
         """
-        if self._remaining < self._sample_budget:
-            # What is left is not a per-sample budget. Spending it would report a
-            # breach the sample did not commit, under a number naming no rule.
+        if self._short_of_a_sample:
             return {"v": "exhausted"}
         begin = time.monotonic()
-        uncharged = 0.0
         try:
             if self._proc is None:
                 started = time.monotonic()
@@ -238,12 +248,34 @@ class BudgetedGrader:
                                      else min(_START_DEADLINE_SECONDS, self._remaining))
                 if first:
                     self._started_once = True
-                    uncharged = time.monotonic() - started
+                else:
+                    self._remaining -= time.monotonic() - started
+                # Whatever the start cost is settled, so grading is timed from
+                # here and the charge below covers grading alone.
+                begin = time.monotonic()
                 if not usable:
                     return {"v": "unavailable", "reason": self._unhostable}
+                # A charged restart can leave less behind than a sample costs, and
+                # the test that let this sample in ran before the restart.
+                if self._short_of_a_sample:
+                    return {"v": "exhausted"}
             return self._graded(schema, node, sample)
+        except Exception as exc:  # noqa: BLE001 - last-resort guard, see below
+            # Grading reaches a pipe, an encoder and a reply, and the caller runs
+            # under a guard that keeps no findings — so anything unanticipated
+            # escaping here would cost the endpoint every verdict it had earned
+            # and report a validator bug in their place. Whatever went wrong, the
+            # sample needs the same answer: nothing was decided about it.
+            #
+            # Not latched, unlike a failed start: a worker lost while grading says
+            # nothing about the samples after it, and this arm cannot tell a host
+            # that refused a resource from a defect in this module.
+            self._kill()
+            return {"v": "unavailable",
+                    "reason": f"grading it failed unexpectedly "
+                              f"({type(exc).__name__}: {_bounded(str(exc))})"}
         finally:
-            self._remaining -= time.monotonic() - begin - uncharged
+            self._remaining -= time.monotonic() - begin
 
     def close(self) -> None:
         self._kill()
@@ -301,30 +333,36 @@ class BudgetedGrader:
         """Start a worker and prove it answers. False leaves a stated reason.
 
         The handshake is what separates an environment that cannot host a worker
-        from a sample that cannot be graded, so only a failure HERE is permanent.
+        from a sample that cannot be graded, so only a failure HERE is permanent —
+        and permanent for the document, meaning the host is asked once rather than
+        once per sample.
+
+        One guard covers the whole of it rather than one per acquisition. A
+        temporary file, a process, a queue, a thread and the first pipe write can
+        each be refused by the host; enumerating them has repeatedly missed one,
+        and every miss escapes to the caller's guard, which keeps no findings — so
+        the endpoint loses every verdict it had earned and reports a validator bug
+        in their place. Whichever was refused, the answer is the same: this
+        environment cannot host a worker.
         """
         if self._unhostable is not None:
             return False
-        if not sys.executable:
-            self._unhostable = "this interpreter does not report its own path"
-            return False
-        if not os.path.isfile(_WORKER_SCRIPT):
-            self._unhostable = f"the grading worker {_WORKER_SCRIPT!r} is not on disk"
-            return False
-        # The worker must import what this process imported. Passing the path
-        # explicitly covers a run from a source checkout, where the package is
-        # importable only because something put it on the path.
-        env = {**os.environ,
-               "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
         try:
+            if not sys.executable:
+                self._unhostable = "this interpreter does not report its own path"
+                return False
+            if not os.path.isfile(_WORKER_SCRIPT):
+                self._unhostable = f"the grading worker {_WORKER_SCRIPT!r} is not on disk"
+                return False
+            # The worker must import what this process imported. Passing the path
+            # explicitly covers a run from a source checkout, where the package is
+            # importable only because something put it on the path.
+            env = {**os.environ,
+                   "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
             if self._stderr is None:
                 # A real file, not a pipe: the parent reads it only after a
                 # failure, and a pipe nobody drains is a way for the worker to
-                # block forever on a diagnostic. Opening it is part of starting a
-                # worker — an exhausted descriptor table or an unwritable temp
-                # directory is a reason the environment cannot host one, and
-                # letting it escape here would cost the endpoint every finding it
-                # had earned instead of naming the samples it could not grade.
+                # block forever on a diagnostic.
                 self._stderr = tempfile.TemporaryFile(mode="w+")
             else:
                 # Emptied per worker, so a reason quotes the worker it is about.
@@ -334,17 +372,19 @@ class BudgetedGrader:
                 [sys.executable, _WORKER_SCRIPT],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=self._stderr, text=True, env=env)
-        except OSError as exc:
-            self._proc = None
-            self._unhostable = f"the grading worker could not be started ({exc})"
+            self._replies = queue.Queue()
+            # Daemon: if the worker outlives an abandoned parent, this thread
+            # must not keep the interpreter alive waiting on its pipe.
+            threading.Thread(target=_drain, args=(self._proc.stdout, self._replies),
+                             daemon=True).start()
+            handshake = self._exchange(_encoded({"op": "ping"}), deadline)
+        except Exception as exc:  # noqa: BLE001 - see the docstring
+            # Unconditional: whatever was refused, a child that did start must not
+            # be left behind by the attempt that abandoned it.
+            self._kill()
+            self._unhostable = (f"the grading worker could not be started "
+                                f"({type(exc).__name__}: {_bounded(str(exc))})")
             return False
-
-        self._replies = queue.Queue()
-        # Daemon: if the worker outlives an abandoned parent, this thread must
-        # not keep the interpreter alive waiting on its pipe.
-        threading.Thread(target=_drain, args=(self._proc.stdout, self._replies),
-                         daemon=True).start()
-        handshake = self._exchange(_encoded({"op": "ping"}), deadline)
         if handshake.verdict != {"v": "pong"}:
             why = handshake.gone or "it did not answer"
             diagnostic = self._worker_stderr()

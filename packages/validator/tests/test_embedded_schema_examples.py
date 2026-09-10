@@ -633,9 +633,12 @@ marker = os.environ["FAKE_GRADING_WORKER_MARKER"]
 with open(marker + ".gen", "a") as fh:
     fh.write("x")
 generation = os.path.getsize(marker + ".gen")
-if mode == "stall-on-restart" and generation > 1:
+if generation > 1:
     import time
-    time.sleep(3600)
+    if mode == "stall-on-restart":
+        time.sleep(3600)
+    if mode == "slow-restart":
+        time.sleep(1.2)
 for line in sys.stdin:
     job = json.loads(line)
     if job["op"] == "ping":
@@ -647,7 +650,7 @@ for line in sys.stdin:
     if mode == "die-once" and not os.path.exists(marker):
         open(marker, "w").close()
         raise SystemExit(1)
-    if mode == "stall-on-restart":
+    if mode in ("stall-on-restart", "slow-restart"):
         raise SystemExit(1)
     if mode == "garbage":
         sys.stdout.write("this is not a verdict\\n")
@@ -910,3 +913,124 @@ def test_a_restart_cannot_outlast_what_is_left_of_the_document_budget(
     assert elapsed < 15.0, f"the stalled restart was not bounded ({elapsed:.1f}s)"
     assert len(errors) == 2, errors
     assert all("was not graded" in e["message"] for e in errors), errors
+
+
+def test_a_value_too_deep_to_encode_is_the_documents_defect():
+    """Nesting deep enough to exhaust the encoder's stack is a shape no JSON
+    document could hold, so it is the document's defect rather than a lost worker.
+
+    Graded here rather than through a document, because a document this deep
+    cannot be written as JSON either — it reaches the check only from a caller
+    that built it in Python, which is the same route the other unencodable values
+    take. What matters is that the encoder's `RecursionError` is treated as they
+    are: an answer about the value, not an exception escaping the protocol."""
+    from analitiq.validator._sample_budget import _encoded
+
+    deep = current = []
+    for _ in range(12_000):
+        nested = []
+        current.append(nested)
+        current = nested
+    assert _encoded({"op": "grade", "value": deep}) is None
+    assert _encoded({"op": "grade", "value": [1, 2]}) is not None
+
+
+@pytest.mark.parametrize("holder,target,blowup", [
+    ("subprocess", "Popen", ValueError("argv is not what Popen wanted")),
+    ("queue", "Queue", MemoryError("out of memory")),
+    ("threading", "Thread", RuntimeError("can't start new thread")),
+], ids=["the spawn refuses", "a queue cannot be allocated", "a thread cannot be started"])
+def test_a_host_that_cannot_host_a_worker_is_asked_once_and_said_once(
+        holder, target, blowup, validator, monkeypatch):
+    """Starting a worker touches a temporary file, a process, a queue, a thread
+    and a pipe, and the host can refuse any of them.
+
+    Enumerating them has repeatedly missed one, and every miss escapes to the
+    endpoint's guard, which keeps no findings — so the endpoint loses every
+    verdict it earned and reports a validator bug in their place. Each refusal
+    must instead name the samples it could not grade, and be asked once for the
+    document: the answer cannot change between two samples of it."""
+    from analitiq.validator import _sample_budget
+
+    attempts = []
+    real_popen = _sample_budget.subprocess.Popen
+
+    def refuse(*_args, **_kwargs):
+        raise blowup
+
+    def counted(*args, **kwargs):
+        attempts.append(args)
+        return real_popen(*args, **kwargs)
+
+    monkeypatch.setattr(_sample_budget.subprocess, "Popen", counted)
+    monkeypatch.setattr(getattr(_sample_budget, holder), target, refuse)
+    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
+    findings = validator.validate_document(doc)
+    errors = _sample_findings(findings)
+    assert len(errors) == 2, findings
+    assert all(e["severity"] == "error" for e in errors), errors
+    assert all("was not graded" in e["message"] for e in errors), errors
+    assert all(str(blowup) in e["message"] for e in errors), errors
+    assert not [f for f in findings if "crashed unexpectedly" in f["message"]], findings
+    # Asked once for the document, not once per sample. A refusal that lands
+    # before the spawn counts none, which is the same claim.
+    assert len(attempts) <= 1, attempts
+
+
+def test_a_failure_while_grading_is_not_held_against_the_next_sample(
+        validator, monkeypatch):
+    """The other half, and the reason the two guards are not one.
+
+    A failure while GRADING cannot tell a host that refused something from a
+    defect in this module, and either way it says nothing about the samples after
+    it — so it is reported against its own sample and the next one still gets a
+    worker. Latching here would turn one bad sample into a failed connector."""
+    from analitiq.validator import _sample_budget
+
+    attempts = []
+    real_popen = _sample_budget.subprocess.Popen
+    real_encoded = _sample_budget._encoded
+
+    def counted(*args, **kwargs):
+        attempts.append(args)
+        return real_popen(*args, **kwargs)
+
+    def refuse_to_encode_a_grade(message):
+        if message.get("op") == "grade":
+            raise ValueError("the grade message could not be built")
+        return real_encoded(message)
+
+    monkeypatch.setattr(_sample_budget.subprocess, "Popen", counted)
+    monkeypatch.setattr(_sample_budget, "_encoded", refuse_to_encode_a_grade)
+    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
+    findings = validator.validate_document(doc)
+    errors = _sample_findings(findings)
+    assert len(errors) == 2, findings
+    assert all("failed unexpectedly" in e["message"] for e in errors), errors
+    assert all("could not be built" in e["message"] for e in errors), errors
+    assert not [f for f in findings if "crashed unexpectedly" in f["message"]], findings
+    # Not latched: the second sample was given a worker of its own.
+    assert len(attempts) == 2, attempts
+
+
+def test_a_restart_that_spends_the_budget_leaves_none_for_the_sample(
+        validator, monkeypatch, fake_worker):
+    """The budget is checked when a sample arrives, and a restart happens after
+    that check and is charged to it.
+
+    So a replacement worker slow enough to spend what was left would otherwise be
+    followed by a full sample budget the document no longer has. Once the restart
+    is paid for there may be nothing left, and that is the spent-budget outcome,
+    not a licence to overrun."""
+    from analitiq.validator import connectors
+    from analitiq.validator._sample_budget import BudgetedGrader
+
+    fake_worker("slow-restart")
+    monkeypatch.setattr(connectors, "BudgetedGrader",
+                        lambda: BudgetedGrader(sample_budget=0.5, document_budget=1.5))
+    doc = _read_endpoint({"one": {"type": "boolean", "examples": ["0"]},
+                          "two": {"type": "boolean", "examples": ["1"]}})
+    errors = _sample_findings(validator.validate_document(doc))
+    assert len(errors) == 2, errors
+    assert "the grading worker was lost" in errors[0]["message"], errors[0]["message"]
+    assert "budget was already spent" in errors[1]["message"], errors[1]["message"]
