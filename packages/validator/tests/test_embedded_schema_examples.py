@@ -15,6 +15,8 @@ import time
 
 import pytest
 
+from conftest import CLI_DEADLINE_SECONDS
+
 from analitiq.contracts.endpoints import (
     JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
     JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
@@ -527,45 +529,26 @@ _NEAR_MISS = "a" * 32 + "X"
 _RUNAWAY_NODE = {"type": "string", "pattern": _RUNAWAY_PATTERN,
                  "examples": [_NEAR_MISS]}
 
-#: Generous by orders of magnitude. What it has to separate is a bounded pass
-#: from an unbounded one, not one budget from another.
-_RETURN_DEADLINE = 60.0
+def _sample_findings_via_cli(validator_cli, doc, filename="doc.json"):
+    """This document's `embedded-schema-example` findings, from a child process.
 
-_OUT_OF_PROCESS = """\
-import json, sys
-from pathlib import Path
-sys.path[:0] = json.loads(sys.argv[1])
-from analitiq.validator import validate_document
-request = json.loads(sys.argv[2])
-where = request["doc_path"]
-sys.stdout.write(json.dumps(validate_document(
-    request["doc"], doc_path=Path(where) if where else None)))
-"""
+    A regression in the bound does not make this check answer wrongly, it makes it
+    not answer, so a direct call would hang the suite where the CLI fixture fails
+    it. The deadline and the child's import path are the fixture's.
+    """
+    result = validator_cli.on_document(doc, filename)
+    assert result.returncode in (0, 1), result.stderr
+    return _sample_findings(json.loads(result.stdout)["findings"])
 
 
-def _validate_out_of_process(doc, doc_path=None):
-    """`validate_document(doc)`'s findings, obtained from a child process."""
-    request = json.dumps({"doc": doc,
-                          "doc_path": str(doc_path) if doc_path else None})
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-c", _OUT_OF_PROCESS, json.dumps(sys.path), request],
-            capture_output=True, text=True, timeout=_RETURN_DEADLINE,
-            env={**os.environ, "DOMAIN": "analitiq.ai"}, check=False)
-    except subprocess.TimeoutExpired:
-        pytest.fail(f"validate_document did not return within {_RETURN_DEADLINE}s")
-    assert proc.returncode == 0, proc.stderr
-    return json.loads(proc.stdout)
-
-
-def test_a_sample_past_the_budget_is_reported_and_costs_only_itself():
+def test_a_sample_past_the_budget_is_reported_and_costs_only_itself(validator_cli):
     """The shape every other ungradeable entry already has: the sample is named,
     the verdict says nothing was decided, and the entries beside it still get
     theirs."""
     doc = _read_endpoint({"before": {"type": "integer", "examples": ["one"]},
                           "code": dict(_RUNAWAY_NODE),
                           "paid": {"type": "boolean", "examples": ["0"]}})
-    errors = _sample_findings(_validate_out_of_process(doc))
+    errors = _sample_findings_via_cli(validator_cli, doc)
     by_field = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
     assert set(by_field) == {"before/examples/0", "code/examples/0", "paid/examples/0"}
     # Graded on the worker generation the breach then killed.
@@ -581,16 +564,16 @@ def test_a_sample_past_the_budget_is_reported_and_costs_only_itself():
      "examples": [{_NEAR_MISS: 1}]},
     {"propertyNames": {"pattern": _RUNAWAY_PATTERN}, "examples": [{_NEAR_MISS: 1}]},
 ], ids=["patternProperties", "propertyNames"])
-def test_the_budget_bounds_every_keyword_not_only_pattern(node):
+def test_the_budget_bounds_every_keyword_not_only_pattern(node, validator_cli):
     """`pattern` is the reachable instance, not the class. Both keywords below
     apply the author's regex to the sample's KEYS, and a bound that reached only
     the keyword named in the report would leave them running."""
-    errors = _sample_findings(_validate_out_of_process(_read_endpoint({"bag": node})))
+    errors = _sample_findings_via_cli(validator_cli, _read_endpoint({"bag": node}))
     assert len(errors) == 1, errors
     assert "was not graded" in errors[0]["message"]
 
 
-def test_the_connector_walk_bounds_a_pathological_sample(tmp_path):
+def test_the_connector_walk_bounds_a_pathological_sample(tmp_path, validator_cli):
     """The second entry point. It reaches the same grading through a different
     caller, so a bound applied at the single-document call site would leave a
     connector package unprotected."""
@@ -605,8 +588,7 @@ def test_the_connector_walk_bounds_a_pathological_sample(tmp_path):
     (tmp_path / "endpoints" / "widgets.json").write_text(
         json.dumps(_read_endpoint({"code": dict(_RUNAWAY_NODE)})))
 
-    errors = _sample_findings(_validate_out_of_process(
-        connector, doc_path=tmp_path / "connector.json"))
+    errors = _sample_findings_via_cli(validator_cli, connector, "connector.json")
     assert len(errors) == 1, errors
     assert "widgets.json/operations/read/" in errors[0]["message"]
     assert "was not graded" in errors[0]["message"]
@@ -820,19 +802,14 @@ def test_the_worker_writes_only_verdicts_to_its_stdout():
     assert proc.stdout == '{"v": "pong"}\n', proc.stdout
 
 
-def test_a_budget_breach_leaves_no_traceback_on_stderr():
+def test_a_budget_breach_leaves_no_traceback_on_stderr(validator_cli):
     """A breach is an ordinary outcome, so it must not look like a crash.
 
     The worker is killed with its pipes still buffered; left to finalization those
     raise, and the interpreter prints the traceback on the validator's own stderr
     — which is exactly where a caller looks when the JSON report is missing."""
-    doc = _read_endpoint({"code": dict(_RUNAWAY_NODE)})
-    request = json.dumps({"doc": doc, "doc_path": None})
-    proc = subprocess.run(
-        [sys.executable, "-c", _OUT_OF_PROCESS, json.dumps(sys.path), request],
-        capture_output=True, text=True, timeout=_RETURN_DEADLINE,
-        env={**os.environ, "DOMAIN": "analitiq.ai"}, check=False)
-    assert proc.returncode == 0, proc.stderr
+    proc = validator_cli.on_document(_read_endpoint({"code": dict(_RUNAWAY_NODE)}))
+    assert proc.returncode in (0, 1), proc.stderr
     assert "Traceback" not in proc.stderr, proc.stderr
     assert "BrokenPipeError" not in proc.stderr, proc.stderr
 
@@ -900,7 +877,7 @@ def test_a_worker_ends_itself_when_its_deadline_passes():
     ))
     proc = subprocess.run(
         [sys.executable, _sample_budget._WORKER_SCRIPT], input=jobs,
-        capture_output=True, text=True, timeout=_RETURN_DEADLINE,
+        capture_output=True, text=True, timeout=CLI_DEADLINE_SECONDS,
         env={**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)},
         check=False)
     assert proc.returncode != 0, "the worker outlived its deadline"

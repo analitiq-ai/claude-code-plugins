@@ -111,15 +111,9 @@ _JSON_TYPES = frozenset({dict, list, str, bool, int, float, type(None)})
 # The parent
 # ---------------------------------------------------------------------------
 
-class _Unsent:
-    """Distinguishes "never sent" from a node or schema that is legitimately
-    `None`, which a comparison against `None` could not."""
-
-    def __repr__(self) -> str:  # pragma: no cover - diagnostics only
-        return "_UNSENT"
-
-
-_UNSENT = _Unsent()
+#: Distinguishes "never sent" from a node or schema that is legitimately `None`,
+#: which a comparison against `None` could not.
+_UNSENT = object()
 
 
 class _Reply:

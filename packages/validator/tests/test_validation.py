@@ -32,8 +32,6 @@ SRC_ROOT = _REPO_ROOT / "validator" / "src"
 # parses the flags exactly as the `analitiq-validate` console script would. Only
 # the two public source trees ride PYTHONPATH — the validator and the contract
 # models — so this exercises precisely what an installed consumer gets.
-_CLI_CODE = "from analitiq.validator import main; import sys; sys.exit(main())"
-_CLI_PYTHONPATH = os.pathsep.join([str(SRC_ROOT), str(CONTRACTS_SRC_ROOT)])
 
 # (corpus file, expected pass?) — single-document verdicts.
 DOC_CASES = [
@@ -999,39 +997,28 @@ def test_storage_kinds_need_no_read_map(tmp_path, kind, validator):
 
 # --- CLI / exit-code contract (the integration surface consumers depend on) ---
 
-def _run_cli(tmp_path, doc, filename="doc.json"):
-    p = tmp_path / filename
-    p.write_text(json.dumps(doc))
-    env = {**os.environ, "PYTHONPATH": _CLI_PYTHONPATH, "DOMAIN": "analitiq.ai"}
-    return subprocess.run([sys.executable, "-c", _CLI_CODE, "--document", str(p)],
-                          capture_output=True, text=True, env=env, check=False)
-
-
-def test_cli_valid_doc_exit0(tmp_path):
+def test_cli_valid_doc_exit0(validator_cli):
     # Name the file after its endpoint_id so the filename↔id check is satisfied.
     doc = json.loads((CORPUS / "valid_read.json").read_text())
-    r = _run_cli(tmp_path, doc, filename=f"{doc['endpoint_id']}.json")
+    r = validator_cli.on_document(doc, filename=f"{doc['endpoint_id']}.json")
     assert r.returncode == 0, r.stdout
     out = json.loads(r.stdout)
     assert out["passed"] is True and isinstance(out["findings"], list)
 
 
-def test_cli_invalid_doc_exit1(tmp_path):
-    r = _run_cli(tmp_path, json.loads((CORPUS / "invalid_write_from_input.json").read_text()))
+def test_cli_invalid_doc_exit1(validator_cli):
+    r = validator_cli.on_document(json.loads((CORPUS / "invalid_write_from_input.json").read_text()))
     assert r.returncode == 1
     assert json.loads(r.stdout)["passed"] is False
 
 
-def test_cli_unreadable_document_exit1(tmp_path):
-    env = {**os.environ, "PYTHONPATH": _CLI_PYTHONPATH, "DOMAIN": "analitiq.ai"}
+def test_cli_unreadable_document_exit1(tmp_path, validator_cli):
     # A directory path: read raises IsADirectoryError → must still emit JSON + exit 1.
-    r = subprocess.run([sys.executable, "-c", _CLI_CODE, "--document", str(tmp_path)],
-                       capture_output=True, text=True, env=env, check=False)
+    r = validator_cli.run("--document", str(tmp_path))
     assert r.returncode == 1
     assert json.loads(r.stdout)["passed"] is False
 
 
-def test_cli_missing_arg_exit2(tmp_path):
-    env = {**os.environ, "PYTHONPATH": _CLI_PYTHONPATH, "DOMAIN": "analitiq.ai"}
-    r = subprocess.run([sys.executable, "-c", _CLI_CODE], capture_output=True, text=True, env=env, check=False)
+def test_cli_missing_arg_exit2(validator_cli):
+    r = validator_cli.run()
     assert r.returncode == 2
