@@ -8,6 +8,9 @@ grading through both entry points — a single endpoint document, and the
 connector-anchored walk that labels findings with the endpoint's filename.
 """
 import json
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -502,3 +505,118 @@ def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path,
     errors = _sample_findings(findings)
     assert len(errors) == 2, findings
     assert all("widgets.json/operations/read/" in e["message"] for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# The evaluation budget
+# ---------------------------------------------------------------------------
+#
+# Every guard around grading is an `except` clause, so between them they contain
+# every way an evaluation raises and none of the ways it does not come back.
+# `pattern` is evaluated by Python's `re`, which backtracks exponentially on an
+# ambiguous pattern paired with a subject that nearly matches; the pair below
+# does not finish in any time a caller will wait for.
+#
+# So what these tests assert is that grading RETURNS, and they obtain the
+# findings from a child process to do it: a regression here does not produce a
+# wrong answer, it produces no answer, and a direct call would hang the suite
+# instead of failing it.
+
+_RUNAWAY_PATTERN = "^(a+)+$"
+_NEAR_MISS = "a" * 32 + "X"
+_RUNAWAY_NODE = {"type": "string", "pattern": _RUNAWAY_PATTERN,
+                 "examples": [_NEAR_MISS]}
+
+#: Generous by orders of magnitude. What it has to separate is a bounded pass
+#: from an unbounded one, not one budget from another.
+_RETURN_DEADLINE = 60.0
+
+_OUT_OF_PROCESS = """\
+import json, sys
+from pathlib import Path
+sys.path[:0] = json.loads(sys.argv[1])
+from analitiq.validator import validate_document
+request = json.loads(sys.argv[2])
+where = request["doc_path"]
+sys.stdout.write(json.dumps(validate_document(
+    request["doc"], doc_path=Path(where) if where else None)))
+"""
+
+
+def _validate_out_of_process(doc, doc_path=None):
+    """`validate_document(doc)`'s findings, obtained from a child process."""
+    request = json.dumps({"doc": doc,
+                          "doc_path": str(doc_path) if doc_path else None})
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _OUT_OF_PROCESS, json.dumps(sys.path), request],
+            capture_output=True, text=True, timeout=_RETURN_DEADLINE,
+            env={**os.environ, "DOMAIN": "analitiq.ai"}, check=False)
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"validate_document did not return within {_RETURN_DEADLINE}s")
+    assert proc.returncode == 0, proc.stderr
+    return json.loads(proc.stdout)
+
+
+def test_a_sample_past_the_budget_is_reported_and_costs_only_itself():
+    """The shape every other ungradeable entry already has: the sample is named,
+    the verdict says nothing was decided, and the entries beside it still get
+    theirs."""
+    doc = _read_endpoint({"code": dict(_RUNAWAY_NODE),
+                          "paid": {"type": "boolean", "examples": ["0"]}})
+    errors = _sample_findings(_validate_out_of_process(doc))
+    by_field = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
+    assert set(by_field) == {"code/examples/0", "paid/examples/0"}
+    assert "was not graded" in by_field["code/examples/0"]
+    assert "budget" in by_field["code/examples/0"]
+    assert "is not of type 'boolean'" in by_field["paid/examples/0"]
+    assert all(e["severity"] == "error" for e in errors), errors
+
+
+@pytest.mark.parametrize("node", [
+    {"patternProperties": {_RUNAWAY_PATTERN: {"type": "integer"}},
+     "examples": [{_NEAR_MISS: 1}]},
+    {"propertyNames": {"pattern": _RUNAWAY_PATTERN}, "examples": [{_NEAR_MISS: 1}]},
+], ids=["patternProperties", "propertyNames"])
+def test_the_budget_bounds_every_keyword_not_only_pattern(node):
+    """`pattern` is the reachable instance, not the class. Both keywords below
+    apply the author's regex to the sample's KEYS, and a bound that reached only
+    the keyword named in the report would leave them running."""
+    errors = _sample_findings(_validate_out_of_process(_read_endpoint({"bag": node})))
+    assert len(errors) == 1, errors
+    assert "was not graded" in errors[0]["message"]
+
+
+def test_the_connector_walk_bounds_a_pathological_sample(tmp_path):
+    """The second entry point. It reaches the same grading through a different
+    caller, so a bound applied at the single-document call site would leave a
+    connector package unprotected."""
+    from pathlib import Path
+
+    corpus = Path(__file__).resolve().parent / "corpus" / CORPUS_CONNECTOR
+    connector = json.loads(corpus.read_text())
+    (tmp_path / "endpoints").mkdir(parents=True)
+    (tmp_path / "connector.json").write_text(json.dumps(connector))
+    (tmp_path / "type-map-read.json").write_text(json.dumps(
+        [{"match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean"}]))
+    (tmp_path / "endpoints" / "widgets.json").write_text(
+        json.dumps(_read_endpoint({"code": dict(_RUNAWAY_NODE)})))
+
+    errors = _sample_findings(_validate_out_of_process(
+        connector, doc_path=tmp_path / "connector.json"))
+    assert len(errors) == 1, errors
+    assert "widgets.json/operations/read/" in errors[0]["message"]
+    assert "was not graded" in errors[0]["message"]
+
+
+def test_a_document_with_no_samples_starts_no_worker(validator, monkeypatch):
+    """The cost of the bound is paid where the risk is. A document recording
+    nothing has no value to grade, so it must not pay for a grading process."""
+    from analitiq.validator import _sample_budget
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("a document with no samples started a grading worker")
+
+    monkeypatch.setattr(_sample_budget.BudgetedGrader, "_start", refuse)
+    doc = _read_endpoint({"paid": {"type": "boolean"}})
+    assert not _sample_findings(validator.validate_document(doc))

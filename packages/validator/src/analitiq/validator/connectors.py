@@ -54,6 +54,7 @@ from ._core import (
     _model_findings,
     _run_guarded,
 )
+from ._sample_budget import BudgetedGrader
 
 # The contract models resolve from the `analitiq-contract-models` dependency —
 # the same import path here and for an installed consumer, so there is nothing to
@@ -395,32 +396,6 @@ def _bounded(text: str, limit: int = 200) -> str:
     return text if len(text) <= limit else f"{text[:limit]}…"
 
 
-def _offline_registry():
-    """An empty reference registry — one with no way to retrieve anything.
-
-    Validation here is offline by contract, and `jsonschema`'s default registry
-    is not: a `$ref` naming an `http(s)` URL is FETCHED, so an authored endpoint
-    could make the validator issue a request to any address its author chose and
-    block on the answer. Retrieval is a `retrieve` callable a registry either has
-    or does not, so an empty one refuses instead, and the per-entry guard turns
-    the refusal into a finding.
-
-    Empty is all it has to be, and this is the fact that makes the whole scheme
-    work: a validator roots its OWN schema as a resource, and that root is what
-    every in-document reference resolves against — a pointer, an `$anchor`, a
-    nested `$id`. So the document needs no registry entry, and a registry with
-    nothing in it can still resolve every reference the contract allows while
-    refusing every one it does not.
-
-    That the contract models separately refuse a non-local `$ref` does not cover
-    this: grading runs on documents the models have already rejected, and an
-    offline guarantee that holds only while another check keeps its rule is not
-    one."""
-    from referencing import Registry
-
-    return Registry()
-
-
 def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dict]:
     """Every `examples` entry on an embedded schema node must satisfy the node
     declaring it.
@@ -452,76 +427,91 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
     - **the node's** — a reference naming nothing, or one leading back to itself;
     - **the sample's** — a value no keyword on the node can evaluate, such as a
       number too large for `multipleOf`;
+    - **undecided** — an evaluation that did not finish inside its budget. Every
+      other arm here contains a way the evaluation RAISES, and a keyword whose
+      cost grows with the recorded value rather than with its size does not
+      raise, it does not come back; `_sample_budget` owns why that cannot be
+      waited on and where the bound is enforced;
     - **neither**, which is the contradiction this check exists to report.
 
-    The three have different fixes, so they are worth telling apart, and none of
-    them may cost the remaining entries their verdict."""
-    from jsonschema import Draft202012Validator
-    from jsonschema.exceptions import best_match
-    from referencing.exceptions import Unresolvable
-
+    Each has a different fix, so they are worth telling apart, and none of them
+    may cost the remaining entries their verdict."""
     findings: list[dict] = []
-    for pointer, schema in _embedded_json_schemas(ep_doc):
-        if not isinstance(schema, dict):
-            continue
-        if _unreadable_as_2020_12(schema) is not None:
-            continue
-        document = Draft202012Validator(schema, registry=_offline_registry())
-        for node_ptr, node in _walk_schema_nodes(schema, pointer):
-            examples = node.get("examples")
-            if not isinstance(examples, list):
+    with BudgetedGrader() as grader:
+        for pointer, schema in _embedded_json_schemas(ep_doc):
+            if not isinstance(schema, dict):
                 continue
-            # `evolve` swaps the schema and keeps the resolver, so a node written
-            # as `{"$ref": "#/$defs/..."}` is graded against what it points at
-            # rather than against a node with no assertions in it.
-            node_validator = document.evolve(schema=node)
-            for index, sample in enumerate(examples):
-                entry = f"{node_ptr}/examples/{index}"
-                # `entry` is the finding's machine-readable `path` and stays
-                # exact. Everything the MESSAGE interpolates is bounded, pointers
-                # included: a property name is authored, so it can be as long as
-                # the author likes and it appears in the pointer twice.
-                where = _bounded(f"{label}{entry}" if label else entry)
-                at_node = _bounded(node_ptr)
-                try:
-                    error = best_match(node_validator.iter_errors(sample))
-                except (Unresolvable, RecursionError) as exc:
-                    # Never interpolate `exc`: an unresolved-reference error
-                    # renders the whole resource it searched, so the embedded
-                    # schema would land in the message once per recorded sample.
-                    # `ref` is the part of it that names the defect.
-                    ref = getattr(exc, "ref", None)
-                    why = (f"the reference {_bounded(repr(ref))} names nothing this "
-                           f"schema defines"
-                           if ref is not None else
-                           "resolving it ran out of stack — either a reference leading "
-                           "back to itself, or a sample nested deeper than the resolver "
-                           "follows")
-                    findings.append(finding(
-                        "embedded-schema-example", "error", entry,
-                        f"the node at {at_node} could not be resolved, so the sample "
-                        f"at {where} was not graded: {why}. The defect is in the "
-                        f"schema, not in the sample."))
+            if _unreadable_as_2020_12(schema) is not None:
+                continue
+            for node_ptr, node in _walk_schema_nodes(schema, pointer):
+                examples = node.get("examples")
+                if not isinstance(examples, list):
                     continue
-                except Exception as exc:  # noqa: BLE001 - author input, no total gate
-                    findings.append(finding(
-                        "embedded-schema-example", "error", entry,
-                        f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the "
-                        f"node declaring it could not grade ({type(exc).__name__}: "
-                        f"{_bounded(str(exc))}). "
-                        f"The recorded value is outside what a keyword on this node can "
-                        f"evaluate."))
-                    continue
-                if error is None:
-                    continue
-                inside = ("" if error.json_path == "$"
-                          else f" at {_bounded(error.json_path)} within the sample")
-                findings.append(finding(
-                    "embedded-schema-example", "error", entry,
-                    f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the node "
-                    f"declaring it rejects{inside}: {_bounded(error.message)}. A sample is a "
-                    f"value the provider sends, so either the declared shape is wrong for "
-                    f"this field or the recorded sample never came off the wire."))
+                for index, sample in enumerate(examples):
+                    entry = f"{node_ptr}/examples/{index}"
+                    # `entry` is the finding's machine-readable `path` and stays
+                    # exact. Everything the MESSAGE interpolates is bounded,
+                    # pointers included: a property name is authored, so it can
+                    # be as long as the author likes and it appears in the
+                    # pointer twice.
+                    where = _bounded(f"{label}{entry}" if label else entry)
+                    at_node = _bounded(node_ptr)
+                    verdict = grader.grade(schema, node, sample)
+                    kind = verdict["v"]
+                    if kind == "graded":
+                        error = verdict["error"]
+                        if error is None:
+                            continue
+                        inside = ("" if error["path"] == "$"
+                                  else f" at {_bounded(error['path'])} within the sample")
+                        message = (
+                            f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the node "
+                            f"declaring it rejects{inside}: {_bounded(error['message'])}. A sample is a "
+                            f"value the provider sends, so either the declared shape is wrong for "
+                            f"this field or the recorded sample never came off the wire.")
+                    elif kind in ("unresolvable", "recursion"):
+                        # The reference alone, never the resource it was searched
+                        # for in: that renders the whole embedded schema, and it
+                        # would land in the message once per recorded sample.
+                        why = (f"the reference {_bounded(verdict['ref'])} names nothing this "
+                               f"schema defines"
+                               if kind == "unresolvable" else
+                               "resolving it ran out of stack — either a reference leading "
+                               "back to itself, or a sample nested deeper than the resolver "
+                               "follows")
+                        message = (
+                            f"the node at {at_node} could not be resolved, so the sample "
+                            f"at {where} was not graded: {why}. The defect is in the "
+                            f"schema, not in the sample.")
+                    elif kind == "crash":
+                        message = (
+                            f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the "
+                            f"node declaring it could not grade ({verdict['type']}: "
+                            f"{_bounded(verdict['detail'])}). "
+                            f"The recorded value is outside what a keyword on this node can "
+                            f"evaluate.")
+                    elif kind == "budget":
+                        message = (
+                            f"the sample at {where} was not graded: evaluating it against the "
+                            f"node at {at_node} exceeded the {verdict['seconds']:g}s budget for "
+                            f"one sample. A keyword whose cost grows with the recorded value "
+                            f"rather than with its size cannot be interrupted, so nothing was "
+                            f"decided about this sample.")
+                    elif kind == "exhausted":
+                        message = (
+                            f"the sample at {where} was not graded: this document's grading "
+                            f"budget was already spent by earlier samples, so this entry was "
+                            f"never attempted and nothing was decided about it.")
+                    elif kind == "unavailable":
+                        message = (
+                            f"the sample at {where} was not graded: {verdict['reason']}. Samples "
+                            f"are graded in a worker process so an evaluation that does not "
+                            f"return can be abandoned; with no worker, nothing was decided about "
+                            f"this sample.")
+                    else:
+                        raise AssertionError(f"unknown grading verdict {kind!r}")
+                    findings.append(
+                        finding("embedded-schema-example", "error", entry, message))
     return findings
 
 
