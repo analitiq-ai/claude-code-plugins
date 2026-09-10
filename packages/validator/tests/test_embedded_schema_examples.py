@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -647,6 +648,12 @@ if mode == "nostart":
     sys.stderr.write("the fake worker refused to start\\n")
     raise SystemExit(1)
 marker = os.environ["FAKE_GRADING_WORKER_MARKER"]
+with open(marker + ".gen", "a") as fh:
+    fh.write("x")
+generation = os.path.getsize(marker + ".gen")
+if mode == "stall-on-restart" and generation > 1:
+    import time
+    time.sleep(3600)
 for line in sys.stdin:
     job = json.loads(line)
     if job["op"] == "ping":
@@ -657,6 +664,8 @@ for line in sys.stdin:
         continue
     if mode == "die-once" and not os.path.exists(marker):
         open(marker, "w").close()
+        raise SystemExit(1)
+    if mode == "stall-on-restart":
         raise SystemExit(1)
     if mode == "garbage":
         sys.stdout.write("this is not a verdict\\n")
@@ -826,3 +835,101 @@ def test_a_budget_breach_leaves_no_traceback_on_stderr():
     assert proc.returncode == 0, proc.stderr
     assert "Traceback" not in proc.stderr, proc.stderr
     assert "BrokenPipeError" not in proc.stderr, proc.stderr
+
+
+@pytest.mark.parametrize("node,sample", [
+    ({"type": "array", "items": {"type": "integer"}}, (1, 2)),
+    ({"type": "object", "required": ["1"]}, {1: "x"}),
+], ids=["a tuple written as an array", "a key written as a string"])
+def test_a_value_json_would_normalise_is_reported_rather_than_converted(
+        node, sample, validator):
+    """Encoding succeeding is not proof the round trip was lossless.
+
+    `json.dumps` normalises: a tuple is written as an array, a non-string mapping
+    key as a string. Both samples below are rejected by the node that records them
+    and are accepted once normalised, so trusting the encoder would turn a
+    rejection into a silent pass — the one outcome bounding the evaluation exists
+    to make impossible."""
+    doc = _read_endpoint({"a": dict(node, examples=[sample])})
+    errors = _sample_findings(validator.validate_document(doc))
+    assert len(errors) == 1, errors
+    assert "was not graded" in errors[0]["message"]
+    assert "not JSON data" in errors[0]["message"], errors[0]["message"]
+
+
+def test_a_worker_whose_diagnostic_file_cannot_be_opened_is_reported(
+        validator, monkeypatch):
+    """Opening the file the worker's stderr goes to is part of starting one.
+
+    An exhausted descriptor table or an unwritable temp directory is a reason the
+    environment cannot host a worker, and it arrives before the spawn does. Left
+    outside, it costs the endpoint every finding it had earned and reports a
+    validator bug instead of the samples it could not grade."""
+    from analitiq.validator import _sample_budget
+
+    def refuse(*_args, **_kwargs):
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr(_sample_budget.tempfile, "TemporaryFile", refuse)
+    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
+    findings = validator.validate_document(doc)
+    errors = _sample_findings(findings)
+    assert len(errors) == 2, findings
+    assert all("no space left on device" in e["message"] for e in errors), errors
+    assert not [f for f in findings if "crashed unexpectedly" in f["message"]], findings
+
+
+def test_a_worker_ends_itself_when_its_deadline_passes():
+    """The parent kills a worker that overruns, but only while the parent is alive.
+
+    Killed itself mid-evaluation — an outer timeout, a cancelled request — it would
+    leave a child inside a match that never returns, holding a core for as long as
+    the machine is up. So the worker watches its own deadline: driven here with no
+    parent to kill it, it must end rather than run on.
+
+    Nothing written in Python could do this. A runaway match holds the interpreter
+    outright, so no other thread in that process runs while one is going, which is
+    why the watchdog is a native one."""
+    from analitiq.validator import _sample_budget
+
+    node = {"type": "string", "pattern": _RUNAWAY_PATTERN}
+    jobs = "".join(json.dumps(job) + "\n" for job in (
+        {"op": "schema", "value": node},
+        {"op": "node", "value": node},
+        {"op": "grade", "value": _NEAR_MISS, "deadline": 0.1},
+    ))
+    proc = subprocess.run(
+        [sys.executable, _sample_budget._WORKER_SCRIPT], input=jobs,
+        capture_output=True, text=True, timeout=_RETURN_DEADLINE,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)},
+        check=False)
+    assert proc.returncode != 0, "the worker outlived its deadline"
+    assert "Timeout" in proc.stderr, proc.stderr
+    # The channel stays clean even as the process ends: a half-verdict would be
+    # read as one.
+    assert proc.stdout == "", proc.stdout
+
+
+def test_a_restart_cannot_outlast_what_is_left_of_the_document_budget(
+        validator, monkeypatch, fake_worker):
+    """A replacement worker is started for the samples that are left, so it is
+    bounded by the budget they have left.
+
+    The FIRST start is setup and carries its own deadline, which is generous
+    because a cold interpreter is. A restart is a cost the samples caused, and one
+    that stalls under the same generous deadline overshoots the document cap by
+    that whole deadline before any sample is told it ran out."""
+    from analitiq.validator import connectors
+    from analitiq.validator._sample_budget import BudgetedGrader
+
+    fake_worker("stall-on-restart")
+    monkeypatch.setattr(connectors, "BudgetedGrader",
+                        lambda: BudgetedGrader(sample_budget=0.5, document_budget=3.0))
+    doc = _read_endpoint({"one": {"type": "boolean", "examples": ["0"]},
+                          "two": {"type": "boolean", "examples": ["1"]}})
+    started = time.monotonic()
+    errors = _sample_findings(validator.validate_document(doc))
+    elapsed = time.monotonic() - started
+    assert elapsed < 15.0, f"the stalled restart was not bounded ({elapsed:.1f}s)"
+    assert len(errors) == 2, errors
+    assert all("was not graded" in e["message"] for e in errors), errors

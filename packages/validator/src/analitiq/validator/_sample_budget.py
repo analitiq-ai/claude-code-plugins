@@ -40,10 +40,18 @@ no longer holds, and answer cleanly — a pass for a sample nothing graded.
 
 Samples cross the pipe as JSON. That is what a recorded sample is: `examples`
 entries are read out of a JSON document, so re-encoding one is lossless. A value
-that cannot be encoded reached this check from a caller that built the document in
-Python rather than parsing it, and every sample under it is reported ungraded
-rather than guessed at — a sample sits inside the schema that records it, so a
-value neither can be encoded is one defect, not two.
+`json.loads` could not have produced reached this check from a caller that built
+the document in Python, and every sample under it is reported ungraded rather than
+guessed at — a sample sits inside the schema that records it, so a value neither
+can carry is one defect, not two. Encoding SUCCEEDING is not that test: `json.dumps`
+normalises, turning a tuple into an array and a non-string key into a string, and a
+value the node would have rejected would come back graded clean.
+
+The worker also carries its own end. The parent kills one that overruns, but only
+while the parent is alive: killed itself mid-evaluation, it would leave a child
+inside a match that never returns, burning a core for as long as the machine is up.
+An idle worker sees its stdin close and exits; a busy one is past reading it, so it
+watches its own deadline instead.
 
 What comes back carries only what a finding renders: an unresolved reference's
 `ref` is sent already `repr`'d and never the resource it was searched for in, so a
@@ -52,6 +60,7 @@ message stays a finding rather than a copy of the document that produced it.
 from __future__ import annotations
 
 import contextlib
+import faulthandler
 import json
 import os
 import queue
@@ -89,6 +98,18 @@ _WORKER_SCRIPT = str(Path(__file__).resolve())
 #: How much of a stray line or a diagnostic reaches a finding. Long enough to
 #: identify what happened, short enough that a finding stays a finding.
 _DETAIL_LIMIT = 200
+
+#: How far past its deadline a worker lets a job run before ending its own
+#: process. Wide enough that the parent, which reports the overrun, gets there
+#: first while it is alive; narrow enough that an orphan does not outlive the run
+#: by much. Racing is harmless either way — a parent that timed out kills a
+#: process that has already gone, and reports the same breach.
+_SELF_DESTRUCT_MARGIN = 2.0
+
+#: The types `json.loads` produces. Membership is by exact type, not `isinstance`:
+#: the point is to catch what an encoder would silently convert, and every such
+#: value is a subclass or a look-alike of one of these.
+_JSON_TYPES = frozenset({dict, list, str, bool, int, float, type(None)})
 
 
 def _offline_registry():
@@ -184,7 +205,22 @@ def _serve() -> int:
         if op == "node":
             node = job["value"]
             continue
-        verdict = {"v": "pong"} if op == "ping" else _grade(document, node, job["value"])
+        if op == "ping":
+            verdict = {"v": "pong"}
+        else:
+            # A Python-level watchdog cannot do this: a runaway match holds the
+            # interpreter outright, so no other thread in this process runs at
+            # all while one is going — measured, not assumed. `faulthandler`'s
+            # is a native thread that needs neither the interpreter nor the
+            # evaluating thread to yield, which makes it the only thing here
+            # that can still act. It writes its traceback to stderr, never to
+            # the channel fd this worker took for itself.
+            faulthandler.dump_traceback_later(
+                job["deadline"] + _SELF_DESTRUCT_MARGIN, exit=True)
+            try:
+                verdict = _grade(document, node, job["value"])
+            finally:
+                faulthandler.cancel_dump_traceback_later()
         channel.write(json.dumps(verdict) + "\n")
         channel.flush()
     return 0
@@ -215,12 +251,41 @@ class _Reply:
         self.gone = gone
 
 
+def _json_native(value: Any) -> bool:
+    """Whether this is a value `json.loads` could have produced.
+
+    Walked iteratively: a sample is author data, and recursion deep enough to
+    exhaust the stack is a thing an author can write.
+    """
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if type(item) not in _JSON_TYPES:
+            return False
+        if isinstance(item, dict):
+            if any(type(key) is not str for key in item):
+                return False
+            pending.extend(item.values())
+        elif isinstance(item, list):
+            pending.extend(item)
+    return True
+
+
 def _encoded(message: dict) -> str | None:
-    """The message as a wire line, or `None` when its value is not JSON."""
+    """The message as a wire line, or `None` when its value is not JSON.
+
+    Encoding succeeding is not the test, which is why the check is separate.
+    `json.dumps` NORMALISES: a tuple is written as an array and a non-string
+    mapping key as a string, so a value the node would have rejected crosses the
+    pipe as one it accepts and comes back graded clean. Encoding first is what
+    makes the walk safe — it is the step that refuses a structure containing
+    itself, which the walk would otherwise follow forever.
+    """
     try:
-        return json.dumps(message) + "\n"
+        line = json.dumps(message)
     except (TypeError, ValueError):
         return None
+    return line + "\n" if _json_native(message.get("value")) else None
 
 
 def _drain(stream, replies: queue.Queue) -> None:
@@ -289,8 +354,14 @@ class BudgetedGrader:
         try:
             if self._proc is None:
                 started = time.monotonic()
-                usable = self._start()
-                if not self._started_once:
+                first = not self._started_once
+                # The first start is setup and has its own deadline. A RESTART is
+                # a cost the samples caused, so it is bounded by what is left of
+                # their budget — otherwise a stalled one overshoots the document
+                # cap by the whole start deadline before anything notices.
+                usable = self._start(_START_DEADLINE_SECONDS if first
+                                     else min(_START_DEADLINE_SECONDS, self._remaining))
+                if first:
                     self._started_once = True
                     uncharged = time.monotonic() - started
                 if not usable:
@@ -327,7 +398,8 @@ class BudgetedGrader:
             else:
                 self._node = node
 
-        payload = _encoded({"op": "grade", "value": sample})
+        payload = _encoded({"op": "grade", "value": sample,
+                            "deadline": self._sample_budget})
         if payload is None:
             return {"v": "unserializable"}
         reply = self._exchange(payload, self._sample_budget)
@@ -350,7 +422,7 @@ class BudgetedGrader:
 
     # -- worker lifecycle ---------------------------------------------------
 
-    def _start(self) -> bool:
+    def _start(self, deadline: float) -> bool:
         """Start a worker and prove it answers. False leaves a stated reason.
 
         The handshake is what separates an environment that cannot host a worker
@@ -369,16 +441,20 @@ class BudgetedGrader:
         # importable only because something put it on the path.
         env = {**os.environ,
                "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
-        if self._stderr is None:
-            # A real file, not a pipe: the parent reads it only after a failure,
-            # and a pipe nobody drains is a way for the worker to block forever
-            # on a diagnostic.
-            self._stderr = tempfile.TemporaryFile(mode="w+")
-        else:
-            # Emptied per worker, so a reason quotes the worker it is about.
-            self._stderr.seek(0)
-            self._stderr.truncate()
         try:
+            if self._stderr is None:
+                # A real file, not a pipe: the parent reads it only after a
+                # failure, and a pipe nobody drains is a way for the worker to
+                # block forever on a diagnostic. Opening it is part of starting a
+                # worker — an exhausted descriptor table or an unwritable temp
+                # directory is a reason the environment cannot host one, and
+                # letting it escape here would cost the endpoint every finding it
+                # had earned instead of naming the samples it could not grade.
+                self._stderr = tempfile.TemporaryFile(mode="w+")
+            else:
+                # Emptied per worker, so a reason quotes the worker it is about.
+                self._stderr.seek(0)
+                self._stderr.truncate()
             self._proc = subprocess.Popen(  # noqa: S603 - argv is this interpreter and this file
                 [sys.executable, _WORKER_SCRIPT],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -393,7 +469,7 @@ class BudgetedGrader:
         # not keep the interpreter alive waiting on its pipe.
         threading.Thread(target=_drain, args=(self._proc.stdout, self._replies),
                          daemon=True).start()
-        handshake = self._exchange(_encoded({"op": "ping"}), _START_DEADLINE_SECONDS)
+        handshake = self._exchange(_encoded({"op": "ping"}), deadline)
         if handshake.verdict != {"v": "pong"}:
             why = handshake.gone or "it did not answer"
             diagnostic = self._worker_stderr()
