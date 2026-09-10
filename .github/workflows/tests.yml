@@ -103,6 +103,31 @@ jobs:
           python3 packages/contract-models/scripts/build.py --check
           python3 packages/validator/scripts/build.py --check
 
+  sample-budget-portability:
+    name: sample grading is bounded on ${{ matrix.os }}
+    # The bound on grading a recorded sample is a worker process the parent
+    # kills, rather than an interval timer, BECAUSE the plugins are run on
+    # Windows as well as Linux and macOS: `SIGALRM` does not exist there, so a
+    # timer-based bound would be absent on a platform users are on. That reason
+    # is only worth anything if the claim is exercised, so these are the runners
+    # it is exercised on. Just the file that grades the mechanism — the rest of
+    # the suite is gated on ubuntu above, and widening this job would make it a
+    # port of the whole repo rather than a check of this one property.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install dev/test dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Grade a pathological sample
+        run: pytest -v -rs packages/validator/tests/test_embedded_schema_examples.py
+
   engine-grammar-pin-guard:
     # The canonical Arrow type vocabulary derives from a VENDORED copy of the
     # engine-published arrow-type-grammar manifest. pytest pins

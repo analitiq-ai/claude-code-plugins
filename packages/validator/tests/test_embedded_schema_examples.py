@@ -350,19 +350,18 @@ def test_a_remote_ref_is_refused_without_reaching_the_network(validator):
     Left to its default reference registry, the grader FETCHES an `http(s)`
     `$ref` — an authored endpoint would make the validator issue a request to
     an address its author chose and wait for the answer. The host here is
-    TEST-NET-1, which is unroutable: a fetch stalls until it times out, so the
-    elapsed time is the assertion. It is generous by orders of magnitude, since
-    what it must separate is a refusal from a network timeout.
-    """
-    import time
+    TEST-NET-1, which is unroutable, so a fetch would stall until it timed out.
 
+    The VERDICT is what separates the two, not the elapsed time: a refusal names
+    the reference, while a fetch that stalled would be abandoned by the sample
+    budget and say so. Time cannot separate them, because the budget bounds both.
+    """
     doc = _read_endpoint({"x": {"$ref": "http://192.0.2.1/nothing.json",
                                 "examples": [1]}})
-    started = time.monotonic()
     errors = _sample_findings(validator.validate_document(doc))
-    assert time.monotonic() - started < 5.0, "grading attempted a network fetch"
     assert len(errors) == 1, errors
     assert "could not be resolved" in errors[0]["message"]
+    assert "budget" not in errors[0]["message"], "grading stalled instead of refusing"
 
 
 # Every way 2020-12 lets a reference name something inside its own document.
@@ -562,11 +561,14 @@ def test_a_sample_past_the_budget_is_reported_and_costs_only_itself():
     """The shape every other ungradeable entry already has: the sample is named,
     the verdict says nothing was decided, and the entries beside it still get
     theirs."""
-    doc = _read_endpoint({"code": dict(_RUNAWAY_NODE),
+    doc = _read_endpoint({"before": {"type": "integer", "examples": ["one"]},
+                          "code": dict(_RUNAWAY_NODE),
                           "paid": {"type": "boolean", "examples": ["0"]}})
     errors = _sample_findings(_validate_out_of_process(doc))
     by_field = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
-    assert set(by_field) == {"code/examples/0", "paid/examples/0"}
+    assert set(by_field) == {"before/examples/0", "code/examples/0", "paid/examples/0"}
+    # Graded on the worker generation the breach then killed.
+    assert "is not of type 'integer'" in by_field["before/examples/0"]
     assert "was not graded" in by_field["code/examples/0"]
     assert "budget" in by_field["code/examples/0"]
     assert "is not of type 'boolean'" in by_field["paid/examples/0"]
@@ -617,6 +619,210 @@ def test_a_document_with_no_samples_starts_no_worker(validator, monkeypatch):
     def refuse(*_args, **_kwargs):
         raise AssertionError("a document with no samples started a grading worker")
 
-    monkeypatch.setattr(_sample_budget.BudgetedGrader, "_start", refuse)
+    monkeypatch.setattr(_sample_budget.subprocess, "Popen", refuse)
     doc = _read_endpoint({"paid": {"type": "boolean"}})
     assert not _sample_findings(validator.validate_document(doc))
+
+
+# ---------------------------------------------------------------------------
+# Everything that is not a verdict
+# ---------------------------------------------------------------------------
+#
+# Grading in another process adds ways for a sample to come back ungraded that
+# an in-process call did not have: a budget spent, a worker that cannot start,
+# one that dies, one that answers something that is not a verdict, a value that
+# cannot be encoded. Each is a way for the check to decide nothing, and the
+# whole point of bounding the evaluation was that deciding nothing must never
+# read as a pass. So each is graded here for the same three properties — the
+# sample is named, the severity is `error`, and the samples around it keep their
+# verdicts.
+
+#: A worker whose behaviour the test chooses, so the parent's handling of a
+#: worker that misbehaves can be graded without waiting for one that does.
+_FAKE_WORKER = '''\
+import json, os, sys
+
+mode = os.environ["FAKE_GRADING_WORKER"]
+if mode == "nostart":
+    sys.stderr.write("the fake worker refused to start\\n")
+    raise SystemExit(1)
+marker = os.environ["FAKE_GRADING_WORKER_MARKER"]
+for line in sys.stdin:
+    job = json.loads(line)
+    if job["op"] == "ping":
+        sys.stdout.write('{"v": "pong"}\\n')
+        sys.stdout.flush()
+        continue
+    if job["op"] != "grade":
+        continue
+    if mode == "die-once" and not os.path.exists(marker):
+        open(marker, "w").close()
+        raise SystemExit(1)
+    if mode == "garbage":
+        sys.stdout.write("this is not a verdict\\n")
+    elif mode == "alien":
+        sys.stdout.write('{"v": "a kind from the future"}\\n')
+    else:
+        sys.stdout.write('{"v": "graded", "error": null}\\n')
+    sys.stdout.flush()
+'''
+
+
+@pytest.fixture
+def fake_worker(monkeypatch, tmp_path):
+    """Point the grader at `_FAKE_WORKER`, in the mode the test asks for."""
+    from analitiq.validator import _sample_budget
+
+    script = tmp_path / "fake_grading_worker.py"
+    script.write_text(_FAKE_WORKER)
+    monkeypatch.setattr(_sample_budget, "_WORKER_SCRIPT", str(script))
+    monkeypatch.setenv("FAKE_GRADING_WORKER_MARKER", str(tmp_path / "died"))
+
+    def use(mode):
+        monkeypatch.setenv("FAKE_GRADING_WORKER", mode)
+
+    return use
+
+
+def test_a_spent_document_budget_reports_rather_than_passes(validator, monkeypatch):
+    """A spent budget is not a verdict.
+
+    Once the document's budget is gone the remaining samples are never attempted,
+    and each must still be an error naming itself. Reporting nothing would let a
+    document whose samples were never graded through the gate that grading exists
+    to be — which is worse than the stall, because it is silent."""
+    from analitiq.validator import connectors
+    from analitiq.validator._sample_budget import BudgetedGrader
+
+    monkeypatch.setattr(connectors, "BudgetedGrader",
+                        lambda: BudgetedGrader(document_budget=0.0))
+    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]},
+                          "n": {"type": "integer", "examples": ["two"]}})
+    errors = _sample_findings(validator.validate_document(doc))
+    assert {e["path"].split("/properties/")[1] for e in errors} == {
+        "paid/examples/0", "n/examples/0"}
+    assert all(e["severity"] == "error" for e in errors), errors
+    assert all("was not graded" in e["message"] for e in errors), errors
+    assert all("budget was already spent" in e["message"] for e in errors), errors
+
+
+def test_a_worker_that_cannot_start_is_reported_per_sample_and_attempted_once(
+        validator, monkeypatch):
+    """An environment that cannot host a worker is stated, once.
+
+    Every sample still earns a finding — nothing was decided about any of them —
+    but the environment is asked once per document rather than once per sample,
+    because the answer cannot change between two samples."""
+    from analitiq.validator import _sample_budget
+
+    attempts = []
+
+    def refuse(*args, **_kwargs):
+        attempts.append(args)
+        raise OSError("cannot allocate memory")
+
+    monkeypatch.setattr(_sample_budget.subprocess, "Popen", refuse)
+    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
+    errors = _sample_findings(validator.validate_document(doc))
+    assert len(errors) == 2, errors
+    assert all(e["severity"] == "error" for e in errors), errors
+    assert all("cannot allocate memory" in e["message"] for e in errors), errors
+    assert len(attempts) == 1, attempts
+
+
+def test_a_worker_lost_mid_document_costs_only_the_sample_that_lost_it(
+        validator, fake_worker):
+    """A worker one sample killed says nothing about the samples after it.
+
+    Giving up for the document would report, for every later sample, a failure it
+    never had — the coarse-grained version of the stall this check was bounded to
+    prevent. Only a worker that cannot START is a verdict about the environment."""
+    fake_worker("die-once")
+    doc = _read_endpoint({"first": {"type": "boolean", "examples": ["0"]},
+                          "second": {"type": "boolean", "examples": ["1"]},
+                          "third": {"type": "boolean", "examples": ["2"]}})
+    errors = _sample_findings(validator.validate_document(doc))
+    assert len(errors) == 1, errors
+    assert errors[0]["path"].endswith("/first/examples/0"), errors
+    assert "was not graded" in errors[0]["message"]
+    assert "the grading worker was lost" in errors[0]["message"]
+
+
+@pytest.mark.parametrize("mode,expected", [
+    ("garbage", "'this is not a verdict'"),
+    ("alien", "a kind from the future"),
+    ("nostart", "the fake worker refused to start"),
+], ids=["a line that is not JSON", "a kind this build does not know",
+        "a worker that never starts"])
+def test_a_reply_that_is_not_a_verdict_is_refused_and_quoted(
+        mode, expected, validator, fake_worker):
+    """What came back is quoted, because it is the only evidence of what happened.
+
+    None of these may be read as a verdict, and none may escape as an exception:
+    this check runs inside the per-endpoint guard, so a raise here would replace
+    every finding the document had earned with one generic validator-bug notice."""
+    fake_worker(mode)
+    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]}})
+    findings = validator.validate_document(doc)
+    errors = _sample_findings(findings)
+    assert len(errors) == 1, findings
+    assert errors[0]["severity"] == "error"
+    assert "was not graded" in errors[0]["message"]
+    assert expected in errors[0]["message"], errors[0]["message"]
+    assert "crashed unexpectedly" not in errors[0]["message"]
+
+
+def test_a_document_that_is_not_json_reports_every_sample_rather_than_crashing(validator):
+    """A recorded sample is a value read out of a JSON document, so handing it to
+    another process costs nothing — but a caller that built the document in Python
+    can hold a value no JSON document could.
+
+    A sample sits inside the schema that records it, so such a value stops every
+    sample under that schema, not just its own. What matters is that each says so:
+    before the samples were named, this raised, and the guard around the check
+    replaced every finding the endpoint had earned with one generic validator-bug
+    notice."""
+    from decimal import Decimal
+
+    doc = _read_endpoint({"amount": {"type": "integer", "examples": [Decimal("1.5")]},
+                          "paid": {"type": "boolean", "examples": ["0"]}})
+    findings = validator.validate_document(doc)
+    by_field = {e["path"].split("/properties/")[1]: e["message"]
+                for e in _sample_findings(findings)}
+    assert set(by_field) == {"amount/examples/0", "paid/examples/0"}
+    assert all("was not graded" in m for m in by_field.values()), by_field
+    assert all("not JSON data" in m for m in by_field.values()), by_field
+    assert not [f for f in findings if "crashed unexpectedly" in f["message"]], findings
+
+
+def test_the_worker_writes_only_verdicts_to_its_stdout():
+    """The worker's stdout IS the protocol.
+
+    Anything else in its process that writes there lands mid-verdict, and the
+    parent then reads a reply that is not one for every remaining sample — the
+    check turning itself off, one finding at a time, everywhere at once."""
+    from analitiq.validator import _sample_budget
+
+    proc = subprocess.run(
+        [sys.executable, _sample_budget._WORKER_SCRIPT],
+        input='{"op": "ping"}\n', capture_output=True, text=True, timeout=120,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)},
+        check=False)
+    assert proc.stdout == '{"v": "pong"}\n', proc.stdout
+
+
+def test_a_budget_breach_leaves_no_traceback_on_stderr():
+    """A breach is an ordinary outcome, so it must not look like a crash.
+
+    The worker is killed with its pipes still buffered; left to finalization those
+    raise, and the interpreter prints the traceback on the validator's own stderr
+    — which is exactly where a caller looks when the JSON report is missing."""
+    doc = _read_endpoint({"code": dict(_RUNAWAY_NODE)})
+    request = json.dumps({"doc": doc, "doc_path": None})
+    proc = subprocess.run(
+        [sys.executable, "-c", _OUT_OF_PROCESS, json.dumps(sys.path), request],
+        capture_output=True, text=True, timeout=_RETURN_DEADLINE,
+        env={**os.environ, "DOMAIN": "analitiq.ai"}, check=False)
+    assert proc.returncode == 0, proc.stderr
+    assert "Traceback" not in proc.stderr, proc.stderr
+    assert "BrokenPipeError" not in proc.stderr, proc.stderr

@@ -502,14 +502,23 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
                             f"the sample at {where} was not graded: this document's grading "
                             f"budget was already spent by earlier samples, so this entry was "
                             f"never attempted and nothing was decided about it.")
-                    elif kind == "unavailable":
+                    elif kind == "unserializable":
                         message = (
-                            f"the sample at {where} was not graded: {verdict['reason']}. Samples "
-                            f"are graded in a worker process so an evaluation that does not "
-                            f"return can be abandoned; with no worker, nothing was decided about "
-                            f"this sample.")
+                            f"the sample at {where} was not graded: the schema recording it "
+                            f"holds a value that is not JSON data, so it could not be handed to "
+                            f"the grader. A recorded sample is a value read out of a JSON "
+                            f"document, so a value that cannot be encoded as JSON reached this "
+                            f"document from a caller that built it rather than parsed it.")
                     else:
-                        raise AssertionError(f"unknown grading verdict {kind!r}")
+                        # `unavailable`, and anything a future kind might be. Never
+                        # raised: this runs inside the per-endpoint guard, which
+                        # would replace every finding the document had earned with
+                        # one generic "validator bug".
+                        why = verdict.get("reason") or f"the grader answered {kind!r}"
+                        message = (
+                            f"the sample at {where} was not graded: {why}. Samples are graded in "
+                            f"a worker process so an evaluation that does not return can be "
+                            f"abandoned; with no worker, nothing was decided about this sample.")
                     findings.append(
                         finding("embedded-schema-example", "error", entry, message))
     return findings
