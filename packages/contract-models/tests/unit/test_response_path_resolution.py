@@ -501,6 +501,40 @@ class TestScalarNodePropertiesAreNotTraversable:
         }
         assert effective_properties(node) == {}
 
+    def test_a_scalar_union_inherited_through_a_ref_still_gates_properties(self):
+        # A union binds every instance of the node it sits on, and `$ref` is an
+        # intersection, so moving the union into the target does not escape it.
+        root = {
+            "$defs": {"Scalar": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+            "$ref": "#/$defs/Scalar",
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(root, root) == {}
+        assert materialize_node(root, root)["properties"] == {}
+
+    def test_a_scalar_union_on_a_sibling_allof_branch_still_gates_properties(self):
+        node = {"allOf": [
+            {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            {"properties": {"age": {"type": "integer"}}},
+        ]}
+        assert effective_properties(node) == {}
+
+    def test_a_null_marker_does_not_replace_an_inherited_one(self):
+        # Both contract markers spell "not declared" as an explicit `null`, so
+        # a null sibling must not win the merge over a substantive marker
+        # inherited from the `$ref` target.
+        root = {
+            "$defs": {"Scalar": {"native_type": "text", "arrow_type": "Utf8"}},
+            "$ref": "#/$defs/Scalar",
+            "native_type": None,
+            "arrow_type": None,
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(root, root) == {}
+        assert materialize_node(root, root)["properties"] == {}
+        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
+            resolve_declared_path(root, ["age"], root=root)
+
     def test_a_union_of_only_false_branches_leaves_no_alternative(self):
         # `false` matches nothing, so a list offering only `false` offers an
         # instance no alternative at all — proven to exclude object, unlike a
