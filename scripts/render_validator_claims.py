@@ -14,10 +14,11 @@ This module is the fix, in three parts:
    (`analitiq.validator.validate_document`, the same entry the plugins invoke),
    each asserting an outcome: rejected with a message, accepted clean, or
    accepted silent (zero findings). A probe is a *measurement*; if the contract
-   moves under it, `verify_probes()` fails and CI goes red. A claim about what
-   a plugin's own adapter does — the pipeline plugin chooses `require_runnable`
-   from the pipeline's status — is measured through that adapter instead, which
-   is the entry its agent runs; the findings list is the same shape either way.
+   moves under it, `verify_probes()` fails and CI goes red. A claim about a
+   whole bundle — runnability chosen from the pipeline's status, a connector
+   ref checked against the connector's endpoints — is measured through
+   `validate_tree`, the entry the pipeline plugin's reader hands its files to;
+   the findings list is the same shape either way.
 2. **Claims** — the prose sentences themselves, authored ONCE here, each naming
    the probes that prove it. Marked regions in the plugin docs
    (`<!-- BEGIN GENERATED: <block-id> -->` … `END GENERATED`, the same marker
@@ -712,23 +713,23 @@ def _staged_pipeline_bundle(
     mutate_stream: Callable[[dict], None] | None = None,
     publish_connector_endpoints: bool = False,
 ) -> list[dict]:
-    """The shipped examples laid out on disk as a bundle, graded at `status`.
+    """The shipped examples as a pipeline tree, graded at `status`.
 
-    Runnability is the one verdict the pipeline plugin asks for conditionally:
-    `scripts/validate.py` passes `require_runnable` off the pipeline's own
-    status, so measuring the claim means calling the adapter the agent runs,
-    not `validate_document`. Everything but the wiring comes from the bundled
-    examples — the pipeline's `streams` list and the destination ref are
-    repointed because no example pair ships pre-stitched.
+    Runnability is the one verdict the bundle run asks for conditionally:
+    `validate_tree` passes `require_runnable` off the pipeline's own status, so
+    measuring the claim means grading the tree, not `validate_document`.
+    Everything but the wiring comes from the bundled examples — the pipeline's
+    `streams` list and the destination ref are repointed because no example
+    pair ships pre-stitched.
 
     `mutate_stream` runs after that repointing, so a probe can break exactly one
     cross-document agreement in a bundle that is otherwise the shipped set.
 
-    `publish_connector_endpoints` writes the source connector's endpoint set
+    `publish_connector_endpoints` puts the source connector's endpoint set
     under `connectors/<slug>/definition/endpoints/`, which is the only thing
-    that makes the plugin's `connector-endpoint-ref` check verify rather than
-    skip: it omits a connector whose endpoints are absent, because an unknown
-    set must not read as "no endpoints". The id published is the one the stream
+    that makes the `connector-endpoint-ref` check verify rather than skip: it
+    omits a connector whose endpoints are absent, because an unknown set must
+    not read as "no endpoints". The id published is the one the stream
     example's source already names, read back rather than typed, so a probe
     that mutates the ref still has a real endpoint to be measured against.
     """
@@ -747,31 +748,19 @@ def _staged_pipeline_bundle(
     if mutate_stream is not None:
         mutate_stream(stream)
 
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "pipelines" / "p" / "streams").mkdir(parents=True)
-        document = root / "pipelines" / "p" / "pipeline.json"
-        document.write_text(json.dumps(pipeline))
-        (root / "pipelines" / "p" / "streams" / "s.json").write_text(json.dumps(stream))
-        for connection in (source, destination):
-            slug = connection["connector_id"]
-            (root / "connections" / slug).mkdir(parents=True)
-            (root / "connections" / slug / "connection.json").write_text(json.dumps(connection))
-            definition = root / "connectors" / slug / "definition"
-            definition.mkdir(parents=True)
-            (definition / "connector.json").write_text(json.dumps({"connector_id": slug}))
-        endpoints = (root / "connections" / destination["connector_id"]
-                     / "definition" / "endpoints")
-        endpoints.mkdir(parents=True)
-        (endpoints / f"{endpoint['endpoint_id']}.json").write_text(json.dumps(endpoint))
-        if publish_connector_endpoints:
-            published_dir = (root / "connectors" / source["connector_id"]
-                             / "definition" / "endpoints")
-            published_dir.mkdir(parents=True)
-            (published_dir / f"{published}.json").write_text(
-                json.dumps({"endpoint_id": published}))
-        return _pipeline_adapter().diagnostics_for(
-            "pipeline", document, bundle_root=root)["findings"]
+    from analitiq.validator import validate_tree
+
+    tree: dict[str, Any] = {"pipeline.json": pipeline, "streams/s.json": stream}
+    for connection in (source, destination):
+        slug = connection["connector_id"]
+        tree[f"connections/{slug}/connection.json"] = connection
+        tree[f"connectors/{slug}/definition/connector.json"] = {"connector_id": slug}
+    tree[f"connections/{destination['connector_id']}/definition/endpoints/"
+         f"{endpoint['endpoint_id']}.json"] = endpoint
+    if publish_connector_endpoints:
+        tree[f"connectors/{source['connector_id']}/definition/endpoints/{published}.json"] = {
+            "endpoint_id": published}
+    return validate_tree(tree)["findings"]
 
 
 def _p_pipeline_draft_runnability() -> list[dict]:
@@ -825,13 +814,12 @@ def _p_stream_cross_document_unchecked_alone() -> list[dict]:
     The entity the agent passes for a stream never receives a bundle root, so
     this is the whole of what a stream validation can see.
     """
+    from analitiq.validator import validate_document
+
     stream = json.loads(STREAM_EXAMPLE.read_text())
     _wrong_connection_role(stream)
     _unbacked_connection_endpoint(stream)
-    with tempfile.TemporaryDirectory() as tmp:
-        document = Path(tmp) / "stream.json"
-        document.write_text(json.dumps(stream))
-        return _pipeline_adapter().diagnostics_for("stream", document)["findings"]
+    return validate_document(stream, entity="stream")
 
 
 def _p_stream_connection_role_bundle() -> list[dict]:
@@ -1432,32 +1420,6 @@ def _pipeline_gen():
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    return module
-
-
-@functools.lru_cache(maxsize=None)
-def _pipeline_adapter():
-    """The pipeline plugin's validator adapter, imported by path (cached).
-
-    One claim in that plugin's prose is about the adapter rather than about the
-    published validator: `require_runnable` is chosen from the pipeline's own
-    status in `scripts/validate.py`, so a probe that called
-    `validate_pipeline_bundle` directly would measure the wrong side of the
-    sentence. Import is side-effect-free — `_bootstrap`'s venv build and
-    re-exec only fire from the adapter's `main()`.
-    """
-    import importlib.util
-
-    scripts_dir = str(PIPELINE_PLUGIN / "scripts")
-    spec = importlib.util.spec_from_file_location(
-        "_pipeline_validate_adapter", PIPELINE_PLUGIN / "scripts" / "validate.py")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    sys.path.insert(0, scripts_dir)  # validate.py imports _bootstrap
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.path.remove(scripts_dir)
     return module
 
 

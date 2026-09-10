@@ -1,12 +1,12 @@
 """Tests for the type-map gap prober (plugins/analitiq-pipeline-builder/scripts/type_map_gaps.py).
 
-The script holds no matching logic — resolution dispatches to the pinned
-`analitiq-validator`'s internal helpers (the exact semantics every runtime
-reader uses); these tests exercise them against the in-repo source, which moves
-in lockstep with the pin. They pin the *wiring*: probe/rule routing per
-direction, map precedence (connection primary over connector fallback,
-mirroring the engine's `TypeMapper.compose`), per-map model validation, gap
-reporting, and the CLI envelope.
+The script holds no matching logic — it reads the map files and hands them to
+the pinned `analitiq-validator`'s `resolve_type_map_gaps` (the exact semantics
+every runtime reader uses); these tests exercise it against the in-repo source,
+which moves in lockstep with the pin. They pin the *wiring*: probe/rule routing
+per direction, map precedence (connection primary over connector fallback,
+mirroring the engine's composition), per-map model validation naming the file,
+gap reporting, and the CLI envelope.
 """
 from __future__ import annotations
 
