@@ -25,29 +25,31 @@ import pytest
 from pydantic import ValidationError
 
 from analitiq.contracts.endpoints import (
+    _OperationKind,
+    _unresolved_harm,
+    ApiEndpointDoc,
+    ResponseExtraction,
+    WriteInput,
+    find_record_field_properties,
+    parse_endpoint,
+    resolve_read_record_schema,
+)
+from analitiq.contracts.shared.json_schema import (
     _MATERIALIZED_NODE,
     _MISSING,
-    _OperationKind,
     _combine_schema_values,
     _compose_declarations,
     _property_contributors,
     _refuse_disjoint_types,
-    _unresolved_harm,
-    ApiEndpointDoc,
     DeclarationConflictError,
     DeclaredPathError,
     JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
     JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
     JSON_SCHEMA_SUBSCHEMA_KEYS,
-    ResponseExtraction,
-    WriteInput,
     effective_properties,
-    find_record_field_properties,
     materialize_node,
-    parse_endpoint,
     resolve_declared_path,
     resolve_local_pointer,
-    resolve_read_record_schema,
     resolve_schema_ref,
 )
 from analitiq.contracts.shared.rules import all_rules
@@ -1316,31 +1318,31 @@ class TestKeywordVocabularyHasOneOwner:
         return doc["$defs"]["JsonSchemaPropertyNode"]
 
     def test_validator_buckets_match_the_contract_bucket_for_bucket(self):
-        from analitiq.contracts import endpoints as ep
+        from analitiq.contracts.shared import json_schema as js
         from analitiq.validator import connectors as vc
 
-        assert vc._SUBSCHEMA_MAP_KEYS == ep.JSON_SCHEMA_SUBSCHEMA_KEYS
-        assert vc._SUBSCHEMA_LIST_KEYS == ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-        assert vc._SUBSCHEMA_SINGLE_KEYS == ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+        assert vc._SUBSCHEMA_MAP_KEYS == js.JSON_SCHEMA_SUBSCHEMA_KEYS
+        assert vc._SUBSCHEMA_LIST_KEYS == js.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+        assert vc._SUBSCHEMA_SINGLE_KEYS == js.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
 
     def test_rendered_node_constrains_exactly_the_contract_vocabulary(self):
-        from analitiq.contracts import endpoints as ep
+        from analitiq.contracts.shared import json_schema as js
 
         vocabulary = (
-            ep.JSON_SCHEMA_SUBSCHEMA_KEYS
-            | ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-            | ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+            js.JSON_SCHEMA_SUBSCHEMA_KEYS
+            | js.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | js.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
         )
         rendered = set(self._rendered_node()["properties"]) - {"arrow_type", "native_type"}
         assert rendered == vocabulary
 
     def test_rendered_description_names_every_keyword_it_constrains(self):
-        from analitiq.contracts import endpoints as ep
+        from analitiq.contracts.shared import json_schema as js
 
         vocabulary = (
-            ep.JSON_SCHEMA_SUBSCHEMA_KEYS
-            | ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-            | ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+            js.JSON_SCHEMA_SUBSCHEMA_KEYS
+            | js.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | js.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
         )
         description = self._rendered_node()["description"]
         missing = sorted(k for k in vocabulary if f"`{k}`" not in description)

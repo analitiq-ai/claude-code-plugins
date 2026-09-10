@@ -68,12 +68,14 @@ try:
         from pydantic import TypeAdapter
         from analitiq.contracts.connector import Connector
         from analitiq.contracts.endpoints import (
-            JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
-            JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
-            JSON_SCHEMA_SUBSCHEMA_KEYS,
             ApiEndpointDoc,
             DatabaseEndpointDoc,
             SLUG_RE,
+        )
+        from analitiq.contracts.shared.json_schema import (
+            JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+            JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+            JSON_SCHEMA_SUBSCHEMA_KEYS,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
@@ -211,7 +213,8 @@ def _arrow_type_eq(a: str, b: str) -> bool:
     return norm(a) == norm(b)
 
 
-# JSON-Schema keyword sets that hold sub-schemas (mirrors analitiq.contracts.endpoints):
+# JSON-Schema keyword sets that hold sub-schemas (mirrors
+# analitiq.contracts.shared.json_schema):
 # a schema-aware walk recurses only through these — never through data keywords
 # like `const`/`default`/`enum`, and it treats `properties` children as field
 # names (a field literally named `default` is still walked as a sub-schema).

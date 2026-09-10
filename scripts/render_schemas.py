@@ -90,12 +90,14 @@ from analitiq.contracts.credentials_file import CredentialsFile  # noqa: E402
 from analitiq.contracts.connector import Connector  # noqa: E402
 from analitiq.contracts.endpoints import (  # noqa: E402
     ARROW_TYPE_PATTERN,
-    JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
-    JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
-    JSON_SCHEMA_SUBSCHEMA_KEYS,
     WRITE_MODES,
     ApiEndpointDoc,
     DatabaseEndpointDoc,
+)
+from analitiq.contracts.shared.json_schema import (  # noqa: E402
+    JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+    JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+    JSON_SCHEMA_SUBSCHEMA_KEYS,
 )
 from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc  # noqa: E402
 from analitiq.contracts.pipelines.config import PipelineInput  # noqa: E402
@@ -431,15 +433,11 @@ _JSON_SCHEMA_NODE_REF: dict[str, Any] = {"$ref": "#/$defs/JsonSchemaPropertyNode
 def _json_schema_node_properties() -> dict[str, Any]:
     """The node's constrained keywords, DERIVED from the contract's own sets.
 
-    These were three hand-maintained copies of one vocabulary — here, the
-    walkers in `analitiq.contracts.endpoints`, and the validator's
-    `_SUBSCHEMA_*_KEYS`. Adding `contentSchema` meant editing all three, and the
-    fourth expression of it (this node's own description, below) was missed, so
-    the RENDERED schema constrained a keyword its own prose said it did not
-    recurse into. Caught in review before any version carrying it reached the
-    bucket — which is the only reason it is describable in the past tense, since
-    a pinned `X.Y.Z.json` is immutable once published. The contract package owns
-    the vocabulary; both consumers import it.
+    The vocabulary has one owner, `analitiq.contracts.shared.json_schema`; this
+    renderer, the contract's walkers and the validator's `_SUBSCHEMA_*_KEYS` all
+    import it. Nothing here restates it: a keyword landing in the sets reaches
+    this node and its description (below) together, and a pinned `X.Y.Z.json`
+    is immutable once published, so a copy that lagged could never be corrected.
     """
     properties: dict[str, Any] = {
         "arrow_type": {"type": "string", "pattern": ARROW_TYPE_PATTERN},
