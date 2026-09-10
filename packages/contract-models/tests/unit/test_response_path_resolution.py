@@ -472,15 +472,94 @@ class TestScalarNodePropertiesAreNotTraversable:
         }
         assert effective_properties(node) == {"age": {"type": "integer"}}
 
-    def test_an_own_type_answers_ahead_of_a_sibling_union(self):
-        # A node's own markers are its last word, the same "own statements win"
-        # order every other key in this fold follows.
+    def test_a_union_branch_proving_nothing_leaves_an_object_node_traversable(self):
+        # A union refuses only when EVERY branch is proven to exclude object.
+        # One branch here says nothing about the kind of value, so the union
+        # proves nothing and the node's own `type` decides.
         node = {
             "type": "object",
-            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "anyOf": [{"maxProperties": 5}, {"type": "null"}],
             "properties": {"age": {"type": "integer"}},
         }
         assert effective_properties(node) == {"age": {"type": "integer"}}
+
+    def test_a_boolean_true_branch_leaves_a_union_permitting(self):
+        # `true` is a valid JSON Schema matching anything, an object included,
+        # so a union carrying one is never proven to exclude object.
+        node = {
+            "anyOf": [True, {"type": "string"}],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {"age": {"type": "integer"}}
+
+    def test_a_boolean_false_branch_is_not_an_alternative(self):
+        # `false` matches nothing, so it is not one of the alternatives an
+        # instance could take; the remaining branches decide.
+        node = {
+            "anyOf": [False, {"type": "string"}],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {}
+
+    def test_an_unsatisfiable_union_branch_does_not_refuse_the_document(self):
+        # A branch whose own composition leaves no kind of value is simply an
+        # alternative no instance takes. The union still has its object branch,
+        # and nothing is raised — a bad branch must not reject the document.
+        node = {
+            "anyOf": [
+                {"allOf": [{"type": "string"}], "type": "integer"},
+                {"type": "object"},
+            ],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {"age": {"type": "integer"}}
+
+    def test_a_branchs_own_markers_are_judged_together(self):
+        # Evidence never crosses between alternatives: each branch approves
+        # only if its OWN `type` and `arrow_type` both permit. Here the first
+        # branch's `arrow_type` and the second branch's `type` would each
+        # approve half of a phantom object shape neither branch describes.
+        node = {
+            "anyOf": [
+                {"type": "string", "native_type": "record", "arrow_type": "Object",
+                 "properties": {"age": {"type": "integer"}}},
+                {"type": "object", "native_type": "text", "arrow_type": "Utf8"},
+            ],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {}
+
+    def test_a_bare_type_excluding_object_is_not_overruled_by_arrow_type_object(self):
+        # Each proof refuses on its own. A bare `type` excluding object refuses
+        # whatever `arrow_type` says, on the same node or inherited through a
+        # `$ref` that moved the bare `type` out of it.
+        node = {
+            "type": "string",
+            "native_type": "record",
+            "arrow_type": "Object",
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {}
+        root = {
+            "$defs": {"Scalar": {"type": "string"}},
+            "$ref": "#/$defs/Scalar",
+            "native_type": "record",
+            "arrow_type": "Object",
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(root, root) == {}
+        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
+            resolve_declared_path(root, ["age"], root=root)
+
+    def test_overlapping_type_unions_intersect_across_allof_branches(self):
+        # `$ref` and `allOf` compose by intersection, so overlapping `type`
+        # lists narrow rather than overwrite: only `string` survives here.
+        node = {"allOf": [
+            {"type": ["string", "null"]},
+            {"type": ["object", "string"]},
+            {"properties": {"age": {"type": "integer"}}},
+        ]}
+        assert effective_properties(node) == {}
 
     def test_type_on_one_allof_branch_gates_properties_on_a_sibling_branch(self):
         # The type marker and the `properties` map can be declared on

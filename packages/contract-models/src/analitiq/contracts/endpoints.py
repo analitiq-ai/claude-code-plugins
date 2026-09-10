@@ -4185,73 +4185,113 @@ def _composed_permits_object(node: dict[str, Any], root: Any) -> bool:
     nothing more: the map is written down, and no conforming instance carries a
     single name out of it.
 
-    A node permits object when nothing in its composition says what kind of
-    value lives there (`properties` with no `type` is JSON Schema's own
-    implicit-object idiom), when its declared `type` includes `object`, or when
-    its `arrow_type` is `Object`. `arrow_type` is the contract's own type marker
-    and answers ahead of the bare JSON `type`, so a scalar one — `Utf8` reached
-    through a `$ref`, say — excludes object even where no bare `type` key exists
-    to say so.
+    THE ONE RULE: refuse only what the composed node PROVES it excludes.
+    Everything else permits. This is not a JSON Schema evaluator and must never
+    become one — deciding what an arbitrary schema can match is the whole
+    keyword set, and a gate that guesses at it rejects working documents. Two
+    facts carry a proof here, and a document carrying neither is traversed
+    exactly as it was before this gate existed:
+
+    * the composed bare `type`, intersected across `$ref` and `allOf` because
+      2020-12 composes those by intersection, excludes `object`;
+    * the composed `arrow_type` — the contract's own type marker, last-wins
+      across composition like every other scalar key :func:`_materialize` folds
+      — is present and is not `Object`.
+
+    Either proof alone refuses. Neither is stronger than the other and neither
+    overrules the other: `{"$ref": Scalar, "arrow_type": "Object"}` over a
+    `Scalar` declaring `type: "string"` is refused on the `type` proof, while
+    the same node over a `Scalar` declaring `arrow_type: "Utf8"` and no bare
+    `type` is permitted, because last-wins is what a materialized node reports
+    for that key and the gate must not disagree with it.
+
+    `anyOf`/`oneOf` fold through :func:`_union_permits_object`, which carries
+    the same burden of proof: a union refuses only when EVERY branch is proven
+    to exclude object. A boolean branch, a branch declaring no type, or a
+    branch this fold cannot decide leaves the union permitting.
 
     The verdict is read off the COMPOSED node, never off its literal keys:
     `{"$ref": "#/$defs/Str", "properties": {…}}` states no `type` of its own and
-    is scalar all the same. :func:`_fold_permits_object` composes it with the
-    same source order and the same last-wins rule :func:`_materialize` applies
-    to every other scalar key, so this predicate and a materialized node agree
-    about what kind of value the document declares.
+    is scalar all the same.
 
     Deliberately a separate fold rather than a call to :func:`materialize_node`:
     that fold is what this predicate gates, so it cannot also be what decides
     the gate.
 
-    Sources that contradict each other are :func:`_refuse_disjoint_types`'
-    subject, not this one's. This gate answers which kind of value a node
-    composes to; it does not fold in that refusal, and a document it calls
-    scalar is well-formed rather than contradictory.
+    Contradictions are :func:`_refuse_disjoint_types`' subject, not this one's.
+    A composition this gate finds empty is refused by exclusion, never by a
+    raise — an unsatisfiable `anyOf` branch does not make the document invalid,
+    and a gate that raised from inside the fold turned one bad branch into a
+    rejected document.
 
     :func:`_property_contributors` and :func:`materialize_node` each call this
     ONCE, on the node the walk starts at, and thread the single verdict through
     every recursive call unchanged. Per-branch is wrong: `type` on one `allOf`
     branch and `properties` on a sibling describe the same instance, and the
-    `properties`-only branch judged alone declares nothing and would permit
+    `properties`-only branch judged alone proves nothing and would permit
     object on its own.
     """
-    return _fold_permits_object(node, root, {}, frozenset()) is not False
+    return _permits_object(_fold_type_evidence(node, root, {}, frozenset()))
 
 
-def _fold_permits_object(
+class _TypeEvidence(NamedTuple):
+    """What a composed node PROVES about the kind of value it holds.
+
+    ``arrow_type`` is the composed `arrow_type`, ``None`` where nothing declares
+    one. ``json_types`` is the intersection of every composed bare `type`,
+    ``None`` where nothing asserts one and empty where the assertions leave
+    nothing. ``unions_permit`` is False once some `anyOf`/`oneOf` in the
+    composition is proven to exclude object.
+    """
+
+    arrow_type: str | None
+    json_types: frozenset[str] | None
+    unions_permit: bool
+
+
+_NO_TYPE_EVIDENCE = _TypeEvidence(None, None, True)
+
+
+def _permits_object(evidence: _TypeEvidence) -> bool:
+    """Whether ``evidence`` leaves `object` possible. Each fact refuses on its
+    own; nothing here is weighed against anything else."""
+    if evidence.arrow_type is not None and evidence.arrow_type != "Object":
+        return False
+    if evidence.json_types is not None and "object" not in evidence.json_types:
+        return False
+    return evidence.unions_permit
+
+
+def _fold_type_evidence(
     node: dict[str, Any],
     root: Any,
-    memo: dict[int, bool | None],
+    memo: dict[int, _TypeEvidence],
     on_path: frozenset[int],
-) -> bool | None:
-    """Whether ``node`` composes to something that may carry `properties`, or
-    ``None`` where nothing in the composition says what kind of value it is.
+) -> _TypeEvidence:
+    """Compose :class:`_TypeEvidence` for ``node``.
 
-    :func:`_composed_permits_object`'s worker. `None` is the answer that makes
-    the fold compose: a source saying nothing about the kind of value narrows
-    nothing and never blanks a verdict an earlier source reached, which is what
-    lets `type` on one `allOf` branch gate `properties` on a sibling.
-
-    Same source order as :func:`_materialize` — `$ref` target, `allOf` branches
-    in document order, `anyOf`/`oneOf`, then the node's own markers — and the
-    same last-wins rule, so this reports the same kind of value a materialized
-    node declares.
+    :func:`_composed_permits_object`'s worker; that function states the rule
+    this implements. Same source order as :func:`_materialize` — `$ref` target,
+    `allOf` branches in document order, then the node itself — so `arrow_type`
+    composes to what a materialized node reports. Bare `type` intersects
+    instead, which is how 2020-12 composes a `$ref` with its siblings.
 
     Memoized on the RESULT within one fold, with `on_path` separately tracking
     the composition chain currently being folded — the two sets answer different
     questions, per the module comment above. A node met again while still on the
-    path is a cycle and says nothing the second time.
+    path is a cycle and proves nothing the second time.
     """
     key = id(node)
-    cached = memo.get(key, _MISSING)
-    if cached is not _MISSING:
-        return cached  # type: ignore[return-value]
+    cached = memo.get(key)
+    if cached is not None:
+        return cached
     if key in on_path:
-        return None
+        return _NO_TYPE_EVIDENCE
     on_path = on_path | {key}
 
-    verdict: bool | None = None
+    arrow_type: str | None = None
+    json_types: frozenset[str] | None = None
+    unions_permit = True
 
     sources: list[dict[str, Any]] = []
     ref = node.get("$ref")
@@ -4264,70 +4304,84 @@ def _fold_permits_object(
         sources.extend(branch for branch in branches if isinstance(branch, dict))
 
     for source in sources:
-        source_verdict = _fold_permits_object(source, root, memo, on_path)
-        if source_verdict is not None:
-            verdict = source_verdict
+        inherited = _fold_type_evidence(source, root, memo, on_path)
+        if inherited.arrow_type is not None:
+            arrow_type = inherited.arrow_type
+        json_types = _intersect_declared_types(json_types, inherited.json_types)
+        unions_permit = unions_permit and inherited.unions_permit
+
+    own_arrow_type = node.get("arrow_type")
+    if isinstance(own_arrow_type, str):
+        arrow_type = own_arrow_type
+    json_types = _intersect_declared_types(json_types, _declared_types(node))
 
     for keyword in ("anyOf", "oneOf"):
         union = node.get(keyword)
         if isinstance(union, list):
-            union_verdict = _union_permits_object(union, root, memo, on_path)
-            if union_verdict is not None:
-                verdict = union_verdict
+            unions_permit = unions_permit and _union_permits_object(
+                union, root, memo, on_path
+            )
 
-    own_verdict = _own_permits_object(node)
-    if own_verdict is not None:
-        verdict = own_verdict
-
-    memo[key] = verdict
-    return verdict
+    evidence = _TypeEvidence(arrow_type, json_types, unions_permit)
+    memo[key] = evidence
+    return evidence
 
 
 def _union_permits_object(
     branches: list[Any],
     root: Any,
-    memo: dict[int, bool | None],
+    memo: dict[int, _TypeEvidence],
     on_path: frozenset[int],
-) -> bool | None:
-    """One `anyOf`/`oneOf` branch list, folded to the single verdict
-    :func:`_fold_permits_object` treats as one more source.
+) -> bool:
+    """Whether an `anyOf`/`oneOf` branch list leaves `object` possible.
 
-    An instance satisfying the list need only match ONE branch, so the union
-    permits object as soon as any branch does — the nullable-object idiom
-    `{"anyOf": [{"type": "object", …}, {"type": "null"}]}` among them. A branch
-    saying nothing about the kind of value permits it, same as anywhere else in
-    this fold. `oneOf`'s exclusivity decides which branch an instance matches,
-    never which kinds of value are possible, so it folds identically.
+    An instance need only match ONE branch, so the union is refused only when
+    every branch is proven to exclude object — the nullable-record idiom
+    `{"anyOf": [{"type": "object", …}, {"type": "null"}]}` keeps resolving on
+    its object branch. Each branch is judged WHOLE, by the same
+    :func:`_permits_object` the composed node is, so evidence never crosses
+    between alternatives: a branch approves only if its own `type`, `arrow_type`
+    and nested unions all permit.
 
-    A list where no branch says anything says nothing itself, rather than
-    excluding everything.
+    A boolean `true` branch matches anything, including an object. `false`
+    matches nothing and is simply not an alternative. A branch this fold cannot
+    decide proves nothing and leaves the union permitting.
+
+    `oneOf` folds identically. Its exactly-one requirement can make an object
+    match two branches and so satisfy neither, but deciding that means deciding
+    whether two arbitrary subschemas overlap — schema evaluation, which this
+    gate does not do. Permitting is the direction that never rejects a working
+    document.
     """
-    verdicts = [
-        _fold_permits_object(branch, root, memo, on_path)
-        for branch in branches
-        if isinstance(branch, dict)
-    ]
-    if all(verdict is None for verdict in verdicts):
-        return None
-    return any(verdict is not False for verdict in verdicts)
+    proven_impossible: list[bool] = []
+    for branch in branches:
+        if branch is True:
+            return True
+        if branch is False:
+            continue
+        if not isinstance(branch, dict):
+            return True
+        proven_impossible.append(
+            _permits_object(_fold_type_evidence(branch, root, memo, on_path))
+        )
+    return any(proven_impossible) if proven_impossible else True
 
 
-def _own_permits_object(node: dict[str, Any]) -> bool | None:
-    """The kind of value ``node``'s OWN markers declare, ignoring composition.
+def _intersect_declared_types(
+    composed: frozenset[str] | None, contributor: set[str] | None
+) -> frozenset[str] | None:
+    """Fold one more bare-`type` assertion into a running intersection.
 
-    `arrow_type` is the contract's own type marker and answers first where both
-    are present. An `arrow_type` explicitly set to `null` spells "not declared"
-    in this contract (:func:`_validate_arrow_type_in_json_schema` reads it the
-    same way), so only a string value answers. ``None`` where the node declares
-    neither marker.
+    ``None`` asserts nothing and narrows nothing. An empty result means the
+    assertions leave no kind of value at all, which excludes `object` like any
+    other set that does not contain it — :func:`_refuse_disjoint_types` owns
+    whether that contradiction is refused outright.
     """
-    arrow_type = node.get("arrow_type")
-    if isinstance(arrow_type, str):
-        return arrow_type == "Object"
-    declared_types = _declared_types(node)
-    if declared_types is not None:
-        return "object" in declared_types
-    return None
+    if contributor is None:
+        return composed
+    if composed is None:
+        return frozenset(contributor)
+    return composed & frozenset(contributor)
 
 
 def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[Any]]:
