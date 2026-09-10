@@ -4172,7 +4172,249 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
 # declaration wins.
 
 
-def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[Any]]:
+#: The contract's own type annotations. Both spell "not declared" as an explicit
+#: `null` rather than by absence, so :func:`_compose_schema_keys` drops a `null`
+#: one instead of letting it win the merge.
+_CONTRACT_TYPE_MARKERS = ("native_type", "arrow_type")
+
+
+def composed_schema_keys(
+    node: dict[str, Any],
+    root: Any,
+    memo: dict[int, tuple[Any, dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
+    """``node``'s keys folded over its `$ref` target and `allOf` branches, with
+    `properties` left out.
+
+    THE ONE composition of a node's own declarations in this module.
+    :func:`_materialize` builds its result on this, and
+    :func:`_composed_permits_object` reads the composed type off it, so the two
+    cannot answer differently about the same document — every way they were
+    computed separately, they eventually disagreed.
+
+    `properties` is excluded because it is not a declaration a node makes about
+    itself: it is composed per NAME from the contributor walk, and that walk is
+    gated on the type this fold reports. Folding it here would make the answer
+    depend on the question.
+
+    Source order is `$ref` target, then `allOf` branches in document order, then
+    the node itself, with the last contributor winning — the order the module
+    comment above states for both walkers. `type` is the exception and
+    INTERSECTS: `$ref` and `allOf` are intersections in 2020-12, so a node
+    reached through both `{"type": ["string", "null"]}` and
+    `{"type": ["object", "string"]}` can only be a string. Last-wins on that key
+    reported `["object", "string"]` and made a scalar look object-shaped.
+    :func:`_refuse_disjoint_types` already computes this intersection to prove
+    the empty case; this keeps the result instead of discarding it.
+
+    ``memo`` is shared by every fold belonging to ONE walk — a materialization
+    and the gate it applies, say — so a `$defs` subgraph reached from several
+    branches is folded once. Passing none starts a fresh walk. It is never
+    shared BETWEEN walks: a node folded while an ancestor was on the path is
+    truncated by the cycle rule, and that result belongs to the walk that
+    computed it.
+    """
+    return _compose_schema_keys(node, root, {} if memo is None else memo, set())
+
+
+def _compose_schema_keys(
+    node: dict[str, Any],
+    root: Any,
+    memo: dict[int, tuple[Any, dict[str, Any]]],
+    on_path: set[int],
+) -> dict[str, Any]:
+    """:func:`composed_schema_keys`' memoized worker. Same memo-and-`on_path`
+    scheme as :func:`_materialize` and :func:`_contributors`, stated in the
+    module comment above: the result is cached, and a node met again while it is
+    still on the current path contributes nothing."""
+    key = id(node)
+    cached = memo.get(key)
+    if cached is not None:
+        return cached[1]
+    if key in on_path:
+        return {}
+    on_path.add(key)
+
+    sources: list[dict[str, Any]] = []
+    ref = node.get("$ref")
+    if isinstance(ref, str):
+        target = resolve_schema_ref(root, ref)
+        if isinstance(target, dict):
+            sources.append(_compose_schema_keys(target, root, memo, on_path))
+    branches = node.get("allOf")
+    if isinstance(branches, list):
+        for branch in branches:
+            _reject_unsatisfiable_branch(branch)
+            if isinstance(branch, dict):
+                sources.append(_compose_schema_keys(branch, root, memo, on_path))
+    sources.append({
+        k: v for k, v in node.items()
+        if k not in ("$ref", "allOf", "properties")
+        # An explicit `null` on either contract marker spells "not declared"
+        # (:func:`_validate_arrow_type_in_json_schema` reads it the same way),
+        # so it is not a contributor and must not overwrite one inherited from
+        # a `$ref` target or an `allOf` branch.
+        and not (k in _CONTRACT_TYPE_MARKERS and v is None)
+    })
+
+    _refuse_disjoint_types(_MATERIALIZED_NODE, sources)
+
+    merged: dict[str, Any] = {}
+    for source in sources:
+        for name, value in source.items():
+            merged[name] = (
+                _combine_schema_values(merged[name], value, kind=_position_kind(name))
+                if name in merged
+                else value
+            )
+
+    declared = [t for t in (_declared_types(s) for s in sources) if t is not None]
+    if len(declared) > 1:
+        intersection = sorted(set.intersection(*declared))
+        merged["type"] = intersection[0] if len(intersection) == 1 else intersection
+
+    on_path.discard(key)
+    memo[key] = (node, merged)
+    return merged
+
+
+def _composed_permits_object(
+    node: dict[str, Any],
+    root: Any,
+    memo: dict[int, tuple[Any, dict[str, Any]]] | None = None,
+) -> bool:
+    """Whether ``node``'s `properties` map describes fields an instance can
+    actually carry — the gate `resolve_declared_path`/`effective_properties`
+    (via :func:`_property_contributors`) and `materialize_node` (via
+    :func:`_materialize`) both put in front of `properties`.
+
+    JSON Schema applies `properties` only to object instances, so
+    `{"type": "string", "properties": {"age": …}}` describes a string and
+    nothing more: the map is written down, and no conforming instance carries a
+    single name out of it.
+
+    REFUSE ONLY ON PROOF. The two mistakes this can make are not symmetric.
+    Reporting a field that no record can carry is the defect this exists to
+    catch, and it ships a connector wired to nothing. Failing to prove an
+    exclusion costs nothing at all: the path resolves, exactly as it did before
+    this gate existed. So precision is worth nothing bought at the price of
+    refusing a document that works, and this deliberately proves less than a
+    schema evaluator could.
+
+    What carries a proof is the composed declaration
+    (:func:`composed_schema_keys`), read as two facts that each refuse on their
+    own: a bare `type` that excludes `object`, and an `arrow_type` — the
+    contract's own type marker — that is present and is not `Object`. Neither
+    overrules the other.
+
+    `anyOf`/`oneOf` fold through :func:`_union_permits_object`, which carries the
+    same burden. A union constrains every instance of the node that carries it,
+    so one reached through a `$ref` target or an `allOf` branch counts exactly as
+    one written here.
+
+    `oneOf` folds as a plain union. Its exactly-one requirement can leave an
+    object matching two branches and so satisfying neither, but proving that
+    means deciding whether two arbitrary subschemas overlap, and the asymmetry
+    above says that precision is not worth buying.
+    """
+    memo = {} if memo is None else memo
+    composed = composed_schema_keys(node, root, memo)
+    arrow_type = composed.get("arrow_type")
+    if isinstance(arrow_type, str) and arrow_type != "Object":
+        return False
+    declared_types = _declared_types(composed)
+    if declared_types is not None and "object" not in declared_types:
+        return False
+    return _union_permits_object(node, root, memo)
+
+
+def _union_permits_object(
+    node: dict[str, Any],
+    root: Any,
+    memo: dict[int, tuple[Any, dict[str, Any]]],
+) -> bool:
+    """Whether every `anyOf`/`oneOf` in ``node``'s composition leaves `object`
+    possible.
+
+    An instance need only match ONE branch, so a union refuses only when every
+    branch is proven to exclude object — the nullable-record idiom
+    `{"anyOf": [{"type": "object", …}, {"type": "null"}]}` keeps resolving on
+    its object branch. Each branch is judged by the same composed declaration
+    the node itself is, so no evidence crosses between alternatives.
+
+    A branch is not an alternative when it cannot be taken: boolean `false`, or
+    a branch whose own composition is refused (`allOf: [false]`, disjoint
+    types). That refusal is :func:`_reject_unsatisfiable_branch` and
+    :func:`_refuse_disjoint_types` doing the deciding, not a case written here,
+    and it is contained to the branch — one impossible alternative must never
+    reject the document. A list offering no alternative at all refuses; an empty
+    list is malformed rather than impossible and proves nothing.
+
+    Boolean `true`, and anything else this cannot read, proves nothing and
+    leaves the union permitting.
+    """
+    for branches in _composed_unions(node, root, set()):
+        alternatives: list[bool] = []
+        for branch in branches:
+            if branch is True:
+                alternatives.append(True)
+                continue
+            if branch is False:
+                continue  # not an alternative at all
+            if not isinstance(branch, dict):
+                alternatives.append(True)  # unreadable, so it proves nothing
+                continue
+            try:
+                alternatives.append(_composed_permits_object(branch, root, memo))
+            except DeclarationConflictError:
+                continue  # an alternative no instance can take
+        if branches and not any(alternatives):
+            return False
+    return True
+
+
+def _composed_unions(
+    node: dict[str, Any], root: Any, seen: set[int]
+) -> Iterator[list[Any]]:
+    """Every `anyOf`/`oneOf` list ``node``'s composition carries.
+
+    A union binds every instance of the node it sits on, and `$ref` and `allOf`
+    are intersections, so a union moved into a `$ref` target still binds the
+    referencing node. Same traversal as :func:`_compose_schema_keys`, yielding
+    the lists rather than composing them, because a union is not a declaration
+    that merges.
+
+    ``seen`` is a VISITED set, not a current-path set. Every union must hold, so
+    yielding a shared node's unions once is enough, and a `$defs` subgraph
+    reached from several branches is a DAG — walking it once per route is the
+    exponential blowup `TestCompositionIsLinearNotExponential` exists to catch.
+    Visiting each node once terminates on a cycle for the same reason.
+    """
+    key = id(node)
+    if key in seen:
+        return
+    seen.add(key)
+    ref = node.get("$ref")
+    if isinstance(ref, str):
+        target = resolve_schema_ref(root, ref)
+        if isinstance(target, dict):
+            yield from _composed_unions(target, root, seen)
+    branches = node.get("allOf")
+    if isinstance(branches, list):
+        for branch in branches:
+            if isinstance(branch, dict):
+                yield from _composed_unions(branch, root, seen)
+    for keyword in ("anyOf", "oneOf"):
+        union = node.get(keyword)
+        if isinstance(union, list):
+            yield union
+
+
+def _property_contributors(
+    node: dict[str, Any],
+    root: Any,
+    keys_memo: dict[int, tuple[Any, dict[str, Any]]] | None = None,
+) -> dict[str, list[Any]]:
     """Every UNCONDITIONAL declaration of each property name, LOWEST precedence
     first.
 
@@ -4197,6 +4439,11 @@ def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[An
     the first occurrence is NOT safe and was one of the three bugs above; the
     inline comment at the dedup states the failure.
     """
+    # The gate is applied to the WHOLE node, once, and not threaded into the
+    # walk: `type` on one `allOf` branch and `properties` on a sibling describe
+    # the same instance, so a branch judged alone proves nothing about it.
+    if not _composed_permits_object(node, root, keys_memo):
+        return {}
     return _contributors(node, root, {}, set())
 
 
@@ -4478,7 +4725,27 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     """
     if not isinstance(node, dict):
         return node
-    return _materialize(node, node if root is None else root, {}, set())
+    root = node if root is None else root
+    # One keys-memo for this whole materialization, shared with the gate below:
+    # a `$defs` subgraph reached from several branches is folded once.
+    keys_memo: dict[int, tuple[Any, dict[str, Any]]] = {}
+    materialized = _materialize(node, root, {}, set(), keys_memo)
+    # Gated HERE, on the node the caller asked about, and never inside the
+    # recursion: a `$ref` target can be scalar on its own and object-shaped once
+    # an enclosing `arrow_type` composes over it, so pruning it mid-fold
+    # discarded properties the finished node does carry.
+    if (
+        isinstance(materialized, dict)
+        and isinstance(materialized.get("properties"), dict)
+        and not _composed_permits_object(node, root, keys_memo)
+    ):
+        # KNOWN-EMPTY, not absent. `_json_schema_top_level_fields` tells those
+        # apart, and a scalar instance carrying no named field is as knowable as
+        # an explicit `properties: {}`; dropping the key would answer
+        # "unknowable, skip" and turn off the `conflict_keys` and `from_input`
+        # membership checks for exactly the documents this gate exists to catch.
+        materialized["properties"] = {}
+    return materialized
 
 
 def _materialize(
@@ -4486,6 +4753,7 @@ def _materialize(
     root: Any,
     memo: dict[int, tuple[Any, Any]],
     on_path: set[int],
+    keys_memo: dict[int, tuple[Any, dict[str, Any]]],
 ) -> Any:
     """Memoized fold. Each node is materialized ONCE and its RESULT reused.
 
@@ -4509,6 +4777,10 @@ def _materialize(
     already on the current path is a cycle: it contributes nothing the second
     time it is met, which is the rule the contract states. The memo holds the
     node beside its result so a freed node's `id()` cannot be reused mid-walk.
+
+    Its non-`properties` keys come from :func:`composed_schema_keys`, the one
+    fold `_composed_permits_object` also reads, so a materialized node and the
+    gate cannot report different types for the same document.
     """
     key = id(node)
     cached = memo.get(key)
@@ -4523,13 +4795,13 @@ def _materialize(
     if isinstance(ref, str):
         target = resolve_schema_ref(root, ref)
         if isinstance(target, dict):
-            sources.append(_materialize(target, root, memo, on_path))
+            sources.append(_materialize(target, root, memo, on_path, keys_memo))
     branches = node.get("allOf")
     if isinstance(branches, list):
         for branch in branches:
             _reject_unsatisfiable_branch(branch)
             if isinstance(branch, dict):
-                sources.append(_materialize(branch, root, memo, on_path))
+                sources.append(_materialize(branch, root, memo, on_path, keys_memo))
     sources.append({k: v for k, v in node.items() if k not in ("$ref", "allOf")})
 
     # The same refusal `_compose_declarations` applies to a property name's
@@ -4540,18 +4812,8 @@ def _materialize(
     # instance can satisfy validates as a good array.
     _refuse_disjoint_types(_MATERIALIZED_NODE, sources)
 
-    merged: dict[str, Any] = {}
-    for source in sources:
-        if not isinstance(source, dict):
-            continue
-        for name, value in source.items():
-            if name == "properties":
-                continue  # composed below, from the shared contributor walk
-            merged[name] = (
-                _combine_schema_values(merged[name], value, kind=_position_kind(name))
-                if name in merged
-                else value
-            )
+    # Every key but `properties`, from the one fold the gate below also reads.
+    merged: dict[str, Any] = dict(composed_schema_keys(node, root, keys_memo))
 
     # `properties` is composed per NAME here, and the satisfiability proof below
     # reads the same raw contributor list `_compose_declarations` proves, so the
@@ -4616,7 +4878,7 @@ def _materialize(
         # on a deep UNSHARED `allOf` chain (measured ~3s at depth 400, ~44ms at
         # depth 100). Real record shapes nest < 10 deep, where this is ~0.2ms;
         # the linearity pins bound the shared/cyclic shapes that actually occur.
-        raw = _property_contributors(node, root)
+        raw = _property_contributors(node, root, keys_memo)
         by_name: dict[str, list[Any]] = {}
         for source_map in own_properties:
             for name, declaration in source_map.items():
