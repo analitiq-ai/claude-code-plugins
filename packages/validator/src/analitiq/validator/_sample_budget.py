@@ -60,7 +60,6 @@ message stays a finding rather than a copy of the document that produced it.
 from __future__ import annotations
 
 import contextlib
-import faulthandler
 import json
 import os
 import queue
@@ -71,6 +70,8 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+
+from ._core import _bounded
 
 #: Wall clock for one sample. A sample the node can grade at all grades in well
 #: under a millisecond, so this is orders of magnitude of headroom and will not
@@ -89,141 +90,21 @@ DOCUMENT_BUDGET_SECONDS = 10.0
 #: sample costs. A restart IS charged — it is a cost the samples caused.
 _START_DEADLINE_SECONDS = 30.0
 
-#: The worker is this file, run directly rather than as `-m analitiq.validator…`:
-#: importing the package would pull the contract models and pydantic into a child
-#: that needs neither, and `runpy` warns about the double import on every start —
-#: into the same stderr a failure reason is read from.
-_WORKER_SCRIPT = str(Path(__file__).resolve())
+#: Started by path rather than as `-m analitiq.validator…`: importing the package
+#: would pull the contract models and pydantic into a child that uses neither, and
+#: `runpy` warns about the double import on every start — into the same stderr a
+#: failure reason is read from.
+_WORKER_SCRIPT = str(Path(__file__).resolve().parent / "_sample_worker.py")
 
-#: How much of a stray line or a diagnostic reaches a finding. Long enough to
-#: identify what happened, short enough that a finding stays a finding.
-_DETAIL_LIMIT = 200
+#: The kinds a worker may answer with. This module refuses anything else rather
+#: than reading it as a verdict.
+_WORKER_KINDS = frozenset({"pong", "graded", "unresolvable", "recursion", "crash"})
 
-#: How far past its deadline a worker lets a job run before ending its own
-#: process. Wide enough that the parent, which reports the overrun, gets there
-#: first while it is alive; narrow enough that an orphan does not outlive the run
-#: by much. Racing is harmless either way — a parent that timed out kills a
-#: process that has already gone, and reports the same breach.
-_SELF_DESTRUCT_MARGIN = 2.0
 
 #: The types `json.loads` produces. Membership is by exact type, not `isinstance`:
 #: the point is to catch what an encoder would silently convert, and every such
 #: value is a subclass or a look-alike of one of these.
 _JSON_TYPES = frozenset({dict, list, str, bool, int, float, type(None)})
-
-
-def _offline_registry():
-    """An empty reference registry — one with no way to retrieve anything.
-
-    Validation here is offline by contract, and `jsonschema`'s default registry
-    is not: a `$ref` naming an `http(s)` URL is FETCHED, so an authored endpoint
-    could make the validator issue a request to any address its author chose and
-    block on the answer. Retrieval is a `retrieve` callable a registry either has
-    or does not, so an empty one refuses instead, and the per-entry guard turns
-    the refusal into a finding.
-
-    Empty is all it has to be, and this is the fact that makes the whole scheme
-    work: a validator roots its OWN schema as a resource, and that root is what
-    every in-document reference resolves against — a pointer, an `$anchor`, a
-    nested `$id`. So the document needs no registry entry, and a registry with
-    nothing in it can still resolve every reference the contract allows while
-    refusing every one it does not.
-
-    That the contract models separately refuse a non-local `$ref` does not cover
-    this: grading runs on documents the models have already rejected, and an
-    offline guarantee that holds only while another check keeps its rule is not
-    one."""
-    from referencing import Registry
-
-    return Registry()
-
-
-def _clipped(text: str) -> str:
-    return text if len(text) <= _DETAIL_LIMIT else f"{text[:_DETAIL_LIMIT]}…"
-
-
-# ---------------------------------------------------------------------------
-# The worker
-# ---------------------------------------------------------------------------
-
-#: The kinds a worker may answer with. The parent refuses anything else rather
-#: than reading it as a verdict.
-_WORKER_KINDS = frozenset({"pong", "graded", "unresolvable", "recursion", "crash"})
-
-
-def _grade(document, node: dict, sample: Any) -> dict:
-    """One sample's verdict, as the data a finding needs rather than as objects.
-
-    The arms are the ones the caller already tells apart, kept apart here because
-    each has a different fix: a reference naming nothing is the node's defect, a
-    value no keyword can evaluate is the sample's, and a verdict is neither.
-    """
-    from jsonschema.exceptions import best_match
-    from referencing.exceptions import Unresolvable
-
-    try:
-        # `evolve` swaps the schema and keeps the resolver, so a node written as
-        # `{"$ref": "#/$defs/..."}` is graded against what it points at rather
-        # than against a node with no assertions in it.
-        error = best_match(document.evolve(schema=node).iter_errors(sample))
-    except (Unresolvable, RecursionError) as exc:
-        ref = getattr(exc, "ref", None)
-        # `repr` here rather than in the parent: an unresolved-reference error
-        # renders the whole resource it searched, and `ref` is the part of it
-        # that names the defect. Sending anything else would put the embedded
-        # schema on the wire once per recorded sample.
-        return {"v": "unresolvable", "ref": repr(ref)} if ref is not None else {"v": "recursion"}
-    except Exception as exc:  # noqa: BLE001 - author input, no total gate
-        return {"v": "crash", "type": type(exc).__name__, "detail": str(exc)}
-    if error is None:
-        return {"v": "graded", "error": None}
-    return {"v": "graded", "error": {"message": error.message, "path": error.json_path}}
-
-
-def _serve() -> int:
-    """Read jobs from stdin, write one verdict line per graded sample."""
-    from jsonschema import Draft202012Validator
-
-    # The protocol channel is this process's original stdout, taken privately.
-    # Anything else here that writes to fd 1 — a library banner, a `print` in a
-    # dependency, a warning routed to stdout — would otherwise land mid-verdict
-    # and desynchronise the parent for every remaining sample. Pointing fd 1 at
-    # stderr keeps such writes visible as diagnostics instead of destroying the
-    # channel.
-    channel = os.fdopen(os.dup(1), "w", encoding="utf-8")
-    os.dup2(2, 1)
-    sys.stdout = sys.stderr
-
-    document = None
-    node: dict = {}
-    for line in sys.stdin:
-        job = json.loads(line)
-        op = job["op"]
-        if op == "schema":
-            document = Draft202012Validator(job["value"], registry=_offline_registry())
-            continue
-        if op == "node":
-            node = job["value"]
-            continue
-        if op == "ping":
-            verdict = {"v": "pong"}
-        else:
-            # A Python-level watchdog cannot do this: a runaway match holds the
-            # interpreter outright, so no other thread in this process runs at
-            # all while one is going — measured, not assumed. `faulthandler`'s
-            # is a native thread that needs neither the interpreter nor the
-            # evaluating thread to yield, which makes it the only thing here
-            # that can still act. It writes its traceback to stderr, never to
-            # the channel fd this worker took for itself.
-            faulthandler.dump_traceback_later(
-                job["deadline"] + _SELF_DESTRUCT_MARGIN, exit=True)
-            try:
-                verdict = _grade(document, node, job["value"])
-            finally:
-                faulthandler.cancel_dump_traceback_later()
-        channel.write(json.dumps(verdict) + "\n")
-        channel.flush()
-    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -506,7 +387,7 @@ class BudgetedGrader:
             self._stderr.seek(0)
             text = self._stderr.read().strip()
             if text:
-                return _clipped(text.splitlines()[-1])
+                return _bounded(text.splitlines()[-1])
         return ""
 
     # -- the pipe -----------------------------------------------------------
@@ -531,18 +412,9 @@ class BudgetedGrader:
         try:
             verdict = json.loads(line)
         except json.JSONDecodeError:
-            return _Reply(gone=f"it wrote {_clipped(line.strip())!r} where a verdict belonged")
+            return _Reply(gone=f"it wrote {_bounded(line.strip())!r} where a verdict belonged")
         if not isinstance(verdict, dict) or verdict.get("v") not in _WORKER_KINDS:
             # Refused rather than passed on. An unrecognised shape reaching the
             # caller's dispatch would take the whole document's findings with it.
-            return _Reply(gone=f"it answered {_clipped(str(verdict))!r}, which is not a verdict")
+            return _Reply(gone=f"it answered {_bounded(str(verdict))!r}, which is not a verdict")
         return _Reply(verdict=verdict)
-
-
-if __name__ == "__main__":
-    # Run by path, so Python prepended this file's own directory to `sys.path`,
-    # where a sibling module could shadow a name the grader's own imports need.
-    # The worker takes nothing from that directory.
-    if sys.path and os.path.realpath(sys.path[0]) == os.path.dirname(_WORKER_SCRIPT):
-        del sys.path[0]
-    sys.exit(_serve())

@@ -51,6 +51,7 @@ from ._core import (
     finding,
     register_kind,
     register_validator_ids,
+    _bounded,
     _model_findings,
     _run_guarded,
 )
@@ -380,20 +381,6 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
                 "embedded-json-schema", "error", pointer,
                 f"embedded schema at {where} {reason}"))
     return findings
-
-
-def _bounded(text: str, limit: int = 200) -> str:
-    """A diagnostic sentence borrowed from another library, bounded.
-
-    `jsonschema` renders the failing instance AND the failing keyword's own value
-    into `ValidationError.message`, so an oversized sample or a long `enum` comes
-    back whole — and it is emitted once per recorded entry. Bounding the sample
-    alone leaves the same unbounded text arriving by the other route.
-
-    Plain slicing rather than `textwrap.shorten`, which drops the text entirely
-    when it holds no whitespace to break on — a provider record is exactly that
-    shape."""
-    return text if len(text) <= limit else f"{text[:limit]}…"
 
 
 def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dict]:
