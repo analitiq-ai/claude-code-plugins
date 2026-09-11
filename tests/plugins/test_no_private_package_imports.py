@@ -39,6 +39,22 @@ def _private_imports(path: Path) -> list[str]:
     return hits
 
 
+def test_the_scan_reports_every_shape_a_private_import_takes(tmp_path):
+    """Non-vacuity: a green scan means the scripts are clean, not that the walk
+    matched nothing."""
+    script = tmp_path / "script.py"
+    script.write_text(
+        "from analitiq.validator import validate_tree, _validate_at\n"
+        "from analitiq.validator._core import finding\n"
+        "import analitiq.contracts._private\n"
+        "import analitiq.validator\n", encoding="utf-8")
+    assert _private_imports(script) == [
+        "from analitiq.validator import _validate_at",
+        "from analitiq.validator._core import …",
+        "import analitiq.contracts._private",
+    ]
+
+
 def test_plugin_scripts_import_only_public_package_names():
     scripts = sorted(PLUGINS.rglob("*.py"))
     assert scripts, f"no Python under {PLUGINS} — the scan is reading nothing"

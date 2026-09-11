@@ -159,9 +159,9 @@ def test_bundle_referential_error(tmp_path):
 
 
 def test_bundle_endpoint_filename_mismatch(tmp_path):
-    # the engine locates a connection-scoped endpoint by filename stem; a file named
-    # something other than <endpoint_id>.json registers under the wrong id at runtime.
-    # The id inside the file is still correct (so the referential checks pass), but the
+    # a connection-scoped endpoint file is addressed by its stem, so a file named
+    # something other than <endpoint_id>.json fails the filename gate. The id
+    # inside the file is still correct (so the referential checks pass), but the
     # bundle assembler flags the filename mismatch as an error.
     doc = _build_bundle(tmp_path)
     ep_dir = tmp_path / "connections/postgresql/definition/endpoints"
@@ -407,8 +407,8 @@ def test_valid_type_map_entity(tmp_path, entity, fname, doc):
 
 
 def test_type_map_entity_rejects_wrong_filename(tmp_path):
-    # the engine loads the maps by exact filename; the gate must fire ALONE — a
-    # misnamed file's content would otherwise be graded in the wrong direction
+    # the filename gate (`RULE-TMAP-023`) must fire ALONE — a misnamed file's
+    # content would otherwise be graded in the wrong direction
     diag = V.diagnostics_for("type_map_read", _write(tmp_path, "type-map.json", TYPE_MAP_READ))
     assert not diag["passed"]
     assert [f["validator"] for f in diag["findings"]] == ["connection-type-map"], diag["findings"]
@@ -423,7 +423,7 @@ def test_type_map_entity_direction_mismatch_is_caught(tmp_path):
 
 
 @pytest.mark.parametrize("doc", [
-    [],                                                            # empty array — engine load-time error
+    [],                                                            # empty array — the model requires a rule
     [{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}],  # lowercase canonical fails the Arrow pattern
 ])
 def test_invalid_type_map_content(tmp_path, doc):
@@ -441,8 +441,7 @@ def test_bundle_with_valid_connection_type_maps(tmp_path):
 
 
 def test_bundle_rejects_dead_type_map_filename(tmp_path):
-    # the engine never reads the pre-split name — a lingering file is silently inert
-    # at runtime, so the bundle pass rejects it with a migration finding
+    # the pre-split name is rejected with a migration finding (`RULE-TMAP-023`)
     doc = _build_bundle(tmp_path)
     _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
@@ -480,7 +479,7 @@ def test_bundle_unreadable_connection_type_map(tmp_path):
 def test_type_map_entity_rejects_non_array(tmp_path):
     # a dict under a load-bearing type-map filename must fail HERE: the published
     # dispatch detects by shape, so a stray connection document would otherwise be
-    # graded as a connection and pass clean while the engine's loader chokes
+    # graded as a connection and pass clean (`RULE-TMAP-023`)
     diag = V.diagnostics_for("type_map_read", _write(tmp_path, "type-map-read.json", CONN_PG))
     assert not diag["passed"]
     assert [f["validator"] for f in diag["findings"]] == ["connection-type-map"], diag["findings"]
@@ -518,16 +517,17 @@ def test_bundle_flags_invalid_connection_write_type_map(tmp_path):
 
 
 def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
-    # a directory under a load-bearing name cannot be read as text, so it has no
-    # place in the tree handed to the package — it would otherwise validate
-    # clean and then fail at the engine's loader. The reader reports it by key.
+    # a directory under a load-bearing name cannot be read as text; the reader
+    # hands it over as unreadable rather than dropping the key, so the check
+    # that needs the file reports the failure at that key — it would otherwise
+    # validate clean
     doc = _build_bundle(tmp_path)
     (tmp_path / "connections/postgresql/definition/type-map-read.json").mkdir(parents=True)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    bad = [f for f in diag["findings"] if f["validator"] == "document"]
-    assert [f["path"] for f in bad] == ["connections/postgresql/definition/type-map-read.json"], diag["findings"]
-    assert "Cannot read" in bad[0]["message"]
+    bad = [f for f in diag["findings"] if f["validator"] == "connection-type-map"]
+    assert [(f["severity"], f["path"]) for f in bad] == [
+        ("error", "connections/postgresql/definition/type-map-read.json")], diag["findings"]
 
 
 # ---------------------------------------------------------------------------
@@ -556,7 +556,8 @@ def test_model_crash_is_contained_by_the_package(tmp_path, monkeypatch, capsys):
     assert rc == 1
     assert out["passed"] is False
     crashed = [f for f in out["findings"] if f["validator"] == "contract-model"]
-    assert crashed and "crashed" in crashed[0]["message"], out["findings"]
+    # a model finding carries a JSON pointer; only the crash guard reports at ""
+    assert [f["path"] for f in crashed] == [""], out["findings"]
 
 
 def test_bundle_stage_crash_is_one_adapter_crash_finding(tmp_path, monkeypatch):

@@ -241,6 +241,9 @@ def _connector_run_ids() -> set[str]:
     """The package's ids a connector-document run can emit."""
     from analitiq.validator import VALIDATOR_IDS
 
+    # A renamed or dropped id would otherwise leave the partition naming nothing
+    # while every subtraction below still succeeds.
+    assert PIPELINE_RUN_ONLY_IDS <= VALIDATOR_IDS, PIPELINE_RUN_ONLY_IDS - VALIDATOR_IDS
     return {vid for vid in VALIDATOR_IDS
             if not vid.startswith("bundle-") and vid not in PIPELINE_RUN_ONLY_IDS}
 

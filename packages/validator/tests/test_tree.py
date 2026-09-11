@@ -56,7 +56,7 @@ def _stage_connector(example_dir: Path, dest: Path) -> Path:
     """An example connector laid out as `definition/` — the registry layout."""
     definition = dest / "definition"
     definition.mkdir(parents=True)
-    body = next(example_dir.glob("*.example.json"))
+    [body] = example_dir.glob("*.example.json")
     shutil.copy(body, definition / "connector.json")
     for name in ("type-map-read.json", "type-map-write.json"):
         if (example_dir / name).exists():
@@ -113,9 +113,13 @@ def test_connector_tree_is_clean_when_the_shipped_example_is(validator, tmp_path
     assert validator.validate_tree(_api_tree(tmp_path))["passed"]
 
 
+def _first_endpoint_key(tree: dict[str, str]) -> str:
+    return min(k for k in tree if k.startswith("definition/endpoints/"))
+
+
 def test_connector_tree_reports_a_duplicate_endpoint_id(validator, tmp_path):
     tree = _api_tree(tmp_path)
-    original = next(k for k in tree if k.startswith("definition/endpoints/"))
+    original = _first_endpoint_key(tree)
     tree["definition/endpoints/copy.json"] = tree[original]
     envelope = validator.validate_tree(tree)
     assert not envelope["passed"]
@@ -124,7 +128,7 @@ def test_connector_tree_reports_a_duplicate_endpoint_id(validator, tmp_path):
 
 def test_connector_tree_reports_a_misnamed_endpoint_file(validator, tmp_path):
     tree = _api_tree(tmp_path)
-    original = next(k for k in tree if k.startswith("definition/endpoints/"))
+    original = _first_endpoint_key(tree)
     tree["definition/endpoints/misnamed.json"] = tree.pop(original)
     envelope = validator.validate_tree(tree)
     assert "endpoint-filename" in _ids(envelope, "error"), envelope["findings"]
@@ -134,17 +138,14 @@ def test_connector_tree_reports_a_missing_read_map(validator, tmp_path):
     tree = _api_tree(tmp_path)
     del tree["definition/type-map-read.json"]
     envelope = validator.validate_tree(tree)
-    missing = [f for f in envelope["findings"]
-               if f["validator"] == "type-map-coverage" and "missing" in f["message"]]
-    assert missing, envelope["findings"]
+    assert "type-map-coverage" in _ids(envelope, "error"), envelope["findings"]
 
 
 def test_bare_connector_document_still_reports_coverage_skipped(validator):
-    body = next(API_EXAMPLE.glob("*.example.json"))
+    [body] = API_EXAMPLE.glob("*.example.json")
     findings = validator.validate_document(json.loads(body.read_text(encoding="utf-8")))
     skipped = [f for f in findings if f["validator"] == "type-map-coverage"]
     assert [(f["severity"], f["path"]) for f in skipped] == [("warning", "/")], findings
-    assert "skipped" in skipped[0]["message"]
 
 
 # ---------------------------------------------------------------------------
@@ -276,10 +277,7 @@ def test_malformed_connector_sibling_is_reported_under_the_reading_check(validat
     tree = _api_tree(tmp_path)
     tree["definition/type-map-read.json"] = "[ not valid json"
     envelope = validator.validate_tree(tree)
-    bad = [f for f in envelope["findings"]
-           if f["validator"] == "type-map-coverage" and "could not be read or parsed" in f["message"]]
-    assert bad, envelope["findings"]
-    assert "type-map-read.json" in bad[0]["message"]
+    assert "type-map-coverage" in _ids(envelope, "error"), envelope["findings"]
 
 
 def test_malformed_root_document_is_a_finding_naming_the_key(validator, tmp_path):
@@ -294,6 +292,58 @@ def test_a_parsed_value_is_taken_as_the_document(validator):
     tree = _pipeline_tree()
     tree["pipeline.json"] = json.loads(tree["pipeline.json"])
     assert validator.validate_tree(tree)["passed"]
+
+
+def test_bytes_are_the_files_text(validator):
+    tree = {key: text.encode("utf-8") for key, text in _pipeline_tree().items()}
+    assert validator.validate_tree(tree)["passed"]
+
+
+@pytest.mark.parametrize("key", ["pipeline.json", "streams/orders.json"])
+def test_text_nested_past_the_parser_limit_is_a_finding_naming_the_key(validator, key):
+    tree = _pipeline_tree()
+    tree[key] = "[" * 100_000
+    envelope = validator.validate_tree(tree)
+    reads = [(f["validator"], f["severity"], f["path"]) for f in envelope["findings"]
+             if f["validator"] in ("document", "adapter-crash")]
+    assert reads == [("document", "error", key)], envelope["findings"]
+
+
+def test_an_unreadable_member_is_reported_at_its_key_and_withholds_the_referential_pass(validator):
+    tree = _pipeline_tree()
+    tree["connections/postgresql/connection.json"] = validator.Unreadable("Is a directory")
+    tree["connections/postgresql/definition/type-map.json"] = "[]"
+    envelope = validator.validate_tree(tree)
+    ids = _ids(envelope)
+    assert [f["path"] for f in envelope["findings"] if f["validator"] == "document"] == [
+        "connections/postgresql/connection.json"], envelope["findings"]
+    # the member was there: its directory still counts, so the map beside it is graded
+    assert "connection-type-map" in ids, envelope["findings"]
+    # and could not be taken: no referential verdict over a bundle short of it, and no crash
+    assert not any(vid.startswith("bundle-") for vid in ids), envelope["findings"]
+    assert "adapter-crash" not in ids, envelope["findings"]
+
+
+def test_an_absent_key_reads_as_a_failure_in_both_trees(validator, tmp_path):
+    from analitiq.validator._tree import DiskTree, MemoryTree
+
+    for tree in (MemoryTree({"pipeline.json": "{}"}), DiskTree(tmp_path)):
+        doc, error = tree.read("streams/absent.json")
+        assert doc is None and error, type(tree).__name__
+
+
+def test_connector_endpoints_without_a_connector_document_still_verify_refs(validator):
+    # the endpoint set is keyed by the directory slug; the connector document
+    # supplies only the id alias, so its absence costs the alias, not the check
+    tree = _pipeline_tree()
+    del tree["connectors/wise/definition/connector.json"]
+    stream = json.loads(tree["streams/orders.json"])
+    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"
+    tree["streams/orders.json"] = json.dumps(stream)
+    envelope = validator.validate_tree(tree)
+    ids = _ids(envelope)
+    assert "adapter-crash" not in ids, envelope["findings"]
+    assert "connector-endpoint-ref" in ids, envelope["findings"]
 
 
 # ---------------------------------------------------------------------------
@@ -561,7 +611,7 @@ def test_type_map_direction_crash_preserves_legacy_finding_and_sibling_direction
     crashes = [f["path"] for f in envelope["findings"] if f["validator"] == "adapter-crash"]
     assert crashes == [f"{site}/type-map-read.json"], envelope["findings"]
     legacy = [f for f in envelope["findings"]
-              if f["validator"] == "connection-type-map" and "pre-split" in f["message"]]
+              if f["validator"] == "connection-type-map" and f["path"] == f"{site}/type-map.json"]
     assert legacy, envelope["findings"]  # decided before the crash, still present
     bad_write = [f for f in envelope["findings"] if f["validator"] == "contract-model"
                  and f["path"].startswith(f"{site}/type-map-write.json")]

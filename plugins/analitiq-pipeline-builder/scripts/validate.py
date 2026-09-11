@@ -16,8 +16,8 @@ Routing:
     authored against, so a document missing its discriminating key — the
     broken input a validation exists to diagnose — is graded by the model it
     was meant for rather than collapsing into one "unrecognised" finding. For a
-    ``type_map_*`` entity the package also gates the filename (the engine loads
-    each direction from its exact name) and grades in that direction.
+    ``type_map_*`` entity the package also gates the filename (`RULE-TMAP-023`)
+    and grades in that direction.
   * ``pipeline`` with ``--bundle-root`` -> ``analitiq.validator.validate_tree``
     over the layout below, read as text and keyed the way the package's tree
     API expects. The package assembles the bundle, checks referential integrity
@@ -36,8 +36,9 @@ The ``--bundle-root`` layout, as tree keys::
     connectors/<slug>/definition/endpoints/*.json
 
 A file the layout names that cannot be read as text (a directory under a
-document's name, a dangling symlink, an undecodable file) has no place in a
-tree of documents; it is reported here under ``document``, by its key.
+document's name, a dangling symlink, an undecodable file) is handed over as
+``Unreadable``, so the package sees the member was there and reports the read
+failure at its key.
 
 Validation is offline — no schema is fetched. Usage::
 
@@ -76,20 +77,17 @@ def _read_json(path: Path) -> Any:
     return json.loads(Path(path).read_text())
 
 
-def _bundle_documents(pipeline_doc: Any, document_path: Path,
-                      root: Path) -> tuple[dict[str, Any], list[dict]]:
-    """The `--bundle-root` layout as the tree `validate_tree` reads, plus a
-    `document` finding for each file that exists but could not be read."""
-    from analitiq.validator import finding
+def _bundle_documents(pipeline_doc: Any, document_path: Path, root: Path) -> dict[str, Any]:
+    """The `--bundle-root` layout as the tree `validate_tree` reads."""
+    from analitiq.validator import Unreadable
 
     documents: dict[str, Any] = {"pipeline.json": pipeline_doc}
-    unreadable: list[dict] = []
 
     def take(key: str, path: Path) -> None:
         try:
             documents[key] = path.read_text()
         except (OSError, UnicodeDecodeError) as exc:
-            unreadable.append(finding("document", "error", key, f"Cannot read {key}: {exc}"))
+            documents[key] = Unreadable(str(exc))
 
     for path in (document_path.parent / "streams").glob("*.json"):
         take(f"streams/{path.name}", path)
@@ -105,7 +103,7 @@ def _bundle_documents(pipeline_doc: Any, document_path: Path,
     for pattern in patterns:
         for path in root.glob(pattern):
             take(path.relative_to(root).as_posix(), path)
-    return documents, unreadable
+    return documents
 
 
 def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None = None) -> dict:
@@ -120,8 +118,7 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
         return diagnostics([finding("document", "error", "", f"Cannot read document: {exc}")])
 
     if entity == "pipeline" and bundle_root is not None:
-        documents, unreadable = _bundle_documents(doc, Path(document_path), Path(bundle_root))
-        return diagnostics([*unreadable, *validate_tree(documents)["findings"]])
+        return validate_tree(_bundle_documents(doc, Path(document_path), Path(bundle_root)))
     return diagnostics(validate_document(doc, doc_path=document_path, entity=entity))
 
 

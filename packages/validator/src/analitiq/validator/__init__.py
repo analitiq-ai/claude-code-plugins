@@ -27,6 +27,7 @@ detector→validator pairs (and its validator ids) with the core dispatch regist
 The public surface is re-exported here.
 """
 from ._core import ENTITIES, diagnostics, finding, main, validate_document, VALIDATOR_IDS
+from ._tree import Unreadable
 from . import connectors  # noqa: F401  — imported for its self-registration side effect
 from . import pipelines  # noqa: F401  — imported for its self-registration side effect
 from . import connections  # noqa: F401  — imported for its self-registration side effect
@@ -62,6 +63,7 @@ __all__ = [
     "main",
     "validate_document",
     "validate_tree",
+    "Unreadable",
     "resolve_type_map_gaps",
     "VALIDATOR_IDS",
     "check_coverage",

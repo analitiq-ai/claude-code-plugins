@@ -21,10 +21,11 @@ recognised from the keys:
   endpoint ref is checked against the endpoints its connector publishes.
 
 Every pipeline-tree stage runs under `_contained`: a crash in one is one
-`adapter-crash` finding naming the stage, and the others still report. A stage
-whose crash excluded a member from the bundle also withholds the referential
-pass, since the published checks could not then tell "excluded here" from
-"genuinely missing".
+`adapter-crash` finding naming the stage, and the others still report. A member
+the bundle could not take — a crash reading it, text that does not parse, an
+`Unreadable` entry, a non-object payload — withholds the referential pass, since
+the published checks could not then tell "excluded here" from "genuinely
+missing"; the finding at the member's key is the report until it is fixed.
 """
 from __future__ import annotations
 
@@ -57,8 +58,9 @@ PIPELINE_ROOT = "pipeline.json"
 def validate_tree(documents: Mapping[str, Any]) -> dict:
     """Validate one connector or one pipeline handed over as a tree.
 
-    `documents` maps POSIX relative keys to either the file's text (a `str`,
-    parsed here — a parse failure is a finding, never an exception) or the
+    `documents` maps POSIX relative keys to the file's text (`str` or `bytes`,
+    parsed here — a parse failure is a finding, never an exception), an
+    `Unreadable` standing for a file a reader found but could not read, or the
     already-parsed document. Which layout the tree is comes from its keys; a
     tree matching neither, or both, is one `document` error, as is a key that
     is empty, absolute, or steps through `.` / `..`.
@@ -125,7 +127,7 @@ def _slugs(tree: Tree, directory: str, *tail: str) -> list[str]:
     for key in tree.files(directory, recursive=True):
         parts = key.split("/")
         if len(parts) == 2 + len(tail) and all(
-                want == "*" or want == have for want, have in zip(tail, parts[2:])):
+                want in ("*", have) for want, have in zip(tail, parts[2:])):
             found.add(parts[1])
     return sorted(found)
 
@@ -160,10 +162,10 @@ def _connector_id(tree: Tree, key: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 def _connection_type_map_findings(tree: Tree, slug: str, findings: list[dict]) -> None:
-    """Grade the connection-scoped type maps beside one connection.json — the
-    files the engine loads from the connection's `definition/`, which the
-    assembled bundle never carries. A present map is graded in its own
-    direction; the dead pre-split filename is rejected with a migration finding.
+    """Grade the connection-scoped type maps beside one connection.json
+    (`RULE-TMAP-023`) — files the assembled bundle never carries. A present map
+    is graded in its own direction; the pre-split filename is rejected with a
+    migration finding.
 
     Appends directly to the caller's shared `findings` list rather than
     building a local one to return: the legacy check and each type-map
@@ -177,9 +179,9 @@ def _connection_type_map_findings(tree: Tree, slug: str, findings: list[dict]) -
         if tree.is_file(legacy):
             findings.append(finding(
                 "connection-type-map", "error", legacy,
-                f"{_LEGACY_MAP_FILENAME} is the pre-split filename; the engine never "
-                "reads it. Split it into type-map-read.json (native → Arrow) and, for the "
-                "write direction, type-map-write.json (Arrow → native)."))
+                f"{_LEGACY_MAP_FILENAME} is the pre-split filename. Split it into "
+                f"{_TYPE_MAP_FILENAMES['read']} (native → Arrow) and, for the write "
+                f"direction, {_TYPE_MAP_FILENAMES['write']} (Arrow → native)."))
     for direction, fname in _TYPE_MAP_FILENAMES.items():
         key = f"{site}/{fname}"
         with _contained(findings, key):
@@ -195,7 +197,7 @@ def _connection_type_map_findings(tree: Tree, slug: str, findings: list[dict]) -
 
 
 def _assemble_bundle(tree: Tree, pipeline_doc: Any) -> tuple[dict, list[dict], bool, bool]:
-    """Gather the pipeline bundle the way the engine resolves it at load: the
+    """Gather the pipeline bundle `validate_pipeline_bundle` grades: the
     pipeline plus its stream documents, every connection, the connection-scoped
     endpoint documents (stamped with their owning connection's id, which
     endpoint documents do not carry themselves), and the connector identities.
@@ -287,8 +289,8 @@ def _assemble_bundle(tree: Tree, pipeline_doc: Any) -> tuple[dict, list[dict], b
                 crashed = True
             if outcome.crashed or conn is None:
                 complete = False
-            # Connection-scoped type maps are files the engine loads beside the
-            # connection, invisible to the assembled-document bundle, and depend
+            # Connection-scoped type maps sit beside the connection, invisible
+            # to the assembled-document bundle, and depend
             # only on the connection's directory — never on whether
             # connection.json itself parsed — so they are checked unconditionally:
             # a crash inside is contained per-direction by
@@ -471,7 +473,8 @@ def _bundle_findings(tree: Tree, pipeline_doc: Any) -> list[dict]:
     # The bundle validator receives connector identity only, so scope='connector'
     # endpoint refs go unresolved there. The tree has the connector endpoint
     # documents, so verify those refs here and warn (with an alignment
-    # suggestion) rather than error — connectors are trusted, pinned at runtime.
+    # suggestion) rather than error: the documents on disk are the author's copy
+    # of the connector, not proof of what it publishes (`RULE-STRM-042`).
     # _check_connector_endpoint_refs contains each ref on its own; this outer
     # guard is a backstop, e.g. against _connector_endpoint_sets itself.
     with _contained(findings, "connector-endpoint-refs"):

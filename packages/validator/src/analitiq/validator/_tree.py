@@ -14,6 +14,11 @@ Keys are POSIX relative paths. A `DiskTree` is rooted at the filesystem anchor,
 so a document's absolute path is its key and sibling arithmetic is the same
 string arithmetic in both trees. A tree of documents has no empty directories:
 a directory exists exactly when some file sits under it.
+
+Reading a key answers `(document, None)` or `(None, why)` — for text that does
+not parse, a file the reader could not read, or a key the tree does not hold —
+and never raises: what a broken or missing sibling costs depends on which check
+needed it, so the check phrases the finding.
 """
 from __future__ import annotations
 
@@ -46,6 +51,30 @@ def join_key(directory: str, name: str) -> str:
     return f"{directory}/{name}" if directory else name
 
 
+def _parse(text: str | bytes) -> tuple[Any, str | None]:
+    """`json.loads`, with a failure returned as its reason. `RecursionError` is
+    the one failure the parser raises that is not a `ValueError` — nesting past
+    the interpreter's limit — and a document that deep is unreadable the same
+    way malformed text is."""
+    try:
+        return json.loads(text), None
+    except ValueError as exc:
+        return None, str(exc)
+    except RecursionError as exc:
+        return None, f"{type(exc).__name__}: {exc}"
+
+
+@dataclass(frozen=True)
+class Unreadable:
+    """A tree entry for a file that exists but yields no text — a directory
+    under a document's name, an undecodable file, a permission error. A reader
+    hands it over instead of dropping the key, so the checks still see the file
+    is there (its directory still counts) and report the read failure at its
+    key, exactly as they report text that does not parse."""
+
+    reason: str
+
+
 def _by_component(key: str) -> list[str]:
     """Order keys the way `pathlib` orders paths — segment by segment — so a
     tree lists `endpoints/a/b.json` before `endpoints/a.json` whichever store
@@ -64,8 +93,7 @@ class Tree:
 
     def read(self, key: str) -> tuple[Any, str | None]:
         """`(document, None)` for a key that parses, `(None, why)` for one that
-        does not. The caller phrases the finding: what a broken sibling costs
-        depends on which check needed it."""
+        does not or is not there."""
         raise NotImplementedError
 
     def files(self, directory: str, *, recursive: bool = False) -> list[str]:
@@ -82,10 +110,11 @@ class Tree:
 
 
 class MemoryTree(Tree):
-    """A tree over a `{key: text | document}` mapping. A `str` is the file's
-    text and parses on first read; anything else is the document already.
-    Parsing is cached, so every check that reads a key reads one object — the
-    same as one file read once from disk."""
+    """A tree over a `{key: text | Unreadable | document}` mapping. A `str` or
+    `bytes` is the file's text and parses on first read; an `Unreadable` reads
+    as its reason; anything else is the document already. Parsing is cached, so
+    every check that reads a key reads one object — the same as one file read
+    once from disk."""
 
     def __init__(self, documents: Mapping[str, Any]) -> None:
         self._documents = dict(documents)
@@ -99,13 +128,14 @@ class MemoryTree(Tree):
         return any(k.startswith(prefix) for k in self._documents)
 
     def read(self, key: str) -> tuple[Any, str | None]:
+        if key not in self._documents:
+            return None, "no such key"
         if key not in self._parsed:
             value = self._documents[key]
-            if isinstance(value, str):
-                try:
-                    self._parsed[key] = (json.loads(value), None)
-                except ValueError as exc:
-                    self._parsed[key] = (None, str(exc))
+            if isinstance(value, Unreadable):
+                self._parsed[key] = (None, value.reason)
+            elif isinstance(value, (str, bytes, bytearray)):
+                self._parsed[key] = _parse(value)
             else:
                 self._parsed[key] = (value, None)
         return self._parsed[key]
@@ -140,9 +170,10 @@ class DiskTree(Tree):
 
     def read(self, key: str) -> tuple[Any, str | None]:
         try:
-            return json.loads(self._path(key).read_text()), None
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            text = self._path(key).read_text()
+        except (OSError, UnicodeDecodeError) as exc:
             return None, str(exc)
+        return _parse(text)
 
     def files(self, directory: str, *, recursive: bool = False) -> list[str]:
         base = self._path(directory)
