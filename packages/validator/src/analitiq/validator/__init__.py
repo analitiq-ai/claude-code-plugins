@@ -8,7 +8,7 @@ bundle** for cross-document referential integrity. Output is a JSON report
 (`{"passed": bool, "findings": [...]}`); the CLI exits non-zero on any
 error-severity finding.
 
-Three entry points, one set of checks:
+The entry points, one set of checks:
 
 - `validate_document(doc, doc_path=None, schema_url=None, *, entity=None)` —
   one document, its kind detected from its shape or named by `entity`; with a
@@ -20,6 +20,12 @@ Three entry points, one set of checks:
 - `validate_pipeline_bundle(bundle)` — the referential checks over an already
   assembled bundle.
 
+Reading a document is part of that surface rather than each adapter's own
+business: `read_document(path)` and `parse_document(data)` answer
+`(document, reason)` and never raise, so a text earns one verdict whether the
+CLI read it off disk, a plugin script piped it in, or it arrived in a tree.
+Both prefer bytes and leave the encoding to what the document declares.
+
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which self-registers its detector→validator
 pairs (and its validator ids) with the core dispatch registry — a new kind is a
@@ -29,7 +35,7 @@ from its shape, so it registers the ids its own checks emit and nothing else.
 The public surface is re-exported here.
 """
 from ._core import ENTITIES, diagnostics, finding, main, validate_document, VALIDATOR_IDS
-from ._tree import Unreadable
+from ._tree import Unreadable, parse_document, read_document
 from . import connectors  # noqa: F401  — imported for its self-registration side effect
 from . import pipelines  # noqa: F401  — imported for its self-registration side effect
 from . import connections  # noqa: F401  — imported for its self-registration side effect
@@ -66,6 +72,8 @@ __all__ = [
     "validate_document",
     "validate_tree",
     "Unreadable",
+    "parse_document",
+    "read_document",
     "resolve_type_map_gaps",
     "VALIDATOR_IDS",
     "check_coverage",

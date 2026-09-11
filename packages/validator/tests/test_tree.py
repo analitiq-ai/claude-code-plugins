@@ -388,6 +388,111 @@ def test_a_json_key_nothing_readable_occupies_is_still_enumerated_by_both_reader
         assert tree.files("definition", recursive=True) == expected, type(tree).__name__
 
 
+#: Every awkward thing an author can leave at a document's key. The contract
+#: is that the reader is the only thing that differs, so each of these is
+#: staged on disk and handed over as a tree, and every question is put to both.
+_OCCUPANTS = {
+    "parsing document": (b'{"a": 1}', None),
+    "text that does not parse": (b"{not json", None),
+    "directory under a document name": (None, "a directory is here"),
+    "dangling symlink": (None, "the target is gone"),
+    "utf-16 text with a byte-order mark": ('{"a": "\u00e9"}'.encode("utf-16"), None),
+}
+
+
+def _stage(occupant: str, target):
+    payload, _ = _OCCUPANTS[occupant]
+    if occupant == "directory under a document name":
+        target.mkdir()
+        (target / "inside.txt").write_text("x", encoding="utf-8")
+    elif occupant == "dangling symlink":
+        target.symlink_to(target.parent / "gone.json")
+    else:
+        target.write_bytes(payload)
+
+
+@pytest.mark.parametrize("occupant", sorted(_OCCUPANTS), ids=lambda o: o)
+def test_both_readers_answer_every_question_alike_for_each_occupant(
+        validator, tmp_path, occupant):
+    # One table instead of a test per question, because the questions fail
+    # together: a predicate that decides what counts as present is written
+    # once per reader and every question that consults it inherits the answer.
+    # Reasons are allowed to differ — they name the store — so `read` is
+    # compared on whether a document came back, not on the wording.
+    from analitiq.validator import Unreadable
+    from analitiq.validator._tree import DiskTree, MemoryTree
+
+    key = "definition/doc.json"
+    target = tmp_path / key
+    target.parent.mkdir(parents=True)
+    _stage(occupant, target)
+
+    payload, unreadable = _OCCUPANTS[occupant]
+    memory = MemoryTree({key: Unreadable(unreadable) if unreadable else payload})
+    answers = []
+    for tree in (memory, DiskTree(tmp_path)):
+        doc, error = tree.read(key)
+        answers.append({
+            "occupied": tree.occupied(key),
+            "is_dir(parent)": tree.is_dir("definition"),
+            "files(parent)": tree.files("definition"),
+            "files(parent, recursive)": tree.files("definition", recursive=True),
+            "read gave a document": doc is not None,
+            "read gave a reason": bool(error),
+        })
+    assert answers[0] == answers[1], (
+        f"{occupant}: MemoryTree and DiskTree disagree")
+
+
+@pytest.mark.parametrize("payload,parses", [
+    (b'{"a": 1}', True),
+    ('{"a": "\u00e9"}'.encode("utf-16"), True),
+    ('{"a": "\u00e9"}'.encode("utf-32"), True),
+    (b"\xef\xbb\xbf" + b'{"a": 1}', True),
+    (b"{not json", False),
+    (b"\xff\xfe\x00nonsense", False),
+], ids=["utf-8", "utf-16 with BOM", "utf-32 with BOM", "utf-8 with BOM",
+        "text that does not parse", "bytes that decode to nothing"])
+def test_a_document_is_read_by_what_it_declares_not_by_the_host(
+        validator, tmp_path, payload, parses):
+    # The encoding a file declares decides how it parses. Decoding to text
+    # first would apply whatever the host defaults to, so the same file would
+    # read one way in a tree handed over in memory and another off disk.
+    from analitiq.validator import read_document
+
+    path = tmp_path / "doc.json"
+    path.write_bytes(payload)
+    doc, problem = read_document(path)
+    assert (problem is None) is parses, problem
+    assert (doc is not None) is parses
+
+
+def test_nesting_past_the_parsers_limit_is_a_reason_not_a_raised_error(
+        validator, tmp_path):
+    # The parser raises `RecursionError` here, which is not a `ValueError` and
+    # so escapes a caller catching only parse errors. A document this deep is
+    # unreadable the way malformed text is, and every reader must say so
+    # rather than let the failure out as a crash.
+    from analitiq.validator import parse_document, read_document
+
+    deep = b"[" * 20_000 + b"]" * 20_000
+    path = tmp_path / "deep.json"
+    path.write_bytes(deep)
+    for doc, problem in (read_document(path), parse_document(deep)):
+        assert doc is None
+        assert "RecursionError" in problem
+
+
+def test_a_document_holding_null_is_read_without_a_reason(validator, tmp_path):
+    # `None` is what a document holding `null` parses to, so a caller gating
+    # on the document rather than on the reason calls a good file unreadable.
+    from analitiq.validator import read_document
+
+    path = tmp_path / "doc.json"
+    path.write_bytes(b"null")
+    assert read_document(path) == (None, None)
+
+
 def test_a_directory_is_occupied_and_a_directory_in_both_trees(validator, tmp_path):
     # a directory key is a question either reader may be asked, so they answer
     # it together — the in-memory reader has no entry of its own to consult

@@ -51,10 +51,12 @@ def _fail(message: str) -> "int":
 
 def _load_map(path: Path) -> Any:
     """Read one rule-list file, naming it on a read or parse failure."""
-    try:
-        return json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ValueError(f"{path}: {exc}") from exc
+    from analitiq.validator import read_document
+
+    doc, problem = read_document(path)
+    if problem is not None:
+        raise ValueError(f"{path}: {problem}")
+    return doc
 
 
 def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
@@ -100,11 +102,14 @@ def main(argv: list[str] | None = None) -> int:
             return _fail(f"{m} is a {implied}-direction map (by filename) but "
                          f"--direction is {args.direction}")
 
-    try:
-        raw = Path(args.probes_file).read_text() if args.probes_file else sys.stdin.read()
-        probes = json.loads(raw)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        return _fail(f"cannot read probes: {exc}")
+    from analitiq.validator import parse_document, read_document
+
+    if args.probes_file:
+        probes, problem = read_document(Path(args.probes_file))
+    else:
+        probes, problem = parse_document(sys.stdin.read())
+    if problem is not None:
+        return _fail(f"cannot read probes: {problem}")
     if not isinstance(probes, list) or not all(isinstance(p, str) for p in probes):
         return _fail("probes must be a JSON array of strings")
 

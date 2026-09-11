@@ -69,10 +69,6 @@ def _crash_finding(path: str, exc: BaseException) -> dict:
     return {"validator": "adapter-crash", "severity": "error", "path": path, "message": message}
 
 
-def _read_json(path: Path) -> Any:
-    return json.loads(Path(path).read_text())
-
-
 def _bundle_documents(pipeline_doc: Any, document_path: Path, root: Path) -> dict[str, Any]:
     """The `--bundle-root` layout as the tree `validate_tree` reads."""
     from analitiq.validator import Unreadable
@@ -80,9 +76,12 @@ def _bundle_documents(pipeline_doc: Any, document_path: Path, root: Path) -> dic
     documents: dict[str, Any] = {"pipeline.json": pipeline_doc}
 
     def take(key: str, path: Path) -> None:
+        # Bytes, never decoded here: the tree reader is the only parser in the
+        # path, so a member earns the verdict the package gives its text and
+        # not one this host's default encoding decided first.
         try:
-            documents[key] = path.read_text()
-        except (OSError, UnicodeDecodeError) as exc:
+            documents[key] = path.read_bytes()
+        except OSError as exc:
             documents[key] = Unreadable(str(exc))
 
     for path in (document_path.parent / "streams").glob("*.json"):
@@ -106,12 +105,14 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     """Validate one document and return the Diagnostics envelope. Raises nothing
     for validation failures — those become findings; only a genuinely unreadable
     document short-circuits."""
-    from analitiq.validator import diagnostics, finding, validate_document, validate_tree
+    from analitiq.validator import (diagnostics, finding, read_document,
+                                    validate_document, validate_tree)
 
-    try:
-        doc = _read_json(document_path)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        return diagnostics([finding("document", "error", "", f"Cannot read document: {exc}")])
+    # The gate is the reason, never the document: a file holding `null` parses
+    # to `None` with nothing wrong with it.
+    doc, problem = read_document(document_path)
+    if problem is not None:
+        return diagnostics([finding("document", "error", "", f"Cannot read document: {problem}")])
 
     if entity == "pipeline" and bundle_root is not None:
         return validate_tree(_bundle_documents(doc, Path(document_path), Path(bundle_root)))

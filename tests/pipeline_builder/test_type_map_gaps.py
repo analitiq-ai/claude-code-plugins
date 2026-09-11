@@ -166,6 +166,16 @@ def test_cli_parse_error_names_the_file(tmp_path, capsys):
     assert "broken.json" in capsys.readouterr().err
 
 
+def test_a_map_nested_past_the_parsers_limit_is_named_not_a_traceback(tmp_path):
+    # Every per-file failure is named for its file and raised as a ValueError,
+    # so a parser failure this deep must join them rather than escape as a
+    # crash the caller has no message for.
+    path = tmp_path / "type-map-read.json"
+    path.write_bytes(b"[" * 20_000 + b"]" * 20_000)
+    with pytest.raises(ValueError, match="RecursionError"):
+        G.resolve("read", ["citext"], [path])
+
+
 def test_cli_reads_probes_from_stdin(tmp_path, capsys, monkeypatch):
     # stdin is the documented primary invocation (spec-type-map-gaps.md)
     import io

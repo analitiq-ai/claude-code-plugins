@@ -296,6 +296,37 @@ def test_unreadable_document(tmp_path):
     assert diag["findings"][0]["validator"] == "document"
 
 
+@pytest.mark.parametrize("bundled", [False, True], ids=["alone", "in a bundle"])
+def test_a_document_nested_past_the_parsers_limit_is_a_finding(tmp_path, bundled):
+    # Handing the same text straight to `validate_tree` earns a `document`
+    # finding, so reading it here must earn the same one: a parser failure the
+    # adapter does not catch surfaces as a crash and the two routes disagree
+    # about one text.
+    path = tmp_path / "pipeline.json"
+    path.write_bytes(b"[" * 20_000 + b"]" * 20_000)
+    diag = V.diagnostics_for("pipeline", path,
+                             bundle_root=tmp_path if bundled else None)
+    assert not diag["passed"]
+    assert diag["findings"][0]["validator"] == "document", diag["findings"]
+
+
+def test_a_bundle_member_is_graded_by_what_it_declares_not_by_the_host(tmp_path):
+    # A member is handed over as bytes for the package to parse. Decoding it
+    # here would apply this host's default encoding, so a member valid in a
+    # tree received over the wire would read as unreadable off disk.
+    doc = json.loads(json.dumps(PIPELINE))
+    _write(tmp_path, "pipeline.json", doc)
+    stream = json.loads(json.dumps(STREAM))
+    (tmp_path / "streams").mkdir(exist_ok=True)
+    (tmp_path / "streams" / "orders.json").write_bytes(
+        json.dumps(stream).encode("utf-16"))
+    documents = V._bundle_documents(doc, tmp_path / "pipeline.json", tmp_path)
+    from analitiq.validator import parse_document
+    parsed, problem = parse_document(documents["streams/orders.json"])
+    assert problem is None, problem
+    assert parsed == stream
+
+
 def test_cli_main_valid(tmp_path, capsys):
     p = _write(tmp_path, "pipeline.json", PIPELINE)
     rc = V.main(["--entity", "pipeline", "--document", str(p)])

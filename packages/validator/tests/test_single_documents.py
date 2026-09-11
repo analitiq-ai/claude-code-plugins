@@ -183,6 +183,18 @@ def test_cli_validates_connection_exit0(validator_cli):
     assert out["passed"] is True
 
 
+def test_cli_a_document_holding_null_is_validated_not_called_unreadable(validator_cli):
+    # `null` is a document the contract refuses, not a file that could not be
+    # read. The read gate is the reason a read failed, never the value it
+    # produced, or a file that read perfectly is reported as unreadable.
+    r = validator_cli.on_document(None)
+    assert r.returncode == 1
+    out = json.loads(r.stdout)
+    assert out["passed"] is False
+    assert not any("Cannot read document" in f["message"] for f in out["findings"]), \
+        out["findings"]
+
+
 def test_cli_invalid_stream_exit1(validator_cli):
     bad = _valid_stream()
     bad["status"] = "bogus"

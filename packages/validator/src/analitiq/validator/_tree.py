@@ -79,17 +79,44 @@ def _dir_prefix(directory: str) -> str:
     return f"{directory}/" if directory else ""
 
 
-def _parse(text: str | bytes) -> tuple[Any, str | None]:
-    """`json.loads`, with a failure returned as its reason. `RecursionError` is
-    the one failure the parser raises that is not a `ValueError` — nesting past
-    the interpreter's limit — and a document that deep is unreadable the same
-    way malformed text is."""
+def parse_document(data: str | bytes) -> tuple[Any, str | None]:
+    """One document'"'"'s text as `(document, None)`, or `(None, why)`.
+
+    Public because every adapter that reads documents from somewhere needs
+    exactly this and must not answer it differently: a text earns one verdict
+    whether the CLI read it off disk, a plugin script piped it in, or it
+    arrived in a tree. Prefer `bytes` — `json.loads` detects UTF-8/16/32 and a
+    byte-order mark from them, while text decoded by the caller has already
+    had a host'"'"'s default encoding applied to it.
+
+    `RecursionError` is the one failure the parser raises that is not a
+    `ValueError` — nesting past the interpreter'"'"'s limit — and a document that
+    deep is unreadable the same way malformed text is.
+    """
     try:
-        return json.loads(text), None
+        return json.loads(data), None
     except ValueError as exc:
         return None, str(exc)
     except RecursionError as exc:
         return None, f"{type(exc).__name__}: {exc}"
+
+
+def read_document(path: Path) -> tuple[Any, str | None]:
+    """One document off disk, answered as `parse_document` answers text: the
+    reason a file could not be read reaches the caller the same way the reason
+    it could not be parsed does, so no caller has to know which happened to
+    report it.
+
+    Read as bytes and never decoded here, so the encoding the file declares
+    decides how it parses rather than the encoding the host defaults to. An
+    undecodable byte surfaces as a `UnicodeDecodeError`, a `ValueError`, which
+    `parse_document` reports as the reason.
+    """
+    try:
+        data = Path(path).read_bytes()
+    except OSError as exc:
+        return None, str(exc)
+    return parse_document(data)
 
 
 @dataclass(frozen=True)
@@ -175,7 +202,7 @@ class MemoryTree(Tree):
             if isinstance(value, Unreadable):
                 self._parsed[key] = (None, value.reason)
             elif isinstance(value, (str, bytes, bytearray)):
-                self._parsed[key] = _parse(value)
+                self._parsed[key] = parse_document(value)
             else:
                 self._parsed[key] = (value, None)
         return self._parsed[key]
@@ -218,14 +245,14 @@ class DiskTree(Tree):
 
     def is_dir(self, key: str) -> bool:
         path = self._path(key)
-        return path.is_dir() and any(p.is_file() for p in path.rglob("*"))
+        # Anything that is not itself a directory is an occupant and so could
+        # be a key: a dangling symlink included, which is why the test is not
+        # `is_file`. A directory holding only directories is the one an
+        # in-memory tree cannot represent, and it is the one excluded.
+        return path.is_dir() and any(not p.is_dir() for p in path.rglob("*"))
 
     def read(self, key: str) -> tuple[Any, str | None]:
-        try:
-            text = self._path(key).read_text()
-        except (OSError, UnicodeDecodeError) as exc:
-            return None, str(exc)
-        return _parse(text)
+        return read_document(self._path(key))
 
     def files(self, directory: str, *, recursive: bool = False) -> list[str]:
         base = self._path(directory)

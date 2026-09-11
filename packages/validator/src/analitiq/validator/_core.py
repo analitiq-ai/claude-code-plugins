@@ -44,7 +44,7 @@ from typing import Any, Callable, Iterable, Iterator
 
 from pydantic import TypeAdapter, ValidationError
 
-from ._tree import Location, disk_location
+from ._tree import Location, disk_location, read_document
 
 # The set of legal validator ids. The framework owns `contract-model` (emitted by
 # `_model_findings`), `document` (the unrecognized-artifact verdict) and
@@ -305,14 +305,12 @@ def main() -> int:
     args = parser.parse_args()
 
     document_path = Path(args.document)
-    try:
-        document = json.loads(document_path.read_text())
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        # OSError subsumes FileNotFoundError / IsADirectoryError / PermissionError,
-        # so an unreadable document always yields the finding + exit 1 (never a
-        # bare traceback), matching _load_type_map and the documented contract.
+    # The gate is the reason, never the document: a file holding `null` parses
+    # to `None` with nothing wrong with it.
+    document, problem = read_document(document_path)
+    if problem is not None:
         print(json.dumps(diagnostics([
-            finding("document", "error", "", f"Cannot read document: {exc}")])))
+            finding("document", "error", "", f"Cannot read document: {problem}")])))
         return 1
 
     envelope = diagnostics(validate_document(
