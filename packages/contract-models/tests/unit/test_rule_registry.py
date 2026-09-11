@@ -131,6 +131,64 @@ def test_bound_rules_name_a_real_enforcer():
         assert not missing, f"{rule.id}: enforcer {enforcer!r} missing on {missing}"
 
 
+def _runs_as_pydantic_validator(cls: type[BaseModel], member: str) -> bool:
+    """Whether pydantic runs `member` as a model or field validator on `cls`."""
+    decorators = cls.__pydantic_decorators__
+    return member in decorators.model_validators or member in decorators.field_validators
+
+
+def test_a_rule_bound_to_a_pydantic_validator_costs_an_error():
+    """A pydantic validator has one channel: return the model, or raise.
+
+    A raise is a rejected document — `model_validate` refuses it, which is the
+    verdict `test_fixture_matches_enforcement` below counts on. Nothing a model
+    or field validator does can leave the document legal-but-suspect, so a
+    record binding one and declaring `warning` or `info` publishes a cost below
+    the one its enforcer imposes: the rendered reference tells an author the
+    violation is survivable while the validator rejects the document.
+
+    Resolved against the live decorators rather than read off the source. What
+    makes a binding a rejection is that pydantic runs it, and
+    `__pydantic_decorators__` is where pydantic says it does — inherited
+    validators included, which is how a record naming the subclass resolves.
+    A validator declared on a mixin — a plain class that is not a contract
+    model, whose decorator pydantic collects onto every model inheriting it —
+    is looked up on the record's targets instead, since the mixin itself
+    carries no decorator table and skipping it would leave every rule enforced
+    that way ungraded. Bindings this does not grade: a model field (its
+    mechanism may be a default, which is a permission and rejects nothing), a
+    bare class, and a cross-document check in the validator package, whose
+    finding function chooses its own severity.
+    """
+    by_module_and_name = {
+        (cls.__module__, cls.__name__): cls for cls in contract_classes()
+    }
+    bound: list[str] = []
+    mispriced: list[str] = []
+    for rule in all_rules():
+        if not rule.validator_symbol or "." not in rule.validator_symbol:
+            continue
+        owner, _, member = rule.validator_symbol.partition(".")
+        cls = by_module_and_name.get((rule.validator_module, owner))
+        carriers = [cls] if cls is not None else [MODEL_INDEX[t] for t in rule.targets]
+        assert carriers, (
+            f"{rule.id}: {rule.validator} names neither a contract model nor a "
+            "target one, so nothing here can say whether pydantic runs it"
+        )
+        if not any(_runs_as_pydantic_validator(c, member) for c in carriers):
+            continue
+        bound.append(rule.id)
+        if rule.severity != "error":
+            mispriced.append(f"{rule.id}: severity {rule.severity!r} on {rule.validator}")
+    assert bound, "no rule binds a pydantic validator — this census measures nothing"
+    assert not mispriced, (
+        "records whose enforcer rejects the document but which declare a lower "
+        f"cost: {mispriced}. A model validator can only raise, so the record's "
+        "severity is `error` — or the enforcement moves to a check in the "
+        "validator package that emits a finding at the severity declared."
+    )
+
+
 def _declared_validators() -> set[tuple[str, str, str]]:
     """Every validator pydantic runs on a contract model, by (module, class, name).
 
