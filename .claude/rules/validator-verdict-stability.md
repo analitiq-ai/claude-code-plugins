@@ -8,60 +8,57 @@ paths:
 
 # Rule: within a major, a passing document keeps passing
 
-Governs `analitiq-validator` and `analitiq-contract-models` from their first
-stable release onward — every enforcer under `packages/*/src` (a `finding(…)`
-call in `analitiq.validator`, a `@model_validator` or a field constraint under
-`analitiq.contracts`), every record's `severity` under `rules/records/`, the
-`version` each package's `pyproject.toml` carries, and the packaging under
-`packages/*/scripts` that decides what the wheel enforces — the generated
-`analitiq/contracts/__init__.py` pins the host the `$schema` `Literal` fields
-are built for, so the installed models accept a document the source tree would
-reject, and the reverse.
+Governs every change that can alter what an installed `analitiq-validator` or
+`analitiq-contract-models` accepts: an enforcer under `packages/*/src`, a
+record's `severity` under `rules/records/`, the packaging under
+`packages/*/scripts` that decides what the built wheel enforces, and the
+`version` each `pyproject.toml` carries. What puts a change here is that it can
+reach a released wheel's verdict, not which directory it sits in.
 
-**The invariant:** the major version is a promise about verdicts. Within a
-major, a document that passes keeps passing. A pass is the validator's
-verdict — no finding at severity `error` — and, for the contract models on
-their own, the model accepting the document. Nothing a minor or patch release
-ships turns either into a rejection.
+**The invariant:** the major version is a promise about verdicts. From the
+first stable release onward, no release within a major rejects a document the
+last stable release accepted.
+
+## The question every change answers
+
+> Does this change make the validator reject a document the last stable
+> release accepted?
+
+Yes is a major bump of both packages. No is not. Nothing else decides it: not
+what the change is called, not which package it lands in, not whether the
+verdict it replaces was right.
+
+The question carries the whole rule, so each term in it is defined here rather
+than left to the reader.
+
+- **Reject.** The validator answers with a finding at severity `error`, or,
+  for the contract models used on their own, the model refuses the document.
+  A pydantic `ValidationError` reaches the validator as an `error` finding
+  under the `contract-model` id, so a model that refuses and a check that
+  reports `error` are one event here. A finding carries `error` or `warning`
+  and nothing else, while a record may also declare `info` — so what answers
+  the question is whether a document is rejected, never the label a record
+  declares. A record reaching any severity is a bump only when an enforcer
+  rejects a document with it.
+- **The last stable release.** The newest release of the packages carrying no
+  pre-release suffix. A pre-release is never the reference point. Before the
+  first stable release there is nothing to preserve, and a pre-release
+  prepared after one is measured against that stable release like any other
+  change — so a narrowing merged during a release candidate still binds,
+  because the stable release it is heading for inherits the promise.
+- **A document that release accepted.** One it could have been handed and did
+  not reject. A document of a kind no detector claimed was not accepted: the
+  validator answers anything it cannot identify with an `error`. So the
+  contract model that first claims a kind may reject a malformed one at
+  `error` in the release that introduces it.
 
 ## Why the major carries it
 
 A consumer that addresses the validator by major version, not by exact
 version, takes every compatible release without a release of its own. That is
 what a major is for, and it holds only while "compatible" means the verdict
-holds: a check that turns a passing document into a failing one under the same
-major is a document broken in the field by a release nobody chose. A
-pre-release promises nothing, so the promise starts at the first stable
-release.
-
-## What moves the major
-
-Any change after which the validator rejects a document the current release
-accepts, whatever the change is called:
-
-- **A check promoted to `error`.** A new check over a document the current
-  release accepts ships at severity `warning`; its promotion is the major
-  bump, not its arrival. A rule whose violation breaks a run still arrives as
-  a warning — the promise forbids the rejection, not the finding — and the
-  record's `rationale` says what the run does with the violation.
-- **A model tightened.** A field made required, a `Literal` narrowed, a bound
-  or pattern added, a `@model_validator` raising where none did. A pydantic
-  `ValidationError` reaches the validator as an `error` finding under the
-  `contract-model` id and has no severity to be downgraded to, so a model
-  change that rejects an accepted document moves the major on its own.
-- **A hole closed.** A fix after which the validator rejects what it wrongly
-  accepted is a tightening. The policy keys on the verdict, not the intent: a
-  wrong pass is a pass a consumer relied on.
-
-## What does not
-
-- **A new finding id.** A new `validator` id (the `VALIDATOR_IDS` registry in
-  `analitiq.validator`) arriving at severity `warning` is compatible: the
-  promise binds a consumer to handle an id it does not know as it handles any
-  warning, which is why a new check over an accepted document arrives as one.
-- **A loosening.** Accepting a document the current release rejects.
-- **A reworded message, a moved `path`.** The verdict is the promise; the
-  finding's wording is not.
+holds: a release that turns a passing document into a failing one under the
+same major is a document broken in the field by a release nobody chose.
 
 ## The packages move together
 
@@ -70,32 +67,35 @@ same version (`packages/validator/tests/test_contract_models_pin.py` holds
 both), so a major bump in one is a major bump in both, and which side a change
 falls on is decided once, for the pair.
 
-## Applying it while editing
+## Worked examples
 
-- **A record's `severity`.** `warning` → `error` is a major bump whether the
-  enforcer is code or a reader: the compiled registry ships in the wheel and
-  the rendered references print the severity, so the promotion reaches every
-  consumer whichever applies the rule. A demotion, and `info` → `warning`, are
-  compatible.
-- **A new check over a document the release accepts.** It lands as a
-  `finding(…, "warning", …)` in `analitiq.validator` with a record at
-  `severity: warning` — even a rule one document settles alone, which would
-  otherwise be a `@model_validator`: the model layer has nothing below
-  `error`, so a warning has one home. Promotion is when it moves into the
-  model, where `rules/SCHEMA.md` places a rule one document settles.
-- **A check over a document it rejects already.** Outside the warning rule,
-  because it narrows nothing. An artifact kind no detector claims is the case
-  that arises: the validator answers every document of an unrecognised kind
-  with an `error`, so none of them passes, and the contract model that first
-  claims the kind rejects a malformed one at `error` in the release that
-  introduces it. Shipping those constraints as warnings instead would make the
-  kind's first release accept what it exists to refuse, and buy a major bump
-  to correct.
-- **A model constraint.** Ask whether a document the current release accepts
-  now fails. `render_schemas.py write` classifies the rendered schema's diff
-  and errs toward `major`; that classification is evidence, not the verdict —
-  it grades the schema alone, and a `@model_validator` renders into no keyword
-  it can see.
-- **A change on the breaking side.** Say so in the PR description, and the
-  release that carries it is a major of both packages — the one coordinated
-  release the root `CLAUDE.md` describes under "Releases and credentials".
+These apply the question; they are not a list to check a change against. A
+change absent here is decided by the question, not by its absence.
+
+- **A check promoted to `error`.** It rejects what it used to report. A check
+  arrives at `warning` where the document it grades is one the release
+  accepts, and the promotion is the bump, not the arrival. A rule whose
+  violation breaks a run still arrives as a warning — the promise forbids the
+  rejection, not the finding — and the record's `rationale` says what the run
+  does with the violation.
+- **A record gaining a rejecting enforcer.** A record one document settles
+  alone is applied by a `@model_validator`, which can only refuse, so binding
+  one to a record is a rejection whatever severity the record declared before
+  (`rules/SCHEMA.md` owns that placement). A record edited with no enforcer
+  behind it rejects nothing and answers the question no.
+- **A model tightened.** A field made required, a `Literal` narrowed, a bound
+  or pattern added. Ask the question of a document the last stable release
+  accepted. `render_schemas.py write` classifies the rendered schema's diff
+  and errs toward `major`; that is evidence, not the verdict — it grades the
+  schema alone, and a `@model_validator` renders into no keyword it can see.
+- **A hole closed.** A fix after which the validator rejects what it wrongly
+  accepted still answers yes. The question keys on the verdict, not the
+  intent: a wrong pass is a pass a consumer relied on.
+- **What the wheel pins.** The generated `analitiq/contracts/__init__.py` fixes
+  the host the `$schema` `Literal` fields are built for. Changing it makes the
+  installed models reject documents naming the old host, which answers yes
+  from a file outside `packages/*/src`.
+- **A new finding id.** It changes no verdict on a document that already
+  validated, so the question answers no.
+- **A loosening, a reworded message, a moved `path`.** Accepting more, or
+  saying the same verdict differently, answers no.

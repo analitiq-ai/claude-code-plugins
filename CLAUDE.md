@@ -243,8 +243,8 @@ matches what you are editing:
   does at run time, and before resting a check on one.
 - `reachability-dispositions.md` — before writing or re-affirming a `FieldDisposition`
   under `census/consumption/`.
-- `validator-verdict-stability.md` — before changing a check's severity, a
-  contract-model constraint, a package version, or what the built wheel pins.
+- `validator-verdict-stability.md` — before any change that can alter what an
+  installed validator accepts.
 
 `plugin-prose.md`, `contract-prose.md`, `reachability-dispositions.md` and
 `validator-verdict-stability.md` are keyed to the surface you are editing;
