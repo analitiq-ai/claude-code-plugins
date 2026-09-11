@@ -70,9 +70,6 @@ from analitiq.contracts.shared.common import (
 )
 from analitiq.contracts.shared.json_schema import (
     _MISSING,
-    JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
-    JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
-    JSON_SCHEMA_SUBSCHEMA_KEYS,
     DeclaredPathError,
     SchemaResolutionError,
     _declares_a_type,
@@ -80,6 +77,8 @@ from analitiq.contracts.shared.json_schema import (
     resolve_declared_path,
     resolve_local_pointer,
     resolve_schema_ref,
+    StructuralPosition,
+    walk_structural_positions,
 )
 from analitiq.contracts.shared.types import (
     StrictFloat,
@@ -1326,6 +1325,15 @@ class WriteRequest(_BodyBearingRequest):
     )
 
 
+def _dotted_position(path: str, tokens: StructuralPosition) -> str:
+    """`path` extended to a structural position, in the dotted dialect the
+    contract's messages use: a keyword or name as `.name`, a list index as
+    `[i]`."""
+    return path + "".join(
+        f"[{token}]" if isinstance(token, int) else f".{token}" for token in tokens
+    )
+
+
 def _validate_arrow_type_in_json_schema(
     schema: Any, path: str, errors: list[str]
 ) -> None:
@@ -1338,170 +1346,143 @@ def _validate_arrow_type_in_json_schema(
       (2) any subschema declaring `native_type` or `arrow_type` must declare
           both. Pairing is enforced per node; the walker does not distinguish
           leaf and inner subschemas.
-    """
-    # JSON Schema 2020-12 permits `true` / `false` as a whole-schema short-form
-    # ("anything" / "nothing"). Those are valid but carry no arrow_type, so
-    # walk past them. Non-bool, non-dict values in a schema position are
-    # malformed JSON Schema; surface them rather than silently skipping.
-    if isinstance(schema, bool):
-        return
-    if not isinstance(schema, dict):
-        errors.append(
-            f"{path} is not a JSON Schema object/boolean (got "
-            f"{type(schema).__name__}); cannot validate arrow_type "
-            "(spec: §Native and Arrow Types)"
-        )
-        return
 
-    native_value = schema.get("native_type", _MISSING)
-    arrow_value = schema.get("arrow_type", _MISSING)
-    has_native = native_value is not _MISSING and native_value is not None
-    has_arrow = arrow_value is not _MISSING and arrow_value is not None
-    if arrow_value is not _MISSING and arrow_value is not None:
-        # fullmatch (not match) — `$` in ARROW_TYPE_PATTERN matches before a
-        # trailing `\n` under Python re default flags, so `"Utf8\n"` would
-        # slip through match() but is correctly rejected by Pydantic's
-        # rust-regex field-level pattern. Use fullmatch here for parity.
-        if not isinstance(arrow_value, str) or not ARROW_TYPE_RE.fullmatch(arrow_value):
+    The positions are :func:`walk_structural_positions`'s; the loop body below
+    runs on every value it yields, the document itself included.
+    """
+    for tokens, node in walk_structural_positions(schema):
+        node_path = _dotted_position(path, tokens)
+        # JSON Schema 2020-12 permits `true` / `false` as a whole-schema
+        # short-form ("anything" / "nothing"). Those are valid but carry no
+        # arrow_type, so walk past them. Non-bool, non-dict values in a schema
+        # position are malformed JSON Schema; surface them rather than silently
+        # skipping — this loop body is the only place they get surfaced.
+        if isinstance(node, bool):
+            continue
+        if not isinstance(node, dict):
             errors.append(
-                f"{path}.arrow_type={arrow_value!r} is not a canonical Arrow "
-                "type. Parameterized canonical types must carry their "
-                "parameters: e.g. 'Timestamp(MICROSECOND)', "
-                "'Decimal128(38, 9)', 'FixedSizeBinary(16)' "
+                f"{node_path} is not a JSON Schema object/boolean (got "
+                f"{type(node).__name__}); cannot validate arrow_type "
                 "(spec: §Native and Arrow Types)"
             )
-        else:
-            # Cross-parameter bounds the pattern cannot express
-            # (Decimal scale <= precision).
-            try:
-                validate_cross_params(arrow_value)
-            except ValueError as exc:
-                errors.append(
-                    f"{path}.arrow_type: {exc} (spec: §Native and Arrow Types)"
-                )
-    if has_native ^ has_arrow:
-        missing = "arrow_type" if has_native else "native_type"
-        errors.append(
-            f"{path} declares only one of native_type/arrow_type; typed field "
-            f"schemas must carry both (missing {missing!r}; spec: §Native and "
-            "Arrow Types)"
-        )
-
-    # Authored-shape JSON container markers (Object/List/Json) require
-    # specific sibling keys. `properties` and `items` are standard JSON
-    # Schema keywords already meaningful at this node, so we enforce
-    # presence/absence inline here rather than constructing a model.
-    #
-    # Why this is not just `enforce_container_shape(...)`: the walker
-    # validates response/input JSON-Schema slots — raw dicts — whereas
-    # `analitiq.contracts.shared.arrow_shape.enforce_container_shape` runs after
-    # Pydantic has coerced sibling keys into typed `ArrowFieldSpec` /
-    # `ColumnFieldSpec` instances. Pydantic's type coercion implicitly
-    # rejects JSON Schema 2020-12 shorthands (`items: true|false`,
-    # tuple-form `items: [...]`) at the model layer, but the walker has
-    # no such coercion and must reject them explicitly. The two paths
-    # cover the same matrix but in different dialects; do not collapse
-    # them without preserving the dialect-specific rejections below.
-    if has_arrow and isinstance(arrow_value, str):
-        properties_value = schema.get("properties", _MISSING)
-        items_value = schema.get("items", _MISSING)
-        # `null` siblings count as "not declared" so error messages are
-        # precise rather than recursing into None downstream.
-        has_properties = (
-            properties_value is not _MISSING and properties_value is not None
-        )
-        has_items = items_value is not _MISSING and items_value is not None
-        if arrow_value == "Object":
-            if not has_properties:
-                errors.append(
-                    f"{path}.arrow_type='Object' requires sibling 'properties' "
-                    "(spec: §Native and Arrow Types)"
-                )
-            elif not isinstance(properties_value, dict) or not properties_value:
-                # Empty dict or non-dict shape is structurally meaningless for
-                # a declared Object.
-                errors.append(
-                    f"{path}.arrow_type='Object' requires non-empty "
-                    "'properties' map (spec: §Native and Arrow Types)"
-                )
-            if has_items:
-                errors.append(
-                    f"{path}.arrow_type='Object' must not carry 'items' "
-                    "(spec: §Native and Arrow Types)"
-                )
-        elif arrow_value == "List":
-            if not has_items:
-                errors.append(
-                    f"{path}.arrow_type='List' requires sibling 'items' "
-                    "(spec: §Native and Arrow Types)"
-                )
-            elif not isinstance(items_value, dict):
-                # Reject JSON Schema boolean shorthand (`items: true/false`)
-                # and tuple-form (`items: [...]`) — both contradict the
-                # single-spec contract that Column / ArrowFieldSpec enforce.
-                errors.append(
-                    f"{path}.arrow_type='List' requires 'items' to be a "
-                    "single field spec (object); boolean and tuple forms "
-                    "are not permitted (spec: §Native and Arrow Types)"
-                )
-            if has_properties:
-                errors.append(
-                    f"{path}.arrow_type='List' must not carry 'properties' "
-                    "(spec: §Native and Arrow Types)"
-                )
-        elif arrow_value == "Json":
-            if has_properties or has_items:
-                errors.append(
-                    f"{path}.arrow_type='Json' is opaque and must not carry "
-                    "'properties' or 'items' (spec: §Native and Arrow Types)"
-                )
-        else:
-            # Scalar or parameterized arrow_type (Utf8, Int64,
-            # Decimal128(38, 9), etc.): JSON-container siblings are not legal.
-            # The Pydantic helper rejects this on the model side; the walker
-            # must mirror it on the JSON Schema side per spec §Native and
-            # Arrow Types ("must not appear on scalar or parameterized
-            # arrow_type values").
-            if has_properties or has_items:
-                errors.append(
-                    f"{path}.arrow_type={arrow_value!r} must not carry "
-                    "'properties' or 'items'; those are only valid for the "
-                    "bare authored-shape markers 'Object' / 'List' "
-                    "(spec: §Native and Arrow Types)"
-                )
-
-    # Each traversal always re-enters the walker so its entry-point bool/dict
-    # check (above) runs on every visited slot — that's the only place
-    # malformed schema positions (e.g. `items: "Int64"`) get surfaced.
-    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
-        child = schema.get(key)
-        if isinstance(child, dict):
-            for sub_key, sub_schema in child.items():
-                _validate_arrow_type_in_json_schema(
-                    sub_schema, f"{path}.{key}.{sub_key}", errors
-                )
-    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
-        child = schema.get(key)
-        if isinstance(child, list):
-            for idx, sub_schema in enumerate(child):
-                _validate_arrow_type_in_json_schema(
-                    sub_schema, f"{path}.{key}[{idx}]", errors
-                )
-    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
-        if key not in schema:
             continue
-        child = schema[key]
-        # Draft 2019-09 tuple-form `items: [...]` is still authored in
-        # parts of the catalog; iterate per position. Draft 2020-12 uses
-        # `prefixItems` for the same purpose (handled by the list-keyword
-        # block above).
-        if isinstance(child, list):
-            for idx, sub_schema in enumerate(child):
-                _validate_arrow_type_in_json_schema(
-                    sub_schema, f"{path}.{key}[{idx}]", errors
+
+        native_value = node.get("native_type", _MISSING)
+        arrow_value = node.get("arrow_type", _MISSING)
+        has_native = native_value is not _MISSING and native_value is not None
+        has_arrow = arrow_value is not _MISSING and arrow_value is not None
+        if arrow_value is not _MISSING and arrow_value is not None:
+            # fullmatch (not match) — `$` in ARROW_TYPE_PATTERN matches before a
+            # trailing `\n` under Python re default flags, so `"Utf8\n"` would
+            # slip through match() but is correctly rejected by Pydantic's
+            # rust-regex field-level pattern. Use fullmatch here for parity.
+            if not isinstance(arrow_value, str) or not ARROW_TYPE_RE.fullmatch(arrow_value):
+                errors.append(
+                    f"{node_path}.arrow_type={arrow_value!r} is not a canonical Arrow "
+                    "type. Parameterized canonical types must carry their "
+                    "parameters: e.g. 'Timestamp(MICROSECOND)', "
+                    "'Decimal128(38, 9)', 'FixedSizeBinary(16)' "
+                    "(spec: §Native and Arrow Types)"
                 )
-        else:
-            _validate_arrow_type_in_json_schema(child, f"{path}.{key}", errors)
+            else:
+                # Cross-parameter bounds the pattern cannot express
+                # (Decimal scale <= precision).
+                try:
+                    validate_cross_params(arrow_value)
+                except ValueError as exc:
+                    errors.append(
+                        f"{node_path}.arrow_type: {exc} (spec: §Native and Arrow Types)"
+                    )
+        if has_native ^ has_arrow:
+            missing = "arrow_type" if has_native else "native_type"
+            errors.append(
+                f"{node_path} declares only one of native_type/arrow_type; typed field "
+                f"schemas must carry both (missing {missing!r}; spec: §Native and "
+                "Arrow Types)"
+            )
+
+        # Authored-shape JSON container markers (Object/List/Json) require
+        # specific sibling keys. `properties` and `items` are standard JSON
+        # Schema keywords already meaningful at this node, so we enforce
+        # presence/absence inline here rather than constructing a model.
+        #
+        # Why this is not just `enforce_container_shape(...)`: the walker
+        # validates response/input JSON-Schema slots — raw dicts — whereas
+        # `analitiq.contracts.shared.arrow_shape.enforce_container_shape` runs after
+        # Pydantic has coerced sibling keys into typed `ArrowFieldSpec` /
+        # `ColumnFieldSpec` instances. Pydantic's type coercion implicitly
+        # rejects JSON Schema 2020-12 shorthands (`items: true|false`,
+        # tuple-form `items: [...]`) at the model layer, but the walker has
+        # no such coercion and must reject them explicitly. The two paths
+        # cover the same matrix but in different dialects; do not collapse
+        # them without preserving the dialect-specific rejections below.
+        if has_arrow and isinstance(arrow_value, str):
+            properties_value = node.get("properties", _MISSING)
+            items_value = node.get("items", _MISSING)
+            # `null` siblings count as "not declared" so error messages are
+            # precise rather than recursing into None downstream.
+            has_properties = (
+                properties_value is not _MISSING and properties_value is not None
+            )
+            has_items = items_value is not _MISSING and items_value is not None
+            if arrow_value == "Object":
+                if not has_properties:
+                    errors.append(
+                        f"{node_path}.arrow_type='Object' requires sibling 'properties' "
+                        "(spec: §Native and Arrow Types)"
+                    )
+                elif not isinstance(properties_value, dict) or not properties_value:
+                    # Empty dict or non-dict shape is structurally meaningless for
+                    # a declared Object.
+                    errors.append(
+                        f"{node_path}.arrow_type='Object' requires non-empty "
+                        "'properties' map (spec: §Native and Arrow Types)"
+                    )
+                if has_items:
+                    errors.append(
+                        f"{node_path}.arrow_type='Object' must not carry 'items' "
+                        "(spec: §Native and Arrow Types)"
+                    )
+            elif arrow_value == "List":
+                if not has_items:
+                    errors.append(
+                        f"{node_path}.arrow_type='List' requires sibling 'items' "
+                        "(spec: §Native and Arrow Types)"
+                    )
+                elif not isinstance(items_value, dict):
+                    # Reject JSON Schema boolean shorthand (`items: true/false`)
+                    # and tuple-form (`items: [...]`) — both contradict the
+                    # single-spec contract that Column / ArrowFieldSpec enforce.
+                    errors.append(
+                        f"{node_path}.arrow_type='List' requires 'items' to be a "
+                        "single field spec (object); boolean and tuple forms "
+                        "are not permitted (spec: §Native and Arrow Types)"
+                    )
+                if has_properties:
+                    errors.append(
+                        f"{node_path}.arrow_type='List' must not carry 'properties' "
+                        "(spec: §Native and Arrow Types)"
+                    )
+            elif arrow_value == "Json":
+                if has_properties or has_items:
+                    errors.append(
+                        f"{node_path}.arrow_type='Json' is opaque and must not carry "
+                        "'properties' or 'items' (spec: §Native and Arrow Types)"
+                    )
+            else:
+                # Scalar or parameterized arrow_type (Utf8, Int64,
+                # Decimal128(38, 9), etc.): JSON-container siblings are not legal.
+                # The Pydantic helper rejects this on the model side; the walker
+                # must mirror it on the JSON Schema side per spec §Native and
+                # Arrow Types ("must not appear on scalar or parameterized
+                # arrow_type values").
+                if has_properties or has_items:
+                    errors.append(
+                        f"{node_path}.arrow_type={arrow_value!r} must not carry "
+                        "'properties' or 'items'; those are only valid for the "
+                        "bare authored-shape markers 'Object' / 'List' "
+                        "(spec: §Native and Arrow Types)"
+                    )
 
 
 #: Reference keywords the contract does not author, and why each is refused
@@ -1541,16 +1522,14 @@ _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
 }
 
 
-def _validate_schema_refs(
-    schema: Any, path: str, errors: list[str], root: Any = None
-) -> None:
+def _validate_schema_refs(schema: Any, path: str, errors: list[str]) -> None:
     """Every reference in an embedded schema must be IN-DOCUMENT, must resolve,
     and must land on a schema; and the schema declares its dialect at its root
     or nowhere.
 
     RULE-ENDP-026. `$ref` is authorable — `JsonSchemaPropertyNode` enumerates
-    `$defs` as a recursive position and the arrow_type walker below descends
-    into it, so a `#/$defs/...` target is annotation-checked like any other
+    `$defs` as a recursive position and the structural walk descends into it,
+    so a `#/$defs/...` target is annotation-checked like any other subschema.
     Several spellings are not, and each fails silently (a count here would rot —
     this list grew by three after it was first written):
 
@@ -1585,131 +1564,106 @@ def _validate_schema_refs(
     schema is one resource, and so the keyword is authorable at this document's
     root and refused at every node the walk reaches below it. Its verdict turns
     on WHERE the keyword sits rather than only on its presence, which is why the
-    walk carries a root marker.
+    loop reads the position it is at: the root is the one with no tokens.
 
-    Walks the same structural positions as
-    :func:`_validate_arrow_type_in_json_schema` — the shared
-    ``JSON_SCHEMA_*_KEYS`` sets, so the two cannot disagree about what counts
-    as a schema position. Never follows a `$ref` itself: the walk is over the
-    document's own tree, and every local target is already part of it.
+    The positions are :func:`walk_structural_positions`'s, the same generator
+    :func:`_validate_arrow_type_in_json_schema` loops over, so the two cannot
+    disagree about what counts as a schema position. Never follows a `$ref`
+    itself: the walk is over the document's own tree, and every local target is
+    already part of it. Every ref resolves against `schema`, the whole embedded
+    document — `$defs` lives at its top, and resolving against the subtree the
+    ref sits in would call every legitimate ref dangling.
     """
-    # `root` is threaded down so a ref deep in the tree still resolves against
-    # the WHOLE embedded schema — `$defs` lives at the top, and resolving
-    # against the current subtree would call every legitimate ref dangling.
-    # Its absence also marks the entry call: every recursive one passes on the
-    # root it was given, so no root in hand means this node IS the root — the
-    # one position a dialect declaration belongs in.
-    is_root = root is None
-    root = schema if is_root else root
-    # `true` / `false` are legal whole-schema short-forms carrying no `$ref`.
-    if isinstance(schema, bool) or not isinstance(schema, dict):
-        return
+    for tokens, node in walk_structural_positions(schema):
+        # Nothing but a dict can carry a reference — `true` / `false` are legal
+        # whole-schema short-forms and a malformed value is the arrow_type
+        # check's to report, so neither is this check's business.
+        if not isinstance(node, dict):
+            continue
+        node_path = _dotted_position(path, tokens)
 
-    if not is_root and "$schema" in schema:
-        errors.append(
-            f"{path}.$schema is not authorable below the root of an embedded "
-            "response/input schema: `$schema` declares the dialect a schema "
-            "resource is written in, and this document is one resource. A "
-            "reader grading a subschema honours the declaration that subschema "
-            "carries, so a node naming another draft takes its whole subtree "
-            "out of the dialect the rest of the document is read in, and the "
-            "keywords underneath keep their spelling while losing their "
-            "meaning. Declare the dialect on the schema itself, or omit it "
-            "(spec: §API Response Extraction — embedded schema references)"
-        )
-
-    for keyword, why in _REFUSED_REFERENCE_KEYWORDS.items():
-        if keyword in schema:
+        if tokens and "$schema" in node:
             errors.append(
-                f"{path}.{keyword} is not authorable in an embedded "
-                f"response/input schema: `{keyword}` {why} "
+                f"{node_path}.$schema is not authorable below the root of an embedded "
+                "response/input schema: `$schema` declares the dialect a schema "
+                "resource is written in, and this document is one resource. A "
+                "reader grading a subschema honours the declaration that subschema "
+                "carries, so a node naming another draft takes its whole subtree "
+                "out of the dialect the rest of the document is read in, and the "
+                "keywords underneath keep their spelling while losing their "
+                "meaning. Declare the dialect on the schema itself, or omit it "
                 "(spec: §API Response Extraction — embedded schema references)"
             )
 
-    if "$ref" in schema:
-        ref = schema["$ref"]
-        if not isinstance(ref, str):
-            errors.append(
-                f"{path}.$ref must be a string (got {type(ref).__name__}) "
-                "(spec: §API Response Extraction — embedded schema references)"
-            )
-        elif not ref.startswith("#"):
-            errors.append(
-                f"{path}.$ref={ref!r} is not an in-document reference. Embedded "
-                "response/input schemas are resolved offline — by the validator, "
-                "by the engine and by the conformance kit — so a reference out of "
-                "the document can never be fetched and its target would go "
-                "unvalidated. Inline the shape, or put it in this document's "
-                "`$defs` and reference it as '#/$defs/<name>' "
-                "(spec: §API Response Extraction — embedded schema references)"
-            )
-        elif ref != "#" and not ref.startswith("#/"):
-            # A plain-name fragment (`#name`) is an `$anchor` reference. Saying
-            # "dangling" here would be a wrong diagnosis — the anchor may well
-            # be declared — and would send the author looking for a typo that
-            # is not there.
-            errors.append(
-                f"{path}.$ref={ref!r} is a plain-name fragment (an `$anchor` "
-                "reference). This contract addresses subschemas only by JSON "
-                "Pointer: declare the shape under `$defs` and reference it as "
-                "'#/$defs/<name>' "
-                "(spec: §API Response Extraction — embedded schema references)"
-            )
-        elif isinstance(resolve_schema_ref(root, ref), bool):
-            # `true`/`false` is a legal 2020-12 whole-schema short-form and both
-            # structural walkers accept it, so the target IS a schema — it just
-            # is not a dict. Without this branch it fell through to the
-            # non-schema-position message and told the author to move a shape
-            # that was already sitting in `$defs`, sending them hunting for a
-            # `default`/`examples` payload that does not exist.
-            errors.append(
-                f"{path}.$ref={ref!r} resolves to a boolean schema. `true`/`false` "
-                "declare nothing about a value's shape, so a path through this "
-                "reference can never resolve to a typed declaration — inline the "
-                "shape you mean, or point at a subschema that declares one "
-                "(spec: §API Response Extraction — embedded schema references)"
-            )
-        elif not isinstance(resolve_schema_ref(root, ref), dict):
-            if resolve_local_pointer(root, ref) is not _MISSING:
+        for keyword, why in _REFUSED_REFERENCE_KEYWORDS.items():
+            if keyword in node:
                 errors.append(
-                    f"{path}.$ref={ref!r} points into a non-schema position. "
-                    "`default`, `examples`, `const` and `enum` carry arbitrary "
-                    "data, so nothing validates what is inside them — a "
-                    "reference there is an unchecked subtree wearing the shape "
-                    "of a declaration. Move the shape to this document's "
+                    f"{node_path}.{keyword} is not authorable in an embedded "
+                    f"response/input schema: `{keyword}` {why} "
+                    "(spec: §API Response Extraction — embedded schema references)"
+                )
+
+        if "$ref" in node:
+            ref = node["$ref"]
+            if not isinstance(ref, str):
+                errors.append(
+                    f"{node_path}.$ref must be a string (got {type(ref).__name__}) "
+                    "(spec: §API Response Extraction — embedded schema references)"
+                )
+            elif not ref.startswith("#"):
+                errors.append(
+                    f"{node_path}.$ref={ref!r} is not an in-document reference. Embedded "
+                    "response/input schemas are resolved offline — by the validator, "
+                    "by the engine and by the conformance kit — so a reference out of "
+                    "the document can never be fetched and its target would go "
+                    "unvalidated. Inline the shape, or put it in this document's "
                     "`$defs` and reference it as '#/$defs/<name>' "
                     "(spec: §API Response Extraction — embedded schema references)"
                 )
-            else:
+            elif ref != "#" and not ref.startswith("#/"):
+                # A plain-name fragment (`#name`) is an `$anchor` reference. Saying
+                # "dangling" here would be a wrong diagnosis — the anchor may well
+                # be declared — and would send the author looking for a typo that
+                # is not there.
                 errors.append(
-                    f"{path}.$ref={ref!r} does not resolve to a schema in this "
-                    "document. A dangling reference asserts nothing, so every "
-                    "instance satisfies it "
+                    f"{node_path}.$ref={ref!r} is a plain-name fragment (an `$anchor` "
+                    "reference). This contract addresses subschemas only by JSON "
+                    "Pointer: declare the shape under `$defs` and reference it as "
+                    "'#/$defs/<name>' "
                     "(spec: §API Response Extraction — embedded schema references)"
                 )
-
-    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
-        child = schema.get(key)
-        if not isinstance(child, dict):
-            continue
-        for sub_key, sub_schema in child.items():
-            _validate_schema_refs(sub_schema, f"{path}.{key}.{sub_key}", errors, root)
-    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
-        child = schema.get(key)
-        if not isinstance(child, list):
-            continue
-        for idx, sub_schema in enumerate(child):
-            _validate_schema_refs(sub_schema, f"{path}.{key}[{idx}]", errors, root)
-    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
-        if key not in schema:
-            continue
-        child = schema[key]
-        # Draft 2019-09 tuple-form `items: [...]`, as above.
-        if isinstance(child, list):
-            for idx, sub_schema in enumerate(child):
-                _validate_schema_refs(sub_schema, f"{path}.{key}[{idx}]", errors, root)
-        else:
-            _validate_schema_refs(child, f"{path}.{key}", errors, root)
+            elif isinstance(resolve_schema_ref(schema, ref), bool):
+                # `true`/`false` is a legal 2020-12 whole-schema short-form and both
+                # structural walkers accept it, so the target IS a schema — it just
+                # is not a dict. Without this branch it fell through to the
+                # non-schema-position message and told the author to move a shape
+                # that was already sitting in `$defs`, sending them hunting for a
+                # `default`/`examples` payload that does not exist.
+                errors.append(
+                    f"{node_path}.$ref={ref!r} resolves to a boolean schema. `true`/`false` "
+                    "declare nothing about a value's shape, so a path through this "
+                    "reference can never resolve to a typed declaration — inline the "
+                    "shape you mean, or point at a subschema that declares one "
+                    "(spec: §API Response Extraction — embedded schema references)"
+                )
+            elif not isinstance(resolve_schema_ref(schema, ref), dict):
+                if resolve_local_pointer(schema, ref) is not _MISSING:
+                    errors.append(
+                        f"{node_path}.$ref={ref!r} points into a non-schema position. "
+                        "`default`, `examples`, `const` and `enum` carry arbitrary "
+                        "data, so nothing validates what is inside them — a "
+                        "reference there is an unchecked subtree wearing the shape "
+                        "of a declaration. Move the shape to this document's "
+                        "`$defs` and reference it as '#/$defs/<name>' "
+                        "(spec: §API Response Extraction — embedded schema references)"
+                    )
+                else:
+                    errors.append(
+                        f"{node_path}.$ref={ref!r} does not resolve to a schema in this "
+                        "document. A dangling reference asserts nothing, so every "
+                        "instance satisfies it "
+                        "(spec: §API Response Extraction — embedded schema references)"
+                    )
 
 
 class ResponseExtraction(_EndpointModel):

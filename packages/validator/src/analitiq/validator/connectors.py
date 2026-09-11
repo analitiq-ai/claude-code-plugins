@@ -73,9 +73,8 @@ try:
             SLUG_RE,
         )
         from analitiq.contracts.shared.json_schema import (
-            JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
-            JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
-            JSON_SCHEMA_SUBSCHEMA_KEYS,
+            _escape_pointer_token,
+            walk_structural_positions,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
@@ -213,28 +212,6 @@ def _arrow_type_eq(a: str, b: str) -> bool:
     return norm(a) == norm(b)
 
 
-# JSON-Schema keyword sets that hold sub-schemas (imported from
-# analitiq.contracts.shared.json_schema):
-# a schema-aware walk recurses only through these — never through data keywords
-# like `const`/`default`/`enum`, and it treats `properties` children as field
-# names (a field literally named `default` is still walked as a sub-schema).
-# The JSON-Schema keyword vocabulary is OWNED by the contract package and
-# imported, not restated. It used to be a third hand-maintained copy: adding
-# `contentSchema` meant editing three, and the one that was missed left the
-# rendered schema's prose contradicting its own constraints. `_walk_schema_nodes`
-# must descend exactly where the contract's walkers do; what a position it misses
-# costs is stated on that function, which is where both of its consumers meet.
-_SUBSCHEMA_MAP_KEYS = JSON_SCHEMA_SUBSCHEMA_KEYS
-_SUBSCHEMA_LIST_KEYS = JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-_SUBSCHEMA_SINGLE_KEYS = JSON_SCHEMA_SINGLE_SCHEMA_KEYS
-
-
-def _escape_pointer_token(name: str) -> str:
-    """One object key as an RFC 6901 pointer segment. `~` before `/`: the other
-    order re-encodes the `~` it just wrote, turning `a/b` into `a~01b`."""
-    return name.replace("~", "~0").replace("/", "~1")
-
-
 def _embedded_json_schemas(ep_doc: dict) -> list[tuple[str, Any]]:
     """The endpoint's embedded JSON-Schema documents as `(pointer, schema)` —
     `operations.read.response.schema` and each `operations.write.<mode>.input.schema`
@@ -257,46 +234,29 @@ def _embedded_json_schemas(ep_doc: dict) -> list[tuple[str, Any]]:
 
 def _walk_schema_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
     """Every structural sub-schema node of a JSON Schema document, as
-    `(pointer, node)`, recursing only through sub-schema positions. The document
-    itself is a node and is yielded first.
+    `(pointer, node)`. The document itself is a node and is yielded first, under
+    the bare `pointer` given.
 
     One walk serves every check that has to reach a node: the `native_type` /
     `arrow_type` pairing and the grading of recorded samples must descend
     identically, or a node one of them cannot see is a node the other grades
-    alone."""
-    if not isinstance(schema, dict):
-        return
-    yield pointer, schema
-    for key in _SUBSCHEMA_MAP_KEYS:
-        sub = schema.get(key)
-        if isinstance(sub, dict):
-            for name, child in sub.items():
-                # Only the keys an AUTHOR chooses are encoded — a property name,
-                # a `$defs` name, a `patternProperties` regex. Keyword names and
-                # list indices are fixed vocabulary and can carry neither
-                # character. A raw `a/b` reads as two segments and a raw `~`
-                # opens an escape, so an unencoded name points at the wrong node
-                # or at none, and this pointer is what a finding reports as its
-                # `path` for a consumer to resolve.
-                yield from _walk_schema_nodes(
-                    child, f"{pointer}/{key}/{_escape_pointer_token(name)}")
-    for key in _SUBSCHEMA_LIST_KEYS:
-        sub = schema.get(key)
-        if isinstance(sub, list):
-            for i, child in enumerate(sub):
-                yield from _walk_schema_nodes(child, f"{pointer}/{key}/{i}")
-    for key in _SUBSCHEMA_SINGLE_KEYS:
-        if key not in schema:
+    alone. That walk is the contract's
+    :func:`analitiq.contracts.shared.json_schema.walk_structural_positions`, so
+    the positions this validator reaches are the positions the contract models
+    reach. This is its adapter into the pointer dialect a finding's `path`
+    carries: a `str` token is escaped, because a property name, a `$defs` name
+    or a `patternProperties` regex is the author's and a raw `a/b` reads as two
+    segments while a raw `~` opens an escape; an `int` token is a list index and
+    renders as itself. Non-dict values are filtered out — a boolean short-form
+    declares no node to grade, and a malformed one is the meta-schema check's
+    to report."""
+    for tokens, node in walk_structural_positions(schema):
+        if not isinstance(node, dict):
             continue
-        child = schema[key]
-        # `items` may be tuple-form (a list of schemas, Draft 2019-09) — iterate
-        # it, matching the model's walk. Draft 2020-12 uses `prefixItems` (handled
-        # above) but the catalog still carries the tuple form.
-        if isinstance(child, list):
-            for i, sub in enumerate(child):
-                yield from _walk_schema_nodes(sub, f"{pointer}/{key}/{i}")
-        else:
-            yield from _walk_schema_nodes(child, f"{pointer}/{key}")
+        yield pointer + "".join(
+            f"/{token}" if isinstance(token, int) else f"/{_escape_pointer_token(token)}"
+            for token in tokens
+        ), node
 
 
 def _collect_native_arrow_pairs(ep_doc: dict) -> list[tuple[str, str, str]]:
