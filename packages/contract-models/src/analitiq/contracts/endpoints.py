@@ -1486,8 +1486,8 @@ def _validate_arrow_type_in_json_schema(
 
 
 #: Reference keywords the contract does not author, and why each is refused
-#: rather than tolerated. Every one of them would let a subtree escape both
-#: structural walkers, which is the single harm RULE-ENDP-026 exists to close.
+#: rather than tolerated. Every one of them would let a subtree escape every
+#: structural check, which is the single harm RULE-ENDP-026 exists to close.
 _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
     "$id": (
         "declares a new base URI, which under 2020-12 retargets every `#`-leading "
@@ -1543,9 +1543,10 @@ def _validate_schema_refs(schema: Any, path: str, errors: list[str]) -> None:
     * a DANGLING local ref (`#/$defs/Typo`) points at nothing. It asserts no
       constraint, so every instance satisfies it — an "everything passes" hole
       wearing the shape of a declaration.
-    * a local ref into a NON-SCHEMA position (`#/properties/x/default`). Both
-      walkers deliberately skip `default`/`examples`/`const`/`enum`, because
-      those carry arbitrary user data that can be shaped exactly like a schema.
+    * a local ref into a NON-SCHEMA position (`#/properties/x/default`). The
+      structural walk deliberately skips `default`/`examples`/`const`/`enum`,
+      because those carry arbitrary user data that can be shaped exactly like a
+      schema.
       A pointer into one reaches a subtree nothing checked — the same hole as a
       non-local ref, spelled locally.
     * the reference keywords in :data:`_REFUSED_REFERENCE_KEYWORDS` (`$id`,
@@ -1556,8 +1557,8 @@ def _validate_schema_refs(schema: Any, path: str, errors: list[str]) -> None:
     FOLLOW a `$ref` (see
     :func:`analitiq.contracts.shared.json_schema._property_contributors`): by
     the time a path is resolved, every ref it can meet is local, real, and lands
-    on a node both walkers visited — so following one cannot land the resolver
-    on a type nothing verified.
+    on a node the structural walk visited — so following one cannot land the
+    resolver on a type nothing verified.
 
     RULE-ENDP-064 rides this walk too, because it reaches the same positions:
     `$schema` names the dialect a schema RESOURCE is written in, an embedded
@@ -1567,7 +1568,7 @@ def _validate_schema_refs(schema: Any, path: str, errors: list[str]) -> None:
     loop reads the position it is at: the root is the one with no tokens.
 
     The positions are :func:`walk_structural_positions`'s, the same generator
-    :func:`_validate_arrow_type_in_json_schema` loops over, so the two cannot
+    :func:`_validate_arrow_type_in_json_schema` loops over, so no check can
     disagree about what counts as a schema position. Never follows a `$ref`
     itself: the walk is over the document's own tree, and every local target is
     already part of it. Every ref resolves against `schema`, the whole embedded
@@ -1633,8 +1634,8 @@ def _validate_schema_refs(schema: Any, path: str, errors: list[str]) -> None:
                     "(spec: §API Response Extraction — embedded schema references)"
                 )
             elif isinstance(resolve_schema_ref(schema, ref), bool):
-                # `true`/`false` is a legal 2020-12 whole-schema short-form and both
-                # structural walkers accept it, so the target IS a schema — it just
+                # `true`/`false` is a legal 2020-12 whole-schema short-form that
+                # every structural check accepts, so the target IS a schema — it just
                 # is not a dict. Without this branch it fell through to the
                 # non-schema-position message and told the author to move a shape
                 # that was already sitting in `$defs`, sending them hunting for a

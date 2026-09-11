@@ -271,7 +271,7 @@ def _escape_pointer_token(name: str) -> str:
     other order re-encodes the `~` it just wrote, turning `a/b` into `a~01b`.
 
     Not the inverse of :func:`_unescape_pointer_token`, and deliberately so —
-    the pair meets at the §3 layer only. Unescaping percent-decodes first
+    they meet at the §3 layer only. Unescaping percent-decodes first
     because a `$ref` is a URI fragment (§6); escaping percent-encodes nothing
     because a finding's `path` is a JSON-string pointer (§5) a consumer
     resolves directly, never a URI. Symmetrising them would either encode a

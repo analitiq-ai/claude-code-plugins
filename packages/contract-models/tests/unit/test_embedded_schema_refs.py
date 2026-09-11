@@ -1303,8 +1303,8 @@ class TestKeywordVocabularyHasOneOwner:
     the `JSON_SCHEMA_*_KEYS` sets in `analitiq.contracts.shared.json_schema`,
     and one walk over it, `walk_structural_positions` in the same module —
     `TestOneStructuralWalk` pins every consumer to that walk. The renderer's
-    `JsonSchemaPropertyNode` restates the vocabulary twice, as a published
-    constraint map and as a published sentence naming each keyword, and
+    `JsonSchemaPropertyNode` restates the vocabulary as a published constraint
+    map and as a published sentence naming each keyword, and
     `.claude/rules/no-drift-surfaces.md` requires an unavoidable restatement to
     be pinned by a test. These are the comparisons: the rendered constraint
     map, and the rendered sentence. The sentence is the half a name-level pin
@@ -1390,7 +1390,7 @@ class TestOneStructuralWalk:
         doc["not"] = "Int64"
         return doc, ("not",)
 
-    # The test's own renderings of the two dialects (a test's assertion target
+    # The test's own rendering of each dialect (a test's assertion target
     # is a permitted copy). No author-chosen name in the document carries `/`
     # or `~`, so the pointer form needs no escaping here; the validator's own
     # suite grades the escaping round-trip.
@@ -1405,9 +1405,9 @@ class TestOneStructuralWalk:
 
     def test_the_generator_reaches_every_position_the_document_was_built_to_hold(self):
         doc, non_dict = self._document()
-        first = next(walk_structural_positions(doc))
-        assert first == ((), doc)
-        positions = dict(walk_structural_positions(doc))
+        walked = list(walk_structural_positions(doc))
+        assert walked[0] == ((), doc)
+        positions = dict(walked)
         assert {tokens[0] for tokens in positions if tokens} == (
             JSON_SCHEMA_SUBSCHEMA_KEYS
             | JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
@@ -1423,7 +1423,7 @@ class TestOneStructuralWalk:
         doc, non_dict = self._document()
         positions = dict(walk_structural_positions(doc))
         dict_positions = {t for t, node in positions.items() if isinstance(node, dict)}
-        refused = next(iter(_REFUSED_REFERENCE_KEYWORDS))
+        refused = min(_REFUSED_REFERENCE_KEYWORDS)
         for tokens in dict_positions:
             # One violation per node for each contract check: a `native_type`
             # without its `arrow_type`, and a refused reference keyword.
