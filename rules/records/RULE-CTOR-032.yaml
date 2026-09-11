@@ -1,7 +1,7 @@
 id: RULE-CTOR-032
 statement: >
   A connector's first release MUST declare `version` as `1.0.0`.
-tier: procedural
+tier: process
 severity: info
 scopes: [connector]
 validator: null

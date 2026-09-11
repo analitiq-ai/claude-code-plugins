@@ -2,7 +2,7 @@ id: RULE-STRM-005
 statement: >
   A pipe expression's arguments MUST begin with the source-read node that
   seeds it and continue only with conversion stages applied left to right.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::PipeExpression._validate_positional_grammar"

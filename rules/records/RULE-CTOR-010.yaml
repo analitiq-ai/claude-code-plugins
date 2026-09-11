@@ -3,7 +3,7 @@ statement: >
   A connector whose kind runs no post-authentication phase MUST NOT declare
   post-auth outputs, nor the activation prerequisites that would resolve from
   them.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::FileConnector._validate_no_post_auth_contract"

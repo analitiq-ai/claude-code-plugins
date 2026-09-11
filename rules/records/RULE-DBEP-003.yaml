@@ -2,7 +2,7 @@ id: RULE-DBEP-003
 statement: >
   Every name in a database endpoint's `primary_keys` MUST name a column the
   same document declares.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [database-endpoint]
 validator: "analitiq.contracts.endpoints::DatabaseEndpointDoc._primary_keys_name_columns"

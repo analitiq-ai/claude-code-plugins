@@ -3,7 +3,7 @@ statement: >
   A `regex` read rule MUST spell the literals in its native_type pattern the way the
   engine's native-type normalization spells the probe, because the probe is
   normalized before matching and the pattern is used exactly as authored.
-tier: procedural
+tier: process
 severity: warning
 scopes: [type-map]
 validator: "analitiq.validator.connectors::_type_map_rule_warnings"

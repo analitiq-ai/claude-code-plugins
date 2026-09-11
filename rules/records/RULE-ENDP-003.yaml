@@ -3,7 +3,7 @@ statement: >
   A query parameter whose declared request-input type is a container rather
   than a scalar MUST declare both its wire serialization style and its explode
   flag.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Param._validate"

@@ -3,7 +3,7 @@ statement: >
   An endpoint MUST declare only where the idempotency key goes; the key's value
   is engine-owned and MUST NOT appear in a value expression, an input schema, or
   a request slot.
-tier: procedural
+tier: process
 severity: error
 scopes: [api-endpoint]
 validator: null

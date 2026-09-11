@@ -4,7 +4,7 @@ statement: >
   SHOULD declare that field's native type and canonical Arrow type, spelling
   the native token the way the connector's read map already spells it for that
   field.
-tier: judgment
+tier: choice
 severity: warning
 scopes: [api-endpoint]
 validator: null

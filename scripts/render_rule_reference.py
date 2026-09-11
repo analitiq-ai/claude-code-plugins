@@ -14,7 +14,7 @@ way, so the answer changes nothing it does, and a row saying nothing applies one
 invites skipping it. The record still carries `validator` for the lint and the
 enforcer census; it does not ship.
 
-The structural table's member lists are read off the **live models** rather
+The shape table's member lists are read off the **live models** rather
 than typed here: the point of that tier is to end the copy, so the renderer
 must not become one.
 
@@ -134,7 +134,7 @@ SHARED_LINE = (
 )
 
 TIER_INTRO = {
-    "structural": """
+    "shape": """
 One artifact has this shape — usually a `Literal`, a pattern, a bound or a
 closed object. These ids exist for prose: cite one instead of copying the shape
 into a sentence that stops moving when the model does.
@@ -143,24 +143,24 @@ into a sentence that stops moving when the model does.
 current answer, not a promise, and it is why this file is regenerated rather
 than edited.
 """,
-    "advisory": """
+    "coherence": """
 Fields *within* one document that must agree — set-equality, disjointness,
 membership, cross-key uniqueness. Stock JSON Schema cannot state these, so
 satisfying one means checking the document against itself: nothing about any
 single field looks wrong.
 """,
-    "referential": """
+    "reference": """
 This artifact must agree with **another** one — a `connector_id` against the
 directory it ships in, a declared capability against the hook implementing it,
 an endpoint against the connector declaring it. Satisfying one means holding
 both artifacts, which is more than you are authoring at the moment.
 """,
-    "procedural": """
+    "process": """
 Do it this way, or in this order. What is regenerated after what, what is never
 hand-edited, what the engine owns and is therefore never authored. Violating
 one usually produces a document that validates and then behaves unexpectedly.
 """,
-    "judgment": """
+    "choice": """
 Several authorings all validate and one is right. A legal-but-wrong choice
 looks exactly like a correct one from the outside, so these are the rules an
 agent gets wrong while passing every check — read the prose that cites them,
@@ -239,7 +239,7 @@ def _model_index() -> dict:
 
 
 def _live_values(rule, models: dict) -> str:
-    """The vocabularies a structural rule points at, read from the models.
+    """The vocabularies a shape rule points at, read from the models.
 
     Kept per field. A rule binding several fields binds several *separate*
     closed sets — `ConnectionContractInput` states where a value is stored and
@@ -375,9 +375,9 @@ def _article(word: str) -> str:
 
 
 def _tier_section(tier: str, rules: list, models: dict) -> list[str]:
-    structural = tier == "structural"
+    shape = tier == "shape"
     header = ["ID", "Rule", "Grades", "Severity", "Checked"]
-    if structural:
+    if shape:
         header.append("Values")
     rows = []
     for r in sorted(rules, key=lambda r: r.id):
@@ -393,7 +393,7 @@ def _tier_section(tier: str, rules: list, models: dict) -> list[str]:
             # author has to read for it.
             "validator" if r.mechanized else "—",
         ]
-        if structural:
+        if shape:
             cells.append(_cell(_live_values(r, models)))
         rows.append(_row(cells))
     return [f"\n## {tier.capitalize()}\n{TIER_INTRO[tier]}\n", *_table(header, rows)]

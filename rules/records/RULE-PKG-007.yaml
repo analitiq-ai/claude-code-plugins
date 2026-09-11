@@ -5,7 +5,7 @@ statement: >
   the importable package `analitiq_connector_{connector_id}` mapped to the
   repository root, and the entry-point name `{connector_id}` the engine
   resolves.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector-package]
 validator: null

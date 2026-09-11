@@ -1,7 +1,7 @@
 id: RULE-STRM-021
 statement: >
   A validation rule's value MUST carry the payload shape its type requires.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: null

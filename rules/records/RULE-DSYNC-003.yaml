@@ -2,7 +2,7 @@ id: RULE-DSYNC-003
 statement: >
   A run status payload MUST report its coarse state from the vocabulary
   `PipelineRunStatusData` declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [data-sync-run-status]
 validator: "analitiq.contracts.pipelines.data_sync::PipelineRunStatusData.status"

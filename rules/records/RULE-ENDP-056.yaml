@@ -3,7 +3,7 @@ statement: >
   A single-bound cursor mapping MUST state the wire format it sends the cursor
   value as, and the comparison the provider applies to it, using only the
   vocabularies `SingleCursorMapping` declares for each.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::SingleCursorMapping.format"

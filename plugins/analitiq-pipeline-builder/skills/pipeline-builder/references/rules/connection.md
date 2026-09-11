@@ -16,17 +16,17 @@ a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **8** structural · **2** advisory · **8** referential · **3** procedural · **2** judgment.
+In this file: **8** shape · **2** coherence · **8** reference · **3** process · **2** choice.
 
 ## Contents
 
-- Structural
-- Advisory
-- Referential
-- Procedural
-- Judgment
+- Shape
+- Coherence
+- Reference
+- Process
+- Choice
 
-## Structural
+## Shape
 
 One artifact has this shape — usually a `Literal`, a pattern, a bound or a
 closed object. These ids exist for prose: cite one instead of copying the shape
@@ -47,7 +47,7 @@ than edited.
 | RULE-SHRD-013 | An error-handling block MUST name what happens to a record once its retries are exhausted, from the vocabulary `RetryErrorHandlingBase` declares. | `any` | error | validator | `strategy`: `fail`, `dlq`, `skip` |
 | RULE-SHRD-014 | An authored document MUST NOT declare a field the registry stamps on insert or update; the authored models name the authorable fields and reject every other key. | `any` | error | validator | — |
 
-## Advisory
+## Coherence
 
 Fields *within* one document that must agree — set-equality, disjointness,
 membership, cross-key uniqueness. Stock JSON Schema cannot state these, so
@@ -59,7 +59,7 @@ single field looks wrong.
 | RULE-CONN-004 | A connection's non-secret maps MUST NOT carry a key that names credential material; such a value lives in secret storage and is reached through `secret_refs`. | `connection` | error | validator |
 | RULE-RETRY-001 | A block that allows no retry attempts MUST NOT declare a non-zero retry delay. | `any` | error | validator |
 
-## Referential
+## Reference
 
 This artifact must agree with **another** one — a `connector_id` against the
 directory it ships in, a declared capability against the hook implementing it,
@@ -77,7 +77,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 
-## Procedural
+## Process
 
 Do it this way, or in this order. What is regenerated after what, what is never
 hand-edited, what the engine owns and is therefore never authored. Violating
@@ -89,7 +89,7 @@ one usually produces a document that validates and then behaves unexpectedly.
 | RULE-SHRD-005 | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. | `any` | error | — |
 | RULE-SHRD-009 | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. | `any` | error | — |
 
-## Judgment
+## Choice
 
 Several authorings all validate and one is right. A legal-but-wrong choice
 looks exactly like a correct one from the outside, so these are the rules an

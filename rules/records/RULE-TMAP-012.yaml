@@ -3,7 +3,7 @@ statement: >
   New rules on a connection-scoped type map MUST be appended after the rules
   already present, and a rule already there MUST NOT be removed, reordered or
   rewritten.
-tier: procedural
+tier: process
 severity: error
 scopes: [type-map]
 validator: null

@@ -3,7 +3,7 @@ statement: >
   An ADBC transport's `driver` MUST name a member of the closed vocabulary the
   contract declares for it; a driver the vocabulary does not name cannot be
   declared at all.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::AdbcTransport.driver"

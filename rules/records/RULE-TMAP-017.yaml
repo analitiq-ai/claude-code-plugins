@@ -3,7 +3,7 @@ statement: >
   A connector's write map MUST render every Arrow type a source can hand
   its system, including the bare container markers an API source emits as
   literal Arrow types.
-tier: structural
+tier: shape
 severity: warning
 scopes: [type-map]
 validator: "analitiq.validator.connectors::_write_vocabulary_findings"

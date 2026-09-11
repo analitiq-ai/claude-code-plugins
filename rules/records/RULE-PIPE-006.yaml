@@ -2,7 +2,7 @@ id: RULE-PIPE-006
 statement: >
   A pipeline MAY omit any schedule field `Schedule` declares a default for,
   and a document that omits one takes that default.
-tier: structural
+tier: shape
 severity: info
 scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::Schedule.type"

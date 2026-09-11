@@ -2,7 +2,7 @@ id: RULE-STRM-007
 statement: >
   A constant MUST carry a value of the JSON kind its declared arrow_type
   admits, and MUST declare the inner shape that type calls for and no other.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::ConstantValue._validate_container_shape"

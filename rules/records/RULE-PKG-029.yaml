@@ -4,7 +4,7 @@ statement: >
   vocabulary its dialect's TLS hook interprets MUST be the same set: every
   declared mode is one the dialect handles, and the dialect handles no mode
   the input does not declare.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector-package]
 validator: null

@@ -3,7 +3,7 @@ statement: >
   A stream's per-destination `execution` block MUST NOT be authored as a way to
   change how much a run writes at a time; the batch size a run uses is the one
   the pipeline's runtime declares, for every stream.
-tier: judgment
+tier: choice
 severity: warning
 scopes: [stream]
 validator: null

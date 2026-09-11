@@ -4,7 +4,7 @@ statement: >
   `SqlDialect` base and its connector class on `GenericSQLConnector`, and
   that connector class MUST carry `dialect_class` and no other member, not
   even an `__init__`.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

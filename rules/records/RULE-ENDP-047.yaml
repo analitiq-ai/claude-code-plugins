@@ -2,7 +2,7 @@ id: RULE-ENDP-047
 statement: >
   Every `transport_ref` an endpoint document names MUST resolve to a transport
   declared by the connector it ships beside.
-tier: referential
+tier: reference
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.validator.connectors::_endpoint_transport_ref_findings"

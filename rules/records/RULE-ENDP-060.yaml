@@ -3,7 +3,7 @@ statement: >
   A brace in a request's `path` MUST delimit a `{name}` placeholder, and every
   such name MUST match the contract's placeholder-name pattern, regardless of
   how the provider spells the value that placeholder carries.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::_RequestBase._validate"

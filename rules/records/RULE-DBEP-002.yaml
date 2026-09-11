@@ -2,7 +2,7 @@ id: RULE-DBEP-002
 statement: >
   Where a database endpoint's columns carry an ordinal position, each column's
   ordinal MUST differ from every other's.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [database-endpoint]
 validator: "analitiq.contracts.endpoints::DatabaseEndpointDoc._ordinal_positions_unique"

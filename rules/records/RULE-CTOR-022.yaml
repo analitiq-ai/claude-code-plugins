@@ -4,7 +4,7 @@ statement: >
   stored and what value type it carries using only the vocabulary
   `PostAuthOutput` declares for each; which pairings of the mode and the
   storage are legal is RULE-CTOR-002.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::PostAuthOutput.mode"

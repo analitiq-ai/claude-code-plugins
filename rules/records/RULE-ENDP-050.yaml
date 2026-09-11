@@ -3,7 +3,7 @@ statement: >
   A parameter MUST declare where it is sent on the request and what value type
   it carries using only the vocabulary `Param` declares for each; the placement
   is written under the field's `in` alias.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Param.location"

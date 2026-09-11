@@ -2,7 +2,7 @@ id: RULE-STRM-037
 statement: >
   A validation rule MUST name its kind from the vocabulary `ValidationRule`
   declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::ValidationRule.type"

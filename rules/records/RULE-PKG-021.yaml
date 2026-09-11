@@ -4,7 +4,7 @@ statement: >
   dialect implements the TLS connect-argument hook and, with it, the
   post-connect TLS-state verification hook, and a connector that ships no
   package MUST NOT declare `tls` at all.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector-package]
 validator: null

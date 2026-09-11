@@ -3,7 +3,7 @@ statement: >
   Every node of a write mode's input schema that declares either the native
   type or the canonical Arrow type MUST declare both, and MUST carry the
   sibling declarations its container form requires.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteInput._validate"

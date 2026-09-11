@@ -2,7 +2,7 @@ id: RULE-DSYNC-001
 statement: >
   A run status MUST carry `error` when its `status` is one the contract gates
   as a failure, and MUST NOT carry `error` under any other status.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [data-sync-run-status]
 validator: "analitiq.contracts.pipelines.data_sync::PipelineRunStatusData._error_matches_status"

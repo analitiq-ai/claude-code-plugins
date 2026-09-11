@@ -2,7 +2,7 @@ id: RULE-TMAP-018
 statement: >
   A connection-scoped type map MUST declare a rule only for a native_type or
   arrow_type its connector's own map leaves unresolved.
-tier: referential
+tier: reference
 severity: error
 scopes: [type-map]
 validator: null

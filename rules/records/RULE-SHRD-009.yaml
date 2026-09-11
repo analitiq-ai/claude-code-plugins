@@ -2,7 +2,7 @@ id: RULE-SHRD-009
 statement: >
   A value the platform derives at connection time MUST be declared as a
   `function` expression and MUST NOT be authored as a pre-computed literal.
-tier: procedural
+tier: process
 severity: error
 scopes: [any]
 validator: null

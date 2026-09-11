@@ -3,7 +3,7 @@ statement: >
   A `sidecar:` pointer MUST name an entry in a credentials file keyed by
   connection-contract input name, never a key of the env-var-keyed template the
   plugin emits.
-tier: referential
+tier: reference
 severity: error
 scopes: [connection]
 validator: null

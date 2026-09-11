@@ -3,7 +3,7 @@ statement: >
   A `filters` map key MUST resolve by declared-path resolution against the
   read operation's response schema record shape onto a node declaring a
   type.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"

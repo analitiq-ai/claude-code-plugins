@@ -2,7 +2,7 @@ id: RULE-CTOR-056
 statement: >
   A connection condition's `present` MUST be the JSON boolean `true`, never a
   number or string that stands in for it.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectionConditionPredicate._present_is_strictly_boolean"

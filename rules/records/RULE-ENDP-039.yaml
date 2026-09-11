@@ -4,7 +4,7 @@ statement: >
   is placed, from the placement vocabulary `Idempotency.location` carries and
   written under that field's `in` alias, and MUST NOT carry anything that
   produces the key's value.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Idempotency.location"

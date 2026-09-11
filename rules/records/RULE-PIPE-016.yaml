@@ -2,7 +2,7 @@ id: RULE-PIPE-016
 statement: >
   A pipeline MUST name its lifecycle state from the vocabulary
   `PipelineAuthored` declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::PipelineAuthored.status"

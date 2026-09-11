@@ -2,7 +2,7 @@ id: RULE-CONN-001
 statement: >
   A connection-contract input's `ui.options` MUST offer exactly the value set
   its `enum` declares.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectionContractInput._options_offer_the_enum"

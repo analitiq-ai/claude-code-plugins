@@ -2,7 +2,7 @@ id: RULE-CTOR-061
 statement: >
   The transport type a connector declares as its default MUST come from the
   transport vocabulary `TransportDefaults` declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::TransportDefaults.transport_type"

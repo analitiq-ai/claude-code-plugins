@@ -2,7 +2,7 @@ id: RULE-ENDP-059
 statement: >
   A request's `path` MUST NOT declare the same `{name}` placeholder more than
   once.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::_RequestBase._validate"

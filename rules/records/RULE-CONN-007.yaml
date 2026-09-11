@@ -3,7 +3,7 @@ statement: >
   A connection MUST author each value in the JSON type its connection-contract
   input declares, uncoerced, and within that input's declared allowed-value
   list where it declares one.
-tier: referential
+tier: reference
 severity: error
 scopes: [connection]
 validator: null

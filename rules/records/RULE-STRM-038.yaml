@@ -2,7 +2,7 @@ id: RULE-STRM-038
 statement: >
   A stream destination's write block MUST name its mode from the write-mode
   vocabulary the block it selects declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::ApiWrite.mode"

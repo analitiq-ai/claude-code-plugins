@@ -2,7 +2,7 @@ id: RULE-TMAP-013
 statement: >
   A type map's rules MUST be authored in the order they are meant to resolve,
   with a narrow rule ahead of any broader rule that would also match its input.
-tier: procedural
+tier: process
 severity: error
 scopes: [type-map]
 validator: null

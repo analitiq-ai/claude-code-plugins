@@ -3,7 +3,7 @@ statement: >
   A type map MUST NOT carry two rules an earlier one already resolves for —
   the same match kind over the same matcher, compared the way the reader
   compares it.
-tier: advisory
+tier: coherence
 severity: warning
 scopes: [type-map]
 validator: "analitiq.validator.connectors::_type_map_rule_warnings"

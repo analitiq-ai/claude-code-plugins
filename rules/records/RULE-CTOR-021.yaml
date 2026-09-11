@@ -4,7 +4,7 @@ statement: >
   connection lifecycle it is provisioned, where its resolved value is durably
   stored and what value type it carries using only the vocabulary
   `ConnectionContractInput` declares for each.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectionContractInput.source"

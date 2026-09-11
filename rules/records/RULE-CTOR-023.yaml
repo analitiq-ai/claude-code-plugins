@@ -2,7 +2,7 @@ id: RULE-CTOR-023
 statement: >
   A connector document's `connector_id` MUST match the slug pattern
   `ConnectorBase.connector_id` declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase.connector_id"

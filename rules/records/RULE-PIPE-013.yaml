@@ -2,7 +2,7 @@ id: RULE-PIPE-013
 statement: >
   A pipeline MUST NOT reference two connections that reduce to the same
   version-stripped base id.
-tier: referential
+tier: reference
 severity: error
 scopes: [pipeline]
 validator: "analitiq.validator.pipelines::_check_connection_version_conflicts"

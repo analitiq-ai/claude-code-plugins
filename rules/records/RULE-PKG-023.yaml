@@ -4,7 +4,7 @@ statement: >
   package ships no Python type-rendering table, and a `render_column_type`
   override exists only for logic the map's rules cannot express, delegating
   every other type back to the map.
-tier: structural
+tier: shape
 severity: warning
 scopes: [connector-package]
 validator: null

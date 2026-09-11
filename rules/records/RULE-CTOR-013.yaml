@@ -2,7 +2,7 @@ id: RULE-CTOR-013
 statement: >
   A stage placed in a schema of its own MUST name that schema, and a stage
   co-located with the target MUST NOT name one.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::SqlStageCapabilities._dedicated_schema_matches_scope"

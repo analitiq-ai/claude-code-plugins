@@ -4,7 +4,7 @@ statement: >
   library, its own driver, and — inside an async `bulk_land` —
   `sqlalchemy.util.await_only`, and MUST NOT import another connector, any
   other third-party package, or an engine or runtime.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

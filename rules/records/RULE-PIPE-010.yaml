@@ -2,7 +2,7 @@ id: RULE-PIPE-010
 statement: >
   The order of a pipeline's `streams` MUST NOT encode a dependency between
   streams, and MUST NOT be presented to the user as one.
-tier: procedural
+tier: process
 severity: error
 scopes: [pipeline]
 validator: null

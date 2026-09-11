@@ -3,7 +3,7 @@ statement: >
   A column's frozen `arrow_type` and `native_type` MUST be the values the
   applicable type maps render for it; judgment supplies a value only where no
   map covers the native_type or the arrow_type.
-tier: referential
+tier: reference
 severity: error
 scopes: [database-endpoint]
 validator: null

@@ -3,7 +3,7 @@ statement: >
   A `database` connector MUST declare its `sql_capabilities` block, which the
   contract leaves optional and the engine requires before it will run any
   write mode.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: null

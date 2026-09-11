@@ -3,7 +3,7 @@ statement: >
   A `database` connector's release MUST NOT ship endpoint documents, because
   a database endpoint is produced from resource-discovery output rather than
   authored.
-tier: referential
+tier: reference
 severity: warning
 scopes: [connector]
 validator: null

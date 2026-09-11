@@ -4,7 +4,7 @@ statement: >
   policy for the failures its own rules raise; how a run answers a validation
   failure is what the pipeline's runtime error handling declares, for every
   assignment.
-tier: judgment
+tier: choice
 severity: warning
 scopes: [stream]
 validator: null

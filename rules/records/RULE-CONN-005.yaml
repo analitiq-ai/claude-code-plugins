@@ -2,7 +2,7 @@ id: RULE-CONN-005
 statement: >
   A connection MUST NOT author a value into its `discovered` map, which the
   connections service owns and fills from the connector's post-auth discovery.
-tier: procedural
+tier: process
 severity: error
 scopes: [connection]
 validator: null

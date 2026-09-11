@@ -1,7 +1,7 @@
 id: RULE-PIPE-015
 statement: >
   A schedule's `timezone` MUST name a zone in the IANA database.
-tier: structural
+tier: shape
 severity: error
 scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::Schedule._validate_timezone"

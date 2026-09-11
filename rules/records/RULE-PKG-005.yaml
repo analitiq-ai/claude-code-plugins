@@ -4,7 +4,7 @@ statement: >
   and perform no I/O — `bulk_land` is the one hook handed a live connection
   and the batch, because a bulk mechanism is itself the act of landing
   data.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

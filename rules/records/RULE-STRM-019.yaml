@@ -2,7 +2,7 @@ id: RULE-STRM-019
 statement: >
   A mapping's assignments MUST be kept in the order they were authored and
   MUST NOT be re-sorted, because the engine applies them in that order.
-tier: procedural
+tier: process
 severity: error
 scopes: [stream]
 validator: null

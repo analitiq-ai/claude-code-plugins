@@ -2,7 +2,7 @@ id: RULE-STRM-035
 statement: >
   A stream MUST name its lifecycle state from the vocabulary `StreamAuthored`
   declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::StreamAuthored.status"

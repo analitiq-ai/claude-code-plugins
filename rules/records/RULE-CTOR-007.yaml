@@ -2,7 +2,7 @@ id: RULE-CTOR-007
 statement: >
   Every path in required_for_activation MUST resolve to a storage path that
   some declared input or post-auth output materializes.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs"

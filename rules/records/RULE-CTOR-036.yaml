@@ -3,7 +3,7 @@ statement: >
   A `resource_discovery.strategy` MUST name a strategy the engine has
   registered, unless the connector ships that strategy itself through its
   own `connector_plugin` implementation.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector]
 validator: null

@@ -2,7 +2,7 @@ id: RULE-CTOR-049
 statement: >
   A database connector whose class satisfies a write capability MUST declare
   `sql_capabilities`.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector]
 validator: null

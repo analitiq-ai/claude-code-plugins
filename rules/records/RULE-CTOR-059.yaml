@@ -3,7 +3,7 @@ statement: >
   A destination's SQL capability block MUST state its catalog support, its
   upsert grammar and how a write selects its target schema using only the
   vocabulary `SqlCapabilities` declares for each.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::SqlCapabilities.catalog"

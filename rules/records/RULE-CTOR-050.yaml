@@ -3,7 +3,7 @@ statement: >
   A transport MUST be invoked no earlier than the phase at which every scope
   its expressions reference becomes available, and an input a transport
   references MUST declare a phase no later than that transport's first use.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: null

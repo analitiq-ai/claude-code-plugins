@@ -2,7 +2,7 @@ id: RULE-STRM-028
 statement: >
   An assignment target's arrow_type MUST reproduce the destination column's
   declared type exactly, its parameters included.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: null

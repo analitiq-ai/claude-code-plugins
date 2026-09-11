@@ -3,7 +3,7 @@ statement: >
   A `bulk_land` implementation MUST target the stage's full address rather
   than its bare table name, so a real-scope stage lands in the schema the
   engine qualified it with.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

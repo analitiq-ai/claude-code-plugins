@@ -2,7 +2,7 @@ id: RULE-STRM-034
 statement: >
   A connection-scoped endpoint reference MUST resolve to an endpoint document
   belonging to the connection it names.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: "analitiq.validator.pipelines::_check_connection_scoped_endpoints"

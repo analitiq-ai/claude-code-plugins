@@ -2,7 +2,7 @@ id: RULE-CTOR-055
 statement: >
   A DSN `template` MUST NOT contain `${...}` value-expression syntax; a
   substitution point is a `{name}` placeholder declared in `bindings`.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::UrlTemplateDsn._reject_template_expressions"

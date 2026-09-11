@@ -2,7 +2,7 @@ id: RULE-CTOR-025
 statement: >
   An auth operation slot MUST hold an `AuthOperationTemplate`, which admits
   only the request fields that model names and rejects any other key.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::AuthOperationTemplate"

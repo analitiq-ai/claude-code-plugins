@@ -3,7 +3,7 @@ statement: >
   Every document a plugin authors MUST declare `$schema` with the published
   canonical URL for its family, including the families whose contract leaves
   the field optional.
-tier: structural
+tier: shape
 severity: warning
 scopes: [any]
 validator: null

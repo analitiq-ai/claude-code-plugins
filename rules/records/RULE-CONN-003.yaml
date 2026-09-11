@@ -2,7 +2,7 @@ id: RULE-CONN-003
 statement: >
   An input MUST mark itself secret exactly when its declared `storage` routes
   the value into secret storage.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectionContractInput._consistency"

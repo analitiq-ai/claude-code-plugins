@@ -3,7 +3,7 @@ statement: >
   A connector, or a stream binding, for a connector kind the engine does not
   execute MUST be declined with a structured refusal rather than authored,
   even though the contract accepts the kind.
-tier: procedural
+tier: process
 severity: error
 scopes: [connector, stream]
 validator: null

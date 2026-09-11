@@ -4,7 +4,7 @@ statement: >
   `connector_id` in the `analitiq.source_connectors` entry-point group and
   in the `analitiq.destination_connectors` group, so it lands read and
   write as one working unit.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

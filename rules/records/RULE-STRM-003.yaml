@@ -3,7 +3,7 @@ statement: >
   A connection-scoped endpoint reference that supplies an endpoint_id MUST
   supply the handle the contract's derivation over its verbatim database
   object produces.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::ConnectionEndpointRef._derive_or_verify_endpoint_id"

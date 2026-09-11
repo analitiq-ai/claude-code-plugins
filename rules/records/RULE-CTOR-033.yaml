@@ -4,7 +4,7 @@ statement: >
   connector, and this plugin MUST NOT author a connector under the
   contract's separate document-store kinds even though the contract models
   them.
-tier: procedural
+tier: process
 severity: error
 scopes: [connector]
 validator: null

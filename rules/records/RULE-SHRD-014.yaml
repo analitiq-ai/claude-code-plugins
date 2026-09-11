@@ -3,7 +3,7 @@ statement: >
   An authored document MUST NOT declare a field the registry stamps on insert
   or update; the authored models name the authorable fields and reject every
   other key.
-tier: structural
+tier: shape
 severity: error
 scopes: [any]
 validator: "analitiq.contracts.shared.common::StrictModel"

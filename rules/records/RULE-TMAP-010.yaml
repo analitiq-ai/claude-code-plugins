@@ -3,7 +3,7 @@ statement: >
   A capture feeding an arrow_type parameter position MUST NOT be able to match a
   value that position refuses, and a literal sharing a bounded position with
   such a capture MUST hold against every value that capture can match.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"

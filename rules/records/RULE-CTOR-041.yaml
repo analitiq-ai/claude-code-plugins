@@ -3,7 +3,7 @@ statement: >
   A capability fact the provider's own documentation does not establish MUST
   be left undeclared and reported as a research gap, and MUST NOT be inferred
   from a similar or wire-compatible system.
-tier: procedural
+tier: process
 severity: error
 scopes: [connector]
 validator: null

@@ -2,7 +2,7 @@ id: RULE-STRM-004
 statement: >
   A filter MUST carry a value unless its operator takes no operand, and an
   operator that takes none MUST NOT carry one.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::Filter._validate_value_presence"

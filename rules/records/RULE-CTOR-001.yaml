@@ -2,7 +2,7 @@ id: RULE-CTOR-001
 statement: >
   A connector's default_transport MUST name a transport the same document
   declares.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase._default_transport_declared"

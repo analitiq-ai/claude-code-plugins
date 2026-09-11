@@ -4,7 +4,7 @@ statement: >
   package: the definition documents sit under `definition/`, and
   `__init__.py`, `connector.py`, `requirements.txt` and `pyproject.toml`
   sit at the root beside it.
-tier: procedural
+tier: process
 severity: error
 scopes: [connector-package]
 validator: null

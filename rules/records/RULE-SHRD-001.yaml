@@ -2,7 +2,7 @@ id: RULE-SHRD-001
 statement: >
   A credential MUST appear in an authored document only as a reference
   expression into the secret scope, never as a literal value.
-tier: structural
+tier: shape
 severity: error
 scopes: [any]
 validator: null
