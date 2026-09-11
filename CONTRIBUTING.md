@@ -11,7 +11,9 @@ Read first, in this order:
   directory ships verbatim to every user who installs the plugin.
 
 This document carries only what those do not: **how a class of defect gets
-closed.** Two rules — one for filing, one for closing.
+closed**, and **what a PR owes the release when it narrows a verdict.** Two
+rules for the first — one for filing, one for closing — and one section for
+the second.
 
 ## The consolidation rule
 
@@ -126,6 +128,25 @@ quietly, that gap shipped with a test recording it
 (`test_literal_expression_bypasses_the_bound`) and an issue that stayed open on
 purpose. The narrowing was deliberate, so the residue was written down.
 
+## A PR that narrows a verdict says so
+
+*Applies at PR-authoring time — when a change touches what the validator
+rejects.*
+
+`.claude/rules/validator-verdict-stability.md` asks one question of a change
+to the validator packages: does it make the validator reject a document the
+last stable release accepted? The rule defines every term in that question and
+decides which release carries the change. What it needs from the PR is the
+answer, because the diff shows the constraint and not whether a document the
+last stable release accepts now fails.
+
+So a PR touching an enforcer, a record's `severity`, the packaging or a package
+version answers that question in its description. "Fix" is not an answer: a
+narrowing is a narrowing whatever it is called.
+
+The third clause above already binds a narrowing PR to record what it left
+wide. This binds it to say what it took.
+
 ## Where these bind in the PR loop
 
 `CLAUDE.md` → **PR Review Process** is the loop.
@@ -137,6 +158,8 @@ purpose. The narrowing was deliberate, so the residue was written down.
 - **Closing** — the PR body. Any PR that claims to close an issue states which
   clause above it satisfies, and any PR that narrows a rule records what it left
   wide, per the third clause.
+- **Narrowing** — the PR body. A PR touching the validator packages answers
+  the verdict question in its description, per the section above.
 
 Issue references above are cited as of 2026-08 and describe the state at the
 time each case was written down; open issues named here may since have closed.

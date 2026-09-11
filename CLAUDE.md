@@ -243,11 +243,14 @@ matches what you are editing:
   does at run time, and before resting a check on one.
 - `reachability-dispositions.md` — before writing or re-affirming a `FieldDisposition`
   under `census/consumption/`.
+- `validator-verdict-stability.md` — before any change that can alter what an
+  installed validator accepts.
 
-The first four and the last are keyed to the surface you are editing;
-`resolvable-referents.md`, `engine-behaviour-claims.md` and
-`no-cardinality-restatements.md` to a class of sentence that rots on any surface;
-`guards.md` to the mechanism that reads them.
+`plugin-prose.md`, `contract-prose.md`, `reachability-dispositions.md` and
+`validator-verdict-stability.md` are keyed to the surface you are editing;
+`no-drift-surfaces.md`, `resolvable-referents.md`, `engine-behaviour-claims.md`
+and `no-cardinality-restatements.md` to a class of sentence that rots on any
+surface; `guards.md` to the mechanism that reads them.
 
 ## Conventions
 
