@@ -106,12 +106,8 @@ A whole connector or a whole pipeline layout can also be handed over as a
 **tree** — a mapping of POSIX relative keys to file text (parsed for you) or
 already-parsed documents — which is how a consumer that does not run on the
 author's filesystem gets the same checks the CLI runs from a `definition/`
-directory. A connector tree is `definition/connector.json` with its type maps
-and `endpoints/*.json` beside it; a pipeline tree is `pipeline.json`,
-`streams/*.json`, `connections/<slug>/connection.json` with that connection's
-`definition/endpoints/*.json` and `definition/type-map-{read,write}.json`, and
-`connectors/<slug>/definition/connector.json` with that connector's
-`definition/endpoints/*.json`. The result is the same envelope the CLI prints:
+directory. `validate_tree`'s own docstring carries the keys each layout is
+recognised by. The result is the same envelope the CLI prints:
 
 ```python
 from analitiq.validator import validate_tree

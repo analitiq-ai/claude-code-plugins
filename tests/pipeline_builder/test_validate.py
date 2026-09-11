@@ -701,6 +701,19 @@ def test_pipeline_document_error_preserved_when_bundle_enrichment_crashes(tmp_pa
     assert "adapter-crash" in validators, diag["findings"]
 
 
+def test_the_readers_own_crash_finding_is_one_the_package_would_accept():
+    """`_crash_finding` builds its dict literally, because the guard it serves
+    also covers the bootstrap that installs the package. That is the one copy
+    of a finding's shape outside the package, so it is held to the package's
+    own constructor."""
+    from analitiq.validator import VALIDATOR_IDS, finding
+
+    built = V._crash_finding("some/key", TypeError("boom"))
+    assert built["validator"] in VALIDATOR_IDS
+    assert built == finding(built["validator"], built["severity"],
+                            built["path"], built["message"])
+
+
 def test_crash_finding_handles_broken_exception_str():
     # a third-party backend can raise an exception class whose own __str__
     # itself raises; _crash_finding must never become a second, unguarded

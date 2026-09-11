@@ -1251,7 +1251,7 @@ def _validate_connection_type_map(direction: str, doc: Any, where: Location | No
         return [finding(
             "connection-type-map", "error", "",
             f"file is named {where.name!r} but entity {entity!r} requires "
-            f"{expected!r} (connections/<slug>/definition/{expected}).")]
+            f"{expected!r}.")]
     if not isinstance(doc, list):
         return [finding(
             "connection-type-map", "error", "",

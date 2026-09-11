@@ -149,8 +149,9 @@ Finding ids the validator can emit:
 <!-- END GENERATED: validator-ids -->
 
 Pass `--bundle-root` when validating the stitched pipeline; that is what runs
-the cross-document checks and what makes the `bundle-*` ids reachable, along
-with the ids only a bundle run can decide:
+the cross-document checks and what makes the `bundle-*` ids reachable. The
+ids below name rules about the files a connection carries rather than the
+documents a bundle assembles:
 
 - `connector-endpoint-ref` — **warning-only**: a `scope: "connector"` stream ref
   naming an endpoint the downloaded connector does not publish
@@ -161,16 +162,12 @@ with the ids only a bundle run can decide:
   `endpoint-spec/spec-type-map-gaps.md`.
 
 One further id names not a check but a failure mode: `adapter-crash` —
-**error**: the run could not be evaluated normally. Either a containment guard
-around one stage of the bundle run fired — that stage was not evaluated, and
-`path`/`message` name which stage crashed and why — or the process printed no
-`Diagnostics` JSON at all and the driving agent reconstructed this finding from
-a stderr excerpt, carried in `message` with `path` empty.
-
-A crash inside a single-document check — any `entity` run, or the pipeline
-document's own model check within a bundle run — is caught there and returned
-as an ordinary `contract-model` finding whose `message` says the check itself
-crashed; it is never relabeled `adapter-crash`.
+**error**: something the run needed was not evaluated, so the report is
+incomplete as well as failing. Never read the rest of it as a clean bill for
+what it does not mention. `path` and `message` say what was not evaluated;
+fix that and re-run. A run that printed no `Diagnostics` JSON at all reaches
+you the same way, reconstructed by the driving agent from a stderr excerpt,
+with `path` empty.
 
 Some findings name the rule they apply, as a leading `[RULE-<AREA>-NNN]` in
 `message`. Quote the id verbatim whenever one is present — `pipeline-spec` and
