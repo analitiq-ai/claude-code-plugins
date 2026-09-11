@@ -16,7 +16,7 @@ rationale: >
   capacity a destination endpoint declares as a cap. So authoring one is not a
   smaller write — it is a write size the author believes in and the run never
   uses, and no document the plugin holds contradicts them. That is why this is a
-  judgment rule with nothing applying it: the artifact is legal, the run
+  choice rule with nothing applying it: the artifact is legal, the run
   succeeds, and only a row-rate nobody compares would show the difference.
   Whether the engine should honour the block or the contract should stop
   declaring it is a decision for the owners of both; until one is taken, an
