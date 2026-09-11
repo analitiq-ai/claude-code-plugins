@@ -72,7 +72,7 @@ def validate_tree(documents: Mapping[str, Any]) -> dict:
             "tree keys must be POSIX relative paths with no '.', '..' or empty "
             f"segment: {sorted(bad, key=repr)!r}")])
     tree = MemoryTree(documents)
-    has_connector, has_pipeline = tree.is_file(CONNECTOR_ROOT), tree.is_file(PIPELINE_ROOT)
+    has_connector, has_pipeline = tree.occupied(CONNECTOR_ROOT), tree.occupied(PIPELINE_ROOT)
     if has_connector and has_pipeline:
         return diagnostics([finding(
             "document", "error", "",
@@ -176,7 +176,7 @@ def _connection_type_map_findings(tree: Tree, slug: str, findings: list[dict]) -
     site = f"connections/{slug}/definition"
     legacy = f"{site}/{_LEGACY_MAP_FILENAME}"
     with _contained(findings, legacy):
-        if tree.is_file(legacy):
+        if tree.occupied(legacy):
             findings.append(finding(
                 "connection-type-map", "error", legacy,
                 f"{_LEGACY_MAP_FILENAME} is the pre-split filename. Split it into "
@@ -185,7 +185,7 @@ def _connection_type_map_findings(tree: Tree, slug: str, findings: list[dict]) -
     for direction, fname in _TYPE_MAP_FILENAMES.items():
         key = f"{site}/{fname}"
         with _contained(findings, key):
-            if not tree.is_file(key):
+            if not tree.occupied(key):
                 continue
             doc, error = tree.read(key)
             if error is not None:
@@ -273,9 +273,12 @@ def _assemble_bundle(tree: Tree, pipeline_doc: Any) -> tuple[dict, list[dict], b
                             continue
                         # Endpoint documents omit connection_id (server-managed); supply the
                         # owning connection's id so the bundle's endpoint-ref check can resolve
-                        # connection-scoped references.
-                        endpoint.setdefault("connection_id", connection_id)
-                        endpoint.setdefault("scope", "connection")
+                        # connection-scoped references. Stamped into a copy: an
+                        # in-memory tree hands back the caller's own object, and
+                        # validating a tree must not write into what the caller
+                        # still holds. What the document itself declares wins.
+                        endpoint = {"connection_id": connection_id, "scope": "connection",
+                                    **endpoint}
                         endpoints.append(endpoint)
                         # Files here are stem-addressed by construction (listed from
                         # definition/endpoints/), so the filename gate applies

@@ -359,9 +359,67 @@ def test_a_key_something_unreadable_occupies_is_present_in_both_trees(
         target.symlink_to(tmp_path / "gone.json")
     memory = MemoryTree({key: Unreadable("occupied")})
     for tree in (memory, DiskTree(tmp_path)):
-        assert tree.is_file(key) is True, type(tree).__name__
+        assert tree.occupied(key) is True, type(tree).__name__
         doc, error = tree.read(key)
         assert doc is None and error, type(tree).__name__
+
+
+def test_a_directory_is_occupied_and_a_directory_in_both_trees(validator, tmp_path):
+    # a directory key is a question either reader may be asked, so they answer
+    # it together — the in-memory reader has no entry of its own to consult
+    from analitiq.validator._tree import DiskTree, MemoryTree
+
+    (tmp_path / "definition" / "endpoints").mkdir(parents=True)
+    (tmp_path / "definition" / "endpoints" / "a.json").write_text("{}", encoding="utf-8")
+    memory = MemoryTree({"definition/endpoints/a.json": "{}"})
+    for tree in (memory, DiskTree(tmp_path)):
+        assert tree.occupied("definition/endpoints") is True, type(tree).__name__
+        assert tree.is_dir("definition/endpoints") is True, type(tree).__name__
+
+
+def test_a_directory_holding_no_file_is_no_directory_in_either_tree(validator, tmp_path):
+    # a tree of documents has no empty directories; an in-memory tree cannot
+    # represent one, so a scaffolded-but-empty directory on disk must not read
+    # as present either, or the same layout earns two different diagnostics
+    from analitiq.validator._tree import DiskTree, MemoryTree
+
+    (tmp_path / "definition" / "endpoints").mkdir(parents=True)
+    (tmp_path / "definition" / "connector.json").write_text("{}", encoding="utf-8")
+    memory = MemoryTree({"definition/connector.json": "{}"})
+    for tree in (memory, DiskTree(tmp_path)):
+        assert tree.is_dir("definition/endpoints") is False, type(tree).__name__
+
+
+def test_validating_a_tree_does_not_write_into_the_documents_it_was_given(validator):
+    # a pre-parsed document is a documented input shape, and the in-memory
+    # reader hands back the caller's own object — so a stage stamping a field
+    # onto it would reach out of the call and edit the caller's state
+    eid, _, endpoint = _db_endpoint()
+    tree = {key: json.loads(text) for key, text in _pipeline_tree().items()}
+    tree[f"connections/postgresql/definition/endpoints/{eid}.json"] = endpoint
+    before = json.dumps(endpoint, sort_keys=True)
+    validator.validate_tree(tree)
+    assert json.dumps(endpoint, sort_keys=True) == before
+
+
+@pytest.mark.parametrize("key", ["../escape.json", "/etc/passwd", "a/../../b.json"])
+def test_a_disk_tree_refuses_a_key_that_is_not_a_tree_key(validator, tmp_path, key):
+    # the reader joins a key onto its root, so a key that steps out of the tree
+    # would read a file outside it; `validate_tree` screens its own input, and
+    # this is the same refusal one level down, for a caller that does not
+    from analitiq.validator._tree import DiskTree
+
+    with pytest.raises(ValueError, match="not a tree key"):
+        DiskTree(tmp_path).read(key)
+
+
+def test_an_unreadable_needs_a_reason(validator):
+    # the reason is what the finding reports; an empty one leaves a message
+    # ending in a dangling colon with nothing behind it
+    from analitiq.validator import Unreadable
+
+    with pytest.raises(ValueError, match="reason"):
+        Unreadable("")
 
 
 def test_a_bundle_type_map_a_directory_occupies_is_reported_not_skipped(validator):

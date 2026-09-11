@@ -918,7 +918,7 @@ def check_coverage(doc: dict, where: Location | None) -> list[dict]:
     findings: list[dict] = []
     tree = where.tree
     read_key, write_key = where.sibling(_READ_MAP_FILENAME), where.sibling(_WRITE_MAP_FILENAME)
-    if tree.is_file(where.sibling(_LEGACY_MAP_FILENAME)):
+    if tree.occupied(where.sibling(_LEGACY_MAP_FILENAME)):
         findings.append(finding("type-map-coverage", "error", "/",
                                 f"sibling {_LEGACY_MAP_FILENAME} is the pre-split name; rename the "
                                 f"read direction to {_READ_MAP_FILENAME} (and add {_WRITE_MAP_FILENAME} "
@@ -926,7 +926,7 @@ def check_coverage(doc: dict, where: Location | None) -> list[dict]:
 
     if kind in _STORAGE_KINDS:
         for key, direction in ((read_key, "read"), (write_key, "write")):
-            if tree.is_file(key):
+            if tree.occupied(key):
                 doc_, load = _load_type_map(tree, key)
                 findings.extend(load)
                 if doc_ is not None:
@@ -941,7 +941,7 @@ def check_coverage(doc: dict, where: Location | None) -> list[dict]:
     # value when it is readable but not a list of rules — so the readers below
     # ask whether it is a list rather than whether it is set.
     read_doc: Any = None
-    if not tree.is_file(read_key):
+    if not tree.occupied(read_key):
         findings.append(finding("type-map-coverage", "error", "/",
                                 f"connector requires sibling {_READ_MAP_FILENAME} (native → Arrow); missing."))
     else:
@@ -951,7 +951,7 @@ def check_coverage(doc: dict, where: Location | None) -> list[dict]:
             findings.extend(_type_map_findings(read_doc, "read"))
 
     if kind in _DATABASE_KINDS:
-        if not tree.is_file(write_key):
+        if not tree.occupied(write_key):
             findings.append(finding("type-map-coverage", "error", "/",
                                     f"{kind} connector requires sibling {_WRITE_MAP_FILENAME}; missing."))
             return findings
@@ -962,7 +962,7 @@ def check_coverage(doc: dict, where: Location | None) -> list[dict]:
         return findings
 
     # api: no write map, and every endpoint's natives must be covered by the read map.
-    if tree.is_file(write_key):
+    if tree.occupied(write_key):
         findings.append(finding("type-map-coverage", "error", "/",
                                 f"api connector must not ship {_WRITE_MAP_FILENAME}; the write direction "
                                 "is database-only."))
@@ -1151,7 +1151,7 @@ def _validate_api_endpoint(doc: Any, where: Location | None, schema_url: str | N
             # is not reachable.
             sibling = _sibling_connector_key(where) if where is not None else None
             connector_doc = None
-            sibling_exists = sibling is not None and where.tree.is_file(sibling)
+            sibling_exists = sibling is not None and where.tree.occupied(sibling)
             if sibling_exists:
                 connector_doc, load_findings = _load_json_sibling(
                     where.tree, sibling, "endpoint-transport-ref"

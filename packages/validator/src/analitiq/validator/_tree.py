@@ -3,24 +3,35 @@
 Every cross-file check — a connector's sibling type maps and endpoint files,
 an endpoint's parent connector, a pipeline's streams, connections and
 connectors — asks the same few questions of the files around a document: is
-there a file at this key, what does it parse to, which `.json` files sit under
+anything at this key, what does it parse to, which `.json` files sit under
 this directory. `Tree` is those questions. `MemoryTree` answers them from a
 mapping handed over in one call (`validate_tree`); `DiskTree` from the
 filesystem (`validate_document(..., doc_path=...)`, the CLI). A check written
 against `Tree` grades a tree received over the wire exactly as it grades a
 checkout, because the reader is the only thing that differs.
 
-Keys are POSIX relative paths. A `DiskTree` is rooted at the filesystem anchor,
-so a document's absolute path is its key and sibling arithmetic is the same
-string arithmetic in both trees. A tree of documents has no empty directories:
-a directory exists exactly when some file sits under it.
+That last sentence is the contract, and it is what every answer below is
+shaped to keep. Both readers are asked the same three questions and must give
+the same answer to each:
 
-Reading a key answers `(document, None)` or `(None, why)` — for text that does
-not parse, a file the reader could not read, or a key the tree does not hold —
-and never raises: what a broken or missing sibling costs depends on which check
-needed it, so the check phrases the finding. A key is *present* when something
-occupies it, readable or not, so a check gating on presence never skips in
-silence over a file whose author can see it sitting there.
+- **`occupied`** — is something at this key. Something, not specifically a
+  readable document: a directory under a document's name and a dangling
+  symlink are occupants, and so is a directory a tree legitimately has. A
+  check gating on occupancy therefore never skips in silence over a file whose
+  author can see it sitting there, and `read` is what says whether anything
+  can be got from it.
+- **`is_dir`** — is a directory here. A tree of documents has no empty
+  directories: a directory is here exactly when some file sits under it. An
+  in-memory tree cannot represent one any other way, so the on-disk reader
+  answers to the same rule rather than to what `mkdir` left behind.
+- **`read`** — `(document, None)`, or `(None, why)` for text that does not
+  parse, a file the reader could not read, or a key nothing occupies. It never
+  raises: what a broken or missing sibling costs depends on which check needed
+  it, so the check phrases the finding.
+
+Keys are POSIX relative paths, and `key_problem` is what says so. A `DiskTree`
+is rooted at the filesystem anchor, so a document's absolute path is its key
+and sibling arithmetic is the same string arithmetic in both trees.
 """
 from __future__ import annotations
 
@@ -28,6 +39,10 @@ import json
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
+
+#: The one key naming no segment: every key's ancestor, and the only directory
+#: a tree always has.
+ROOT = ""
 
 
 def key_problem(key: Any) -> str | None:
@@ -42,7 +57,7 @@ def key_problem(key: Any) -> str | None:
 
 
 def parent_key(key: str) -> str | None:
-    """The directory holding `key`: `""` for a top-level key, None above that."""
+    """The directory holding `key`: the root for a top-level key, None above it."""
     if not key:
         return None
     directory, _, _ = key.rpartition("/")
@@ -54,10 +69,9 @@ def join_key(directory: str, name: str) -> str:
 
 
 def _dir_prefix(directory: str) -> str:
-    """What a key under `directory` starts with. The root is every key's
-    parent and adds no segment, so it prefixes with nothing — `"/"` would
-    match no key at all, and the two readers would disagree about the one
-    directory every tree has."""
+    """What a key under `directory` starts with. The root adds no segment, so
+    it prefixes with nothing — `"/"` would match no key at all, and the two
+    readers would disagree about the one directory every tree has."""
     return f"{directory}/" if directory else ""
 
 
@@ -76,13 +90,21 @@ def _parse(text: str | bytes) -> tuple[Any, str | None]:
 
 @dataclass(frozen=True)
 class Unreadable:
-    """A tree entry for a file that exists but yields no text — a directory
+    """A tree entry for a file that is there but yields no text — a directory
     under a document's name, an undecodable file, a permission error. A reader
     hands it over instead of dropping the key, so the checks still see the file
-    is there (its directory still counts) and report the read failure at its
-    key, exactly as they report text that does not parse."""
+    is there and report the read failure at its key, exactly as they report
+    text that does not parse.
+
+    The reason is required and non-empty because it is rendered into a finding
+    the author reads; an empty one leaves a message ending in a dangling `: `
+    with nothing behind it."""
 
     reason: str
+
+    def __post_init__(self) -> None:
+        if not self.reason:
+            raise ValueError("Unreadable needs a reason; it is what the finding reports")
 
 
 def _by_component(key: str) -> list[str]:
@@ -95,15 +117,17 @@ def _by_component(key: str) -> list[str]:
 class Tree:
     """The questions a check may ask of the files around a document."""
 
-    def is_file(self, key: str) -> bool:
+    def occupied(self, key: str) -> bool:
+        """Whether anything is at `key` — readable or not, file or directory."""
         raise NotImplementedError
 
     def is_dir(self, key: str) -> bool:
+        """Whether a directory holding at least one file is at `key`."""
         raise NotImplementedError
 
     def read(self, key: str) -> tuple[Any, str | None]:
         """`(document, None)` for a key that parses, `(None, why)` for one that
-        does not or is not there."""
+        does not or that nothing occupies."""
         raise NotImplementedError
 
     def files(self, directory: str, *, recursive: bool = False) -> list[str]:
@@ -130,17 +154,18 @@ class MemoryTree(Tree):
         self._documents = dict(documents)
         self._parsed: dict[str, tuple[Any, str | None]] = {}
 
-    def is_file(self, key: str) -> bool:
-        return key in self._documents
+    def occupied(self, key: str) -> bool:
+        return key in self._documents or self.is_dir(key)
 
     def is_dir(self, key: str) -> bool:
         prefix = _dir_prefix(key)
-        return any(k.startswith(prefix) for k in self._documents) if prefix \
-            else bool(self._documents)
+        if not prefix:
+            return bool(self._documents)
+        return any(k.startswith(prefix) for k in self._documents)
 
     def read(self, key: str) -> tuple[Any, str | None]:
         if key not in self._documents:
-            return None, "no such key"
+            return None, "nothing at this key"
         if key not in self._parsed:
             value = self._documents[key]
             if isinstance(value, Unreadable):
@@ -171,19 +196,25 @@ class DiskTree(Tree):
         self._root = root
 
     def _path(self, key: str) -> Path:
+        # The root addresses the tree itself; anything else is held to what a
+        # key may be, so a `..` segment cannot walk this reader out of its own
+        # root the way plain path joining would let it.
+        if key == ROOT:
+            return self._root
+        problem = key_problem(key)
+        if problem is not None:
+            raise ValueError(f"not a tree key ({problem}): {key!r}")
         return self._root / key
 
-    def is_file(self, key: str) -> bool:
-        # Anything occupying the key, not only a regular file: a directory
-        # under a document's name and a dangling symlink are present-but-
-        # unreadable, which `read` reports. Answering False for them would
-        # make a check that gates on presence skip the key in silence, and
-        # say nothing at all about a file the author can see.
+    def occupied(self, key: str) -> bool:
         path = self._path(key)
+        # `exists()` follows the link, so a dangling symlink needs asking twice:
+        # it is an occupant whose target is gone, not an empty key.
         return path.exists() or path.is_symlink()
 
     def is_dir(self, key: str) -> bool:
-        return self._path(key).is_dir()
+        path = self._path(key)
+        return path.is_dir() and any(p.is_file() for p in path.rglob("*"))
 
     def read(self, key: str) -> tuple[Any, str | None]:
         try:
@@ -195,7 +226,8 @@ class DiskTree(Tree):
     def files(self, directory: str, *, recursive: bool = False) -> list[str]:
         base = self._path(directory)
         matches = base.rglob("*.json") if recursive else base.glob("*.json")
-        found = [join_key(directory, p.relative_to(base).as_posix()) for p in matches]
+        found = [join_key(directory, p.relative_to(base).as_posix())
+                 for p in matches if p.is_file()]
         return sorted(found, key=_by_component)
 
     def locate(self, key: str) -> str:
@@ -209,6 +241,11 @@ class Location:
 
     tree: Tree
     key: str
+
+    def __post_init__(self) -> None:
+        problem = key_problem(self.key)
+        if problem is not None:
+            raise ValueError(f"not a tree key ({problem}): {self.key!r}")
 
     @property
     def name(self) -> str:
