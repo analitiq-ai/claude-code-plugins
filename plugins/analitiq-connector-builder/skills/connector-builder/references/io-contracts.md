@@ -328,7 +328,7 @@ access and may not guess field types).
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["validator", "severity", "path", "message"],
+        "required": ["validator", "message_id", "kind", "path", "message"],
         "properties": {
           "validator": {
             "type": "string",
@@ -347,7 +347,20 @@ access and may not guess field types).
               "embedded-schema-example"
             ]
           },
-          "severity": { "type": "string", "enum": ["error", "warning"] },
+          "rule": {
+            "type": "string",
+            "description": "The rule id this finding concerns; absent when none does."
+          },
+          "message_id": {
+            "type": "string",
+            "description": "Which of a rule's distinct complaints this is."
+          },
+          "kind": { "type": "string", "enum": ["fail", "notApplicable", "informational"] },
+          "severity": {
+            "type": "string",
+            "enum": ["error", "warning"],
+            "description": "Present only when kind is fail."
+          },
           "path": { "type": "string", "description": "JSON pointer into the document" },
           "message": { "type": "string" }
         }

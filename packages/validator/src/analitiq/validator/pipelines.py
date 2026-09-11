@@ -189,17 +189,20 @@ def _check_stream_endpoint_targets(streams: Any) -> list[dict]:
         source = stream.get("source")
         if not (isinstance(source, dict) and isinstance(source.get("endpoint_ref"), dict)):
             findings.append(finding(
-                "bundle-endpoint-ref", "error", f"/streams/{i}/source/endpoint_ref",
-                "stream source has no endpoint_ref; it references no read target.",
+                "bundle-endpoint-ref", rule="RULE-STRM-042",
+                message_id="stream-source-no-endpoint-ref", kind="fail",
+                path=f"/streams/{i}/source/endpoint_ref",
+                message="stream source has no endpoint_ref; it references no read target.",
             ))
         destinations = stream.get("destinations")
         if isinstance(destinations, list):
             for k, dest in enumerate(destinations):
                 if not (isinstance(dest, dict) and isinstance(dest.get("endpoint_ref"), dict)):
                     findings.append(finding(
-                        "bundle-endpoint-ref", "error",
-                        f"/streams/{i}/destinations/{k}/endpoint_ref",
-                        "stream destination has no endpoint_ref; it references no write target.",
+                        "bundle-endpoint-ref", rule="RULE-STRM-042",
+                        message_id="stream-destination-no-endpoint-ref", kind="fail",
+                        path=f"/streams/{i}/destinations/{k}/endpoint_ref",
+                        message="stream destination has no endpoint_ref; it references no write target.",
                     ))
     return findings
 
@@ -211,8 +214,10 @@ def _check_pipeline_id(pipeline: dict) -> list[dict]:
     pipeline_id = pipeline.get("pipeline_id")
     if not isinstance(pipeline_id, str) or not pipeline_id:
         return [finding(
-            "bundle-pipeline", "error", "/pipeline/pipeline_id",
-            "pipeline document has no pipeline_id; the bundle cannot be resolved to a pipeline.",
+            "bundle-pipeline", rule="RULE-PIPE-018",
+            message_id="pipeline-missing-pipeline-id", kind="fail",
+            path="/pipeline/pipeline_id",
+            message="pipeline document has no pipeline_id; the bundle cannot be resolved to a pipeline.",
         )]
     return []
 
@@ -223,8 +228,9 @@ def _check_pipeline_active(pipeline: dict) -> list[dict]:
     status = pipeline.get("status")
     if status != "active":
         return [finding(
-            "bundle-pipeline", "error", "/pipeline/status",
-            f"pipeline status is {status!r}; only 'active' pipelines are runnable.",
+            "bundle-pipeline", rule="RULE-PIPE-019",
+            message_id="pipeline-not-active", kind="fail", path="/pipeline/status",
+            message=f"pipeline status is {status!r}; only 'active' pipelines are runnable.",
         )]
     return []
 
@@ -239,8 +245,10 @@ def _check_pipeline_active_gate(pipeline: dict, streams: Any) -> list[dict]:
     referenced = {_base_id(r) for r in refs if isinstance(r, str) and r} if isinstance(refs, list) else set()
     if not referenced:
         return [finding(
-            "bundle-pipeline", "error", "/pipeline/streams",
-            "an active pipeline must reference at least one stream.",
+            "bundle-pipeline", rule="RULE-PIPE-014",
+            message_id="active-pipeline-no-stream-refs", kind="fail",
+            path="/pipeline/streams",
+            message="an active pipeline must reference at least one stream.",
         )]
     runnable = any(
         isinstance(s, dict)
@@ -251,9 +259,11 @@ def _check_pipeline_active_gate(pipeline: dict, streams: Any) -> list[dict]:
     )
     if not runnable:
         return [finding(
-            "bundle-pipeline", "error", "/streams",
-            "an active pipeline requires at least one runnable stream "
-            "(a referenced stream with status='active').",
+            "bundle-pipeline", rule="RULE-PIPE-014",
+            message_id="active-pipeline-no-runnable-stream", kind="fail", path="/streams",
+            message=(
+                "an active pipeline requires at least one runnable stream "
+                "(a referenced stream with status='active')."),
         )]
     return []
 
@@ -269,16 +279,21 @@ def _check_stream_refs(pipeline: dict, streams: Any) -> list[dict]:
         stream_id = stream.get("stream_id") if isinstance(stream, dict) else None
         if not isinstance(stream_id, str) or not stream_id:
             findings.append(finding(
-                "bundle-stream-ref", "error", f"/streams/{i}/stream_id",
-                "bundled stream document has no stream_id; no pipeline ref can resolve to it.",
+                "bundle-stream-ref", rule="RULE-PIPE-011",
+                message_id="bundled-stream-missing-id", kind="fail",
+                path=f"/streams/{i}/stream_id",
+                message="bundled stream document has no stream_id; no pipeline ref can resolve to it.",
             ))
             continue
         base = _base_id(stream_id)
         if base in declared:
             findings.append(finding(
-                "bundle-stream-ref", "error", f"/streams/{i}/stream_id",
-                f"stream id {base!r} is declared by two bundled stream documents "
-                f"(indexes {declared[base]} and {i}).",
+                "bundle-stream-ref", rule="RULE-PIPE-011",
+                message_id="duplicate-bundled-stream-id", kind="fail",
+                path=f"/streams/{i}/stream_id",
+                message=(
+                    f"stream id {base!r} is declared by two bundled stream documents "
+                    f"(indexes {declared[base]} and {i})."),
             ))
         else:
             declared[base] = i
@@ -286,9 +301,11 @@ def _check_stream_refs(pipeline: dict, streams: Any) -> list[dict]:
     refs = pipeline.get("streams", [])
     if not isinstance(refs, list):
         findings.append(finding(
-            "bundle-stream-ref", "error", "/pipeline/streams",
-            f"pipeline.streams must be a list of stream references, got "
-            f"{type(refs).__name__}; its stream refs cannot be resolved.",
+            "bundle-stream-ref", rule="RULE-PIPE-011",
+            message_id="pipeline-streams-not-a-list", kind="fail", path="/pipeline/streams",
+            message=(
+                f"pipeline.streams must be a list of stream references, got "
+                f"{type(refs).__name__}; its stream refs cannot be resolved."),
         ))
         return findings
     seen: dict[str, str] = {}
@@ -298,17 +315,23 @@ def _check_stream_refs(pipeline: dict, streams: Any) -> list[dict]:
         base = _base_id(ref)
         if base in seen:
             findings.append(finding(
-                "bundle-stream-ref", "error", f"/pipeline/streams/{j}",
-                f"pipeline.streams lists {ref!r} and {seen[base]!r}, which both resolve "
-                f"to stream id {base!r}.",
+                "bundle-stream-ref", rule="RULE-PIPE-011",
+                message_id="duplicate-stream-ref", kind="fail",
+                path=f"/pipeline/streams/{j}",
+                message=(
+                    f"pipeline.streams lists {ref!r} and {seen[base]!r}, which both resolve "
+                    f"to stream id {base!r}."),
             ))
         else:
             seen[base] = ref
         if base not in declared:
             findings.append(finding(
-                "bundle-stream-ref", "error", f"/pipeline/streams/{j}",
-                f"pipeline.streams references {ref!r} but no bundled stream document "
-                f"declares id {base!r} (known: {sorted(declared)}).",
+                "bundle-stream-ref", rule="RULE-PIPE-011",
+                message_id="stream-ref-unresolved", kind="fail",
+                path=f"/pipeline/streams/{j}",
+                message=(
+                    f"pipeline.streams references {ref!r} but no bundled stream document "
+                    f"declares id {base!r} (known: {sorted(declared)})."),
             ))
     return findings
 
@@ -334,9 +357,12 @@ def _check_stream_parent_pipeline(pipeline: dict, streams: Any) -> list[dict]:
             continue  # shape is the stream model's job
         if _base_id(stream_parent) != parent:
             findings.append(finding(
-                "bundle-stream-ref", "error", f"/streams/{i}/pipeline_id",
-                f"stream declares pipeline_id {stream_parent!r} but is bundled under "
-                f"pipeline {parent!r}; it belongs to a different pipeline.",
+                "bundle-stream-ref", rule="RULE-STRM-032",
+                message_id="stream-wrong-parent-pipeline", kind="fail",
+                path=f"/streams/{i}/pipeline_id",
+                message=(
+                    f"stream declares pipeline_id {stream_parent!r} but is bundled under "
+                    f"pipeline {parent!r}; it belongs to a different pipeline."),
             ))
     return findings
 
@@ -361,9 +387,12 @@ def _check_connection_version_conflicts(pipeline: dict) -> list[dict]:
         prior = by_base.get(base)
         if prior is not None and prior != ref:
             findings.append(finding(
-                "bundle-connection-ref", "error", "/pipeline/connections",
-                f"pipeline pins two versions of connection {base!r} ({prior!r} and "
-                f"{ref!r}); connections resolve by base id and cannot represent both.",
+                "bundle-connection-ref", rule="RULE-PIPE-013",
+                message_id="connection-version-conflict", kind="fail",
+                path="/pipeline/connections",
+                message=(
+                    f"pipeline pins two versions of connection {base!r} ({prior!r} and "
+                    f"{ref!r}); connections resolve by base id and cannot represent both."),
             ))
         else:
             by_base[base] = ref
@@ -385,18 +414,24 @@ def _check_connections_present(pipeline: dict, connections: Any) -> list[dict]:
         base = _base_id(conn["connection_id"])
         if base in present:
             findings.append(finding(
-                "bundle-connection-ref", "error", f"/connections/{i}/connection_id",
-                f"connection {base!r} is declared by two bundled documents "
-                f"(indexes {present[base]} and {i}); the run layout keys one per base.",
+                "bundle-connection-ref", rule="RULE-PIPE-012",
+                message_id="duplicate-bundled-connection", kind="fail",
+                path=f"/connections/{i}/connection_id",
+                message=(
+                    f"connection {base!r} is declared by two bundled documents "
+                    f"(indexes {present[base]} and {i}); the run layout keys one per base."),
             ))
         else:
             present[base] = i
     for cid in sorted(_pipeline_connection_ids(pipeline)):
         if cid not in present:
             findings.append(finding(
-                "bundle-connection-ref", "error", "/pipeline/connections",
-                f"pipeline references connection {cid!r} but no connection document for "
-                f"it is bundled (known: {sorted(present)}).",
+                "bundle-connection-ref", rule="RULE-PIPE-012",
+                message_id="connection-ref-unresolved", kind="fail",
+                path="/pipeline/connections",
+                message=(
+                    f"pipeline references connection {cid!r} but no connection document for "
+                    f"it is bundled (known: {sorted(present)})."),
             ))
     return findings
 
@@ -428,13 +463,17 @@ def _check_stream_connection_roles(pipeline: dict, streams: Any) -> list[dict]:
             cid = _connection_id(source)
             path = f"/streams/{i}/source/endpoint_ref/connection_id"
             if cid is None:
-                findings.append(finding("bundle-connection-ref", "error", path,
-                                        "source endpoint_ref names no connection_id."))
+                findings.append(finding(
+                    "bundle-connection-ref", rule="RULE-STRM-033",
+                    message_id="stream-source-no-connection-id", kind="fail", path=path,
+                    message="source endpoint_ref names no connection_id."))
             elif source_base is None or _base_id(cid) != source_base:
                 findings.append(finding(
-                    "bundle-connection-ref", "error", path,
-                    f"stream source connection {cid!r} must match the pipeline's "
-                    f"connections.source ({src!r}).",
+                    "bundle-connection-ref", rule="RULE-STRM-033",
+                    message_id="stream-source-wrong-connection", kind="fail", path=path,
+                    message=(
+                        f"stream source connection {cid!r} must match the pipeline's "
+                        f"connections.source ({src!r})."),
                 ))
         for k, dest in enumerate(stream.get("destinations") or []):
             if not (isinstance(dest, dict) and isinstance(dest.get("endpoint_ref"), dict)):
@@ -442,13 +481,17 @@ def _check_stream_connection_roles(pipeline: dict, streams: Any) -> list[dict]:
             cid = _connection_id(dest)
             path = f"/streams/{i}/destinations/{k}/endpoint_ref/connection_id"
             if cid is None:
-                findings.append(finding("bundle-connection-ref", "error", path,
-                                        "destination endpoint_ref names no connection_id."))
+                findings.append(finding(
+                    "bundle-connection-ref", rule="RULE-STRM-033",
+                    message_id="stream-destination-no-connection-id", kind="fail", path=path,
+                    message="destination endpoint_ref names no connection_id."))
             elif _base_id(cid) not in dest_bases:
                 findings.append(finding(
-                    "bundle-connection-ref", "error", path,
-                    f"stream destination connection {cid!r} is not one of the pipeline's "
-                    f"connections.destinations ({sorted(dest_bases)}).",
+                    "bundle-connection-ref", rule="RULE-STRM-033",
+                    message_id="stream-destination-wrong-connection", kind="fail", path=path,
+                    message=(
+                        f"stream destination connection {cid!r} is not one of the pipeline's "
+                        f"connections.destinations ({sorted(dest_bases)})."),
                 ))
     return findings
 
@@ -464,17 +507,23 @@ def _check_connection_connector_refs(connections: Any, connectors: Any) -> list[
         connector_id = conn.get("connector_id")
         if not isinstance(connector_id, str) or not connector_id:
             findings.append(finding(
-                "bundle-connector-ref", "error", f"/connections/{i}/connector_id",
-                f"connection {conn.get('connection_id')!r} names no connector_id; "
-                "its connector cannot be resolved.",
+                "bundle-connector-ref", rule="RULE-CONN-011",
+                message_id="connection-no-connector-id", kind="fail",
+                path=f"/connections/{i}/connector_id",
+                message=(
+                    f"connection {conn.get('connection_id')!r} names no connector_id; "
+                    "its connector cannot be resolved."),
             ))
             continue
         if connector_id not in present:
             findings.append(finding(
-                "bundle-connector-ref", "error", f"/connections/{i}/connector_id",
-                f"connection {conn.get('connection_id')!r} references connector "
-                f"{connector_id!r} but it is not among the bundled connectors "
-                f"({sorted(present)}).",
+                "bundle-connector-ref", rule="RULE-CONN-011",
+                message_id="connector-ref-unresolved", kind="fail",
+                path=f"/connections/{i}/connector_id",
+                message=(
+                    f"connection {conn.get('connection_id')!r} references connector "
+                    f"{connector_id!r} but it is not among the bundled connectors "
+                    f"({sorted(present)})."),
             ))
     return findings
 
@@ -504,9 +553,11 @@ def _check_connection_scoped_endpoints(streams: Any, endpoints: Any) -> list[dic
         key = (_base_id(cid), eid)
         if key in present:
             findings.append(finding(
-                "bundle-endpoint-ref", "error", f"/endpoints/{j}",
-                f"two bundled endpoint documents share (connection {key[0]!r}, endpoint "
-                f"{key[1]!r}); the run layout keys one document per that pair.",
+                "bundle-endpoint-ref", rule="RULE-STRM-034",
+                message_id="duplicate-bundled-endpoint", kind="fail", path=f"/endpoints/{j}",
+                message=(
+                    f"two bundled endpoint documents share (connection {key[0]!r}, endpoint "
+                    f"{key[1]!r}); the run layout keys one document per that pair."),
             ))
         else:
             present.add(key)
@@ -519,16 +570,20 @@ def _check_connection_scoped_endpoints(streams: Any, endpoints: Any) -> list[dic
             continue  # a missing connection_id is already flagged by the connection check
         if not isinstance(eid, str) or not eid:
             findings.append(finding(
-                "bundle-endpoint-ref", "error", path,
-                "connection-scoped endpoint_ref names no endpoint_id; its endpoint "
-                "cannot be resolved.",
+                "bundle-endpoint-ref", rule="RULE-STRM-034",
+                message_id="endpoint-ref-no-endpoint-id", kind="fail", path=path,
+                message=(
+                    "connection-scoped endpoint_ref names no endpoint_id; its endpoint "
+                    "cannot be resolved."),
             ))
             continue
         if (_base_id(cid), eid) not in present:
             findings.append(finding(
-                "bundle-endpoint-ref", "error", path,
-                f"connection-scoped endpoint_ref (connection {_base_id(cid)!r}, endpoint "
-                f"{eid!r}) has no matching bundled endpoint document.",
+                "bundle-endpoint-ref", rule="RULE-STRM-034",
+                message_id="endpoint-ref-unresolved", kind="fail", path=path,
+                message=(
+                    f"connection-scoped endpoint_ref (connection {_base_id(cid)!r}, endpoint "
+                    f"{eid!r}) has no matching bundled endpoint document."),
             ))
     return findings
 
@@ -556,16 +611,21 @@ def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> l
     `pipeline_id` — still apply.
     """
     if not isinstance(bundle, dict):
+        # No rule to name: this rejects before any referential check — the ones
+        # rule records bind — could even begin (rules/SCHEMA.md's generalized
+        # first ruleless-fail case).
         return [finding(
-            "bundle-pipeline", "error", "/",
-            "pipeline bundle must be a mapping of pipeline/streams/connections/"
-            "connectors/endpoints.",
+            "bundle-pipeline", message_id="bundle-not-a-mapping", kind="fail", path="/",
+            message=(
+                "pipeline bundle must be a mapping of pipeline/streams/connections/"
+                "connectors/endpoints."),
         )]
     pipeline = bundle.get("pipeline")
     if not isinstance(pipeline, dict):
         return [finding(
-            "bundle-pipeline", "error", "/pipeline",
-            "pipeline bundle is missing its 'pipeline' document.",
+            "bundle-pipeline", message_id="bundle-missing-pipeline-document",
+            kind="fail", path="/pipeline",
+            message="pipeline bundle is missing its 'pipeline' document.",
         )]
     streams = bundle.get("streams")
     connections = bundle.get("connections")

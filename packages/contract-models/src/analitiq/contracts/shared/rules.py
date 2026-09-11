@@ -23,6 +23,7 @@ is written once and every target inherits it.
 """
 from __future__ import annotations
 
+import re
 from functools import cache
 from typing import Any, Callable
 
@@ -51,6 +52,40 @@ def all_rules() -> list[RuleRecord]:
     return list(_load()[0])
 
 
+def rule_by_id(rule_id: str) -> RuleRecord:
+    """The record naming this id.
+
+    The public door onto the same index :func:`violation` reads, so a caller
+    outside this module — the validator's own ``finding()``, deriving a
+    finding's severity from the rule it names — resolves an id through the
+    same path ``violation`` does, rather than a second lookup that could
+    disagree with it. Raises ``KeyError`` for an id no record defines.
+    """
+    return _load()[1][rule_id]
+
+
+#: The `[RULE-ID] ` prefix :func:`violation` writes, anchored to the start of
+#: the message. Locates a marker this module itself generates — the same kind
+#: of lexical anchor as a backticked identifier or a generated-block marker —
+#: never a judgment about what the surrounding English means.
+_VIOLATION_PREFIX = re.compile(r"^\[(?P<id>RULE-[A-Z]+-\d+)\] ")
+
+
+def extract_rule_id(message: str) -> str | None:
+    """The rule id :func:`violation` embedded at the front of `message`, or
+    `None` if it carries none.
+
+    A field constraint pydantic enforces on its own — a `Literal`, a pattern, a
+    bound — raises with no such prefix, so this returns `None` for it exactly
+    as often as `violation` was never the one raising: the two functions own
+    opposite ends of the same format, so a finding built from either answers
+    "which rule" through this one parser rather than a second one that could
+    read the format differently.
+    """
+    match = _VIOLATION_PREFIX.match(message)
+    return match.group("id") if match else None
+
+
 def violation(rule_id: str, detail: str) -> ValueError:
     """The error an enforcer raises, with the rule it applies already named.
 
@@ -60,7 +95,7 @@ def violation(rule_id: str, detail: str) -> ValueError:
     reworded rule rewords its own diagnostic. An id no record defines raises
     ``KeyError`` here rather than emitting a citation that resolves to nothing.
     """
-    rule = _load()[1][rule_id]
+    rule = rule_by_id(rule_id)
     return ValueError(f"[{rule.id}] {' '.join(rule.statement.split())} ({detail})")
 
 

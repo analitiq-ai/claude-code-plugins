@@ -185,9 +185,9 @@ def test_bundle_endpoint_missing_id_warns(tmp_path):
     (ep_dir / f"{EID}.json").unlink()
     (ep_dir / "whatever.json").write_text(json.dumps(data))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert any(f["validator"] == "endpoint-filename" and f["severity"] == "warning"
+    assert any(f["validator"] == "endpoint-filename" and f["kind"] == "notApplicable"
                for f in diag["findings"]), diag["findings"]
-    assert not any(f["validator"] == "endpoint-filename" and f["severity"] == "error"
+    assert not any(f["validator"] == "endpoint-filename" and f.get("severity") == "error"
                    for f in diag["findings"]), diag["findings"]
     assert not diag["passed"]
 
