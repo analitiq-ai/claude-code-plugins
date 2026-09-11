@@ -15,8 +15,8 @@ rationale: >
   the coalescer sees no preference either way, and only the bound the author
   meant to state is missing. Whether that author forgot the value or meant the
   default is not knowable from the document, so the model refuses the
-  ambiguous spelling rather than let it pass as a declaration — the document
-  does not validate until the bound is stated or the block is dropped, the
-  same cost every other declared-capability rule imposes.
+  ambiguous spelling rather than let it pass as a declaration — and a model
+  validator can only refuse, so the document does not validate until the
+  bound is stated or the block is dropped.
 status: active
 superseded_by: null

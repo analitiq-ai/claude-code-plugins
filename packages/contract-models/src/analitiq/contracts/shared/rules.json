@@ -597,7 +597,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "write_unit exists to tell the engine's batch coalescer what to aim for, and absence of the whole block already means \"no preference\". An empty block is therefore a second spelling of the default that reads like a declared one: the coalescer sees no preference either way, and only the bound the author meant to state is missing. Whether that author forgot the value or meant the default is not knowable from the document, so the model refuses the ambiguous spelling rather than let it pass as a declaration — the document does not validate until the bound is stated or the block is dropped, the same cost every other declared-capability rule imposes.\n",
+   "rationale": "write_unit exists to tell the engine's batch coalescer what to aim for, and absence of the whole block already means \"no preference\". An empty block is therefore a second spelling of the default that reads like a declared one: the coalescer sees no preference either way, and only the bound the author meant to state is missing. Whether that author forgot the value or meant the default is not knowable from the document, so the model refuses the ambiguous spelling rather than let it pass as a declaration — and a model validator can only refuse, so the document does not validate until the bound is stated or the block is dropped.\n",
    "status": "active",
    "superseded_by": null
   },
