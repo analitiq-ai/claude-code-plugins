@@ -11,8 +11,8 @@ against `Tree` grades a tree received over the wire exactly as it grades a
 checkout, because the reader is the only thing that differs.
 
 That last sentence is the contract, and it is what every answer below is
-shaped to keep. Both readers are asked the same three questions and must give
-the same answer to each:
+shaped to keep. Each question below is put to both readers, and both must
+give the same answer to it:
 
 - **`occupied`** — is something at this key. Something, not specifically a
   readable document: a directory under a document's name and a dangling
@@ -28,6 +28,10 @@ the same answer to each:
   parse, a file the reader could not read, or a key nothing occupies. It never
   raises: what a broken or missing sibling costs depends on which check needed
   it, so the check phrases the finding.
+- **`files`** — the `.json` keys under a directory. Every occupant is listed,
+  readable or not, for the same reason `occupied` counts one: enumeration is
+  what hands a directory's members to the checks that grade them, so an entry
+  left out is a document nothing ever grades.
 
 Keys are POSIX relative paths, and `key_problem` is what says so. A `DiskTree`
 is rooted at the filesystem anchor, so a document's absolute path is its key
@@ -226,8 +230,11 @@ class DiskTree(Tree):
     def files(self, directory: str, *, recursive: bool = False) -> list[str]:
         base = self._path(directory)
         matches = base.rglob("*.json") if recursive else base.glob("*.json")
-        found = [join_key(directory, p.relative_to(base).as_posix())
-                 for p in matches if p.is_file()]
+        # No regular-file filter: a `.json` name is enumerated because something
+        # occupies it, and `read` is what says whether anything came of it.
+        # Skipping a dangling symlink here would hide a file its author can see
+        # from every check that grades the directory's members.
+        found = [join_key(directory, p.relative_to(base).as_posix()) for p in matches]
         return sorted(found, key=_by_component)
 
     def locate(self, key: str) -> str:

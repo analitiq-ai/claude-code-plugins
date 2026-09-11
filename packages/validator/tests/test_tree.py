@@ -364,6 +364,30 @@ def test_a_key_something_unreadable_occupies_is_present_in_both_trees(
         assert doc is None and error, type(tree).__name__
 
 
+def test_a_json_key_nothing_readable_occupies_is_still_enumerated_by_both_readers(
+        validator, tmp_path):
+    # enumeration is what hands a directory's members to the checks that grade
+    # them, so a reader dropping an occupant grades the tree short of a file
+    # its author can see sitting there — and a directory holding nothing else
+    # reads as empty rather than as holding one broken document
+    from analitiq.validator import Unreadable
+    from analitiq.validator._tree import DiskTree, MemoryTree
+
+    endpoints = tmp_path / "definition" / "endpoints"
+    endpoints.mkdir(parents=True)
+    (endpoints / "orders.json").write_text("{}", encoding="utf-8")
+    (endpoints / "broken.json").symlink_to(tmp_path / "gone.json")
+    memory = MemoryTree({
+        "definition/endpoints/orders.json": "{}",
+        "definition/endpoints/broken.json": Unreadable("dangling symlink"),
+    })
+    expected = ["definition/endpoints/broken.json",
+                "definition/endpoints/orders.json"]
+    for tree in (memory, DiskTree(tmp_path)):
+        assert tree.files("definition/endpoints") == expected, type(tree).__name__
+        assert tree.files("definition", recursive=True) == expected, type(tree).__name__
+
+
 def test_a_directory_is_occupied_and_a_directory_in_both_trees(validator, tmp_path):
     # a directory key is a question either reader may be asked, so they answer
     # it together — the in-memory reader has no entry of its own to consult
