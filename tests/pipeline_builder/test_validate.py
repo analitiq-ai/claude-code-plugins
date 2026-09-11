@@ -192,6 +192,29 @@ def test_bundle_endpoint_missing_id_warns(tmp_path):
     assert not diag["passed"]
 
 
+def test_diagnostics_fails_closed_on_a_published_notapplicable_finding():
+    """`_diagnostics` reduces published `analitiq.validator` findings through
+    the same predicate `analitiq.validator`'s own `passed` does
+    (`finding_costs_a_pass`), not a second one that only ever knew about
+    `severity`. A `notApplicable` naming an error-tier rule carries no
+    `severity` at all — the bug this pins is that check reading its absence
+    as "fine" instead of as "unchecked, and error-tier rules don't get that
+    benefit of the doubt."""
+    published = {
+        "validator": "endpoint-transport-ref", "rule": "RULE-ENDP-047",
+        "message_id": "transport-ref-check-skipped-no-sibling",
+        "kind": "notApplicable", "path": "/", "message": "not checked",
+    }
+    # This adapter's own locally-minted findings carry no `kind` at all and
+    # must still be graded exactly as before: severity: error costs.
+    local_ok = V._finding("adapter-crash", "warning", "/", "harmless")
+    local_bad = V._finding("adapter-crash", "error", "/", "boom")
+
+    assert V._diagnostics([published])["passed"] is False
+    assert V._diagnostics([local_ok])["passed"] is True
+    assert V._diagnostics([local_bad])["passed"] is False
+
+
 def _add_wise_endpoint(root: Path, endpoint_id: str = "transfers") -> None:
     # Give the `wise` API connector a downloaded endpoint set on disk, so the plugin's
     # scope='connector' verification has something to resolve against. (_build_bundle

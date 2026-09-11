@@ -101,7 +101,16 @@ def _finding(validator: str, severity: str, path: str, message: str) -> dict:
 
 
 def _diagnostics(findings: list[dict]) -> dict:
-    passed = all(f.get("severity") != "error" for f in findings)
+    # Reduces over the same predicate analitiq.validator's own passed does
+    # (analitiq.validator.finding_costs_a_pass), rather than a second one that
+    # only ever knew about severity: a published finding can now be
+    # notApplicable against a rule this predicate looks up, which a bare
+    # `severity == "error"` check reads past silently. This adapter's own
+    # locally-minted findings (no `kind` key) are unaffected — the shared
+    # predicate grades those exactly as this line always did.
+    from analitiq.validator import finding_costs_a_pass
+
+    passed = not any(finding_costs_a_pass(f) for f in findings)
     return {"passed": passed, "findings": findings}
 
 

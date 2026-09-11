@@ -1771,13 +1771,20 @@ def test_diagnostics_enum_matches_the_package() -> None:
 
 def test_diagnostics_severities_are_the_ones_finding_accepts() -> None:
     """Every severity the fragment declares must be one a `fail` finding
-    actually carries.
+    actually carries, and the registry must never bind a validator to a
+    severity the fragment doesn't name.
 
     `finding()` no longer accepts a severity literal — it derives one from the
-    rule a `fail` finding names (`rules/SCHEMA.md`, "Findings"), so what is
-    decidable here is that a real rule of each documented severity produces
-    that severity, found dynamically rather than named, so a retired or
-    renamed example does not go stale here.
+    rule a `fail` finding names (`rules/SCHEMA.md`, "Findings"), so a finding's
+    severity is now enumerable from the registry: `all_rules()` is public, and
+    a bound rule's `severity` is exactly what a `fail` finding for it produces
+    (`finding()` refuses to build one otherwise — see
+    `test_fail_finding_refuses_an_info_tier_rule` in
+    `packages/validator/tests/test_core.py`). Both directions close here: each
+    documented severity is one a real rule of that severity produces, found
+    dynamically rather than named so a retired or renamed example does not go
+    stale; and no validator-bound rule's severity falls outside the documented
+    set.
     """
     from analitiq.contracts.shared.rules import all_rules
     from analitiq.validator._core import finding
@@ -1795,6 +1802,24 @@ def test_diagnostics_severities_are_the_ones_finding_accepts() -> None:
             "document", rule=rule.id, message_id="probe", kind="fail",
             path="/", message="probe")["severity"])
     assert produced == documented, (produced, documented)
+
+    # `mechanism: default` binds `validator` to a field the rendered reference
+    # reads members off of, not a check that rejects anything (a permission,
+    # not a rejection — `packages/contract-models/tests/unit/test_rule_registry.py`'s
+    # `test_a_rule_bound_to_a_pydantic_validator_costs_an_error` documents the
+    # same exemption). Such a rule never reaches `finding()`, so its severity
+    # is not one a fail finding could ever be asked to carry.
+    bound_severities = {
+        r.severity for r in all_rules() if r.validator and r.mechanism != "default"
+    }
+    assert bound_severities <= documented, _diff_msg(
+        "severities a bound rule can carry",
+        bound_severities,
+        documented,
+        "update the `severity` enum in "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md — "
+        "a validator is now bound to a rule at a severity no fail finding may report.",
+    )
     assert "severity" not in finding(
         "document", message_id="probe", kind="notApplicable", path="/", message="probe")
 

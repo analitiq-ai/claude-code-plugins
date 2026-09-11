@@ -31,6 +31,18 @@ def test_fail_finding_derives_severity_from_its_rule():
         path="/", message="x")["severity"] == "warning"
 
 
+def test_fail_finding_refuses_an_info_tier_rule():
+    """An info-tier violation is kind: informational, never kind: fail — a
+    fail finding may only report error or warning. Guards the invariant
+    validator-verdict-stability.md states as fact: a finding never carries
+    severity: info."""
+    info_rule = _rule("info", bound=False)
+    with pytest.raises(ValueError, match="informational"):
+        finding(
+            "document", rule=info_rule.id, message_id="m", kind="fail",
+            path="/", message="x")
+
+
 def test_fail_finding_with_no_rule_costs_error():
     # The two framework cases (rules/SCHEMA.md's case table): a rejection or
     # an unrecognized document, with no record to derive a lesser cost from.

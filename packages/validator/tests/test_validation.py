@@ -933,21 +933,24 @@ def test_unrendered_coverage_is_reported_not_silent(tmp_path, connector_base, va
                 if any(fragment in f["message"] for fragment in _RENDERED_COVERAGE)], findings
 
 
-@pytest.mark.parametrize("text", [t for _, t, _ in _BROKEN_READ_MAPS], ids=[s for s, _, _ in _BROKEN_READ_MAPS])
-def test_unrendered_coverage_now_fails_closed(tmp_path, connector_base, validator, text):
-    """The amended verdict: on `main` before this change, a broken read map
-    reported `type-map-coverage` at `severity: warning`, which never flips
-    `passed`. RULE-PKG-033 (the rule this coverage question answers) is
-    `error`-tier, so the same site now reports `kind: notApplicable` naming
-    that rule, and an unchecked `error`-tier rule is not a rule that held —
-    `passed` must be `False` here, where it was `True` before. Deliberate: see
-    `rules/SCHEMA.md`'s Findings section and the amended Acceptance 4 recorded
-    on the issue this stack implements.
+def test_validating_a_connector_with_no_path_now_fails_closed(validator):
+    """The amended verdict, isolated: on `main` before this change, a
+    connector validated with no filesystem path reported `type-map-coverage`
+    at `severity: warning` for the skipped coverage question, which never
+    flipped `passed`. That question is whether PKG-030/032/033/035 hold, all
+    `error`-tier, and a check that could not even attempt them is not one
+    that found them satisfied — `passed` must be `False` here, where it was
+    `True` before. A model-valid connector is used so this is the ONLY
+    finding in play, unlike `test_endpoint_checks_run_when_read_map_is_broken`'s
+    fixtures, which also carry unrelated error findings and so cannot
+    isolate this one. Deliberate: see `rules/SCHEMA.md`'s Findings section and
+    the amended Acceptance 4 recorded on the issue this stack implements.
     """
     from analitiq.validator._core import _passed
 
-    _write_defective_endpoints(tmp_path, connector_base, text)
-    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    doc = json.loads((CORPUS / "valid_connector_sync_driver.json").read_text())
+    findings = validator.validate_document(doc)  # no doc_path
+    assert [f["message_id"] for f in findings] == ["coverage-check-skipped-no-path"]
     assert not _passed(findings), findings
 
 
