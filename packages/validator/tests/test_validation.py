@@ -42,7 +42,7 @@ DOC_CASES = [
 
 
 def _errors(findings):
-    return [f for f in findings if f["severity"] == "error"]
+    return [f for f in findings if f.get("severity") == "error"]
 
 
 @pytest.mark.parametrize("name,should_pass", DOC_CASES)
@@ -655,9 +655,9 @@ def test_endpoint_filename_findings_public_helper(validator):
     assert [e["validator"] for e in mismatch] == ["endpoint-filename"]
     # Correct {endpoint_id}.json -> no findings.
     assert validator.endpoint_filename_findings(db, f"{eid}.json") == []
-    # Missing/unusable endpoint_id -> a warning (can't verify), not an error.
+    # Missing/unusable endpoint_id -> notApplicable (can't verify), not a fail.
     no_id = validator.endpoint_filename_findings({"database_object": {"name": "orders"}}, "orders.json")
-    assert [(f["validator"], f["severity"]) for f in no_id] == [("endpoint-filename", "warning")]
+    assert [(f["validator"], f["kind"]) for f in no_id] == [("endpoint-filename", "notApplicable")]
 
 
 def test_is_stem_addressed_endpoint_path_public_helper(validator):
@@ -925,12 +925,30 @@ def test_unrendered_coverage_is_reported_not_silent(tmp_path, connector_base, va
     # one check the map feeds did not run — silence there reads as coverage passing.
     _write_defective_endpoints(tmp_path, connector_base, text)
     findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
-    assert any(f["validator"] == "type-map-coverage" and f["severity"] == "warning"
+    assert any(f["validator"] == "type-map-coverage" and f["kind"] == "notApplicable"
                and "not rendered" in f["message"] for f in findings), findings
     # ... and the warning is the whole of what coverage says here: a rendering
     # that never ran cannot also return per-endpoint verdicts.
     assert not [f for f in findings
                 if any(fragment in f["message"] for fragment in _RENDERED_COVERAGE)], findings
+
+
+@pytest.mark.parametrize("text", [t for _, t, _ in _BROKEN_READ_MAPS], ids=[s for s, _, _ in _BROKEN_READ_MAPS])
+def test_unrendered_coverage_now_fails_closed(tmp_path, connector_base, validator, text):
+    """The amended verdict: on `main` before this change, a broken read map
+    reported `type-map-coverage` at `severity: warning`, which never flips
+    `passed`. RULE-PKG-033 (the rule this coverage question answers) is
+    `error`-tier, so the same site now reports `kind: notApplicable` naming
+    that rule, and an unchecked `error`-tier rule is not a rule that held —
+    `passed` must be `False` here, where it was `True` before. Deliberate: see
+    `rules/SCHEMA.md`'s Findings section and the amended Acceptance 4 recorded
+    on the issue this stack implements.
+    """
+    from analitiq.validator._core import _passed
+
+    _write_defective_endpoints(tmp_path, connector_base, text)
+    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    assert not _passed(findings), findings
 
 
 def test_database_missing_both_maps_reports_both(tmp_path, validator):

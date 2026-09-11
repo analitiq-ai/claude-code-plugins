@@ -1,0 +1,17 @@
+id: RULE-PIPE-019
+statement: >
+  When a bundle is checked for runnability, its pipeline document's `status`
+  MUST be `active`.
+tier: reference
+severity: error
+scopes: [pipeline]
+validator: "analitiq.validator.pipelines::_check_pipeline_active"
+owners: [pipeline-plugin, engine]
+rationale: >
+  RULE-PIPE-014 checks that an active pipeline references at least one
+  runnable stream; this is the other half of the same runnability question —
+  that the pipeline itself claims the status a run requires. An authoring
+  tool validating a draft bundle skips both checks (`require_runnable=False`),
+  since a draft is expected not to be active.
+status: active
+superseded_by: null

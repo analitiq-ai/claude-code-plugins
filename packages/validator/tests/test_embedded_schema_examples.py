@@ -557,7 +557,7 @@ def test_a_sample_past_the_budget_is_reported_and_costs_only_itself(validator_cl
     assert "was not graded" in by_field["code/examples/0"]
     assert "budget" in by_field["code/examples/0"]
     assert "is not of type 'boolean'" in by_field["paid/examples/0"]
-    assert all(e["severity"] == "error" for e in errors), errors
+    assert all(e["kind"] in ("fail", "notApplicable") for e in errors), errors
 
 
 @pytest.mark.parametrize("node", [
@@ -696,7 +696,7 @@ def test_a_spent_document_budget_reports_rather_than_passes(validator, monkeypat
     errors = _sample_findings(validator.validate_document(doc))
     assert {e["path"].split("/properties/")[1] for e in errors} == {
         "paid/examples/0", "n/examples/0"}
-    assert all(e["severity"] == "error" for e in errors), errors
+    assert all(e["kind"] == "notApplicable" for e in errors), errors
     assert all("was not graded" in e["message"] for e in errors), errors
     assert all("budget was already spent" in e["message"] for e in errors), errors
 
@@ -720,7 +720,7 @@ def test_a_worker_that_cannot_start_is_reported_per_sample_and_attempted_once(
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
     errors = _sample_findings(validator.validate_document(doc))
     assert len(errors) == 2, errors
-    assert all(e["severity"] == "error" for e in errors), errors
+    assert all(e["kind"] == "notApplicable" for e in errors), errors
     assert all("cannot allocate memory" in e["message"] for e in errors), errors
     assert len(attempts) == 1, attempts
 
@@ -761,7 +761,7 @@ def test_a_reply_that_is_not_a_verdict_is_refused_and_quoted(
     findings = validator.validate_document(doc)
     errors = _sample_findings(findings)
     assert len(errors) == 1, findings
-    assert errors[0]["severity"] == "error"
+    assert errors[0]["kind"] == "notApplicable"
     assert "was not graded" in errors[0]["message"]
     assert expected in errors[0]["message"], errors[0]["message"]
     assert "crashed unexpectedly" not in errors[0]["message"]
@@ -969,7 +969,7 @@ def test_a_host_that_cannot_host_a_worker_is_asked_once_and_said_once(
     findings = validator.validate_document(doc)
     errors = _sample_findings(findings)
     assert len(errors) == 2, findings
-    assert all(e["severity"] == "error" for e in errors), errors
+    assert all(e["kind"] == "notApplicable" for e in errors), errors
     assert all("was not graded" in e["message"] for e in errors), errors
     assert all(str(blowup) in e["message"] for e in errors), errors
     assert not [f for f in findings if "crashed unexpectedly" in f["message"]], findings

@@ -389,7 +389,7 @@ class TestStandaloneEndpointValidation:
         return _validate_api_endpoint(doc, doc_path, None)
 
     def _ids(self, findings):
-        return {(f["validator"], f["severity"]) for f in findings}
+        return {(f["validator"], f.get("severity")) for f in findings}
 
     def test_declared_transport_resolves_clean(self, tmp_path):
         findings = self._run(tmp_path, '{"kind":"api","transports":{"api":{}}}')
@@ -399,20 +399,26 @@ class TestStandaloneEndpointValidation:
         findings = self._run(tmp_path, '{"kind":"api","transports":{"other":{}}}')
         assert ("endpoint-transport-ref", "error") in self._ids(findings)
 
+    def _not_applicable(self, findings):
+        return {
+            f["validator"] for f in findings
+            if f["validator"] == "endpoint-transport-ref" and f["kind"] == "notApplicable"
+        }
+
     def test_connector_without_transports_warns_rather_than_passing_clean(self, tmp_path):
         # The silent-clean-pass case. `_endpoint_transport_ref_findings` returns
         # [] here, which is right when the CONNECTOR is under validation (its own
         # model error stands) and wrong here, where that model never runs.
         findings = self._run(tmp_path, '{"kind":"api"}')
-        assert ("endpoint-transport-ref", "warning") in self._ids(findings)
+        assert "endpoint-transport-ref" in self._not_applicable(findings)
 
     def test_connector_with_non_dict_transports_warns(self, tmp_path):
         findings = self._run(tmp_path, '{"kind":"api","transports":[]}')
-        assert ("endpoint-transport-ref", "warning") in self._ids(findings)
+        assert "endpoint-transport-ref" in self._not_applicable(findings)
 
     def test_absent_connector_warns(self, tmp_path):
         findings = self._run(tmp_path, None)
-        assert ("endpoint-transport-ref", "warning") in self._ids(findings)
+        assert "endpoint-transport-ref" in self._not_applicable(findings)
 
     def test_unparseable_connector_is_reported_under_this_checks_own_id(self, tmp_path):
         findings = self._run(tmp_path, "{not json")
@@ -431,7 +437,7 @@ class TestStandaloneEndpointValidation:
         findings = self._run(tmp_path, "{not json")
         warnings = [
             f for f in findings
-            if f["validator"] == "endpoint-transport-ref" and f["severity"] == "warning"
+            if f["validator"] == "endpoint-transport-ref" and f["kind"] == "notApplicable"
         ]
         assert warnings, "expected a not-checked warning"
         assert not any("was reachable" in f["message"] for f in warnings)

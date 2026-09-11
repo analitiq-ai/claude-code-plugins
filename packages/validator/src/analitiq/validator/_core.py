@@ -15,10 +15,12 @@ This module owns the parts that are independent of any particular artifact kind:
   entire validity is its contract model registers via `register_model_kind()`;
 - `_bounded()` — the one width every borrowed diagnostic is clipped to, so a
   finding is bounded the same way whichever route the text arrived by;
-- `_run_guarded()` — a crash in one check becomes a single error finding so the
-  others survive;
+- `_run_guarded()` — a crash in one check becomes a single `notApplicable`
+  finding so the others survive;
+- `_passed()` — the one reduction every finding's verdict weight passes through,
+  so `main()` and a future caller answer "did this document pass" identically;
 - the `main()` CLI: read the document, validate, print `{"passed", "findings"}`,
-  exit 0 iff no error-severity finding (1 on error findings / unreadable document;
+  exit 0 iff `_passed()` says so (1 on a failing document / unreadable document;
   2 on CLI usage errors).
 """
 from __future__ import annotations
@@ -32,10 +34,21 @@ from typing import Any, Callable, Iterator
 
 from pydantic import TypeAdapter, ValidationError
 
+from analitiq.contracts.shared.rules import extract_rule_id, rule_by_id
+
 # The set of legal validator ids. The framework owns `contract-model` (emitted by
 # `_model_findings`) and `document` (the unrecognized-artifact verdict); each
 # per-kind module contributes its own ids via `register_validator_ids`.
+#
+# Transitional: `validator` still names a finding's category, the way it always
+# has, while `finding()` also carries the `rule`/`message_id`/`kind` shape
+# `rules/SCHEMA.md` documents. The category is not yet gone — a later change
+# retires `VALIDATOR_IDS` and this field together, once nothing reads them.
 VALIDATOR_IDS: set[str] = {"contract-model", "document"}
+
+#: The finding shape's `kind` axis (`rules/SCHEMA.md`, "Findings — what a check
+#: reports"): whether a check found a violation at all, not which check ran.
+_KINDS = ("fail", "notApplicable", "informational")
 
 
 def register_validator_ids(ids: set[str]) -> None:
@@ -113,12 +126,46 @@ def _bounded(text: str, limit: int = 200) -> str:
     return text if len(text) <= limit else f"{text[:limit]}…"
 
 
-def finding(validator: str, severity: str, path: str, message: str) -> dict:
+def finding(
+    validator: str,
+    *,
+    rule: str | None = None,
+    message_id: str,
+    kind: str,
+    path: str,
+    message: str,
+) -> dict:
+    """One thing a check said about one document (`rules/SCHEMA.md`, "Findings").
+
+    `validator` is the transitional category (see `VALIDATOR_IDS` above);
+    `rule`, when given, is the id of the record the finding concerns, resolved
+    through the same `rule_by_id` a rejection raised via `rules.violation`
+    resolves through, so the two never disagree about what an id names. A
+    `fail` finding's `severity` is derived from that record — never accepted
+    as a literal — and is `error` for the two framework cases that fail with
+    no rule to name (`rule=None`). A `notApplicable` or `informational`
+    finding carries no `severity` at all.
+    """
     if validator not in VALIDATOR_IDS:
         raise ValueError(f"unknown validator id: {validator!r}")
-    if severity not in ("error", "warning"):
-        raise ValueError(f"unknown severity: {severity!r}")
-    return {"validator": validator, "severity": severity, "path": path, "message": message}
+    if kind not in _KINDS:
+        raise ValueError(f"unknown kind: {kind!r}")
+    record = None
+    if rule is not None:
+        try:
+            record = rule_by_id(rule)
+        except KeyError:
+            raise ValueError(f"unknown rule id: {rule!r}") from None
+    result: dict = {"validator": validator}
+    if rule is not None:
+        result["rule"] = rule
+    result["message_id"] = message_id
+    result["kind"] = kind
+    if kind == "fail":
+        result["severity"] = record.severity if record is not None else "error"
+    result["path"] = path
+    result["message"] = message
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +173,18 @@ def finding(validator: str, severity: str, path: str, message: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
-    """Validate `doc` against a contract model; map each error to a finding."""
+    """Validate `doc` against a contract model; map each error to a finding.
+
+    A rejection raised through `rules.violation` carries its rule id as the
+    `[RULE-ID] ` prefix on `err["msg"]`; `extract_rule_id` reads it back, so
+    the finding names the same rule the raise did. A field constraint pydantic
+    enforces on its own — no `violation` call behind it — carries no such
+    prefix, and the finding's `rule` is `None` for it (`rules/SCHEMA.md`'s "a
+    field constraint on a contract model rejected, and no record claims it").
+    `message_id` is pydantic's own error-type string (`err["type"]`, e.g.
+    `"missing"`, `"string_pattern_mismatch"`) — an existing, already-stable
+    vocabulary reused rather than a second one invented beside it.
+    """
     try:
         adapter.validate_python(doc)
         return []
@@ -134,7 +192,14 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
         findings: list[dict] = []
         for err in exc.errors():
             path = "/" + "/".join(str(p) for p in err["loc"])
-            findings.append(finding("contract-model", "error", path, err["msg"]))
+            findings.append(finding(
+                "contract-model",
+                rule=extract_rule_id(err["msg"]),
+                message_id=err["type"],
+                kind="fail",
+                path=path,
+                message=err["msg"],
+            ))
         return findings
 
 
@@ -159,22 +224,34 @@ def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) ->
             return validator(doc, doc_path, schema_url)
     # Anything no registered kind claims is a document we were asked to validate
     # but cannot identify — that is a validation failure, not a pass.
-    return [finding("document", "error", "/",
-                    "document does not match any known artifact (connector / api-endpoint / "
-                    "database-endpoint / type-map / connection / stream / pipeline); a connector "
-                    "must declare 'kind', an api-endpoint 'operations', a type-map is a JSON array "
-                    "of rules, a connection a 'connector_id', a stream 'source' + 'destinations', "
-                    "a pipeline 'connections'.")]
+    return [finding(
+        "document", message_id="unrecognized-document", kind="fail", path="/",
+        message=(
+            "document does not match any known artifact (connector / api-endpoint / "
+            "database-endpoint / type-map / connection / stream / pipeline); a connector "
+            "must declare 'kind', an api-endpoint 'operations', a type-map is a JSON array "
+            "of rules, a connection a 'connector_id', a stream 'source' + 'destinations', "
+            "a pipeline 'connections'."))]
 
 
 def _run_guarded(fn: Callable, *args, vid: str) -> list[dict]:
-    """Run a check; a crash becomes one error finding so other checks survive."""
+    """Run a check; a crash becomes one finding so other checks survive.
+
+    `notApplicable`, not `fail`: the crash means nothing here decided whether
+    any rule the check would have graded holds, which is exactly what that
+    kind reports. Naming no `rule` (the crash is not attributable to one
+    check's obligation) keeps it inside the framework's own no-rule case and
+    off the "clears the bar" list `passed` reduces over, so it always costs —
+    matching what an unconditional `severity: error` finding always did here.
+    """
     try:
         return fn(*args)
     except Exception as exc:  # noqa: BLE001 - last-resort guard
-        return [finding(vid, "error", "",
-                        f"check {vid!r} crashed unexpectedly ({type(exc).__name__}: {exc}); "
-                        "this is a validator bug — please report.")]
+        return [finding(
+            vid, message_id="check-crashed", kind="notApplicable", path="",
+            message=(
+                f"check {vid!r} crashed unexpectedly ({type(exc).__name__}: {exc}); "
+                "this is a validator bug — please report."))]
 
 
 # ---------------------------------------------------------------------------
@@ -200,11 +277,32 @@ def main() -> int:
         # OSError subsumes FileNotFoundError / IsADirectoryError / PermissionError,
         # so an unreadable document always yields the finding + exit 1 (never a
         # bare traceback), matching _load_type_map and the documented contract.
-        print(json.dumps({"passed": False, "findings": [
-            finding("document", "error", "", f"Cannot read document: {exc}")]}))
+        print(json.dumps({"passed": False, "findings": [finding(
+            "document", message_id="unreadable-document", kind="fail", path="",
+            message=f"Cannot read document: {exc}")]}))
         return 1
 
     findings = validate_document(document, doc_path=document_path.resolve(), schema_url=args.schema_url)
-    passed = all(f["severity"] != "error" for f in findings)
+    passed = _passed(findings)
     print(json.dumps({"passed": passed, "findings": findings}, indent=2))
     return 0 if passed else 1
+
+
+def _passed(findings: list[dict]) -> bool:
+    """Whether `findings` clears the bar `rules/SCHEMA.md`'s Findings section
+    sets: no `fail` at `severity: error`, and no `notApplicable` for a rule
+    that is (or, naming none, might as well be) `error`-tier.
+
+    An unchecked `error`-tier rule is not a rule that held — a `notApplicable`
+    naming no `rule` at all cannot even ask the question, so it always costs,
+    same as one naming an `error`-tier rule explicitly. `informational`
+    findings never reach this reduction: nothing about them costs anything.
+    """
+    for f in findings:
+        if f["kind"] == "fail" and f.get("severity") == "error":
+            return False
+        if f["kind"] == "notApplicable":
+            rule = f.get("rule")
+            if rule is None or rule_by_id(rule).severity == "error":
+                return False
+    return True
