@@ -30,7 +30,7 @@ this registry exists to remove (`.claude/rules/no-drift-surfaces.md`).
 | `id` | yes | `RULE-<AREA>-NNN`. Immutable, never reused — it appears in validator findings and archived diagnostics, so reissuing one silently re-points every stored occurrence. The filename must match it. |
 | `statement` | yes | The normative sentence, RFC 2119 keywords in caps. Self-contained: someone reading only this understands the obligation. Never restates a value the contract owns — `targets` and `fields` point at what does. |
 | `tier` | yes | What *kind* of rule it is. See below. |
-| `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it, except that a rule a pydantic validator applies is always `error`: that enforcer can only reject the document, so a lower cost on the record is one no document ever pays. `test_a_rule_bound_to_a_pydantic_validator_costs_an_error` in `packages/contract-models/tests/unit/test_rule_registry.py` pins it. Whether a change to this field moves the packages' major version is decided by `.claude/rules/validator-verdict-stability.md`. A finding reports this value; nothing that enforces the rule declares its own — a call site naming its own severity is a second copy of a fact this field already owns. |
+| `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it, except that a rule a pydantic validator applies is always `error`: that enforcer can only reject the document, so a lower cost on the record is one no document ever pays. `test_a_rule_bound_to_a_pydantic_validator_costs_an_error` in `packages/contract-models/tests/unit/test_rule_registry.py` pins it. Whether a change to this field moves the packages' major version is decided by `.claude/rules/validator-verdict-stability.md`, which is also where a finding's own severity is confined to `error` \| `warning` regardless of what a record declares. Once a check derives a `fail` finding's severity from the violated record rather than a literal at the call site (see Findings, below), a call site naming its own severity becomes a second copy of a fact this field already owns. |
 | `scopes` | yes | The artifact kinds it binds, as a list from the vocabulary `SCOPES` declares in `analitiq.contracts.shared.rule_record` — each member names the kind of document whose author the rule binds, plus `any` for the rules that bind every authored document. A list because a rule can grade more than one kind, and the generated reference is split by scope: a scalar scope makes it decide, silently, which of two authors never meets the rule. `any` may not appear beside a named kind — it already covers every document — and an entry may not repeat. It is not derived from the published resources and does not track them: `connector-package` is a repository an author lays out and no resource renders, `type-map` covers both a read map and a write map, and several published resources have no member because no rule has needed one. A member is added when a rule does. Scopes decide which FILE of a plugin's generated reference set the rule lands in; who the rule is rendered *to* is `owners`. |
 | `validator` | no | What applies it: `dotted.module::Symbol.attr`. It names the module that is **imported**, under `analitiq.`, never a path to a file standing in for one — the record ships in `rules.json`, where a repo path resolves for nobody, and a path is checked by slicing rather than by importing, so one that never existed passes. The module half must be a dotted identifier chain, which is how a path is refused whatever it ends in. It lands in one of two packages, decided by how much the check must see: a rule one document settles alone is a `@model_validator` in `contract-models`, and a rule needing a second document in hand is a check in `validator`, bound to the function that emits the finding. An enforcer that reports `warning` is a check in `validator` whatever it needs to see: a `@model_validator` can only reject, so it cannot carry a severity below `error` (`.claude/rules/validator-verdict-stability.md`). Lint-resolved by import, so a renamed validator fails the build instead of leaving a record claiming an enforcement it lost. `null` when nothing does. |
 | `owners` | yes | Who applies the rule and decides a change to it, as a list of `engine`, `connector-plugin`, `pipeline-plugin`. More than one is normal: a type map is authored by both plugins and executed by the engine. |
@@ -77,7 +77,11 @@ Recorded so nobody re-adds them thinking they were forgotten:
 ## `tier` — what kind of rule
 
 Tier states first whether the rule constrains the *artifact* being authored
-or the *author* authoring it, then which one of those it is.
+or the *author* authoring it, then which one of those it is. This is the
+vocabulary the registry is moving to; `TIERS` in
+`analitiq.contracts.shared.rule_record` and every record on disk still use
+the names this table replaces — write a record against those until they
+change.
 
 | Axis | Tier | The rule says | Typically |
 |---|---|---|---|
@@ -99,7 +103,7 @@ The binding is an importable symbol, and the lint imports it.
 | `validator` | Means |
 |---|---|
 | a `module::Symbol` | code rejects a violation — a model validator, a field annotation, a class whose shape *is* the rule, or a cross-document check in `analitiq.validator` |
-| `null` | nothing here applies it; `enforcement_location` (below) names where the obligation is actually checked instead, and `rationale` stays the prose that justifies that answer |
+| `null` | nothing here applies it; `enforcement_location` (below, once it exists) will name where the obligation is actually checked instead, and `rationale` stays the prose that justifies that answer |
 
 A prose document is not a second form of this. A record ships to PyPI inside
 `rules.json`, so a repo path in it resolves for nobody who reads it there, and
@@ -150,14 +154,17 @@ itself lives.
 
 A finding is not a record; it is one thing a check said about one document,
 raised by a `@model_validator` in `analitiq.contracts` or produced by a check
-in `analitiq.validator`. Every finding carries:
+in `analitiq.validator`. This is the shape the registry is moving to: today,
+`finding()` in `analitiq.validator._core` returns `validator`, `severity`,
+`path` and `message`, with `validator` naming the check's own category rather
+than the rule id. Once it does, every finding carries:
 
 | Field | What it is |
 |---|---|
 | `rule` | The id of the record it concerns. |
 | `message_id` | Which of a rule's distinct complaints this is — a rule can fail in more than one way, and a consumer branches on this rather than parsing `message`. |
 | `kind` | `fail` \| `notApplicable` \| `informational`. See below. |
-| `severity` | The violated record's `severity`, present only when `kind` is `fail`. |
+| `severity` | `error` \| `warning`, the violated record's own `severity`, present only when `kind` is `fail`. A record's `info` never reaches a finding this way — see `.claude/rules/validator-verdict-stability.md` — so a rule at that severity is never bound to a `validator`; it is `enforcement_location: authoring-practice` or `unenforced`. |
 | `path` | Where in the document the finding applies. |
 | `message` | The human-readable complaint. |
 

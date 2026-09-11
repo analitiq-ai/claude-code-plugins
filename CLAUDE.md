@@ -176,8 +176,8 @@ defines — reference or load it.** Carry only craft the schema can't express
 - **The rule registry is the source of truth.** One machine-readable record per rule
   in `rules/records/*.yaml` (schema in `rules/SCHEMA.md`), with an immutable id;
   docs, rendered references and prose citations are generated from or validated
-  against it, never the reverse. A record answers independently: `tier` (shape,
-  coherence, reference, process, choice), `validator` (what rejects a
+  against it, never the reverse. A record answers independently: `tier` (structural,
+  advisory, referential, procedural, judgment), `validator` (what rejects a
   violation, absent when nothing does) and `severity`. Enforcement is ordinary
   Python: a rule one document settles alone is a `@model_validator` raising through
   `rules.violation`; a rule needing a second document in hand is a check in
