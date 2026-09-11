@@ -153,8 +153,9 @@ itself lives.
 ## Findings — what a check reports
 
 A finding is not a record; it is one thing a check said about one document,
-raised by a `@model_validator` in `analitiq.contracts` or produced by a check
-in `analitiq.validator`. This is the shape the registry is moving to: today,
+raised by a field constraint or `@model_validator` in `analitiq.contracts`, or
+produced by a check in `analitiq.validator`. This is the shape the registry is
+moving to: today,
 `finding()` in `analitiq.validator._core` returns `validator`, `severity`,
 `path` and `message`, with `validator` naming the check's own category rather
 than the rule id. Once it does, every finding carries:
@@ -164,7 +165,7 @@ than the rule id. Once it does, every finding carries:
 | `rule` | The id of the record it concerns. |
 | `message_id` | Which of a rule's distinct complaints this is — a rule can fail in more than one way, and a consumer branches on this rather than parsing `message`. |
 | `kind` | `fail` \| `notApplicable` \| `informational`. See below. |
-| `severity` | `error` \| `warning`, the violated record's own `severity`, present only when `kind` is `fail`. A record's `info` never reaches a finding this way — see `.claude/rules/validator-verdict-stability.md` — so a rule at that severity is never bound to a `validator`; it is `enforcement_location: authoring-practice` or `unenforced`. |
+| `severity` | `error` \| `warning`, the violated record's own `severity`, present only when `kind` is `fail`. A record's `info` never reaches a finding this way (`.claude/rules/validator-verdict-stability.md`): nothing that produces a `fail` costs less than `warning`, whatever else a record's `validator` documents. |
 | `path` | Where in the document the finding applies. |
 | `message` | The human-readable complaint. |
 
