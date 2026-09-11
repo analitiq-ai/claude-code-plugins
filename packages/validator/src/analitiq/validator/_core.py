@@ -162,10 +162,45 @@ def finding(
     result["message_id"] = message_id
     result["kind"] = kind
     if kind == "fail":
-        result["severity"] = record.severity if record is not None else "error"
+        severity = record.severity if record is not None else "error"
+        if severity not in ("error", "warning"):
+            # A record's `info` never reaches a finding as a severity value
+            # (rules/SCHEMA.md, validator-verdict-stability.md) — a detected
+            # info-tier violation is `kind: informational`, not `kind: fail`.
+            # A rule binding a validator at info severity and a call site
+            # still reporting it as `fail` is a caller bug, not a runtime case
+            # to tolerate silently.
+            raise ValueError(
+                f"rule {rule!r} is severity {severity!r}; a fail finding may "
+                "only report error or warning — an info-tier violation is "
+                "kind: informational instead")
+        result["severity"] = severity
     result["path"] = path
     result["message"] = message
     return result
+
+
+def finding_costs_a_pass(f: dict) -> bool:
+    """Whether one finding, on its own, keeps `passed` from being `True`
+    (`rules/SCHEMA.md`, "Findings"): a `fail` at `severity: error`, or a
+    `notApplicable` for a rule that is (or, naming none, might as well be)
+    `error`-tier. Exported so a consumer aggregating `analitiq.validator`
+    findings into its own verdict — the pipeline plugin's adapter, say —
+    reduces over them the same way `_passed` does, rather than a second
+    predicate that can drift from this one.
+
+    A finding with no `kind` at all is a pre-`rules/SCHEMA.md` shape (a
+    consumer's own locally-minted finding, never built through `finding()`)
+    and is graded the way every finding once was: `severity: error` costs,
+    anything else does not.
+    """
+    kind = f.get("kind", "fail")
+    if kind == "fail":
+        return f.get("severity") == "error"
+    if kind == "notApplicable":
+        rule = f.get("rule")
+        return rule is None or rule_by_id(rule).severity == "error"
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -298,11 +333,4 @@ def _passed(findings: list[dict]) -> bool:
     same as one naming an `error`-tier rule explicitly. `informational`
     findings never reach this reduction: nothing about them costs anything.
     """
-    for f in findings:
-        if f["kind"] == "fail" and f.get("severity") == "error":
-            return False
-        if f["kind"] == "notApplicable":
-            rule = f.get("rule")
-            if rule is None or rule_by_id(rule).severity == "error":
-                return False
-    return True
+    return not any(finding_costs_a_pass(f) for f in findings)

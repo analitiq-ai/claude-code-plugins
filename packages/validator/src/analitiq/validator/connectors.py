@@ -943,9 +943,11 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
     if not isinstance(doc, dict) or not any(k in doc for k in _CONNECTOR_SENTINELS):
         return []
     if doc_path is None:
-        # No rule to name: which of PKG-030/032/033/035 would apply depends on
-        # `kind`, which nothing here can read without a path to the sibling
-        # files that would decide it.
+        # No rule to name: PKG-030/032/033/035 are each about a sibling file
+        # or directory this function reads by path, so without one none of
+        # them can be checked, let alone singled out. A document validated
+        # this way can no longer report coverage passed — that question was
+        # never asked of it.
         return [finding(
             "type-map-coverage", message_id="coverage-check-skipped-no-path",
             kind="notApplicable", path="/",
