@@ -11,8 +11,9 @@ which owns every check and returns the one Diagnostics envelope:
 
 Routing:
 
-  * every ``--entity`` -> ``analitiq.validator.validate_document(doc, doc_path,
-    entity=...)``. The entity names the published contract the document is
+  * one document on its own, whatever its ``--entity`` ->
+    ``analitiq.validator.validate_document(doc, doc_path, entity=...)``. The
+    entity names the published contract the document is
     authored against, so a document missing its discriminating key — the
     broken input a validation exists to diagnose — is graded by the model it
     was meant for rather than collapsing into one "unrecognised" finding. For a

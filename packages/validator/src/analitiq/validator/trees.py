@@ -1,4 +1,4 @@
-"""`validate_tree` — a keyed document tree in, the `Diagnostics` envelope out.
+"""`validate_tree` — a keyed document tree in, the `diagnostics` envelope out.
 
 The path-based entry points read a document's siblings from disk. This one
 reads them from a mapping of POSIX relative keys to file text (parsed here) or
@@ -21,11 +21,14 @@ recognised from the keys:
   endpoint ref is checked against the endpoints its connector publishes.
 
 Every pipeline-tree stage runs under `_contained`: a crash in one is one
-`adapter-crash` finding naming the stage, and the others still report. A member
-the bundle could not take — a crash reading it, text that does not parse, an
-`Unreadable` entry, a non-object payload — withholds the referential pass, since
-the published checks could not then tell "excluded here" from "genuinely
-missing"; the finding at the member's key is the report until it is fixed.
+`adapter-crash` finding naming the stage, and the others still report. A stream,
+connection or endpoint the bundle could not take — a crash reading it, text that
+does not parse, an `Unreadable` entry, a non-object payload — withholds the
+referential pass, since the published checks could not then tell "excluded here"
+from "genuinely missing"; the finding at the member's key is the report until it
+is fixed. A connector is the exception, and the loop that gathers them says why:
+its directory slug already is its identity, so a malformed `connector.json`
+costs only the `connector_id` alias.
 """
 from __future__ import annotations
 

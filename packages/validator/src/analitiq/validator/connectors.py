@@ -1243,8 +1243,9 @@ def _validate_connection_type_map(direction: str, doc: Any, where: Location | No
     The filename gate (`RULE-TMAP-023`) runs first and alone on a mismatch, so
     a misnamed file gets the rename finding rather than findings graded in a
     direction its author never meant. A non-list document is likewise gated
-    here — shape dispatch would grade a stray connection document under a
-    type-map filename as a connection, and pass it."""
+    here, because only the entity route reaches this function: the same stray
+    connection document under a type-map filename, validated without an entity,
+    is graded by its shape — as a connection — and passes."""
     expected = _TYPE_MAP_FILENAMES[direction]
     entity = f"type_map_{direction}"
     if where is not None and where.name != expected:

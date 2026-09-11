@@ -3,7 +3,8 @@
 This module owns the parts that are independent of any particular artifact kind:
 
 - `finding()` and the `VALIDATOR_IDS` registry every check emits through, and
-  `diagnostics()`, the one envelope every entry point returns;
+  `diagnostics()`, the one way a list of findings becomes the envelope a caller
+  prints — the per-document entry points return the bare list;
 - `_model_findings()` — validate a document against a Pydantic contract model and
   map each error to a finding (the single source of single-document validity,
   reused by every kind);
@@ -245,9 +246,9 @@ def _run_guarded(fn: Callable, *args, vid: str) -> list[dict]:
 
 def _crash_finding(path: str, exc: BaseException) -> dict:
     """The finding every containment site emits: a guard fired and the document
-    was not evaluated for that stage. `str(exc)` is empty for some exceptions (a
-    bare `MemoryError()`), so the detail is only appended when there is one,
-    never leaving a dangling `: `. An exception whose own `__str__` raises must
+    was not evaluated for that stage. An exception raised with no argument has
+    an empty `str()`, so the detail is only appended when there is one, never
+    leaving a dangling `: `. An exception whose own `__str__` raises must
     not become a second, unguarded crash inside a guard, so that failure is
     swallowed too."""
     try:

@@ -110,9 +110,10 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         result = resolve(args.direction, probes, [Path(m) for m in args.maps])
-    except (OSError, ValueError) as exc:
-        # Every per-file failure (read, parse, model) arrives as a file-naming
-        # ValueError; OSError is the escape hatch for anything else.
+    except ValueError as exc:
+        # Every per-file failure — read, parse, model — is named for its file
+        # and raised as a ValueError by `resolve`, so there is one failure
+        # shape to report and anything else is a defect that should surface.
         return _fail(str(exc))
 
     print(json.dumps(result, indent=2))

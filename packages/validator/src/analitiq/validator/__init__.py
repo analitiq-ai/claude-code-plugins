@@ -21,9 +21,11 @@ Three entry points, one set of checks:
   assembled bundle.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
-`connections`, `streams`, `trees`), each of which self-registers its
-detector→validator pairs (and its validator ids) with the core dispatch registry
-— a new kind is a new module registering the same way, without touching `_core`.
+`connections`, `streams`), each of which self-registers its detector→validator
+pairs (and its validator ids) with the core dispatch registry — a new kind is a
+new module registering the same way, without touching `_core`. `trees` is not
+one of them: it recognises a layout from the tree's keys rather than a document
+from its shape, so it registers the ids its own checks emit and nothing else.
 The public surface is re-exported here.
 """
 from ._core import ENTITIES, diagnostics, finding, main, validate_document, VALIDATOR_IDS
