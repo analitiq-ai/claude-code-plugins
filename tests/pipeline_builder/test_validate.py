@@ -318,6 +318,17 @@ def test_cli_usage_error(tmp_path):
     assert excinfo.value.code == 2
 
 
+def test_cli_rejects_an_unknown_entity_as_a_usage_error(tmp_path):
+    # the entity vocabulary is checked after the bootstrap, so argparse cannot
+    # carry it as `choices`; without that check an unknown entity reaches the
+    # dispatch and exits 1 with an adapter-crash envelope, where the documented
+    # contract for a CLI mistake is exit 2
+    p = _write(tmp_path, "pipeline.json", PIPELINE)
+    with pytest.raises(SystemExit) as exc:
+        V.main(["--entity", "connector", "--document", str(p)])
+    assert exc.value.code == 2
+
+
 def test_endpoint_id_helper(capsys):
     import endpoint_id  # sibling of validate.py on sys.path
     rc = endpoint_id.main(["--schema", "public", "--name", "orders"])

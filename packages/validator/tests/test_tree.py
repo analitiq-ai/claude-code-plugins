@@ -324,12 +324,79 @@ def test_an_unreadable_member_is_reported_at_its_key_and_withholds_the_referenti
     assert "adapter-crash" not in ids, envelope["findings"]
 
 
+def test_the_two_trees_answer_the_same_at_the_root(validator, tmp_path):
+    # the root is the one directory every tree has and no key names, so it is
+    # where an asymmetry between the readers hides longest
+    from analitiq.validator._tree import DiskTree, MemoryTree
+
+    (tmp_path / "pipeline.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "streams").mkdir()
+    (tmp_path / "streams" / "orders.json").write_text("{}", encoding="utf-8")
+    memory = MemoryTree({"pipeline.json": "{}", "streams/orders.json": "{}"})
+    disk = DiskTree(tmp_path)
+    for tree in (memory, disk):
+        assert tree.files("") == ["pipeline.json"], type(tree).__name__
+        assert tree.files("", recursive=True) == ["pipeline.json",
+                                                  "streams/orders.json"], type(tree).__name__
+        assert tree.is_dir("") is True, type(tree).__name__
+
+
+@pytest.mark.parametrize("occupant", ["directory", "dangling symlink"])
+def test_a_key_something_unreadable_occupies_is_present_in_both_trees(
+        validator, tmp_path, occupant):
+    # what a check gates on is whether the author put something at the key; a
+    # reader that answers "absent" for a directory or a dangling symlink turns
+    # a file the author can see into a check that says nothing
+    from analitiq.validator import Unreadable
+    from analitiq.validator._tree import DiskTree, MemoryTree
+
+    key = "definition/type-map-read.json"
+    target = tmp_path / key
+    target.parent.mkdir(parents=True)
+    if occupant == "directory":
+        target.mkdir()
+    else:
+        target.symlink_to(tmp_path / "gone.json")
+    memory = MemoryTree({key: Unreadable("occupied")})
+    for tree in (memory, DiskTree(tmp_path)):
+        assert tree.is_file(key) is True, type(tree).__name__
+        doc, error = tree.read(key)
+        assert doc is None and error, type(tree).__name__
+
+
+def test_a_bundle_type_map_a_directory_occupies_is_reported_not_skipped(validator):
+    # the check gates on presence, so the key must survive as present even
+    # though nothing can be read from it
+    from analitiq.validator import Unreadable
+
+    tree = _pipeline_tree()
+    key = "connections/postgresql/definition/type-map-read.json"
+    tree[key] = Unreadable("Is a directory")
+    envelope = validator.validate_tree(tree)
+    bad = [(f["severity"], f["path"]) for f in envelope["findings"]
+           if f["validator"] == "connection-type-map"]
+    assert bad == [("error", key)], envelope["findings"]
+
+
 def test_an_absent_key_reads_as_a_failure_in_both_trees(validator, tmp_path):
     from analitiq.validator._tree import DiskTree, MemoryTree
 
     for tree in (MemoryTree({"pipeline.json": "{}"}), DiskTree(tmp_path)):
         doc, error = tree.read("streams/absent.json")
         assert doc is None and error, type(tree).__name__
+
+
+def test_a_connector_endpoint_is_known_by_its_declared_id_as_well_as_its_stem(validator):
+    # a well-formed connector keeps the two equal; the set records both so a
+    # malformed one that let them diverge does not warn on a ref that resolves
+    tree = _pipeline_tree()
+    key = "connectors/wise/definition/endpoints/transfers.json"
+    tree[key] = json.dumps({"endpoint_id": "transfers_v2"})
+    stream = json.loads(tree["streams/orders.json"])
+    stream["source"]["endpoint_ref"]["endpoint_id"] = "transfers_v2"
+    tree["streams/orders.json"] = json.dumps(stream)
+    envelope = validator.validate_tree(tree)
+    assert "connector-endpoint-ref" not in _ids(envelope), envelope["findings"]
 
 
 def test_connector_endpoints_without_a_connector_document_still_verify_refs(validator):
@@ -374,6 +441,32 @@ def test_one_crashing_stage_is_one_finding_and_the_rest_still_report(validator, 
     ids = _ids(envelope)
     assert "connection-type-map" in ids, envelope["findings"]
     assert "connector-endpoint-ref" in ids, envelope["findings"]
+
+
+class _Silent(Exception):
+    """An exception whose `str()` is empty, like a bare `MemoryError()`."""
+
+
+class _BrokenStr(Exception):
+    def __str__(self):
+        raise RuntimeError("broken __str__")
+
+
+@pytest.mark.parametrize("exc,message", [(_Silent(), "_Silent"), (_BrokenStr(), "_BrokenStr")])
+def test_a_crash_finding_names_the_type_when_there_is_no_detail(
+        validator, monkeypatch, exc, message):
+    # the containment finding is built inside a guard, so an exception with no
+    # detail must not leave a dangling ": " and one whose own __str__ raises
+    # must not become a second crash the guard cannot contain
+    from analitiq.validator import trees
+
+    def boom(tree_, slug, findings):
+        raise exc
+
+    monkeypatch.setattr(trees, "_connection_type_map_findings", boom)
+    envelope = validator.validate_tree(_pipeline_tree())
+    crashes = [f["message"] for f in envelope["findings"] if f["validator"] == "adapter-crash"]
+    assert crashes and all(c == message for c in crashes), envelope["findings"]
 
 
 def test_a_crash_that_excludes_a_member_skips_the_referential_pass(validator, monkeypatch):

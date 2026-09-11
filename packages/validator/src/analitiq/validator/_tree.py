@@ -18,7 +18,9 @@ a directory exists exactly when some file sits under it.
 Reading a key answers `(document, None)` or `(None, why)` — for text that does
 not parse, a file the reader could not read, or a key the tree does not hold —
 and never raises: what a broken or missing sibling costs depends on which check
-needed it, so the check phrases the finding.
+needed it, so the check phrases the finding. A key is *present* when something
+occupies it, readable or not, so a check gating on presence never skips in
+silence over a file whose author can see it sitting there.
 """
 from __future__ import annotations
 
@@ -49,6 +51,14 @@ def parent_key(key: str) -> str | None:
 
 def join_key(directory: str, name: str) -> str:
     return f"{directory}/{name}" if directory else name
+
+
+def _dir_prefix(directory: str) -> str:
+    """What a key under `directory` starts with. The root is every key's
+    parent and adds no segment, so it prefixes with nothing — `"/"` would
+    match no key at all, and the two readers would disagree about the one
+    directory every tree has."""
+    return f"{directory}/" if directory else ""
 
 
 def _parse(text: str | bytes) -> tuple[Any, str | None]:
@@ -124,8 +134,9 @@ class MemoryTree(Tree):
         return key in self._documents
 
     def is_dir(self, key: str) -> bool:
-        prefix = f"{key}/"
-        return any(k.startswith(prefix) for k in self._documents)
+        prefix = _dir_prefix(key)
+        return any(k.startswith(prefix) for k in self._documents) if prefix \
+            else bool(self._documents)
 
     def read(self, key: str) -> tuple[Any, str | None]:
         if key not in self._documents:
@@ -141,7 +152,7 @@ class MemoryTree(Tree):
         return self._parsed[key]
 
     def files(self, directory: str, *, recursive: bool = False) -> list[str]:
-        prefix = f"{directory}/"
+        prefix = _dir_prefix(directory)
         found = [
             k for k in self._documents
             if k.startswith(prefix) and k.endswith(".json")
@@ -163,7 +174,13 @@ class DiskTree(Tree):
         return self._root / key
 
     def is_file(self, key: str) -> bool:
-        return self._path(key).is_file()
+        # Anything occupying the key, not only a regular file: a directory
+        # under a document's name and a dangling symlink are present-but-
+        # unreadable, which `read` reports. Answering False for them would
+        # make a check that gates on presence skip the key in silence, and
+        # say nothing at all about a file the author can see.
+        path = self._path(key)
+        return path.exists() or path.is_symlink()
 
     def is_dir(self, key: str) -> bool:
         return self._path(key).is_dir()
