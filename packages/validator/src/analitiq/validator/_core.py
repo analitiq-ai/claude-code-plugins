@@ -17,8 +17,12 @@ This module owns the parts that are independent of any particular artifact kind:
   finding is bounded the same way whichever route the text arrived by;
 - `_run_guarded()` — a crash in one check becomes a single `notApplicable`
   finding so the others survive;
-- `_passed()` — the one reduction every finding's verdict weight passes through,
-  so `main()` and a future caller answer "did this document pass" identically;
+- `finding_costs_a_pass()` — whether one finding, on its own, keeps a document
+  from passing; exported so a caller aggregating published findings into its
+  own verdict (the pipeline plugin's adapter, say) reduces over them the same
+  way `_passed()` does, rather than a second predicate that can drift from it;
+- `_passed()` — `not any(finding_costs_a_pass(f) for f in findings)`, so
+  `main()` and a future caller answer "did this document pass" identically;
 - the `main()` CLI: read the document, validate, print `{"passed", "findings"}`,
   exit 0 iff `_passed()` says so (1 on a failing document / unreadable document;
   2 on CLI usage errors).
