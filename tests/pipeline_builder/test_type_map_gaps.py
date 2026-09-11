@@ -176,11 +176,24 @@ def test_a_map_nested_past_the_parsers_limit_is_named_not_a_traceback(tmp_path):
         G.resolve("read", ["citext"], [path])
 
 
+def test_cli_reads_piped_probes_by_what_they_declare(tmp_path, capsys, monkeypatch):
+    # The file route hands bytes to the package; piping must too, or the same
+    # probes resolve one way from a file and another through a pipe because
+    # this host configured stdin for a different encoding.
+    import io
+    m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
+    monkeypatch.setattr("sys.stdin",
+                        io.TextIOWrapper(io.BytesIO('["citext"]'.encode("utf-16"))))
+    rc = G.main(["--direction", "read", "--map", str(m)])
+    assert rc == 0, capsys.readouterr().err
+    assert "citext" in json.loads(capsys.readouterr().out)["resolved"]
+
+
 def test_cli_reads_probes_from_stdin(tmp_path, capsys, monkeypatch):
     # stdin is the documented primary invocation (spec-type-map-gaps.md)
     import io
     m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
-    monkeypatch.setattr("sys.stdin", io.StringIO('["citext"]'))
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(b'["citext"]')))
     rc = G.main(["--direction", "read", "--map", str(m)])
     assert rc == 0
     assert json.loads(capsys.readouterr().out)["resolved"] == {"citext": "Utf8"}

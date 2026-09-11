@@ -23,8 +23,6 @@ from pathlib import Path
 
 import pytest
 
-from conftest import CONTRACTS_SRC_ROOT, VALIDATOR_SRC_ROOT
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 #: Generous, because the assertion is that the read returns at all: a FIFO
 #: with no writer never does, so any finite wait separates the two outcomes.
@@ -436,12 +434,15 @@ def test_a_named_pipe_at_a_documents_key_is_unreadable_rather_than_a_wait(
         "from analitiq.validator import read_document\n"
         "print(json.dumps(read_document(sys.argv[1])))\n"
     )
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join(
-        [str(VALIDATOR_SRC_ROOT), str(CONTRACTS_SRC_ROOT)])}
+    # The child gets this process's own import path, so it reads the same
+    # source trees the suite is grading rather than a second statement of
+    # where they are.
+    env = {**os.environ,
+           "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
     try:
         result = subprocess.run([sys.executable, "-c", program, str(fifo)],
                                 capture_output=True, text=True, env=env,
-                                timeout=READ_DEADLINE_SECONDS)
+                                check=False, timeout=READ_DEADLINE_SECONDS)
     except subprocess.TimeoutExpired:
         pytest.fail(f"reading a FIFO did not return within "
                     f"{READ_DEADLINE_SECONDS}s — it waited for a writer")
@@ -449,6 +450,20 @@ def test_a_named_pipe_at_a_documents_key_is_unreadable_rather_than_a_wait(
     doc, problem = json.loads(result.stdout)
     assert doc is None
     assert "regular file" in problem, problem
+
+
+def test_a_key_that_is_both_a_document_and_a_directory_is_refused(validator):
+    # No filesystem can hold this, so no disk reader can ever be handed it.
+    # Accepting it is the one way the two readers could be asked to grade
+    # trees that are not the same tree: the walk reads the literal document
+    # and never sees what sits beneath the same name.
+    tree = dict(_pipeline_tree())
+    literal = next(k for k in tree if k.startswith("streams/"))
+    tree[f"{literal}/inside.json"] = "{}"
+    envelope = validator.validate_tree(tree)
+    assert envelope["passed"] is False
+    assert envelope["findings"][0]["validator"] == "document"
+    assert literal in envelope["findings"][0]["message"]
 
 
 def test_a_directory_named_like_a_document_is_one_occupant_to_both_readers(

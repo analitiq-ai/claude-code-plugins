@@ -107,7 +107,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.probes_file:
         probes, problem = read_document(Path(args.probes_file))
     else:
-        probes, problem = parse_document(sys.stdin.read())
+        # Bytes, like the file route: decoding first would apply whatever
+        # encoding this host configured for stdin instead of the one the
+        # probes declare, so the same input would resolve two ways.
+        probes, problem = parse_document(sys.stdin.buffer.read())
     if problem is not None:
         return _fail(f"cannot read probes: {problem}")
     if not isinstance(probes, list) or not all(isinstance(p, str) for p in probes):

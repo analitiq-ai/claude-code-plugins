@@ -74,6 +74,22 @@ def validate_tree(documents: Mapping[str, Any]) -> dict:
             "document", "error", "",
             "tree keys must be POSIX relative paths with no '.', '..' or empty "
             f"segment: {sorted(bad, key=repr)!r}")])
+    # A key names its ancestors, so a mapping holding both `streams/a.json`
+    # and `streams/a.json/inside.json` asks for one name to be a document and
+    # a directory at once. No filesystem can hold that, so no disk reader can
+    # ever be handed it, and accepting it here is the one way the two readers
+    # could be asked to grade trees that are not the same tree.
+    directories = set()
+    for key in documents:
+        segments = key.split("/")
+        for depth in range(1, len(segments)):
+            directories.add("/".join(segments[:depth]))
+    collisions = sorted(set(documents) & directories)
+    if collisions:
+        return diagnostics([finding(
+            "document", "error", "",
+            "a key is both a document and a directory, which no filesystem can "
+            f"hold: {collisions!r}")])
     tree = MemoryTree(documents)
     has_connector, has_pipeline = tree.occupied(CONNECTOR_ROOT), tree.occupied(PIPELINE_ROOT)
     if has_connector and has_pipeline:
