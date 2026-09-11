@@ -123,9 +123,8 @@ register_validator_ids({
 _READ_MAP_FILENAME = "type-map-read.json"
 _WRITE_MAP_FILENAME = "type-map-write.json"
 _LEGACY_MAP_FILENAME = "type-map.json"
-# The engine loads a connection-scoped map by exactly one of these names; a
-# differently-named file is silently ignored at runtime, so the name is gated
-# like an endpoint's filename is.
+# The filename each direction of a connection-scoped map is loaded from
+# (`RULE-TMAP-023`); the name is gated like an endpoint's filename is.
 _TYPE_MAP_FILENAMES = {"read": _READ_MAP_FILENAME, "write": _WRITE_MAP_FILENAME}
 
 _CONNECTOR_SENTINELS = ("transports", "connection_contract", "default_transport", "auth")
@@ -1059,14 +1058,12 @@ def resolve_type_map_gaps(direction: str, probes: Sequence[str], maps: Sequence[
     """Resolve every probe through the concatenated maps, primary first.
 
     `maps` are parsed type-map documents in precedence order (connection-scoped
-    first, connector second), concatenated into one rule list — the engine's
-    composition, where the connection map is primary and the connector map the
-    fallback. Each is model-validated first, and that is load-bearing: the
-    resolver mirrors runtime semantics, which *skip* a malformed rule, so a
-    broken rule would otherwise surface as a false gap indistinguishable from a
-    genuinely uncovered probe — and a false gap makes an author shadow the very
-    rule the map intended. A map that is not a valid `direction` map raises
-    `ValueError` naming its position.
+    first, connector second), concatenated into one first-match rule list — the
+    composition `RULE-TMAP-018` is written against. Each is model-validated
+    first, and that is load-bearing: a broken rule would otherwise surface as a
+    false gap indistinguishable from a genuinely uncovered probe — and a false
+    gap makes an author shadow the very rule the map intended. A map that is
+    not a valid `direction` map raises `ValueError` naming its position.
 
     Returns `{"direction", "resolved": {probe: rendered | None}, "gaps": [...]}`:
     each probe (verbatim, deduplicated in order) maps to the Arrow type (read) or
@@ -1243,20 +1240,18 @@ def _validate_connection_type_map(direction: str, doc: Any, where: Location | No
     """The `type_map_read` / `type_map_write` entity routes: a connection-scoped
     map, graded in the entity's direction.
 
-    The filename gate runs first and alone on a mismatch: the engine loads each
-    direction only from its exact filename, so a misnamed file gets the rename
-    finding rather than findings that could be graded in the wrong direction.
-    A non-list document is likewise gated here — shape dispatch would grade a
-    stray connection document under a type-map filename as a connection, and
-    pass it, while the engine's loader chokes on the non-array."""
+    The filename gate (`RULE-TMAP-023`) runs first and alone on a mismatch, so
+    a misnamed file gets the rename finding rather than findings graded in a
+    direction its author never meant. A non-list document is likewise gated
+    here — shape dispatch would grade a stray connection document under a
+    type-map filename as a connection, and pass it."""
     expected = _TYPE_MAP_FILENAMES[direction]
     entity = f"type_map_{direction}"
     if where is not None and where.name != expected:
         return [finding(
             "connection-type-map", "error", "",
             f"file is named {where.name!r} but entity {entity!r} requires "
-            f"{expected!r} — the engine loads each direction only from its exact "
-            f"filename (connections/<slug>/definition/{expected}).")]
+            f"{expected!r} (connections/<slug>/definition/{expected}).")]
     if not isinstance(doc, list):
         return [finding(
             "connection-type-map", "error", "",

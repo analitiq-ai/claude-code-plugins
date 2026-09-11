@@ -104,7 +104,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-STRM-032 | A stream MUST name as its parent the pipeline that references it. | `stream` | error | validator |
 | RULE-STRM-033 | A stream's source connection MUST be the one its pipeline declares as the source, and each of its destination connections MUST be one the pipeline declares as a destination. | `stream` | error | validator |
 | RULE-STRM-034 | A connection-scoped endpoint reference MUST resolve to an endpoint document belonging to the connection it names. | `stream` | error | validator |
-| RULE-STRM-042 | A connector-scoped endpoint reference SHOULD name an endpoint the referenced connector publishes. | `stream` | warning | validator |
+| RULE-STRM-042 | A connector-scoped endpoint reference MUST name an endpoint published by the connector behind the connection it references. | `stream` | error | validator |
 
 ## Procedural
 

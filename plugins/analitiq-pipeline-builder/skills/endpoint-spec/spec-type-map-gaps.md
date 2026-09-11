@@ -30,8 +30,7 @@ files you resolve against during gap detection are the live reference for it;
 do not restate their vocabulary here.
 
 Filenames are load-bearing (`RULE-TMAP-023`): author only the names in the table
-above. The engine loads exactly those from the connection's `definition/`, and the pre-split
-`type-map.json` is dead.
+above.
 
 ## Gap detection
 

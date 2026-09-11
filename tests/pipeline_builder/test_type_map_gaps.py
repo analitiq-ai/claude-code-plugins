@@ -1,12 +1,11 @@
 """Tests for the type-map gap prober (plugins/analitiq-pipeline-builder/scripts/type_map_gaps.py).
 
 The script holds no matching logic — it reads the map files and hands them to
-the pinned `analitiq-validator`'s `resolve_type_map_gaps` (the exact semantics
-every runtime reader uses); these tests exercise it against the in-repo source,
-which moves in lockstep with the pin. They pin the *wiring*: probe/rule routing
-per direction, map precedence (connection primary over connector fallback,
-mirroring the engine's composition), per-map model validation naming the file,
-gap reporting, and the CLI envelope.
+the pinned `analitiq-validator`'s `resolve_type_map_gaps`; these tests exercise
+it against the in-repo source, which moves in lockstep with the pin. They pin
+the *wiring*: probe/rule routing per direction, map precedence (connection
+primary over connector fallback, `RULE-TMAP-018`), per-map model validation
+naming the file, gap reporting, and the CLI envelope.
 """
 from __future__ import annotations
 
@@ -60,7 +59,7 @@ def test_read_gap_reported(tmp_path):
 
 
 def test_read_connection_map_is_primary(tmp_path):
-    # maps concatenate in argument order, first match wins — the engine's compose order
+    # maps concatenate in argument order, first match wins (`RULE-TMAP-018`)
     connection = _map(tmp_path, "conn.json",
                       [{"match": "exact", "native_type": "CITEXT", "arrow_type": "LargeUtf8"}])
     connector = _map(tmp_path, "base.json", CONNECTOR_READ)

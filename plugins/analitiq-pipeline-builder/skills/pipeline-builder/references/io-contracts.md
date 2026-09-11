@@ -157,7 +157,7 @@ with the ids only a bundle run can decide:
   (`RULE-STRM-042`). The message carries an alignment suggestion. See
   `stream-spec/spec-endpoint-refs.md`.
 - `connection-type-map` — **error**: file-level gates on the connection-scoped
-  type maps the engine loads beside `connection.json` (`RULE-TMAP-023`). See
+  type maps beside `connection.json` (`RULE-TMAP-023`). See
   `endpoint-spec/spec-type-map-gaps.md`.
 
 One further id names not a check but a failure mode: `adapter-crash` —

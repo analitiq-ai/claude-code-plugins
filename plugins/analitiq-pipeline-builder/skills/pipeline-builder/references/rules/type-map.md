@@ -86,7 +86,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-TMAP-018 | A connection-scoped type map MUST declare a rule only for a native_type or arrow_type its connector's own map leaves unresolved. | `type-map` | error | — |
 | RULE-TMAP-019 | An Arrow family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope. | `type-map` | warning | — |
 | RULE-TMAP-021 | A connection-scoped read rule MUST render the Arrow type the endpoint document already froze for the native_type it matches. | `type-map` | error | — |
-| RULE-TMAP-023 | A connection-scoped type map MUST be a JSON array of rules at the exact filename its direction is loaded from — `type-map-read.json` or `type-map-write.json` under the connection's `definition/` — and the pre-split `type-map.json` MUST NOT be present there. | `type-map` | error | validator |
+| RULE-TMAP-023 | A connection-scoped type map MUST be a JSON array of rules under the filename its direction is loaded from, and the pre-split filename MUST NOT be present beside it. | `type-map` | error | validator |
 
 ## Procedural
 

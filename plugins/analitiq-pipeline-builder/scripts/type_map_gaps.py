@@ -4,15 +4,13 @@
 This is the gap-detection half of connection-scoped type-map authoring
 (`endpoint-spec/spec-type-map-gaps.md`). It holds no matching logic of its
 own — it reads the map files and hands them to the pinned `analitiq-validator`'s
-`resolve_type_map_gaps` (the same first-match-wins, `${name}`-substituting,
-read-side-normalizing semantics the engine and the validator use), so a probe
-resolves here exactly as it will at runtime.
+`resolve_type_map_gaps`, so a probe resolves here exactly as the validator
+resolves it.
 
 Maps are passed in precedence order (connection-scoped first, connector
-second); the package concatenates them into one rule list — mirroring the
-engine's composition, where the connection map is primary and the connector
-map is the fallback — after model-validating each, so a broken rule is refused
-rather than read as a gap.
+second); the package concatenates them into one first-match rule list — the
+composition `RULE-TMAP-018` is written against — after model-validating each,
+so a broken rule is refused rather than read as a gap.
 
 Usage::
 

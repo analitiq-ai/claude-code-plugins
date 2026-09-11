@@ -1,20 +1,24 @@
 id: RULE-STRM-042
 statement: >
-  A connector-scoped endpoint reference SHOULD name an endpoint the referenced
-  connector publishes.
+  A connector-scoped endpoint reference MUST name an endpoint published by the
+  connector behind the connection it references.
 tier: referential
-severity: warning
+severity: error
 scopes: [stream]
 validator: "analitiq.validator.trees::_check_connector_endpoint_refs"
-owners: [pipeline-plugin]
+owners: [pipeline-plugin, engine]
 rationale: >
-  A connector's endpoint set is the connector's to define, pinned by version at
-  run time, so a reference to an endpoint it does not publish is a stream
-  defect and the stream is what gets realigned — never the connector. It is a
-  warning because the check can only see the endpoint documents the author has
-  beside the pipeline: a connector whose endpoints were never downloaded has an
-  unknown set, not an empty one, and is skipped rather than warned on, so a
-  clean result is not proof the endpoint exists. The finding carries the
+  The engine resolves a connector-scoped reference to an endpoint document
+  under the connector materialised for the run, eagerly for every stream while
+  the pipeline loads, so a reference to an endpoint the connector does not
+  publish fails the whole run before a record moves — and the stream is what
+  gets realigned, never the connector. The check emits a warning rather than an
+  error because it sees only the endpoint documents the author has beside the
+  pipeline: a connector whose endpoints were never downloaded has an unknown
+  set, not an empty one, and is skipped rather than warned on, and a downloaded
+  set is the author's copy rather than the one the run will materialise. So a
+  finding is a prompt to confirm against the connector, not proof the endpoint
+  is absent, and a clean result is not proof it exists. The finding carries the
   closest published name so the realignment is a choice, not a search.
 status: active
 superseded_by: null

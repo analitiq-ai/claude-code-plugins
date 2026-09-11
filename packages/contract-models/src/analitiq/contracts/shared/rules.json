@@ -6561,14 +6561,15 @@
   },
   {
    "id": "RULE-STRM-042",
-   "statement": "A connector-scoped endpoint reference SHOULD name an endpoint the referenced connector publishes.\n",
+   "statement": "A connector-scoped endpoint reference MUST name an endpoint published by the connector behind the connection it references.\n",
    "tier": "referential",
-   "severity": "warning",
+   "severity": "error",
    "scopes": [
     "stream"
    ],
    "validator": "analitiq.validator.trees::_check_connector_endpoint_refs",
    "owners": [
+    "engine",
     "pipeline-plugin"
    ],
    "targets": [],
@@ -6576,7 +6577,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A connector's endpoint set is the connector's to define, pinned by version at run time, so a reference to an endpoint it does not publish is a stream defect and the stream is what gets realigned — never the connector. It is a warning because the check can only see the endpoint documents the author has beside the pipeline: a connector whose endpoints were never downloaded has an unknown set, not an empty one, and is skipped rather than warned on, so a clean result is not proof the endpoint exists. The finding carries the closest published name so the realignment is a choice, not a search.\n",
+   "rationale": "The engine resolves a connector-scoped reference to an endpoint document under the connector materialised for the run, eagerly for every stream while the pipeline loads, so a reference to an endpoint the connector does not publish fails the whole run before a record moves — and the stream is what gets realigned, never the connector. The check emits a warning rather than an error because it sees only the endpoint documents the author has beside the pipeline: a connector whose endpoints were never downloaded has an unknown set, not an empty one, and is skipped rather than warned on, and a downloaded set is the author's copy rather than the one the run will materialise. So a finding is a prompt to confirm against the connector, not proof the endpoint is absent, and a clean result is not proof it exists. The finding carries the closest published name so the realignment is a choice, not a search.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7087,7 +7088,7 @@
   },
   {
    "id": "RULE-TMAP-023",
-   "statement": "A connection-scoped type map MUST be a JSON array of rules at the exact filename its direction is loaded from — `type-map-read.json` or `type-map-write.json` under the connection's `definition/` — and the pre-split `type-map.json` MUST NOT be present there.\n",
+   "statement": "A connection-scoped type map MUST be a JSON array of rules under the filename its direction is loaded from, and the pre-split filename MUST NOT be present beside it.\n",
    "tier": "referential",
    "severity": "error",
    "scopes": [
@@ -7103,7 +7104,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine loads each direction from its own filename and reads nothing else in the directory, so a map under any other name — the pre-split name included — is silently inert: the file is present and valid, and every stream on the connection runs without it. The filename also decides which direction a rule set is graded in, so a misnamed file is reported for its name alone rather than graded in a direction its author never meant. A document that is not an array fails at the loader, the most expensive place to learn a file's shape. If the engine came to read a further name, this check would reject a map it accepts; it would never pass one it refuses.\n",
+   "rationale": "The engine loads each direction from its own filename and reads nothing else in the directory, so a map under any other name — the pre-split name included — is silently inert: the file is present and valid, and every stream on the connection runs without it. The filename also decides which direction a rule set is graded in, so a misnamed file is reported for its name alone rather than graded in a direction its author never meant, and a document that is not an array is refused here rather than at the loader, which fails the whole run on it. Two checks apply the rule, each seeing half of it: the bundle run grades whatever sits at a direction's filename and rejects the pre-split name, but cannot tell that a file under some other name was meant as a map; the entity run, told which direction a file is meant as, is what rejects a name that is not that direction's. If the engine came to read a further name, this check would reject a map it accepts; it would never pass one it refuses.\n",
    "status": "active",
    "superseded_by": null
   }

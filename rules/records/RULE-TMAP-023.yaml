@@ -1,9 +1,8 @@
 id: RULE-TMAP-023
 statement: >
-  A connection-scoped type map MUST be a JSON array of rules at the exact
-  filename its direction is loaded from — `type-map-read.json` or
-  `type-map-write.json` under the connection's `definition/` — and the
-  pre-split `type-map.json` MUST NOT be present there.
+  A connection-scoped type map MUST be a JSON array of rules under the filename
+  its direction is loaded from, and the pre-split filename MUST NOT be present
+  beside it.
 tier: referential
 severity: error
 scopes: [type-map]
@@ -15,9 +14,14 @@ rationale: >
   included — is silently inert: the file is present and valid, and every
   stream on the connection runs without it. The filename also decides which
   direction a rule set is graded in, so a misnamed file is reported for its
-  name alone rather than graded in a direction its author never meant. A
-  document that is not an array fails at the loader, the most expensive place
-  to learn a file's shape. If the engine came to read a further name, this
-  check would reject a map it accepts; it would never pass one it refuses.
+  name alone rather than graded in a direction its author never meant, and a
+  document that is not an array is refused here rather than at the loader,
+  which fails the whole run on it. Two checks apply the rule, each seeing half
+  of it: the bundle run grades whatever sits at a direction's filename and
+  rejects the pre-split name, but cannot tell that a file under some other name
+  was meant as a map; the entity run, told which direction a file is meant as,
+  is what rejects a name that is not that direction's. If the engine came to
+  read a further name, this check would reject a map it accepts; it would never
+  pass one it refuses.
 status: active
 superseded_by: null
