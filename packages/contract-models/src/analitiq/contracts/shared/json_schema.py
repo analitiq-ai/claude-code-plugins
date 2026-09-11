@@ -7,10 +7,10 @@ apply to it (:func:`composed_schema_keys`, :func:`materialize_node`,
 :func:`effective_properties`); and the questions asked of the composed
 result — whether a dotted path is declared (:func:`resolve_declared_path`),
 whether a node is typed (:func:`_declares_a_type`), whether an instance can be
-an object (:func:`_composed_permits_object`). The walks that check an embedded
-schema position by position against the endpoint contract's rules, and the
-record-shape and `from_input` queries built on these functions, stay beside
-the models that call them in `analitiq.contracts.endpoints`. Nothing here
+an object (:func:`_composed_permits_object`). The checks that grade an
+embedded schema position by position against the endpoint contract's rules,
+and the record-shape and `from_input` queries built on these functions, stay
+beside the models that call them in `analitiq.contracts.endpoints`. Nothing here
 imports that module: a refusal is raised as :class:`SchemaResolutionError`
 carrying the diagnosis, and the caller frames it with its site and the spec
 section an author reads. Beyond JSON Schema it reads the contract's type
@@ -23,9 +23,13 @@ target or an `allOf` branch, a node carrying every marker is typed, and an
 ``JSON_SCHEMA_LIST_OF_SCHEMA_KEYS`` (lists of schemas) and
 ``JSON_SCHEMA_SINGLE_SCHEMA_KEYS`` (one schema) are the positions a schema can
 hold another schema in. They are the vocabulary every reader of an embedded
-schema shares: the position walks in `analitiq.contracts.endpoints` and
-`analitiq.validator`, :func:`resolve_schema_ref`, which follows a pointer
-below the root only through them and never across a conditional keyword, and
+schema shares, and :func:`walk_structural_positions` is the one walk over
+them: every check that has to reach each node of an embedded schema — the
+contract's own in `analitiq.contracts.endpoints` and the validator's — loops
+over that generator rather than descending on its own, so no two checks can
+disagree about which positions exist. The other readers consult the sets one
+hop at a time: :func:`resolve_schema_ref`, which follows a pointer below the
+root only through them and never across a conditional keyword, and
 :func:`_position_kind`, which reads the map and single-schema sets to decide
 how a merged value is treated. `default`, `examples`, `const` and `enum` are
 never among
@@ -140,6 +144,66 @@ JSON_SCHEMA_SINGLE_SCHEMA_KEYS: frozenset[str] = frozenset({
 })
 
 
+#: Where a value sits, from the document root: a keyword or an author-chosen
+#: name as `str`, a list index as `int`.
+StructuralPosition = tuple[str | int, ...]
+
+
+def walk_structural_positions(
+    schema: Any,
+) -> Iterator[tuple[StructuralPosition, Any]]:
+    """Every value in a structural position of an embedded schema, as
+    `(tokens, value)` — the document itself first, as `((), schema)`.
+
+    The one descent over ``JSON_SCHEMA_SUBSCHEMA_KEYS``,
+    ``JSON_SCHEMA_LIST_OF_SCHEMA_KEYS`` and ``JSON_SCHEMA_SINGLE_SCHEMA_KEYS``.
+    A check that has to reach each node loops over this and never writes a
+    recursion of its own, so two checks cannot disagree about which positions
+    exist.
+
+    `tokens` locates the value from the document root: a keyword or an
+    author-chosen name is a `str`, a list index an `int`. The type is the only
+    distinction a rendering needs — a dotted path writes an index as `[i]` and
+    a JSON Pointer as `/i` — and it is what keeps a property named `0` apart
+    from `allOf[0]`.
+
+    Descends into dict values only. A value that is not a dict is yielded and
+    never entered, so every consumer meets it exactly once, in its own loop
+    body, and decides there whether a boolean short-form is fine and a scalar
+    is malformed. A map keyword whose value is not a dict, or a list keyword
+    whose value is not a list, is a malformed container: skipped, no yield. A
+    list under a single-schema keyword is Draft 2019-09 tuple-form `items`,
+    still authored in parts of the catalog, and is walked per index.
+    """
+    def walk(
+        node: Any, tokens: StructuralPosition
+    ) -> Iterator[tuple[StructuralPosition, Any]]:
+        yield tokens, node
+        if not isinstance(node, dict):
+            return
+        for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
+            child = node.get(key)
+            if isinstance(child, dict):
+                for name, sub in child.items():
+                    yield from walk(sub, (*tokens, key, name))
+        for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+            child = node.get(key)
+            if isinstance(child, list):
+                for index, sub in enumerate(child):
+                    yield from walk(sub, (*tokens, key, index))
+        for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+            if key not in node:
+                continue
+            child = node[key]
+            if isinstance(child, list):
+                for index, sub in enumerate(child):
+                    yield from walk(sub, (*tokens, key, index))
+            else:
+                yield from walk(child, (*tokens, key))
+
+    return walk(schema, ())
+
+
 class SchemaResolutionError(ValueError):
     """Base for the two ways declared-path resolution refuses to answer.
 
@@ -200,6 +264,20 @@ class DeclaredPathError(SchemaResolutionError):
         self.segment = segment
         #: Position of ``segment`` in the requested path.
         self.index = index
+
+
+def _escape_pointer_token(name: str) -> str:
+    """One object key as an RFC 6901 §3 reference token. `~` before `/`: the
+    other order re-encodes the `~` it just wrote, turning `a/b` into `a~01b`.
+
+    Not the inverse of :func:`_unescape_pointer_token`, and deliberately so —
+    they meet at the §3 layer only. Unescaping percent-decodes first
+    because a `$ref` is a URI fragment (§6); escaping percent-encodes nothing
+    because a finding's `path` is a JSON-string pointer (§5) a consumer
+    resolves directly, never a URI. Symmetrising them would either encode a
+    path nothing URI-decodes, or stop decoding refs a stock resolver decodes.
+    """
+    return name.replace("~", "~0").replace("/", "~1")
 
 
 def _unescape_pointer_token(token: str) -> str:

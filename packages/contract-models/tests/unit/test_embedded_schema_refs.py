@@ -26,7 +26,10 @@ from pydantic import ValidationError
 
 from analitiq.contracts.endpoints import (
     _OperationKind,
+    _REFUSED_REFERENCE_KEYWORDS,
     _unresolved_harm,
+    _validate_arrow_type_in_json_schema,
+    _validate_schema_refs,
     ApiEndpointDoc,
     ResponseExtraction,
     WriteInput,
@@ -51,6 +54,7 @@ from analitiq.contracts.shared.json_schema import (
     resolve_declared_path,
     resolve_local_pointer,
     resolve_schema_ref,
+    walk_structural_positions,
 )
 from analitiq.contracts.shared.rules import all_rules
 
@@ -1295,18 +1299,18 @@ class TestEachOperationKindGetsItsOwnHarmText:
 
 
 class TestKeywordVocabularyHasOneOwner:
-    """The JSON-Schema keyword vocabulary every walker keys off exists in three
-    hand-maintained copies — the contract's `_JSON_SCHEMA_*_KEYS`, the
-    validator's `_SUBSCHEMA_*_KEYS`, and the renderer's
-    `JsonSchemaPropertyNode`. Adding `contentSchema` required editing all three,
-    and the fourth expression of it — that node's own published *description* —
-    was missed, so the shipped contract constrained a keyword while its prose
-    said it did not recurse there.
-
+    """The JSON-Schema keyword vocabulary every walker keys off has one owner,
+    the `JSON_SCHEMA_*_KEYS` sets in `analitiq.contracts.shared.json_schema`,
+    and one walk over it, `walk_structural_positions` in the same module —
+    `TestOneStructuralWalk` pins every consumer to that walk. The renderer's
+    `JsonSchemaPropertyNode` restates the vocabulary as a published constraint
+    map and as a published sentence naming each keyword, and
     `.claude/rules/no-drift-surfaces.md` requires an unavoidable restatement to
-    be pinned by a test. These are the comparisons that catch it: per bucket
-    (the bucket decides HOW the walker recurses), the rendered constraint map,
-    and the rendered sentence.
+    be pinned by a test. These are the comparisons: the rendered constraint
+    map, and the rendered sentence. The sentence is the half a name-level pin
+    cannot see — a keyword the sets gain and the description does not is a
+    contract constraining a keyword while its prose says it does not recurse
+    there.
     """
 
     def _rendered_node(self):
@@ -1316,14 +1320,6 @@ class TestKeywordVocabularyHasOneOwner:
         repo = Path(__file__).resolve().parents[4]
         doc = json.loads((repo / "schemas/api-endpoint/latest.json").read_text())
         return doc["$defs"]["JsonSchemaPropertyNode"]
-
-    def test_validator_buckets_match_the_contract_bucket_for_bucket(self):
-        from analitiq.contracts.shared import json_schema as js
-        from analitiq.validator import connectors as vc
-
-        assert vc._SUBSCHEMA_MAP_KEYS == js.JSON_SCHEMA_SUBSCHEMA_KEYS
-        assert vc._SUBSCHEMA_LIST_KEYS == js.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-        assert vc._SUBSCHEMA_SINGLE_KEYS == js.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
 
     def test_rendered_node_constrains_exactly_the_contract_vocabulary(self):
         from analitiq.contracts.shared import json_schema as js
@@ -1350,6 +1346,110 @@ class TestKeywordVocabularyHasOneOwner:
             f"the published node constrains {missing!r} but its description does "
             "not name them — the contract contradicts its own prose"
         )
+
+
+class TestOneStructuralWalk:
+    """One descent over the structural positions serves every check that has
+    to reach each node of an embedded schema: `walk_structural_positions`, in
+    `analitiq.contracts.shared.json_schema`. The contract's arrow-type check
+    and reference guard and the validator's `_walk_schema_nodes` each loop over
+    it rather than recursing on their own, so the positions they reach cannot
+    disagree — and this class, not a comment beside each loop, is what holds
+    them to it.
+
+    One document, with a node at every position the keyword sets name (built
+    from the sets, so a keyword joining one is present without an edit here),
+    a tuple-form `items`, nesting under `$defs`, and one non-dict value in a
+    single-schema position. Expected positions are the generator's own yield.
+    Actual positions are each consumer's observable output: the pointers
+    `_walk_schema_nodes` yields, and the error paths the contract checks report
+    when every dict node carries one violation whose message names it.
+    """
+
+    @staticmethod
+    def _document():
+        """The document and the tokens of its one non-dict structural value."""
+        def leaf():
+            return {"type": "string"}
+
+        doc: dict[str, Any] = {"type": "object"}
+        for keyword in JSON_SCHEMA_SUBSCHEMA_KEYS:
+            doc[keyword] = {"x": leaf()}
+        for keyword in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+            doc[keyword] = [leaf()]
+        for keyword in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+            doc[keyword] = leaf()
+        doc["items"] = [leaf(), leaf()]
+        # Nested past the depth at which every keyword family has been entered
+        # once, so a descent that stops below the root is caught wherever it
+        # stops rather than only at the first hop.
+        doc.setdefault("$defs", {})["inner"] = {
+            "type": "object",
+            "properties": {"deep": {"type": "array", "items": {"allOf": [leaf()]}}},
+        }
+        doc["not"] = "Int64"
+        return doc, ("not",)
+
+    # The test's own rendering of each dialect (a test's assertion target
+    # is a permitted copy). No author-chosen name in the document carries `/`
+    # or `~`, so the pointer form needs no escaping here; the validator's own
+    # suite grades the escaping round-trip.
+    @staticmethod
+    def _dotted(prefix, tokens):
+        return prefix + "".join(
+            f"[{t}]" if isinstance(t, int) else f".{t}" for t in tokens)
+
+    @staticmethod
+    def _pointer(prefix, tokens):
+        return prefix + "".join(f"/{t}" for t in tokens)
+
+    def test_the_generator_reaches_every_position_the_document_was_built_to_hold(self):
+        doc, non_dict = self._document()
+        walked = list(walk_structural_positions(doc))
+        assert walked[0] == ((), doc)
+        positions = dict(walked)
+        assert {tokens[0] for tokens in positions if tokens} == (
+            JSON_SCHEMA_SUBSCHEMA_KEYS
+            | JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+        )
+        assert ("items", 1) in positions
+        assert ("$defs", "inner", "properties", "deep", "items", "allOf", 0) in positions
+        assert positions[non_dict] == "Int64"
+
+    def test_every_consumer_reaches_exactly_the_generator_positions(self):
+        from analitiq.validator.connectors import _walk_schema_nodes
+
+        doc, non_dict = self._document()
+        positions = dict(walk_structural_positions(doc))
+        dict_positions = {t for t, node in positions.items() if isinstance(node, dict)}
+        refused = min(_REFUSED_REFERENCE_KEYWORDS)
+        for tokens in dict_positions:
+            # One violation per node for each contract check: a `native_type`
+            # without its `arrow_type`, and a refused reference keyword.
+            positions[tokens]["native_type"] = "text"
+            positions[tokens][refused] = "x"
+
+        pointers = [pointer for pointer, _ in _walk_schema_nodes(doc, "/p")]
+        assert pointers[0] == "/p"
+        assert sorted(pointers) == sorted(self._pointer("/p", t) for t in dict_positions)
+
+        arrow_errors: list[str] = []
+        _validate_arrow_type_in_json_schema(doc, "input.schema", arrow_errors)
+        paired = " declares only one of native_type/arrow_type"
+        malformed = " is not a JSON Schema object/boolean"
+        assert sorted(e.split(paired)[0] for e in arrow_errors if paired in e) == sorted(
+            self._dotted("input.schema", t) for t in dict_positions)
+        assert [e.split(malformed)[0] for e in arrow_errors if malformed in e] == [
+            self._dotted("input.schema", non_dict)]
+        assert len(arrow_errors) == len(dict_positions) + 1
+
+        ref_errors: list[str] = []
+        _validate_schema_refs(doc, "input.schema", ref_errors)
+        marker = f".{refused} is not authorable"
+        assert sorted(e.split(marker)[0] for e in ref_errors if marker in e) == sorted(
+            self._dotted("input.schema", t) for t in dict_positions)
+        assert len(ref_errors) == len(dict_positions)
 
 
 class TestMaterializeMatchesTheNaiveFold:

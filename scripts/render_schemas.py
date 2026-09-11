@@ -433,10 +433,13 @@ _JSON_SCHEMA_NODE_REF: dict[str, Any] = {"$ref": "#/$defs/JsonSchemaPropertyNode
 def _json_schema_node_properties() -> dict[str, Any]:
     """The node's constrained keywords, DERIVED from the contract's own sets.
 
-    The vocabulary has one owner, `analitiq.contracts.shared.json_schema`; this
-    renderer, the contract's walkers and the validator's `_SUBSCHEMA_*_KEYS` all
-    import it. Nothing here restates it, so a keyword landing in the sets
-    reaches this node and its description (below) together.
+    The vocabulary has one owner, `analitiq.contracts.shared.json_schema`, and
+    so does the descent over it — `walk_structural_positions`, which every
+    check that reaches each node of an embedded schema loops over. This
+    renderer imports the sets instead, because it declares the recursion in the
+    published schema rather than visiting a node. Nothing here restates the
+    vocabulary, so a keyword landing in the sets reaches this node and its
+    description (below) together.
     """
     properties: dict[str, Any] = {
         "arrow_type": {"type": "string", "pattern": ARROW_TYPE_PATTERN},
@@ -448,7 +451,7 @@ def _json_schema_node_properties() -> dict[str, Any]:
         properties[key] = {"type": "array", "items": _JSON_SCHEMA_NODE_REF}
     for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
         # `additionalProperties` also takes the boolean short-form, and the
-        # walkers treat it as a schema position only when it is a dict.
+        # structural walk descends into it only when it is a dict.
         properties[key] = (
             {"anyOf": [{"type": "boolean"}, _JSON_SCHEMA_NODE_REF]}
             if key == "additionalProperties"
