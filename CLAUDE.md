@@ -244,7 +244,7 @@ matches what you are editing:
 - `reachability-dispositions.md` — before writing or re-affirming a `FieldDisposition`
   under `census/consumption/`.
 - `validator-verdict-stability.md` — before changing a check's severity, a
-  contract-model constraint, or a package version.
+  contract-model constraint, a package version, or what the built wheel pins.
 
 `plugin-prose.md`, `contract-prose.md`, `reachability-dispositions.md` and
 `validator-verdict-stability.md` are keyed to the surface you are editing;

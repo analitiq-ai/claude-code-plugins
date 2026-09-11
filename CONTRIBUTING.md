@@ -133,18 +133,19 @@ purpose. The narrowing was deliberate, so the residue was written down.
 *Applies at PR-authoring time — when a change touches what the validator
 rejects.*
 
-`.claude/rules/validator-verdict-stability.md` is the policy: within a major
-version of `analitiq-validator` and `analitiq-contract-models`, a document that
-passes keeps passing, so any change after which the validator rejects a
-document the current release accepts is a major bump of both packages. Two
-things follow for the PR:
+`.claude/rules/validator-verdict-stability.md` is the policy: from the first
+stable release of `analitiq-validator` and `analitiq-contract-models` onward,
+within a major version a document that passes keeps passing, so any change
+after which the validator rejects a document the current release accepts is a
+major bump of both packages. Two things follow for the PR:
 
 - **Its description says which side it lands on.** "Fix" is not a side: a
   narrowing is a narrowing whatever it is called, and the diff shows the
   constraint, not whether a document the published release accepts now fails.
 - **The release that carries it is a major.** The change merges like any
   other; what it binds is the next package release, cut as a major of both
-  packages.
+  packages. A pre-release promises nothing, so a narrowing merged while the
+  packages are on one rides the release being prepared and binds nothing.
 
 The third clause above already binds a narrowing PR to record what it left
 wide. This binds it to say what it took.
@@ -161,8 +162,8 @@ wide. This binds it to say what it took.
   clause above it satisfies, and any PR that narrows a rule records what it left
   wide, per the third clause.
 - **Narrowing** — the PR body. Any PR after which the validator rejects a
-  document the current release accepts says so, per the section above, and the
-  next package release is cut as a major.
+  document the current release accepts says so, per the section above, which
+  also decides what that change binds the next package release to.
 
 Issue references above are cited as of 2026-08 and describe the state at the
 time each case was written down; open issues named here may since have closed.

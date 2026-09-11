@@ -1,6 +1,7 @@
 ---
 paths:
   - "packages/*/src/**/*.py"
+  - "packages/*/scripts/**/*.py"
   - "packages/*/pyproject.toml"
   - "rules/records/*.yaml"
 ---
@@ -10,8 +11,12 @@ paths:
 Governs `analitiq-validator` and `analitiq-contract-models` from their first
 stable release onward — every enforcer under `packages/*/src` (a `finding(…)`
 call in `analitiq.validator`, a `@model_validator` or a field constraint under
-`analitiq.contracts`), every record's `severity` under `rules/records/`, and
-the `version` each package's `pyproject.toml` carries.
+`analitiq.contracts`), every record's `severity` under `rules/records/`, the
+`version` each package's `pyproject.toml` carries, and the packaging under
+`packages/*/scripts` that decides what the wheel enforces — the generated
+`analitiq/contracts/__init__.py` pins the host the `$schema` `Literal` fields
+are built for, so the installed models accept a document the source tree would
+reject, and the reverse.
 
 **The invariant:** the major version is a promise about verdicts. Within a
 major, a document that passes keeps passing. A pass is the validator's
@@ -34,11 +39,11 @@ release.
 Any change after which the validator rejects a document the current release
 accepts, whatever the change is called:
 
-- **A check promoted to `error`.** A new check ships at severity `warning`;
-  its promotion is the major bump, not its arrival. A rule whose violation
-  breaks a run still arrives as a warning — the promise forbids the rejection,
-  not the finding — and the record's `rationale` says what the run does with
-  the violation.
+- **A check promoted to `error`.** A new check over a document the current
+  release accepts ships at severity `warning`; its promotion is the major
+  bump, not its arrival. A rule whose violation breaks a run still arrives as
+  a warning — the promise forbids the rejection, not the finding — and the
+  record's `rationale` says what the run does with the violation.
 - **A model tightened.** A field made required, a `Literal` narrowed, a bound
   or pattern added, a `@model_validator` raising where none did. A pydantic
   `ValidationError` reaches the validator as an `error` finding under the
@@ -53,7 +58,7 @@ accepts, whatever the change is called:
 - **A new finding id.** A new `validator` id (the `VALIDATOR_IDS` registry in
   `analitiq.validator`) arriving at severity `warning` is compatible: the
   promise binds a consumer to handle an id it does not know as it handles any
-  warning, which is why a new check may arrive only as one.
+  warning, which is why a new check over an accepted document arrives as one.
 - **A loosening.** Accepting a document the current release rejects.
 - **A reworded message, a moved `path`.** The verdict is the promise; the
   finding's wording is not.
@@ -72,12 +77,20 @@ falls on is decided once, for the pair.
   the rendered references print the severity, so the promotion reaches every
   consumer whichever applies the rule. A demotion, and `info` → `warning`, are
   compatible.
-- **A new check.** It lands as a `finding(…, "warning", …)` in
-  `analitiq.validator` with a record at `severity: warning` — even a rule one
-  document settles alone, which would otherwise be a `@model_validator`: the
-  model layer has nothing below `error`, so a warning has one home. Promotion
-  is when it moves into the model, where `rules/SCHEMA.md` places a rule one
-  document settles.
+- **A new check over a document the release accepts.** It lands as a
+  `finding(…, "warning", …)` in `analitiq.validator` with a record at
+  `severity: warning` — even a rule one document settles alone, which would
+  otherwise be a `@model_validator`: the model layer has nothing below
+  `error`, so a warning has one home. Promotion is when it moves into the
+  model, where `rules/SCHEMA.md` places a rule one document settles.
+- **A check over a document it rejects already.** Outside the warning rule,
+  because it narrows nothing. An artifact kind no detector claims is the case
+  that arises: the validator answers every document of an unrecognised kind
+  with an `error`, so none of them passes, and the contract model that first
+  claims the kind rejects a malformed one at `error` in the release that
+  introduces it. Shipping those constraints as warnings instead would make the
+  kind's first release accept what it exists to refuse, and buy a major bump
+  to correct.
 - **A model constraint.** Ask whether a document the current release accepts
   now fails. `render_schemas.py write` classifies the rendered schema's diff
   and errs toward `major`; that classification is evidence, not the verdict —
