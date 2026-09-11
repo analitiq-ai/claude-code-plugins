@@ -15,12 +15,20 @@ one crashing stage costs exactly one finding, and which trees are refused.
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+from conftest import CONTRACTS_SRC_ROOT, VALIDATOR_SRC_ROOT
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
+#: Generous, because the assertion is that the read returns at all: a FIFO
+#: with no writer never does, so any finite wait separates the two outcomes.
+READ_DEADLINE_SECONDS = 30.0
 CORPUS = Path(__file__).resolve().parent / "corpus"
 RULE_FIXTURES = REPO_ROOT / "packages" / "contract-models" / "tests" / "fixtures" / "rules"
 CONNECTOR_EXAMPLES = REPO_ROOT / "plugins" / "analitiq-connector-builder" / "skills"
@@ -409,6 +417,62 @@ def _stage(occupant: str, target):
         target.symlink_to(target.parent / "gone.json")
     else:
         target.write_bytes(payload)
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="no FIFOs on this platform")
+def test_a_named_pipe_at_a_documents_key_is_unreadable_rather_than_a_wait(
+        validator, tmp_path):
+    """A FIFO where a document belongs answers, and answers promptly.
+
+    Driven in a child process with a deadline because the regression is a read
+    that never returns: a plain open of a FIFO waits for a writer, and an
+    authoring checkout has no reason to ever provide one. Asserting this
+    in-process would hang the suite instead of failing it.
+    """
+    fifo = tmp_path / "type-map-read.json"
+    os.mkfifo(fifo)
+    program = (
+        "import json, sys\n"
+        "from analitiq.validator import read_document\n"
+        "print(json.dumps(read_document(sys.argv[1])))\n"
+    )
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(
+        [str(VALIDATOR_SRC_ROOT), str(CONTRACTS_SRC_ROOT)])}
+    try:
+        result = subprocess.run([sys.executable, "-c", program, str(fifo)],
+                                capture_output=True, text=True, env=env,
+                                timeout=READ_DEADLINE_SECONDS)
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"reading a FIFO did not return within "
+                    f"{READ_DEADLINE_SECONDS}s — it waited for a writer")
+    assert result.returncode == 0, result.stderr
+    doc, problem = json.loads(result.stdout)
+    assert doc is None
+    assert "regular file" in problem, problem
+
+
+def test_a_directory_named_like_a_document_is_one_occupant_to_both_readers(
+        validator, tmp_path):
+    # The in-memory tree can only know this directory from a key beneath it,
+    # which is the shape a single staged occupant cannot express: nothing in
+    # the mapping spells `bad.json` out. Both readers still have to enumerate
+    # it, or the walk that grades a directory's members grades one fewer here
+    # than it does on disk and the tree passes where the checkout fails.
+    from analitiq.validator._tree import DiskTree, MemoryTree
+
+    inside = tmp_path / "streams" / "bad.json" / "inside.json"
+    inside.parent.mkdir(parents=True)
+    inside.write_bytes(b"{}")
+    memory = MemoryTree({"streams/bad.json/inside.json": b"{}"})
+    for tree in (memory, DiskTree(tmp_path)):
+        name = type(tree).__name__
+        assert tree.occupied("streams/bad.json") is True, name
+        assert tree.is_dir("streams/bad.json") is True, name
+        assert tree.files("streams") == ["streams/bad.json"], name
+        assert tree.files("streams", recursive=True) == [
+            "streams/bad.json", "streams/bad.json/inside.json"], name
+        doc, error = tree.read("streams/bad.json")
+        assert doc is None and error, name
 
 
 @pytest.mark.parametrize("occupant", sorted(_OCCUPANTS), ids=lambda o: o)

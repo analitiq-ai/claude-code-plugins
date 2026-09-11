@@ -40,6 +40,8 @@ and sibling arithmetic is the same string arithmetic in both trees.
 from __future__ import annotations
 
 import json
+import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
@@ -112,10 +114,25 @@ def read_document(path: Path) -> tuple[Any, str | None]:
     undecodable byte surfaces as a `UnicodeDecodeError`, a `ValueError`, which
     `parse_document` reports as the reason.
     """
+    # Opened by descriptor, and non-blocking where the platform has the flag,
+    # because a plain read of a FIFO waits for a writer that an authoring
+    # checkout has no reason to ever provide. What is at the key is decided
+    # from the descriptor rather than from a prior `stat`, so nothing can be
+    # swapped for a pipe between the question and the read.
     try:
-        data = Path(path).read_bytes()
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     except OSError as exc:
         return None, str(exc)
+    try:
+        mode = os.fstat(fd).st_mode
+        if not stat.S_ISREG(mode):
+            return None, f"not a regular file ({stat.filemode(mode)})"
+        with open(fd, "rb", closefd=False) as handle:
+            data = handle.read()
+    except OSError as exc:
+        return None, str(exc)
+    finally:
+        os.close(fd)
     return parse_document(data)
 
 
@@ -208,12 +225,21 @@ class MemoryTree(Tree):
         return self._parsed[key]
 
     def files(self, directory: str, *, recursive: bool = False) -> list[str]:
+        # A key names its ancestors as well as itself, and an ancestor named
+        # like a document is an occupant a disk reader enumerates. Listing only
+        # the literal keys would hide `streams/bad.json` from a tree that holds
+        # `streams/bad.json/inside.json`, and the walk that grades the members
+        # of `streams` would grade one fewer here than it does on disk.
         prefix = _dir_prefix(directory)
-        found = [
-            k for k in self._documents
-            if k.startswith(prefix) and k.endswith(".json")
-            and (recursive or "/" not in k[len(prefix):])
-        ]
+        found = set()
+        for key in self._documents:
+            if not key.startswith(prefix):
+                continue
+            segments = key[len(prefix):].split("/")
+            reach = len(segments) if recursive else 1
+            for depth in range(reach):
+                if segments[depth].endswith(".json"):
+                    found.add(prefix + "/".join(segments[:depth + 1]))
         return sorted(found, key=_by_component)
 
     def locate(self, key: str) -> str:
