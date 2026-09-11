@@ -2,7 +2,7 @@ id: RULE-CTOR-015
 statement: >
   A transport family that lands through the default path MUST be omitted from
   the bulk-load declaration rather than declared with a null mechanism.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::SqlBulkLoad._null_is_not_a_mechanism"

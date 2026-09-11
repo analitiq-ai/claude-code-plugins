@@ -2,7 +2,7 @@ id: RULE-TMAP-021
 statement: >
   A connection-scoped read rule MUST render the Arrow type the endpoint
   document already froze for the native_type it matches.
-tier: referential
+tier: reference
 severity: error
 scopes: [type-map]
 validator: null

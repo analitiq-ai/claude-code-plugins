@@ -3,7 +3,7 @@ statement: >
   An authored endpoint MUST NOT declare a column the engine synthesises when it
   creates a table, and MUST drop such a column from a mirrored source's column
   list.
-tier: procedural
+tier: process
 severity: error
 scopes: [database-endpoint]
 validator: null

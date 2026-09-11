@@ -4,7 +4,7 @@ statement: >
   repository and its on-disk directory, and MUST NOT change — rewriting a
   `connector_id`, or a derived `endpoint_id`, mints a different entity rather
   than editing this one.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector]
 validator: null

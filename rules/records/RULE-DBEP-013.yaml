@@ -3,7 +3,7 @@ statement: >
   A discovered object's recorded type label is descriptive only: whether the
   object can be read or written MUST be decided by the connector class's
   protocol conformance, and execution MUST NOT branch on the label.
-tier: procedural
+tier: process
 severity: error
 scopes: [database-endpoint]
 validator: null

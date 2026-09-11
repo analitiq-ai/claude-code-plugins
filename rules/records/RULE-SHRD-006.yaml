@@ -2,7 +2,7 @@ id: RULE-SHRD-006
 statement: >
   A `${...}` placeholder MUST appear only where the value-expression grammar
   resolves a template; every other slot takes the characters literally.
-tier: structural
+tier: shape
 severity: error
 scopes: [any]
 validator: null

@@ -3,7 +3,7 @@ statement: >
   A pipeline's `schedule.type` MUST be a member of the vocabulary
   `Schedule.type` declares; the member chosen then gates which schedule fields
   are legal (RULE-PIPE-002).
-tier: structural
+tier: shape
 severity: error
 scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::Schedule.type"

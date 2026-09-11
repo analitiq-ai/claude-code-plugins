@@ -2,7 +2,7 @@ id: RULE-ENDP-018
 statement: >
   An operations block MUST declare at least one operation, and any write map it
   declares MUST carry at least one mode.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Operations._at_least_one"

@@ -3,7 +3,7 @@ statement: >
   A resource-discovery implementation MUST declare an entrypoint exactly when
   the strategy code ships inside the connector package, and MUST omit one when
   the strategy is already shipped by the runtime.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ResourceDiscoveryImplementation._entrypoint_matches_type"

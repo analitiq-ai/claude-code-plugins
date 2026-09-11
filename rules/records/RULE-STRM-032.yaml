@@ -1,7 +1,7 @@
 id: RULE-STRM-032
 statement: >
   A stream MUST name as its parent the pipeline that references it.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: "analitiq.validator.pipelines::_check_stream_parent_pipeline"

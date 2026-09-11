@@ -2,7 +2,7 @@ id: RULE-PIPE-012
 statement: >
   Every connection a pipeline references MUST resolve to exactly one connection
   document in the run assembled from it.
-tier: referential
+tier: reference
 severity: error
 scopes: [pipeline]
 validator: "analitiq.validator.pipelines::_check_connections_present"

@@ -3,7 +3,7 @@ statement: >
   A default the contract or the connector already declares MUST NOT be copied
   into an authored document; a value is authored only where the user asked for
   one.
-tier: judgment
+tier: choice
 severity: warning
 scopes: [any]
 validator: null

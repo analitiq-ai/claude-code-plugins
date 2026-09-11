@@ -2,7 +2,7 @@ id: RULE-DBEP-001
 statement: >
   Every column a database endpoint declares MUST carry a name no other column
   in that document repeats.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [database-endpoint]
 validator: "analitiq.contracts.endpoints::DatabaseEndpointDoc._column_names_unique"

@@ -2,7 +2,7 @@ id: RULE-STRM-029
 statement: >
   A stream source MUST declare a replication policy unless the referenced
   source endpoint supports full refresh.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: null

@@ -4,7 +4,7 @@ statement: >
   provider's offset counts — the records a page returned when the offset counts
   records, and the page size the request actually asked for when it counts the
   requested window.
-tier: judgment
+tier: choice
 severity: error
 scopes: [api-endpoint]
 validator: null

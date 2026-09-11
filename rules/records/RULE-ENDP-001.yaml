@@ -3,7 +3,7 @@ statement: >
   A request's path_params block MUST be present exactly when the path declares
   placeholders, and its keys MUST be exactly the placeholder names that path
   declares.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::_RequestBase._validate"

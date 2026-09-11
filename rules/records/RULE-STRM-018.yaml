@@ -3,7 +3,7 @@ statement: >
   A connection-scoped endpoint reference SHOULD carry the derived
   endpoint_id whenever the author can compute it, so the cross-document
   bundle check can resolve the reference.
-tier: judgment
+tier: choice
 severity: warning
 scopes: [stream]
 validator: null

@@ -4,7 +4,7 @@ statement: >
   system's own documentation, a wire-compatible system's documentation MUST NOT
   be taken as evidence for it, and a fact those documents do not establish MUST
   be reported as a gap rather than inferred.
-tier: procedural
+tier: process
 severity: error
 scopes: [connector]
 validator: null

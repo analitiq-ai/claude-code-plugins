@@ -3,7 +3,7 @@ statement: >
   A stream's source connection MUST be the one its pipeline declares as the
   source, and each of its destination connections MUST be one the pipeline
   declares as a destination.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: "analitiq.validator.pipelines::_check_stream_connection_roles"

@@ -2,7 +2,7 @@ id: RULE-PIPE-008
 statement: >
   Every connection a pipeline references MUST belong to the same organization
   as the pipeline.
-tier: referential
+tier: reference
 severity: error
 scopes: [pipeline]
 validator: null

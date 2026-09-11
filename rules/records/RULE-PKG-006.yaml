@@ -3,7 +3,7 @@ statement: >
   A database connector's `pyproject.toml` MUST declare its dependencies
   dynamically from `requirements.txt` rather than restating them, so
   `requirements.txt` stays the only place the driver is pinned.
-tier: structural
+tier: shape
 severity: warning
 scopes: [connector-package]
 validator: null

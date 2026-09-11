@@ -2,7 +2,7 @@ id: RULE-DSYNC-002
 statement: >
   A run error's `message` MUST be exactly the canonical customer-safe text the
   contract maps to its `code`, never text derived from the failure itself.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [data-sync-run-status]
 validator: "analitiq.contracts.pipelines.data_sync::PublicRunError._message_matches_code"

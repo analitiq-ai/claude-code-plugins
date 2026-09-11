@@ -2,7 +2,7 @@ id: RULE-HTTP-001
 statement: >
   A block MUST NOT both declare a header and list that same header name for
   removal, matched case-insensitively.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [any]
 validator: "analitiq.contracts.shared.rules::HeaderMergeRules._headers_not_both_set_and_removed"

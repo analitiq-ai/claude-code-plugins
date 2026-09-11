@@ -2,7 +2,7 @@ id: RULE-CONN-009
 statement: >
   A connection MUST NOT carry a secret value; an input the connector routes to
   secret storage is authored as a pointer in `secret_refs`.
-tier: referential
+tier: reference
 severity: error
 scopes: [connection]
 validator: null

@@ -2,7 +2,7 @@ id: RULE-ENDP-044
 statement: >
   A keyset pagination block MUST omit `initial` when there is no first-page key,
   and MUST NOT spell that absence as an explicit null.
-tier: structural
+tier: shape
 severity: warning
 scopes: [api-endpoint]
 validator: null

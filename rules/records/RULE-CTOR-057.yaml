@@ -3,7 +3,7 @@ statement: >
   In a connector field a runtime resolves, every ref and every `${...}`
   template placeholder MUST lead with one of the resolution scopes the
   contract declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ValueExpressionScopes._expressions_qualified"

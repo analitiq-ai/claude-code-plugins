@@ -2,7 +2,7 @@ id: RULE-STRM-025
 statement: >
   An API source's replication method MUST be one the referenced endpoint
   declares in its supported set.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: null

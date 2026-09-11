@@ -3,7 +3,7 @@ statement: >
   A connector's dialect MUST implement every hook the transports and
   `sql_capabilities` its `connector.json` declares require, in the form the
   CDK's hook surface defines.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector-package]
 validator: null

@@ -1,7 +1,7 @@
 id: RULE-STRM-036
 statement: >
   A stream filter MUST name its operator from the vocabulary `Filter` declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::Filter.operator"

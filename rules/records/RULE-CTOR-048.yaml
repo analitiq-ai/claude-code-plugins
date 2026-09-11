@@ -2,7 +2,7 @@ id: RULE-CTOR-048
 statement: >
   Every transport family keyed in `sql_capabilities.bulk_load` MUST name a
   transport family the same connector declares in `transports`.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: null

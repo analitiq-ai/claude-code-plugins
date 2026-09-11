@@ -2,7 +2,7 @@ id: RULE-STRM-024
 statement: >
   An API destination's write mode MUST be one the referenced api-endpoint
   document declares a write operation for.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: null

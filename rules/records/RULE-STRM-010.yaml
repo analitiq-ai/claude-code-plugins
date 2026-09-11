@@ -3,7 +3,7 @@ statement: >
   An assignment target MUST declare the inner shape its arrow_type calls for
   and no other: a container marker carries its own inner declaration, and
   any other type carries none.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::AssignmentTarget._validate_container_shape"

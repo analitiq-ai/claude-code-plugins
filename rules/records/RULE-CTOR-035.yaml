@@ -2,7 +2,7 @@ id: RULE-CTOR-035
 statement: >
   A DSN binding's `value` MUST take one of the forms the value-expression
   grammar defines, since the runtime resolves it at connection time.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: null

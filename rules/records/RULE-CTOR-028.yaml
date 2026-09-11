@@ -3,7 +3,7 @@ statement: >
   A connector document MUST declare the shape of an input and MUST NOT carry a
   value that belongs to one customer or tenant, which the connection
   instantiating the connector supplies instead.
-tier: judgment
+tier: choice
 severity: error
 scopes: [connector]
 validator: null

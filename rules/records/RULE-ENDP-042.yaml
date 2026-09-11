@@ -2,7 +2,7 @@ id: RULE-ENDP-042
 statement: >
   An endpoint MUST declare only how a watermark is sent, and MUST NOT bake sync
   policy — a lookback, an overlap, a backfill depth — into a cursor mapping.
-tier: procedural
+tier: process
 severity: error
 scopes: [api-endpoint]
 validator: null

@@ -2,7 +2,7 @@ id: RULE-HTTP-002
 statement: >
   A block that names an HTTP header MUST NOT name `Content-Length`, matched
   case-insensitively.
-tier: structural
+tier: shape
 severity: error
 scopes: [any]
 validator: "analitiq.contracts.shared.rules::DeclaredHeaderNames._no_content_length_header"

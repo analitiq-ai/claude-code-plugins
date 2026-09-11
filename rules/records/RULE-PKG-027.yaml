@@ -6,7 +6,7 @@ statement: >
   wheel plus `adbc-driver-manager` for an ADBC transport's `driver` — and
   nothing else, neither an engine pin nor the CDK the engine environment
   provides.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector-package]
 validator: null

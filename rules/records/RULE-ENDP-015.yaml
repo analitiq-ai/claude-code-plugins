@@ -1,7 +1,7 @@
 id: RULE-ENDP-015
 statement: >
   A write mode MUST NOT declare both an idempotency key placement and batching.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteOperation._wiring"

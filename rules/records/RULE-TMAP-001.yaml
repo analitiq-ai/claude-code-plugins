@@ -2,7 +2,7 @@ id: RULE-TMAP-001
 statement: >
   An `exact` read rule whose native_type names a schemaless or structured container
   MUST NOT render a scalar Arrow type.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapReadExactRule._check"

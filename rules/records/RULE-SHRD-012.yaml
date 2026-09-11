@@ -2,7 +2,7 @@ id: RULE-SHRD-012
 statement: >
   A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or
   trailing whitespace.
-tier: structural
+tier: shape
 severity: error
 scopes: [any]
 validator: "analitiq.contracts.connector::ConnectorBase._validate_tags_field"

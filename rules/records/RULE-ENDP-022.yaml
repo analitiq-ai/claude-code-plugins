@@ -3,7 +3,7 @@ statement: >
   An expression dict in a request slot MUST declare exactly one expression
   key and carry no sibling beyond the argument fields that key itself
   declares and extension keys.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"

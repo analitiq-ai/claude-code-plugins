@@ -3,7 +3,7 @@ statement: >
   A write `exact` rule's arrow_type MUST hold against the cross-parameter bounds
   its Arrow family declares, and the native_type DDL it renders MUST carry only
   well-formed placeholders.
-tier: structural
+tier: shape
 severity: error
 scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapWriteExactRule._check"

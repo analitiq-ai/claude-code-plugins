@@ -2,7 +2,7 @@ id: RULE-CTOR-062
 statement: >
   A resource-discovery implementation MUST name where its strategy comes from
   using the vocabulary `ResourceDiscoveryImplementation` declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ResourceDiscoveryImplementation.type"

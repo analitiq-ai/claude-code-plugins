@@ -3,7 +3,7 @@ statement: >
   A ref path MUST be authored only from the scope paths the engine documents as
   supplied; the contract patterns the leading token alone, so an invented tail
   validates and resolves to nothing.
-tier: referential
+tier: reference
 severity: error
 scopes: [any]
 validator: null

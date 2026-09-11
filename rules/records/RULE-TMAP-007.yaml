@@ -2,7 +2,7 @@ id: RULE-TMAP-007
 statement: >
   A `${` opening a placeholder in an arrow_type render MUST be closed around a
   non-empty name.
-tier: structural
+tier: shape
 severity: error
 scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"

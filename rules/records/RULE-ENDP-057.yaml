@@ -3,7 +3,7 @@ statement: >
   A windowed cursor mapping MUST state the wire format it sends its bounds as,
   and the comparison the provider applies at each end of the window, using only
   the vocabularies `WindowCursorMapping` declares for each.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WindowCursorMapping.format"

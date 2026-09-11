@@ -2,7 +2,7 @@ id: RULE-STRM-002
 statement: >
   Each assignment in a mapping MUST own a destination path no other
   assignment in that mapping writes.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::StreamMapping._assignment_targets_unique"

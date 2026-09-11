@@ -2,7 +2,7 @@ id: RULE-RETRY-001
 statement: >
   A block that allows no retry attempts MUST NOT declare a non-zero retry
   delay.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [any]
 validator: "analitiq.contracts.shared.common::RetryErrorHandlingBase._validate_retry_fields"

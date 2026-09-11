@@ -2,7 +2,7 @@ id: RULE-CTOR-011
 statement: >
   Every placeholder in a url_template DSN MUST have a binding, and every
   binding MUST be referenced by the template.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::UrlTemplateDsn._validate_placeholder_bindings"

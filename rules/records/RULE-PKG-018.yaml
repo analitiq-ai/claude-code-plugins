@@ -3,7 +3,7 @@ statement: >
   `merge_statement_sql` MUST render a valid statement when every landed
   column is a conflict key, degrading to its merge form's insert-only
   variant rather than an empty update clause.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

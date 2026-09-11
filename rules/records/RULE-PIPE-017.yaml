@@ -2,7 +2,7 @@ id: RULE-PIPE-017
 statement: >
   A pipeline's logging block MUST name its level from the vocabulary `Logging`
   declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::Logging.log_level"

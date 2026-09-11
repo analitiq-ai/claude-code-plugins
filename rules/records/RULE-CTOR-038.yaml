@@ -2,7 +2,7 @@ id: RULE-CTOR-038
 statement: >
   Each `post_auth_outputs` entry MUST resolve on its own, referencing no
   value another entry produces.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: null

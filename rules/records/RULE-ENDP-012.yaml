@@ -3,7 +3,7 @@ statement: >
   A read operation's records reference MUST resolve, against that operation's
   declared response schema, to an array node whose record shape declares
   something.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"

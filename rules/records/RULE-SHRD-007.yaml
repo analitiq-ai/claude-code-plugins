@@ -2,7 +2,7 @@ id: RULE-SHRD-007
 statement: >
   A `function` expression MUST name a function the engine's registry declares,
   including where documentation describes an unregistered one as planned.
-tier: referential
+tier: reference
 severity: error
 scopes: [any]
 validator: null

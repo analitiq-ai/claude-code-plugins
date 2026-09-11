@@ -2,7 +2,7 @@ id: RULE-CTOR-005
 statement: >
   Every transport_ref a connector declares MUST resolve to a transport declared
   in the same document.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase._transport_refs_resolvable"

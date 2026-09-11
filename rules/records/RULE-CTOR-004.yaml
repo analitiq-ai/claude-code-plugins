@@ -2,7 +2,7 @@ id: RULE-CTOR-004
 statement: >
   An ADBC transport MUST carry connection state; a transport that declares none
   has nothing to open a connection with.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::AdbcTransport._require_dsn_or_kwargs"

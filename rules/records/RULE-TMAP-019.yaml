@@ -2,7 +2,7 @@ id: RULE-TMAP-019
 statement: >
   An Arrow family a connector's write map leaves unrendered MUST be one the
   connector's own dialect renders in code, never one left out to cut scope.
-tier: referential
+tier: reference
 severity: warning
 scopes: [type-map]
 validator: null

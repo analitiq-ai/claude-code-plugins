@@ -3,7 +3,7 @@ statement: >
   A connector's declared SQLAlchemy `driver` MUST name a dialect-and-driver
   registration that actually exists for the driver package the connector's
   `requirements.txt` ships.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector]
 validator: null

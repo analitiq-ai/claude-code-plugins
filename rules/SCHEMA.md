@@ -77,11 +77,7 @@ Recorded so nobody re-adds them thinking they were forgotten:
 ## `tier` — what kind of rule
 
 Tier states first whether the rule constrains the *artifact* being authored
-or the *author* authoring it, then which one of those it is. This is the
-vocabulary the registry is moving to; `TIERS` in
-`analitiq.contracts.shared.rule_record` and every record on disk still use
-the names this table replaces — write a record against those until they
-change.
+or the *author* authoring it, then which one of those it is.
 
 | Axis | Tier | The rule says | Typically |
 |---|---|---|---|

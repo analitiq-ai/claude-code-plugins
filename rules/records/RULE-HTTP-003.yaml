@@ -3,7 +3,7 @@ statement: >
   A block that names an HTTP header MUST NOT name `Content-Type`, matched
   case-insensitively; a request body's media type is declared by the request's
   own `content_type` field.
-tier: structural
+tier: shape
 severity: error
 scopes: [any]
 validator: "analitiq.contracts.shared.rules::DeclaredHeaderNames._no_content_type_header"

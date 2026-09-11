@@ -3,7 +3,7 @@ statement: >
   Every binding that names a declared parameter MUST name one the operation
   declares, and that parameter's declared location MUST be the request slot the
   binding sits in.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"

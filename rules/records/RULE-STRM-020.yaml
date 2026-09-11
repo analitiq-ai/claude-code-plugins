@@ -3,7 +3,7 @@ statement: >
   An assignment whose source and target types form a conversion the engine
   classifies as explicit MUST name that conversion function in a pipe stage
   rather than reading the field bare.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: null

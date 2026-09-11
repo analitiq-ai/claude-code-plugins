@@ -3,7 +3,7 @@ statement: >
   A discovered column whose provider type could not be read MUST carry the
   fallback label its `native_type` field declares, never an invented
   placeholder and never a guessed type.
-tier: procedural
+tier: process
 severity: error
 scopes: [database-endpoint]
 validator: null

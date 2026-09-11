@@ -1,7 +1,7 @@
 id: RULE-CONN-002
 statement: >
   An input's `default` MUST be a member of the `enum` declared beside it.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectionContractInput._default_is_an_enum_member"

@@ -3,7 +3,7 @@ statement: >
   A connector release MUST NOT contain a database endpoint document; the
   connector's resource discovery produces one per connection at connection
   time.
-tier: procedural
+tier: process
 severity: error
 scopes: [database-endpoint]
 validator: null
