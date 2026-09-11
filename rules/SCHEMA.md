@@ -171,7 +171,7 @@ than the rule id. Once it does, every finding carries:
 | `rule` | The id of the record it concerns. |
 | `message_id` | Which of a rule's distinct complaints this is — a rule can fail in more than one way, and a consumer branches on this rather than parsing `message`. Immutable and never reused within its namespace once assigned, for the reason `id` is: a consumer that branches on it is a stored or routed decision a rename or reuse silently repoints. A finding's `rule` is that namespace; a finding with no `rule` (below) draws instead from one shared framework namespace, under the same guarantee. |
 | `kind` | `fail` \| `notApplicable` \| `informational`. See below. |
-| `severity` | `error` \| `warning`, the violated record's own `severity`, present only when `kind` is `fail`. A record's `info` never reaches a finding this way (`.claude/rules/validator-verdict-stability.md`): nothing that produces a `fail` costs less than `warning`, whatever else a record's `validator` documents. |
+| `severity` | `error` \| `warning`, the violated record's own `severity`, present only when `kind` is `fail`. A record's `info` never reaches a finding as this field (`.claude/rules/validator-verdict-stability.md`): a detected `info`-tier violation surfaces as `kind: informational` naming that rule instead, so nothing that carries `severity` costs less than `warning`. |
 | `path` | Where in the document the finding applies. |
 | `message` | The human-readable complaint. |
 
@@ -187,7 +187,7 @@ it.
 |---|---|
 | `fail` | the document violates the rule; `severity` names the cost |
 | `notApplicable` | the check knew which rule it was evaluating but could not evaluate the document against it — a sibling file was unreachable, a path could not be resolved — and reports nothing about whether that rule holds. It still carries `rule`: a consumer that cannot tell which obligation went unchecked cannot route or count it. |
-| `informational` | something worth surfacing that violates no rule — a default was silently applied, say |
+| `informational` | something worth surfacing whose cost is not `error`/`warning` — either nothing here violates a rule at all (a default was silently applied, say), or the violated rule is `info`-tier, whose citation carries what a `severity` field would |
 
 A `notApplicable` or `informational` finding never carries a `severity` of
 its own, but a `notApplicable` finding is not costless: an unchecked
@@ -207,7 +207,7 @@ could not run it this time:
 
 | Case | `kind` | `severity` |
 |---|---|---|
-| A field constraint on a contract model rejected, and no record claims it | `fail` | `error` |
+| A structural precondition rejected the document before any rule-specific check could run, and no record claims it — a contract model's own field constraint, or a hand-written shape guard ahead of a check with no model behind it (a pipeline bundle malformed enough that no referential check could run over it, say) | `fail` | `error` |
 | No detector recognised the document | `fail` | `error` |
 | A check failed before it identified which rule applies | `notApplicable` | none |
 | Something worth surfacing about how a check proceeded, with no rule to bind it — a direction guessed from an ambiguous filename, say | `informational` | none |
