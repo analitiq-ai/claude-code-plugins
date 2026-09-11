@@ -41,16 +41,16 @@ than left to the reader.
   declares. A record reaching any severity is a bump only when an enforcer
   rejects a document with it.
 - **The last stable release.** The newest release of the packages carrying no
-  pre-release suffix. A pre-release is never the reference point. Before the
+  pre-release suffix. A pre-release is never the reference point: before the
   first stable release there is nothing to preserve, and a pre-release
   prepared after one is measured against that stable release like any other
-  change — so a narrowing merged during a release candidate still binds,
-  because the stable release it is heading for inherits the promise.
+  change. Asking the question of a release candidate therefore needs no
+  special case — one preparing a later version within the major answers it
+  the same way that version's release must, and one preparing the next major
+  answers yes, which is the bump it is already carrying.
 - **A document that release accepted.** One it could have been handed and did
-  not reject. A document of a kind no detector claimed was not accepted: the
-  validator answers anything it cannot identify with an `error`. So the
-  contract model that first claims a kind may reject a malformed one at
-  `error` in the release that introduces it.
+  not reject. The validator answers a document it cannot identify with an
+  `error`, so nothing of a kind no detector claimed was ever accepted.
 
 ## Why the major carries it
 
@@ -72,17 +72,18 @@ falls on is decided once, for the pair.
 These apply the question; they are not a list to check a change against. A
 change absent here is decided by the question, not by its absence.
 
-- **A check promoted to `error`.** It rejects what it used to report. A check
-  arrives at `warning` where the document it grades is one the release
-  accepts, and the promotion is the bump, not the arrival. A rule whose
-  violation breaks a run still arrives as a warning — the promise forbids the
-  rejection, not the finding — and the record's `rationale` says what the run
-  does with the violation.
+- **A check promoted to `error`.** Ask which documents the check fires on. It
+  is the arrival that is free and the promotion that costs, where the check
+  reports on a document the release accepts; where it can only fire on a
+  document already rejected for another reason, promoting it changes no
+  verdict. A rule whose violation breaks a run still arrives as a warning —
+  the promise forbids the rejection, not the finding — and the record's
+  `rationale` says what the run does with the violation.
 - **A record gaining a rejecting enforcer.** A record one document settles
-  alone is applied by a `@model_validator`, which can only refuse, so binding
-  one to a record is a rejection whatever severity the record declared before
-  (`rules/SCHEMA.md` owns that placement). A record edited with no enforcer
-  behind it rejects nothing and answers the question no.
+  alone is applied by a `@model_validator`, which can only refuse, so the
+  record's declared severity does not soften what the enforcer does
+  (`rules/SCHEMA.md` owns that placement); ask which documents it refuses. A
+  record edited with no enforcer behind it refuses nothing.
 - **A model tightened.** A field made required, a `Literal` narrowed, a bound
   or pattern added. Ask the question of a document the last stable release
   accepted. `render_schemas.py write` classifies the rendered schema's diff
@@ -95,7 +96,10 @@ change absent here is decided by the question, not by its absence.
   the host the `$schema` `Literal` fields are built for. Changing it makes the
   installed models reject documents naming the old host, which answers yes
   from a file outside `packages/*/src`.
-- **A new finding id.** It changes no verdict on a document that already
-  validated, so the question answers no.
+- **A new finding id.** An id arrives with the check that emits it: a
+  registered id with no call site is refused by
+  `packages/validator/tests/test_check_registry_census.py`. So the question is
+  asked of that check and the documents it fires on. The id carries no verdict
+  of its own.
 - **A loosening, a reworded message, a moved `path`.** Accepting more, or
   saying the same verdict differently, answers no.
