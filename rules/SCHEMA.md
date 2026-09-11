@@ -126,13 +126,18 @@ nothing" is a verdict someone writes down rather than a silence nobody reviews;
 ## `enforcement_location` — where a `null` validator leaves off
 
 Not yet a field `RuleRecord` accepts, the way `status: draft` names a record
-written down but not yet in force. Once it is, it is required exactly when
-`validator` is `null`, and closes the question that field leaves open: not
-*what* rejects a violation, but *where* the obligation is checked at all.
+written down but not yet in force. Once it is, it is required whenever
+`validator` is `null` **and** `status` is `active` or `deprecated` — a record
+currently binding an author. A `draft` names no obligation yet and a `retired`
+names one no longer live, so neither has anywhere to check, and this field
+does not force one on them. It closes the question `validator` leaves open for
+every record that does bind: not *what* rejects a violation, but *where* the
+obligation is checked at all.
 
 | `enforcement_location` | Means |
 |---|---|
 | `engine` | the obligation is enforced outside this repo, by the Analitiq engine at run time; the record's own `rationale` states the reading that rests on (`.claude/rules/engine-behaviour-claims.md`) |
+| `external-ci` | a mechanical check exists but runs outside both this repo and the engine's runtime path — the CDK conformance kit DIP CI runs against a published connector, say |
 | `authoring-practice` | no mechanical check exists anywhere; an author or a reviewing agent satisfies it by judgment, the rule's citation in plugin prose being the only guard |
 | `unenforced` | a known gap — nothing anywhere catches a violation yet |
 
@@ -163,34 +168,47 @@ than the rule id. Once it does, every finding carries:
 | Field | What it is |
 |---|---|
 | `rule` | The id of the record it concerns. |
-| `message_id` | Which of a rule's distinct complaints this is — a rule can fail in more than one way, and a consumer branches on this rather than parsing `message`. |
+| `message_id` | Which of a rule's distinct complaints this is — a rule can fail in more than one way, and a consumer branches on this rather than parsing `message`. Immutable and never reused within its rule once assigned, for the reason `id` is: a consumer that branches on it is a stored or routed decision a rename or reuse silently repoints. |
 | `kind` | `fail` \| `notApplicable` \| `informational`. See below. |
 | `severity` | `error` \| `warning`, the violated record's own `severity`, present only when `kind` is `fail`. A record's `info` never reaches a finding this way (`.claude/rules/validator-verdict-stability.md`): nothing that produces a `fail` costs less than `warning`, whatever else a record's `validator` documents. |
 | `path` | Where in the document the finding applies. |
 | `message` | The human-readable complaint. |
+
+The pipeline plugin's own adapter (`plugins/analitiq-pipeline-builder/scripts/validate.py`)
+mints ids of its own — outside `analitiq.validator`, documented in
+`plugins/analitiq-pipeline-builder/skills/pipeline-builder/references/io-contracts.md`
+— and is not this shape either before or after; this registry does not govern
+it.
 
 ### `kind`
 
 | `kind` | Means |
 |---|---|
 | `fail` | the document violates the rule; `severity` names the cost |
-| `notApplicable` | the check could not evaluate the document — a sibling file was unreachable, a path could not be resolved — and reports nothing about whether the rule holds |
+| `notApplicable` | the check knew which rule it was evaluating but could not evaluate the document against it — a sibling file was unreachable, a path could not be resolved — and reports nothing about whether that rule holds. It still carries `rule`: a consumer that cannot tell which obligation went unchecked cannot route or count it. |
 | `informational` | something worth surfacing that violates no rule — a default was silently applied, say |
 
-A `notApplicable` or `informational` finding never carries a `severity`:
-nothing below `fail` costs anything, and a check that could not run has not
-found a violation to price. The overall verdict is computed by reducing over
-every finding's `severity`, so a reduction that assumes the key is always
-present is a defect the moment a `notApplicable` finding reaches it — the
-absence has to be handled, not read past.
+A `notApplicable` or `informational` finding never carries a `severity` of
+its own, but a `notApplicable` finding is not costless: an unchecked
+`error`-tier rule is not a rule that held, and the overall verdict says so.
+**`passed` is `true` only when no finding is `kind: fail` with `severity:
+error`, and every finding that is `kind: notApplicable` names a `rule` whose
+own `severity` is not `error`.** A `notApplicable` naming no `rule` at all — a check that failed before it
+even identified what it was attempting, one of the cases named below —
+cannot clear that bar and always costs: the less a finding says about what it
+missed, the less room there is to call the miss safe. A
+`notApplicable` against a named `warning`- or `info`-tier rule costs nothing,
+the same as a `fail` against one would.
 
-`rule` is absent only in the cases named below, and no others:
+`rule` is absent only in the cases named below, and no others — a check that
+cannot identify which rule it was attempting, never one that knows and simply
+could not run it this time:
 
 | Case | `kind` | `severity` |
 |---|---|---|
 | A field constraint on a contract model rejected, and no record claims it | `fail` | `error` |
 | No detector recognised the document | `fail` | `error` |
-| A check could not run | `notApplicable` | none |
+| A check failed before it identified which rule applies | `notApplicable` | none |
 
 The rows above are the framework reporting something no rule describes, not a
 new kind of rule — and not license to leave `rule` off anywhere else a check
