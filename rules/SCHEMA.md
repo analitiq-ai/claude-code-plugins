@@ -138,6 +138,7 @@ obligation is checked at all.
 |---|---|
 | `engine` | the obligation is enforced outside this repo, by the Analitiq engine at run time; the record's own `rationale` states the reading that rests on (`.claude/rules/engine-behaviour-claims.md`) |
 | `external-ci` | a mechanical check exists but runs outside both this repo and the engine's runtime path — the CDK conformance kit DIP CI runs against a published connector, say |
+| `platform-save` | a mechanical check exists but runs outside this repo, the engine, and CI — the managed platform's own backend, when an author saves the artifact (a connection's authored value against its connector's declared type, a stream's field reference against the endpoint document it names) |
 | `authoring-practice` | no mechanical check exists anywhere; an author or a reviewing agent satisfies it by judgment, the rule's citation in plugin prose being the only guard |
 | `unenforced` | a known gap — nothing anywhere catches a violation yet |
 
@@ -168,7 +169,7 @@ than the rule id. Once it does, every finding carries:
 | Field | What it is |
 |---|---|
 | `rule` | The id of the record it concerns. |
-| `message_id` | Which of a rule's distinct complaints this is — a rule can fail in more than one way, and a consumer branches on this rather than parsing `message`. Immutable and never reused within its rule once assigned, for the reason `id` is: a consumer that branches on it is a stored or routed decision a rename or reuse silently repoints. |
+| `message_id` | Which of a rule's distinct complaints this is — a rule can fail in more than one way, and a consumer branches on this rather than parsing `message`. Immutable and never reused within its namespace once assigned, for the reason `id` is: a consumer that branches on it is a stored or routed decision a rename or reuse silently repoints. A finding's `rule` is that namespace; a finding with no `rule` (below) draws instead from one shared framework namespace, under the same guarantee. |
 | `kind` | `fail` \| `notApplicable` \| `informational`. See below. |
 | `severity` | `error` \| `warning`, the violated record's own `severity`, present only when `kind` is `fail`. A record's `info` never reaches a finding this way (`.claude/rules/validator-verdict-stability.md`): nothing that produces a `fail` costs less than `warning`, whatever else a record's `validator` documents. |
 | `path` | Where in the document the finding applies. |
@@ -209,6 +210,7 @@ could not run it this time:
 | A field constraint on a contract model rejected, and no record claims it | `fail` | `error` |
 | No detector recognised the document | `fail` | `error` |
 | A check failed before it identified which rule applies | `notApplicable` | none |
+| Something worth surfacing about how a check proceeded, with no rule to bind it — a direction guessed from an ambiguous filename, say | `informational` | none |
 
 The rows above are the framework reporting something no rule describes, not a
 new kind of rule — and not license to leave `rule` off anywhere else a check
