@@ -1,7 +1,7 @@
 ---
 paths:
-  - "packages/*/src/**/*.py"
-  - "packages/*/scripts/**/*.py"
+  - "packages/*/src/**/*"
+  - "packages/*/scripts/**/*"
   - "packages/*/pyproject.toml"
   - "rules/records/*.yaml"
 ---
@@ -9,11 +9,14 @@ paths:
 # Rule: within a major, a passing document keeps passing
 
 Governs every change that can alter what an installed `analitiq-validator` or
-`analitiq-contract-models` accepts: an enforcer under `packages/*/src`, a
-record's `severity` under `rules/records/`, the packaging under
+`analitiq-contract-models` accepts: an enforcer under `packages/*/src`, the
+data shipped beside it that an enforcer derives from — the vendored Arrow type
+grammar the accepted `arrow_type` spellings come from, the compiled rule
+registry — a record's `severity` under `rules/records/`, the packaging under
 `packages/*/scripts` that decides what the built wheel enforces, and the
 `version` each `pyproject.toml` carries. What puts a change here is that it can
-reach a released wheel's verdict, not which directory it sits in.
+reach a released wheel's verdict, not which directory it sits in and not what
+kind of file it is.
 
 **The invariant:** the major version is a promise about verdicts. From the
 first stable release onward, no release within a major rejects a document the
