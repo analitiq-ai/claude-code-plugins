@@ -149,9 +149,8 @@ Finding ids the validator can emit:
 <!-- END GENERATED: validator-ids -->
 
 Pass `--bundle-root` when validating the stitched pipeline; that is what runs
-the cross-document checks and what makes the `bundle-*` ids reachable. The
-ids below name rules about the files a connection carries rather than the
-documents a bundle assembles:
+the cross-document checks and what makes the `bundle-*` ids reachable. Each
+id below names the rule it applies:
 
 - `connector-endpoint-ref` — **warning-only**: a `scope: "connector"` stream ref
   naming an endpoint the downloaded connector does not publish

@@ -19,23 +19,17 @@ Routing:
     ``type_map_*`` entity the package also gates the filename (`RULE-TMAP-023`)
     and grades in that direction.
   * ``pipeline`` with ``--bundle-root`` -> ``analitiq.validator.validate_tree``
-    over the layout below, read as text and keyed the way the package's tree
-    API expects. The package assembles the bundle, checks referential integrity
-    (a draft pipeline is not held to runnability; an ``active`` one is), grades
-    each connection's type maps, and verifies ``scope='connector'`` refs against
-    the connectors' endpoints on disk.
+    over a tree read from disk, keyed the way the package's tree API expects:
+    the ``--document`` itself under the key of a pipeline root whatever its own
+    name, its ``streams/`` beside it, and each pattern ``_bundle_documents``
+    globs under ``--bundle-root``. `validate_tree`'s docstring carries what a
+    pipeline tree holds; the globs below are how this reader fills one. The
+    package assembles the bundle, checks referential integrity (a draft
+    pipeline is not held to runnability; an ``active`` one is), grades each
+    connection's type maps, and verifies ``scope='connector'`` refs against the
+    connectors' endpoints on disk.
 
-The ``--bundle-root`` layout, as tree keys::
-
-    pipeline.json                                   <- --document, whatever its name
-    streams/*.json                                  <- beside the document
-    connections/<slug>/connection.json              <- under --bundle-root
-    connections/<slug>/definition/endpoints/*.json
-    connections/<slug>/definition/type-map-read.json, type-map-write.json, type-map.json
-    connectors/<slug>/definition/connector.json
-    connectors/<slug>/definition/endpoints/*.json
-
-A file the layout names that cannot be read as text (a directory under a
+A file a pattern names but that cannot be read as text (a directory under a
 document's name, a dangling symlink, an undecodable file) is handed over as
 ``Unreadable``, so the package sees the member was there and reports the read
 failure at its key.
