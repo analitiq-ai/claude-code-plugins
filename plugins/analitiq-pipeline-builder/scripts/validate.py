@@ -22,8 +22,9 @@ Routing:
     over a tree read from disk, keyed the way the package's tree API expects:
     the ``--document`` itself under the key of a pipeline root whatever its own
     name, its ``streams/`` beside it, and each pattern ``_bundle_documents``
-    globs under ``--bundle-root``. `validate_tree`'s docstring carries what a
-    pipeline tree holds; the globs below are how this reader fills one. The
+    globs under ``--bundle-root``. The ``analitiq.validator.trees`` module
+    docstring carries what a pipeline tree holds; the globs below are how this
+    reader fills one. The
     package assembles the bundle, checks referential integrity (a draft
     pipeline is not held to runnability; an ``active`` one is), grades each
     connection's type maps, and verifies ``scope='connector'`` refs against the

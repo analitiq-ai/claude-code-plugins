@@ -64,9 +64,10 @@ def register_validator_ids(ids: set[str]) -> None:
 _Validator = Callable[[Any, "Location | None", "str | None"], list[dict]]
 _KIND_REGISTRY: list[tuple[Callable[[Any], bool], _Validator]] = []
 
-#: The explicit routes `validate_document(..., entity=...)` accepts, in the order
-#: a caller's CLI lists them. Each is a kind an author names when validating one
-#: file; the per-kind modules bind them through `register_entity`.
+#: The explicit routes `validate_document(..., entity=...)` accepts. Each is a
+#: kind an author names when validating one file; the per-kind modules bind them
+#: through `register_entity`. A caller offering a choice renders this tuple, so
+#: the order here is the order an author is offered.
 ENTITIES = ("pipeline", "stream", "connection", "database_endpoint",
             "type_map_read", "type_map_write")
 _ENTITY_REGISTRY: dict[str, _Validator] = {}
