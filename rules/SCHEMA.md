@@ -30,7 +30,8 @@ this registry exists to remove (`.claude/rules/no-drift-surfaces.md`).
 | `id` | yes | `RULE-<AREA>-NNN`. Immutable, never reused — it appears in validator findings and archived diagnostics, so reissuing one silently re-points every stored occurrence. The filename must match it. |
 | `statement` | yes | The normative sentence, RFC 2119 keywords in caps. Self-contained: someone reading only this understands the obligation. Never restates a value the contract owns — `targets` and `fields` point at what does. |
 | `tier` | yes | What *kind* of rule it is. See below. |
-| `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it, except that a rule a pydantic validator applies is always `error`: that enforcer can only reject the document, so a lower cost on the record is one no document ever pays. `test_a_rule_bound_to_a_pydantic_validator_costs_an_error` in `packages/contract-models/tests/unit/test_rule_registry.py` pins it. Whether a change to this field moves the packages' major version is decided by `.claude/rules/validator-verdict-stability.md`. |
+| `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it, except that a rule a pydantic validator applies is always `error`: that enforcer can only reject the document, so a lower cost on the record is one no document ever pays. `test_a_rule_bound_to_a_pydantic_validator_costs_an_error` in `packages/contract-models/tests/unit/test_rule_registry.py` pins it. Whether a change to this field moves the packages' major version is decided by `.claude/rules/validator-verdict-stability.md`. A finding reports this value; nothing that enforces the rule declares its own — a call site naming its own severity is a second copy of a fact this field already owns. |
+| `enforcement_location` | required when `validator` is `null` | Where the obligation is actually checked, when nothing in this repo does: `engine` — the Analitiq engine rejects or corrects it at run time; `authoring-practice` — no mechanical check exists anywhere, and an author or a reviewing agent satisfies it by judgment, the rule's citation in plugin prose being the only guard; `unenforced` — a known gap, nothing anywhere catches a violation yet. A non-null `validator` already answers where the rule is enforced, so the field carries nothing further when one is present. |
 | `scopes` | yes | The artifact kinds it binds, as a list from the vocabulary `SCOPES` declares in `analitiq.contracts.shared.rule_record` — each member names the kind of document whose author the rule binds, plus `any` for the rules that bind every authored document. A list because a rule can grade more than one kind, and the generated reference is split by scope: a scalar scope makes it decide, silently, which of two authors never meets the rule. `any` may not appear beside a named kind — it already covers every document — and an entry may not repeat. It is not derived from the published resources and does not track them: `connector-package` is a repository an author lays out and no resource renders, `type-map` covers both a read map and a write map, and several published resources have no member because no rule has needed one. A member is added when a rule does. Scopes decide which FILE of a plugin's generated reference set the rule lands in; who the rule is rendered *to* is `owners`. |
 | `validator` | no | What applies it: `dotted.module::Symbol.attr`. It names the module that is **imported**, under `analitiq.`, never a path to a file standing in for one — the record ships in `rules.json`, where a repo path resolves for nobody, and a path is checked by slicing rather than by importing, so one that never existed passes. The module half must be a dotted identifier chain, which is how a path is refused whatever it ends in. It lands in one of two packages, decided by how much the check must see: a rule one document settles alone is a `@model_validator` in `contract-models`, and a rule needing a second document in hand is a check in `validator`, bound to the function that emits the finding. An enforcer that reports `warning` is a check in `validator` whatever it needs to see: a `@model_validator` can only reject, so it cannot carry a severity below `error` (`.claude/rules/validator-verdict-stability.md`). Lint-resolved by import, so a renamed validator fails the build instead of leaving a record claiming an enforcement it lost. `null` when nothing does. |
 | `owners` | yes | Who applies the rule and decides a change to it, as a list of `engine`, `connector-plugin`, `pipeline-plugin`. More than one is normal: a type map is authored by both plugins and executed by the engine. |
@@ -70,22 +71,29 @@ Recorded so nobody re-adds them thinking they were forgotten:
   vocabulary of relational checks was dispatched from the record. Enforcement is
   ordinary Python now, so a rule is applied by the symbol `validator` names or
   by nothing; there is no third state for a key to select. A key naming a
-  dispatch target is a key a typo can silently disable.
+  dispatch target is a key a typo can silently disable. A *finding's* `kind`
+  (below) is a different axis on a different object — whether a check found a
+  violation at all, not which check to run — and does not revive this one.
 
 ## `tier` — what kind of rule
 
-| Tier | The rule says | Typically |
-|---|---|---|
-| `structural` | one artifact has this shape | a `Literal`, a pattern, a bound, a required field, a closed object, a discriminated union — usually rendered into the published JSON Schema, but a rule about what a connector's `connector.py` may contain is structural too |
-| `advisory` | fields *within* one document must agree | set-equality, disjointness, membership, cross-key uniqueness — what stock JSON Schema cannot express |
-| `referential` | this artifact must agree with another one | a `connector_id` against its directory name, a stream field against the endpoint declaring it, a declared capability against the hook implementing it |
-| `procedural` | the author must do something in a particular way or order | what is regenerated after what, what is never hand-edited, what the engine owns and so is never authored |
-| `judgment` | several authorings all validate and one is right | driver selection, sync versus async, whether a system's catalog level is addressable |
+Tier answers two different questions, and states which one first: whether the
+rule constrains the *artifact* being authored, or the *author* authoring it.
 
-Tier is the rule's *nature*, `validator` its enforcement,
-`severity` its cost. Keeping the three apart is the point: a `referential` rule
-may name a validator or not, and one that names none is not a lesser rule — it is
-one whose enforcement lives somewhere this repo cannot reach.
+| Axis | Tier | The rule says | Typically |
+|---|---|---|---|
+| Constrains an artifact | `shape` | one artifact has this form | a `Literal`, a pattern, a bound, a required field, a closed object, a discriminated union — usually rendered into the published JSON Schema, but a rule about what a connector's `connector.py` may contain is shape too |
+| | `coherence` | fields *within* one document must agree | set-equality, disjointness, membership, cross-key uniqueness — what stock JSON Schema cannot express |
+| | `reference` | this artifact must agree with another one | a `connector_id` against its directory name, a stream field against the endpoint declaring it, a declared capability against the hook implementing it |
+| Constrains the author | `process` | the author must do something in a particular way or order | what is regenerated after what, what is never hand-edited, what the engine owns and so is never authored |
+| | `choice` | several authorings all validate and one is right | driver selection, sync versus async, whether a system's catalog level is addressable |
+
+Tier is the rule's *nature* — which axis it sits on, and where — `validator`
+its enforcement, `severity` its cost. Keeping the three apart is the point: a
+`reference` rule may name a validator or not, and one that names none is not a
+lesser rule — it is one whose enforcement lives somewhere this repo cannot
+reach, which `enforcement_location` says explicitly instead of leaving
+unstated.
 
 ## `validator` — what applies the rule
 
@@ -121,6 +129,46 @@ nothing" is a verdict someone writes down rather than a silence nobody reviews;
 | `error` | the artifact is wrong; a violation produces a broken connector, pipeline or run |
 | `warning` | legal but very likely a mistake — a coverage gap, a shape that works today and will not survive the next case |
 | `info` | a convention worth stating and citing, whose violation costs only consistency |
+
+## Findings — what a check reports
+
+A finding is not a record; it is one thing a check said about one document,
+raised by a `@model_validator` in `analitiq.contracts` or produced by a check
+in `analitiq.validator`. Every finding carries:
+
+| Field | What it is |
+|---|---|
+| `rule` | The id of the record it concerns. Absent only in the cases named below, and no others. |
+| `message_id` | Which of a rule's distinct complaints this is — a rule can fail in more than one way, and a consumer branches on this rather than parsing `message`. |
+| `kind` | `fail` \| `notApplicable` \| `informational`. See below. |
+| `severity` | The violated record's `severity`, present only when `kind` is `fail`. |
+| `path` | Where in the document the finding applies. |
+| `message` | The human-readable complaint. |
+
+### `kind`
+
+| `kind` | Means |
+|---|---|
+| `fail` | the document violates the rule; `severity` names the cost |
+| `notApplicable` | the check could not evaluate the document — a sibling file was unreachable, a path could not be resolved — and reports nothing about whether the rule holds |
+| `informational` | something worth surfacing that violates no rule — a default was silently applied, say |
+
+A `notApplicable` or `informational` finding never carries a `severity`:
+nothing below `fail` costs anything, and a check that could not run has not
+found a violation to price. `_core.py`'s `passed = all(...)` reduction reads
+`severity`, so a finding with none can never flip it.
+
+`rule` is absent only in the cases named below, and no others:
+
+| Case | `kind` | `severity` |
+|---|---|---|
+| A field constraint on a contract model rejected, and no record claims it | `fail` | `error` |
+| No detector recognised the document | `fail` | `error` |
+| A check could not run | `notApplicable` | none |
+
+The rows above are the framework reporting something no rule describes, not a
+new kind of rule — and not license to leave `rule` off anywhere else a check
+emits one.
 
 ## Guards
 
