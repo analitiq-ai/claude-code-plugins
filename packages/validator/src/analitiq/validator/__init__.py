@@ -5,8 +5,10 @@ pipeline JSON documents against the **contract models**
 (`analitiq-contract-models`) plus the cross-file coverage and advisory checks a
 single-document model cannot express, and validates an assembled **pipeline
 bundle** for cross-document referential integrity. Output is a JSON report
-(`{"passed": bool, "findings": [...]}`); the CLI exits non-zero on any
-error-severity finding.
+(`{"passed": bool, "findings": [...]}`); the CLI exits non-zero exactly when
+`passed` is `False` — `finding_costs_a_pass` owns the full predicate, which
+also fails closed on an unchecked error-tier rule, not only a `fail` finding
+at `severity: "error"`.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which self-registers its detector→validator

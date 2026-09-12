@@ -358,17 +358,29 @@ access and may not guess field types).
           "kind": { "type": "string", "enum": ["fail", "notApplicable", "informational"] },
           "severity": {
             "type": "string",
-            "enum": ["error", "warning"],
-            "description": "Present only when kind is fail."
+            "enum": ["error", "warning"]
           },
           "path": { "type": "string", "description": "JSON pointer into the document" },
           "message": { "type": "string" }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "fail" } }, "required": ["kind"] },
+            "then": { "required": ["severity"] },
+            "else": { "not": { "required": ["severity"] } }
+          }
+        ]
       }
     }
   }
 }
 ```
+
+This is `finding()`'s current shape; the `analitiq-validator` release this
+skill's self-install line pins predates it and still returns the previous
+`validator`/`severity`/`path`/`message` shape with no `message_id`/`kind` at
+all. A finding missing those two keys is that older shape, not a malformed
+one — treat both until the pin catches up to a release carrying this schema.
 
 ## DriftVerdict
 
