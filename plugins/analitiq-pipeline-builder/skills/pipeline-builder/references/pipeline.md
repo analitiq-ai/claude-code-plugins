@@ -10,9 +10,10 @@ A phase that halts stops the build. Halting means: do not write partial files,
 do not advance to a later phase, and do not auto-retry without user input.
 
 The orchestrator surfaces what it halted on and waits. Where the halt came from
-a validator or a sub-agent, the finding travels verbatim — `validator`, `path`
-and `message` as they were emitted — because the user is the one who has to fix
-the file, and a paraphrased diagnostic sends them to the wrong line.
+a validator or a sub-agent, the finding travels verbatim, exactly as it was
+emitted (`skills/pipeline-builder/references/io-contracts.md`'s `Diagnostics`
+section owns the shape) — because the user is the one who has to fix the file,
+and a paraphrased diagnostic sends them to the wrong line.
 
 ## Parallel dispatch
 

@@ -251,7 +251,7 @@ def _type_map_findings(entity: str, doc, document_path: Path) -> list[dict]:
         # is the same adapter-adapts-published-behavior move as require_runnable.
         # Checked both ways: the currently-pinned release predates the `rule`
         # axis and still names this check `validator="type-map-write-coverage"`;
-        # a release carrying this PR's shape names it `rule="RULE-TMAP-017"`
+        # a release carrying the `rule` axis names it `rule="RULE-TMAP-017"`
         # instead and drops `validator` entirely.
         findings = [
             f for f in findings

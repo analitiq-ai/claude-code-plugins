@@ -98,9 +98,11 @@ Schemas are generated from — so there is no schema fetch. It runs:
    (sibling type-map coverage, filename ↔ endpoint_id, endpoint id uniqueness,
    endpoint id ↔ locator, endpoint → transport), embedded-schema validity, a
    recorded sample against the node declaring it, and quality warnings on a
-   type map. Each finding here carries the `RULE-*` id it concerns too. A
-   document matching no known artifact kind, or one that could not be read or
-   parsed, carries no rule id — there is none to violate.
+   type map. A finding here carries the `RULE-*` id it concerns, same as
+   above — except a document matching no known artifact kind or one that
+   could not be read or parsed (there is none to violate), and a check that
+   could not evaluate a rule at all (reported `notApplicable`, so there is
+   none to decide).
 
    The validator checks JSON documents only; the database package files
    (`connector.py`, `pyproject.toml`, …) are enforced by registry CI.

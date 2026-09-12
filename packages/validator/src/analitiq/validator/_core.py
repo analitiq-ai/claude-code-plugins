@@ -10,8 +10,8 @@ This module owns the parts that are independent of any particular artifact kind:
   under, defined once so the DOMAIN dance is not reimplemented per kind;
 - the KIND-VALIDATOR REGISTRY and `_dispatch()`/`validate_document()` driver — a
   per-kind module (e.g. `connectors`) contributes a `(detector, validator_fn)`
-  pair plus its own validator ids; `_dispatch` consults the registry rather than
-  hard-coding any kind's branches, so a new kind is *register, done*. A kind whose
+  pair; `_dispatch` consults the registry rather than hard-coding any kind's
+  branches, so a new kind is *register, done*. A kind whose
   entire validity is its contract model registers via `register_model_kind()`;
 - `_bounded()` — the one width every borrowed diagnostic is clipped to, so a
   finding is bounded the same way whichever route the text arrived by;
@@ -277,7 +277,7 @@ def validate_document(doc: Any, doc_path: Path | None = None,
     ambiguous (a caller passing `--schema-url .../type-map-write/latest.json`
     from a temp file): it disambiguates read vs write when the filename can't.
     """
-    return _run_guarded(_dispatch, doc, doc_path, schema_url, label="document validation")
+    return _run_guarded(_dispatch, doc, doc_path, schema_url, crash_label="document validation")
 
 
 def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:
@@ -296,8 +296,13 @@ def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) ->
             "a pipeline 'connections'."))]
 
 
-def _run_guarded(fn: Callable, *args, label: str) -> list[dict]:
+def _run_guarded(fn: Callable, *args, crash_label: str) -> list[dict]:
     """Run a check; a crash becomes one finding so other checks survive.
+
+    `crash_label` is keyword-only and named apart from any parameter a
+    wrapped `fn` might itself take (`_embedded_schema_example_findings`'s own
+    `label`, say) — a same-named keyword here would be consumed by this
+    function instead of reaching `fn`, silently dropping the caller's intent.
 
     `notApplicable`, not `fail`: the crash means nothing here decided whether
     any rule the check would have graded holds, which is exactly what that
@@ -312,7 +317,7 @@ def _run_guarded(fn: Callable, *args, label: str) -> list[dict]:
         return [finding(
             message_id="check-crashed", kind="notApplicable", path="",
             message=(
-                f"{label} crashed unexpectedly ({type(exc).__name__}: {exc}); "
+                f"{crash_label} crashed unexpectedly ({type(exc).__name__}: {exc}); "
                 "this is a validator bug — please report."))]
 
 

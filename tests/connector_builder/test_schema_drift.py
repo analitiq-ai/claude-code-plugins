@@ -1801,7 +1801,7 @@ def test_diagnostics_properties_match_the_finding_constructor() -> None:
     produce (one `fail`, carrying `severity`; one `notApplicable`, not) rather
     than `inspect.signature`. A property the fragment names that neither call
     produces is a field no consumer will ever see — which is how `rule_doc`
-    survived in the prose. Nothing pinned the property SET until this test.
+    survived in the prose. Nothing else pins the property SET.
     """
     from analitiq.contracts.shared.rules import all_rules
     from analitiq.validator._core import finding

@@ -887,13 +887,11 @@ def _load_json_sibling(
     when the caller names one, the rule that sibling's content would otherwise
     satisfy.
 
-    `rule` is a parameter because the callers are different checks. It used to
-    be hardcoded to report every failure alike, and the endpoint-anchored
-    caller relabelled the findings afterwards — so a connector.json that would
-    not parse was reported against an endpoint under the type-map check,
-    invisible to a fix loop filtering on the check that actually failed.
-    Naming the rule at the call site fixes that at the source instead of
-    rewriting its output.
+    `rule` is a parameter because the callers are different checks, each
+    attributing an unreadable sibling to whichever obligation it was reading
+    that sibling to satisfy — RULE-PKG-030 for a type-map load, `None` where
+    the read precedes any rule evaluation — rather than a shared default that
+    could name the wrong one.
     """
     try:
         return json.loads(path.read_text()), []
@@ -1081,7 +1079,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             continue
         findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
         findings.extend(_run_guarded(_embedded_schema_example_findings, ep_doc,
-                                     ep_path.name, label="embedded schema example grading"))
+                                     ep_path.name, crash_label="embedded schema example grading"))
         # Cross-file: the endpoint's transport_ref sites resolve against THIS
         # connector's `transports` — checkable only here, where both documents
         # are in hand.
@@ -1137,7 +1135,7 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     if isinstance(doc, dict):
         findings += _embedded_schema_findings(doc)
         findings += _run_guarded(_embedded_schema_example_findings, doc,
-                                 label="embedded schema example grading")
+                                 crash_label="embedded schema example grading")
         # `endpoint-transport-ref` is cross-document: it needs the sibling
         # connector.json's `transports`, which only `check_coverage` has. Say so
         # rather than returning a silent clean pass — an author validating a
