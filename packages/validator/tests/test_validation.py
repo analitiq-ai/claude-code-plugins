@@ -203,6 +203,153 @@ def test_a_root_non_string_dialect_declaration_is_a_document_error(validator):
     assert not [f for f in findings if "validator bug" in f["message"]], findings
 
 
+def _read_endpoint(response_schema, endpoint_id="widgets", path="/widgets"):
+    return {
+        "$schema": API, "endpoint_id": endpoint_id,
+        "operations": {"read": {
+            "request": {"method": "GET", "path": path}, "params": {},
+            "response": {"records": {"ref": "response.body"}, "schema": response_schema},
+        }}}
+
+
+def _write_endpoint(input_schema, endpoint_id="widgets", path="/widgets"):
+    return {
+        "$schema": API, "endpoint_id": endpoint_id,
+        "operations": {"write": {"insert": {
+            "request": {
+                "method": "POST", "path": path,
+                "headers": {"Accept": "application/json"},
+                "body": {"r": {"from_input": "record"}},
+            },
+            "params": {},
+            "input": {"schema": input_schema},
+        }}}}
+
+
+class TestFourWalkerRulesAreAttributed:
+    """RULE-ENDP-005/006/026/064 — the walker error-accumulation redesign.
+
+    `_validate_arrow_type_in_json_schema` and `_validate_schema_refs` used to
+    accumulate plain strings and raise one bare `ValueError`, so every
+    document these four rules govern reached `_model_findings` as
+    `rule=None`. They now raise a `MultiRuleViolation` carrying one
+    `RuleViolation` per complaint, each with its own `rule_id` and a `path`
+    located to the offending node — `_model_findings` expands it into one
+    finding per complaint instead of folding them into one.
+    """
+
+    def _rule_findings(self, validator, doc):
+        return [
+            f for f in _errors(validator.validate_document(doc))
+            if f["validator"] == "contract-model"
+        ]
+
+    def test_response_schema_pairing_miss_is_rule_endp_005(self, validator):
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {"a": {"native_type": "int"}},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["path"]) for f in findings
+            if f["message_id"] == "native-arrow-pairing-incomplete"
+        ] == [("RULE-ENDP-005", "/operations/read/response/schema/properties/a")]
+
+    def test_write_input_schema_pairing_miss_is_rule_endp_006(self, validator):
+        doc = _write_endpoint({
+            "type": "object",
+            "properties": {"z": {"native_type": "int"}},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["path"]) for f in findings
+            if f["message_id"] == "native-arrow-pairing-incomplete"
+        ] == [("RULE-ENDP-006", "/operations/write/insert/input/schema/properties/z")]
+
+    def test_dangling_ref_in_response_schema_is_rule_endp_026(self, validator):
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {"b": {"$ref": "#/$defs/Typo"}},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["message_id"], f["path"]) for f in findings
+        ] == [(
+            "RULE-ENDP-026", "ref-dangling",
+            "/operations/read/response/schema/properties/b",
+        )]
+
+    def test_dangling_ref_in_write_input_schema_is_also_rule_endp_026(self, validator):
+        # `_validate_schema_refs` binds both `ResponseExtraction` and
+        # `WriteInput` — this is the caller the pre-existing embedded-ref
+        # tests never construct.
+        doc = _write_endpoint({
+            "type": "object",
+            "properties": {"a": {"$ref": "#/$defs/Typo"}},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["message_id"], f["path"]) for f in findings
+        ] == [(
+            "RULE-ENDP-026", "ref-dangling",
+            "/operations/write/insert/input/schema/properties/a",
+        )]
+
+    def test_schema_keyword_below_root_is_rule_endp_064(self, validator):
+        doc = _write_endpoint({
+            "type": "object",
+            "properties": {"b": {
+                "type": "object", "$schema": JS, "properties": {},
+            }},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["message_id"], f["path"]) for f in findings
+        ] == [(
+            "RULE-ENDP-064", "schema-keyword-on-subschema",
+            "/operations/write/insert/input/schema/properties/b",
+        )]
+
+    def test_two_simultaneous_violations_are_two_separate_findings(self, validator):
+        # A pairing miss and a dangling ref at different nodes of the same
+        # schema: each must land as its own attributed, located finding — not
+        # folded into one message attributed to only the first one found.
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {
+                "a": {"native_type": "int"},
+                "b": {"$ref": "#/$defs/Typo"},
+            },
+        })
+        findings = self._rule_findings(validator, doc)
+        assert sorted((f.get("rule"), f["path"]) for f in findings) == sorted([
+            ("RULE-ENDP-005", "/operations/read/response/schema/properties/a"),
+            ("RULE-ENDP-026", "/operations/read/response/schema/properties/b"),
+        ])
+
+    def test_unattributed_complaint_still_carries_its_own_path(self, validator):
+        # No registered rule covers an arrow_type spelling that fails the
+        # canonical-vocabulary pattern; it must still surface as its own
+        # `rule=None` finding, located, rather than vanishing into a joined
+        # message or being silently dropped alongside an attributed sibling.
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {
+                "a": {"native_type": "int"},
+                "c": {"native_type": "int", "arrow_type": "NotArrowType"},
+            },
+        })
+        findings = self._rule_findings(validator, doc)
+        unattributed = [f for f in findings if f.get("rule") is None]
+        assert [(f["message_id"], f["path"]) for f in unattributed] == [
+            ("value_error", "/operations/read/response/schema/properties/c"),
+        ]
+        # And the attributed sibling is not displaced by it.
+        assert ("RULE-ENDP-005", "/operations/read/response/schema/properties/a") in [
+            (f.get("rule"), f["path"]) for f in findings
+        ]
+
+
 @pytest.fixture
 def connector_base():
     # A real, model-valid api connector (hand-crafting the exact Connector

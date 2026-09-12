@@ -73,7 +73,8 @@ try:
             SLUG_RE,
         )
         from analitiq.contracts.shared.json_schema import (
-            _escape_pointer_token,
+            escape_pointer_token,
+            pointer_position,
             walk_structural_positions,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
@@ -229,7 +230,7 @@ def _embedded_json_schemas(ep_doc: dict) -> list[tuple[str, Any]]:
     if isinstance(write, dict):
         for mode, block in write.items():
             if isinstance(block, dict) and isinstance(block.get("input"), dict):
-                out.append((f"/operations/write/{_escape_pointer_token(mode)}/input/schema",
+                out.append((f"/operations/write/{escape_pointer_token(mode)}/input/schema",
                             block["input"].get("schema")))
     return out
 
@@ -245,20 +246,16 @@ def _walk_schema_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
     alone. That walk is the contract's
     :func:`analitiq.contracts.shared.json_schema.walk_structural_positions`, so
     the positions this validator reaches are the positions the contract models
-    reach. This is its adapter into the pointer dialect a finding's `path`
-    carries: a `str` token is escaped, because a property name, a `$defs` name
-    or a `patternProperties` regex is the author's and a raw `a/b` reads as two
-    segments while a raw `~` opens an escape; an `int` token is a list index and
-    renders as itself. Non-dict values are filtered out — a boolean short-form
+    reach. `pointer_position` is its adapter into the pointer dialect a
+    finding's `path` carries — the same adapter the contract's own endpoint
+    walkers use, so the two can never disagree about how a token becomes a
+    pointer segment. Non-dict values are filtered out — a boolean short-form
     declares no node to grade, and a malformed one is the meta-schema check's
     to report."""
     for tokens, node in walk_structural_positions(schema):
         if not isinstance(node, dict):
             continue
-        yield pointer + "".join(
-            f"/{token}" if isinstance(token, int) else f"/{_escape_pointer_token(token)}"
-            for token in tokens
-        ), node
+        yield pointer + pointer_position(tokens), node
 
 
 def _collect_native_arrow_pairs(ep_doc: dict) -> list[tuple[str, str, str]]:

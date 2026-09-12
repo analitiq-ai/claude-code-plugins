@@ -75,15 +75,54 @@ class RuleViolation(ValueError):
     model rejection reads `rule_id`/`message_id` off that original object
     rather than parsing the wrapped string, which pydantic's own wrapping
     would defeat.
+
+    `rule_id` is `None` for a complaint no record claims — the
+    ``rule=None`` framework fallback ``rules/SCHEMA.md`` documents, minted
+    directly rather than through :func:`violation`, which requires a
+    resolvable id. `path` is `None` unless the enforcer knows a location more
+    precise than pydantic's own ``err["loc"]`` (`rules/SCHEMA.md`'s Findings
+    section names no format for it); a raiser that never sets it costs
+    nothing — ``_model_findings`` falls back to ``err["loc"]`` exactly as it
+    always has, for every one of this class's other call sites.
     """
 
-    def __init__(self, rule_id: str, message_id: str, message: str) -> None:
+    def __init__(
+        self, rule_id: str | None, message_id: str, message: str, *,
+        path: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.rule_id = rule_id
         self.message_id = message_id
+        self.message = message
+        self.path = path
 
 
-def violation(rule_id: str, message_id: str, detail: str) -> RuleViolation:
+class MultiRuleViolation(ValueError):
+    """Every :class:`RuleViolation` found while validating one document,
+    where a ``@model_validator`` gets exactly one raise to speak for all of
+    them.
+
+    Pydantic's `mode="after"` validator has two outcomes — return the model,
+    or raise once — so an enforcer that walks a whole document and finds
+    several unrelated complaints cannot raise once per complaint. It does not
+    follow that the document can only be told about one of them: this
+    exception carries the whole list, and ``_model_findings``
+    (`analitiq.validator._core`) unpacks it into one finding per entry — each
+    with its own `rule_id`, `message_id` and `path` — rather than folding
+    them into a single attributed-to-one, joined-text finding. Every other
+    enforcer in the registry still raises a bare `RuleViolation` or
+    `ValueError` and is completely unaffected: this is a second exception
+    shape ``_model_findings`` recognises, not a change to the existing one.
+    """
+
+    def __init__(self, violations: list[RuleViolation]) -> None:
+        super().__init__("; ".join(v.message for v in violations))
+        self.violations = violations
+
+
+def violation(
+    rule_id: str, message_id: str, detail: str, *, path: str | None = None,
+) -> RuleViolation:
     """The error an enforcer raises, with the rule and complaint it applies
     already named.
 
@@ -95,11 +134,12 @@ def violation(rule_id: str, message_id: str, detail: str) -> RuleViolation:
     branches on this rather than parsing `detail`. Both the statement and the
     rule id are read from the record, so a reworded rule rewords its own
     diagnostic. An id no record defines raises ``KeyError`` here rather than
-    emitting a citation that resolves to nothing.
+    emitting a citation that resolves to nothing. `path` is optional and
+    unused by every call site that predates it — see `RuleViolation`.
     """
     rule = rule_by_id(rule_id)
     message = f"[{rule.id}] {' '.join(rule.statement.split())} ({detail})"
-    return RuleViolation(rule.id, message_id, message)
+    return RuleViolation(rule.id, message_id, message, path=path)
 
 
 # --- Shared primitives ------------------------------------------------------

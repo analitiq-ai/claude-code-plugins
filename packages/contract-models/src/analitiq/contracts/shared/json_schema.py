@@ -266,7 +266,7 @@ class DeclaredPathError(SchemaResolutionError):
         self.index = index
 
 
-def _escape_pointer_token(name: str) -> str:
+def escape_pointer_token(name: str) -> str:
     """One object key as an RFC 6901 §3 reference token. `~` before `/`: the
     other order re-encodes the `~` it just wrote, turning `a/b` into `a~01b`.
 
@@ -276,8 +276,36 @@ def _escape_pointer_token(name: str) -> str:
     because a finding's `path` is a JSON-string pointer (§5) a consumer
     resolves directly, never a URI. Symmetrising them would either encode a
     path nothing URI-decodes, or stop decoding refs a stock resolver decodes.
+
+    Not module-private: both `analitiq.validator.connectors` and
+    `analitiq.contracts.endpoints` escape a token outside a full
+    :func:`pointer_position` walk (a single map key, not a structural
+    position's tokens), so this is a shared primitive with two callers, not
+    an implementation detail of this module alone.
     """
     return name.replace("~", "~0").replace("/", "~1")
+
+
+def pointer_position(tokens: StructuralPosition) -> str:
+    """`tokens`, as yielded by :func:`walk_structural_positions`, rendered as
+    an RFC 6901 pointer suffix (no leading context — just this position's own
+    segments, for a caller to append to whatever prefix names where the
+    walked document itself sits).
+
+    The one place this dialect is built, so every finding `path` naming a
+    position inside an embedded schema — the contract's own
+    `analitiq.contracts.endpoints` walkers and the validator's
+    `analitiq.validator.connectors._walk_schema_nodes` — agrees byte-for-byte
+    on how a token becomes a pointer segment: a `str` token is one JSON
+    object key and is escaped with :func:`escape_pointer_token` (a raw `a/b`
+    would read as two segments, a raw `~` would open an escape it does not
+    mean); an `int` token is an array index and renders as itself, per RFC
+    6901 §4.
+    """
+    return "".join(
+        f"/{token}" if isinstance(token, int) else f"/{escape_pointer_token(token)}"
+        for token in tokens
+    )
 
 
 def _unescape_pointer_token(token: str) -> str:

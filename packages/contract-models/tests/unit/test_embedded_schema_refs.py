@@ -56,7 +56,7 @@ from analitiq.contracts.shared.json_schema import (
     resolve_schema_ref,
     walk_structural_positions,
 )
-from analitiq.contracts.shared.rules import all_rules
+from analitiq.contracts.shared.rules import all_rules, RuleViolation
 
 
 API_SCHEMA_URL = "https://schemas.analitiq.ai/api-endpoint/latest.json"
@@ -1434,21 +1434,29 @@ class TestOneStructuralWalk:
         assert pointers[0] == "/p"
         assert sorted(pointers) == sorted(self._pointer("/p", t) for t in dict_positions)
 
-        arrow_errors: list[str] = []
-        _validate_arrow_type_in_json_schema(doc, "input.schema", arrow_errors)
-        paired = " declares only one of native_type/arrow_type"
-        malformed = " is not a JSON Schema object/boolean"
-        assert sorted(e.split(paired)[0] for e in arrow_errors if paired in e) == sorted(
-            self._dotted("input.schema", t) for t in dict_positions)
-        assert [e.split(malformed)[0] for e in arrow_errors if malformed in e] == [
-            self._dotted("input.schema", non_dict)]
+        # `_validate_arrow_type_in_json_schema` and `_validate_schema_refs` now
+        # accumulate `RuleViolation`s, each carrying its own `rule_id`,
+        # `message_id` and `path` (`/schema` + this walker's own pointer
+        # dialect — independent of the `path` prose prefix passed in below) —
+        # branch on those structured fields rather than parsing `.message`,
+        # which is what RULE-ENDP-005/006/026/064's attribution exists for.
+        arrow_errors: list[RuleViolation] = []
+        _validate_arrow_type_in_json_schema(doc, "input.schema", arrow_errors, "RULE-ENDP-006")
+        paired = [e for e in arrow_errors if e.message_id == "native-arrow-pairing-incomplete"]
+        malformed = [e for e in arrow_errors if e.message_id == "value_error"]
+        assert all(e.rule_id == "RULE-ENDP-006" for e in paired)
+        assert sorted(e.path for e in paired) == sorted(
+            "/schema" + self._pointer("", t) for t in dict_positions)
+        assert all(e.rule_id is None for e in malformed)
+        assert [e.path for e in malformed] == ["/schema" + self._pointer("", non_dict)]
         assert len(arrow_errors) == len(dict_positions) + 1
 
-        ref_errors: list[str] = []
+        ref_errors: list[RuleViolation] = []
         _validate_schema_refs(doc, "input.schema", ref_errors)
-        marker = f".{refused} is not authorable"
-        assert sorted(e.split(marker)[0] for e in ref_errors if marker in e) == sorted(
-            self._dotted("input.schema", t) for t in dict_positions)
+        refused_violations = [e for e in ref_errors if e.message_id == "ref-refused-keyword"]
+        assert all(e.rule_id == "RULE-ENDP-026" for e in refused_violations)
+        assert sorted(e.path for e in refused_violations) == sorted(
+            "/schema" + self._pointer("", t) for t in dict_positions)
         assert len(ref_errors) == len(dict_positions)
 
 
