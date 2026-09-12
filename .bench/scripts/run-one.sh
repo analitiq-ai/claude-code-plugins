@@ -60,6 +60,12 @@ if [ "$CURL_STATUS" -ne 0 ]; then
   exit 0
 fi
 
+# `|` binds looser than `//`, so `.content | fromjson? // {parse_error: .content}`
+# parses as `.content | (fromjson? // {parse_error: .content})` — inside that
+# parenthesized alternative, `.` is the content STRING, not the root response,
+# so the fallback branch itself throws instead of capturing the raw content.
+# Bind it with `as` to sidestep the precedence trap entirely.
 jq --arg model "$MODEL" --arg diff "$DIFF_FILE" --argjson secs "$((END-START))" \
-  '{model:$model, diff:$diff, wall_seconds:$secs, usage, parsed: (.choices[0].message.content | fromjson? // {parse_error: .choices[0].message.content})}' \
+  '.choices[0].message.content as $c
+   | {model:$model, diff:$diff, wall_seconds:$secs, usage, parsed: (($c | fromjson?) // {parse_error: $c})}' \
   /tmp/bench_response.json > "$OUT_FILE"
