@@ -2284,7 +2284,7 @@ class ConnectorBase(StrictModel):
         try:
             return validate_tags(v)
         except ValueError as detail:
-            raise violation("RULE-SHRD-012", "tags-invalid", str(detail)) from None
+            raise violation("RULE-SHRD-012", "tag-invalid", str(detail)) from None
 
     @model_validator(mode="before")
     @classmethod
