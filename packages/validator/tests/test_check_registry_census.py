@@ -17,6 +17,12 @@ The universe is every literal `rule="RULE-…"` a `finding()` call carries — a
 rule id to emitter is an AST walk for `finding(…, rule="<id>", …)`: a call
 located by callee name and a literal `rule` keyword, never by reading what any
 surrounding text means.
+
+The no-rule half is censused too, in the other direction: `rules/SCHEMA.md`
+names the specific cases `rule` may be absent for, so a ruleless call site
+with no entry in `RULELESS_SITES` is a check reaching for the shortcut rather
+than attributing a real rule — the failure this file's other half cannot see,
+since it only ever looks at calls that DO carry one.
 """
 from __future__ import annotations
 
@@ -56,6 +62,112 @@ def _rule_id_emitters() -> dict[str, set[str]]:
         module = "analitiq.validator" if stem == "__init__" else f"analitiq.validator.{stem}"
         walk(ast.parse(path.read_text(encoding="utf-8")), module, None)
     return found
+
+
+def _ruleless_emitters() -> dict[tuple[str, str], int]:
+    """Map each `(module::owner, message_id)` a ruleless `finding()` call
+    carries to the line it sits on.
+
+    A call is ruleless when its `rule` keyword is absent or the literal
+    `None` — `_load_json_sibling` threads `rule` through from ITS caller, so
+    a call to it passing a literal `rule=None` is tracked the same way a
+    direct `finding()` call would be, attributed to whichever function made
+    that call. `_load_json_sibling`'s own internal `finding(rule=rule, …)`
+    is not itself ruleless by this walk (`rule` there is a variable, not a
+    literal `None`) — its callers are what decide, and are what this counts.
+    """
+    found: dict[tuple[str, str], int] = {}
+
+    def walk(node: ast.AST, module: str, owner: str | None) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                walk(child, module, owner or child.name)
+                continue
+            if isinstance(child, ast.Call) and getattr(child.func, "id", None) in (
+                "finding", "_load_json_sibling",
+            ):
+                kwargs = {kw.arg: kw.value for kw in child.keywords}
+                rule_kw = kwargs.get("rule")
+                is_ruleless = rule_kw is None or (
+                    isinstance(rule_kw, ast.Constant) and rule_kw.value is None
+                )
+                mid = kwargs.get("message_id")
+                if is_ruleless and isinstance(mid, ast.Constant) and isinstance(mid.value, str):
+                    found[(f"{module}::{owner or '<module>'}", mid.value)] = child.lineno
+            walk(child, module, owner)
+
+    for path in sorted(VALIDATOR_SRC.glob("*.py")):
+        stem = path.stem
+        module = "analitiq.validator" if stem == "__init__" else f"analitiq.validator.{stem}"
+        walk(ast.parse(path.read_text(encoding="utf-8")), module, None)
+    return found
+
+
+#: Every call site this package emits a ruleless finding from, mapped to the
+#: `rules/SCHEMA.md` framework case it is. A site this file's walk finds and
+#: this table does not name fails the build — the only way a check earns the
+#: right to omit `rule` is stating which documented case it is, the same
+#: discipline `EXEMPT_VALIDATOR_IDS` once enforced over categories.
+RULELESS_SITES: dict[tuple[str, str], str] = {
+    ("analitiq.validator._core::_dispatch", "unrecognized-document"): (
+        "no registered kind's detector claimed the document"),
+    ("analitiq.validator._core::main", "unreadable-document"): (
+        "the document could not be read or parsed at all, before any kind "
+        "was even identified"),
+    ("analitiq.validator._core::_run_guarded", "check-crashed"): (
+        "a check crashed; nothing decided whether the rule it would have "
+        "graded holds"),
+    ("analitiq.validator.connectors::<module>", "missing-contract-models-dependency"): (
+        "the contract-models dependency is missing; no rule was even "
+        "reachable to ask about"),
+    ("analitiq.validator.connectors::check_coverage", "coverage-check-skipped-no-path"): (
+        "coverage needs a filesystem-anchored document path this call did "
+        "not have"),
+    ("analitiq.validator.connectors::check_coverage", "coverage-check-skipped-bad-kind"): (
+        "the connector's kind is outside the closed enum the model already "
+        "rejects, so coverage was never asked"),
+    ("analitiq.validator.connectors::check_coverage", "endpoint-file-unreadable"): (
+        "a sibling endpoint file's read/parse failure precedes any rule "
+        "evaluation of its content"),
+    ("analitiq.validator.connectors::_validate_api_endpoint", "sibling-connector-unreadable"): (
+        "a read/parse failure has not evaluated RULE-ENDP-047 one way or "
+        "the other; which rule went unchecked is the sibling notApplicable "
+        "branch's to name, not this one's"),
+    ("analitiq.validator.connectors::_validate_type_map", "type-map-direction-defaulted"): (
+        "informational: a direction default is a fact about how this run "
+        "proceeded, not a violation of anything"),
+    ("analitiq.validator.pipelines::validate_pipeline_bundle", "bundle-not-a-mapping"): (
+        "rejects before any referential check the registry binds could even "
+        "begin"),
+    ("analitiq.validator.pipelines::validate_pipeline_bundle", "bundle-missing-pipeline-document"): (
+        "rejects before any referential check the registry binds could even "
+        "begin"),
+}
+
+
+def test_every_ruleless_finding_is_a_named_framework_case():
+    """`rules/SCHEMA.md`'s Findings section says `rule` is absent only in
+    named framework cases — never as a shortcut a new cross-document check
+    reaches for. `RULELESS_SITES` is that enumeration; a call site this walk
+    finds and that table does not name is the failure this test exists to
+    catch."""
+    found = _ruleless_emitters()
+    unaccounted = sorted(set(found) - set(RULELESS_SITES))
+    assert not unaccounted, (
+        "finding() (or _load_json_sibling, which threads rule through from "
+        "its caller) emits a ruleless finding RULELESS_SITES does not name "
+        "— add it with the framework case it is, or attribute an actual "
+        f"rule instead: {unaccounted}"
+    )
+
+
+def test_ruleless_sites_are_still_live():
+    """The rot direction: a table entry naming a call site this walk no
+    longer finds stays green forever and silently exempts the next ruleless
+    emission to reuse the name."""
+    found = _ruleless_emitters()
+    stale = sorted(set(RULELESS_SITES) - set(found))
+    assert not stale, f"RULELESS_SITES names call sites no longer emitting: {stale}"
 
 
 def test_every_finding_rule_id_resolves_to_a_record():

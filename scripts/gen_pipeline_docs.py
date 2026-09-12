@@ -301,12 +301,18 @@ _REACHABLE_CONNECTORS_SYMBOLS = {
 
 
 def render_validator_ids() -> str:
-    """Every rule id this adapter's own `analitiq.validator` entry points can
-    emit — the reachable subset of what
+    """Every rule id this adapter's own CROSS-DOCUMENT checks in
+    `analitiq.validator` can emit — the reachable subset of what
     `packages/validator/tests/test_check_registry_census.py` polices
-    package-wide. A single-document contract-model rejection carries a rule id
-    too, when a `rules.violation` raised it, but that half has no registry of
-    ids to enumerate here: it is whichever rule the model names."""
+    package-wide, deliberately excluding every rule reachable only through a
+    contract model's own `@model_validator`s: those are already catalogued in
+    full, per model, in `references/rules/database-endpoint.md` and
+    `references/rules/type-map.md` — restating their ids here would be the
+    same rule twice, one copy free to drift from the registry that renders
+    the other. A single-document contract-model rejection with no
+    `rules.violation` behind it carries a rule id too, when the model raised
+    one, but that half is open-ended by construction: it is whichever rule
+    the model names, not a set this function could enumerate."""
     from analitiq.contracts.shared.rules import all_rules
 
     ids = sorted(
@@ -317,7 +323,10 @@ def render_validator_ids() -> str:
     if not ids:
         raise RuntimeError("no rule is bound to a validator function this adapter reaches")
     out = [
-        "Rule ids this adapter's own `analitiq.validator` entry points can emit:",
+        "Rule ids this adapter's own cross-document checks in `analitiq.validator` "
+        "can emit (the checks a single-document contract model cannot make on its "
+        "own — sibling coverage, filename↔id, referential integrity across a "
+        "bundle):",
         "",
         ", ".join(f"`{v}`" for v in ids),
     ]

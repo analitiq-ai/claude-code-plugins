@@ -125,7 +125,7 @@ For unsupported cases (e.g., a connector kind the engine can't run —
 ## `Diagnostics` (output of `scripts/validate.py`)
 
 A finding may arrive in either of two shapes: locally minted by this adapter
-(`validator`, `severity`, `path`, `message`), or forwarded unchanged from
+(`validator`, `severity`, `path`, `message`), or forwarded from
 `analitiq.validator` (`rule`, `message_id`, `kind`, `path`, `message`, with
 `severity` present only for `kind: "fail"`). `passed` is
 computed by the same fail-closed predicate over either shape: `false` when a
@@ -133,6 +133,13 @@ computed by the same fail-closed predicate over either shape: `false` when a
 a rule that is `error`-tier (or names none at all) — a check that could not
 run does not get the benefit of the doubt. A `warning` and a `notApplicable`
 naming a lesser-tier rule do not fail validation.
+
+This is the shape a release of `analitiq-validator` carrying the `rule` axis
+forwards; `VALIDATOR_PIN` (`scripts/_bootstrap.py`) predates that release and
+still self-installs one that returns the older `validator`/`severity`/`path`/
+`message` shape with no `rule`/`message_id`/`kind` at all — a forwarded
+finding missing those three keys is that older shape, not a malformed one.
+Treat both until the pin catches up.
 
 <!-- illustrative -->
 ```jsonc
@@ -155,8 +162,16 @@ naming a lesser-tier rule do not fail validation.
 }
 ```
 
+This adapter's `database_endpoint` and `type_map_read`/`type_map_write`
+entities also run the document against its contract model, whose own
+`@model_validator`s can reject it citing a rule of their own — every rule
+bound to `DatabaseEndpointDoc`, `TypeMapReadDoc` or `TypeMapWriteDoc` is
+reachable that way, catalogued in full in `references/rules/
+database-endpoint.md` and `references/rules/type-map.md` rather than restated
+here.
+
 <!-- BEGIN GENERATED: validator-ids -->
-Rule ids this adapter's own `analitiq.validator` entry points can emit:
+Rule ids this adapter's own cross-document checks in `analitiq.validator` can emit (the checks a single-document contract model cannot make on its own — sibling coverage, filename↔id, referential integrity across a bundle):
 
 `RULE-CONN-011`, `RULE-DBEP-011`, `RULE-PIPE-011`, `RULE-PIPE-012`, `RULE-PIPE-013`, `RULE-PIPE-014`, `RULE-PIPE-018`, `RULE-PIPE-019`, `RULE-PKG-031`, `RULE-STRM-032`, `RULE-STRM-033`, `RULE-STRM-034`, `RULE-STRM-042`, `RULE-TMAP-014`, `RULE-TMAP-017`, `RULE-TMAP-022`
 <!-- END GENERATED: validator-ids -->
