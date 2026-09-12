@@ -474,12 +474,14 @@ class ConnectionContractInput(StrictModel):
     def _consistency(self) -> "ConnectionContractInput":
         is_secret_storage = self.storage == "secrets"
         if is_secret_storage and self.secret is not True:
-            raise ValueError(
+            raise violation(
+                "RULE-CONN-003", "secret-storage-not-marked-secret",
                 "storage='secrets' requires secret=true "
                 "(spec: §Connection Inputs — secret iff storage='secrets')"
             )
         if not is_secret_storage and self.secret is True:
-            raise ValueError(
+            raise violation(
+                "RULE-CONN-003", "secret-marked-without-secret-storage",
                 "secret=true requires storage='secrets' "
                 "(spec: §Connection Inputs — secret iff storage='secrets')"
             )
@@ -589,7 +591,7 @@ class ConnectionConditionPredicate(StrictModel):
         # through; the wire grammar and the schema's `const: true` require a real
         # boolean. Reject any non-bool before the Literal check.
         if v is not None and not isinstance(v, bool):
-            raise ValueError("present must be the boolean literal true")
+            raise violation("RULE-CTOR-056", "present-not-strictly-boolean", "present must be the boolean literal true")
         return v
 
     @model_validator(mode="after")
@@ -605,7 +607,8 @@ class ConnectionConditionPredicate(StrictModel):
             if getattr(self, f) is not None
         )
         if len(declared) != 1:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-012", "not-exactly-one-operator",
                 "a connection condition predicate must declare exactly one "
                 "operator key (eq/in/not_in/present/regex); "
                 f"got {declared or 'none'}"
@@ -755,23 +758,27 @@ class PostAuthOutput(StrictModel):
     def _mode_consistency(self) -> "PostAuthOutput":
         if self.mode is PostAuthOutputMode.USER_SELECTION:
             if self.options_request is None:
-                raise ValueError(
+                raise violation(
+                    "RULE-CTOR-002", "user-selection-missing-options-request",
                     "mode='user_selection' requires `options_request` "
                     "(spec: §Post-Auth Outputs)"
                 )
             if self.discovery_request is not None:
-                raise ValueError(
+                raise violation(
+                    "RULE-CTOR-002", "user-selection-has-discovery-request",
                     "mode='user_selection' must omit `discovery_request` "
                     "(spec: §Post-Auth Outputs)"
                 )
             if self.storage != "connection.selections":
-                raise ValueError(
+                raise violation(
+                    "RULE-CTOR-002", "user-selection-wrong-storage",
                     "mode='user_selection' requires storage='connection.selections' "
                     "(spec: §Post-Auth Outputs)"
                 )
         else:
             if self.discovery_request is None:
-                raise ValueError(
+                raise violation(
+                    "RULE-CTOR-002", "auto-discovery-missing-discovery-request",
                     "mode='auto_discovery' requires `discovery_request` "
                     "(spec: §Post-Auth Outputs)"
                 )
@@ -781,12 +788,14 @@ class PostAuthOutput(StrictModel):
                 (self.label_path, "label_path"),
             ):
                 if forbidden is not None:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-CTOR-002", "auto-discovery-has-user-selection-field",
                         f"mode='auto_discovery' must omit `{name}` "
                         "(spec: §Post-Auth Outputs)"
                     )
             if self.storage not in ("connection.discovered", "secrets"):
-                raise ValueError(
+                raise violation(
+                    "RULE-CTOR-002", "auto-discovery-wrong-storage",
                     "mode='auto_discovery' requires storage='connection.discovered' "
                     "or 'secrets' (spec: §Post-Auth Outputs)"
                 )
@@ -844,11 +853,13 @@ class ResourceDiscoveryImplementation(StrictModel):
     @model_validator(mode="after")
     def _entrypoint_matches_type(self) -> "ResourceDiscoveryImplementation":
         if self.type == "connector_plugin" and not self.entrypoint:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-003", "connector-plugin-missing-entrypoint",
                 "type='connector_plugin' requires `entrypoint` (spec: §Resource Discovery)"
             )
         if self.type == "builtin" and self.entrypoint is not None:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-003", "builtin-has-entrypoint",
                 "type='builtin' must not declare `entrypoint` (spec: §Resource Discovery)"
             )
         return self
@@ -1202,7 +1213,8 @@ class UrlTemplateDsn(StrictModel):
     @classmethod
     def _reject_template_expressions(cls, v: str) -> str:
         if "${" in v:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-055", "dsn-template-has-value-expression",
                 "DSN template must not contain ${...} value-expression syntax; "
                 "use {binding} placeholders declared in `bindings`"
             )
@@ -1218,13 +1230,15 @@ class UrlTemplateDsn(StrictModel):
         binding_keys = set(self.bindings)
         missing = placeholders - binding_keys
         if missing:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-011", "placeholder-has-no-binding",
                 f"url_template references placeholder(s) {sorted(missing)} with "
                 "no matching entry in `bindings`"
             )
         unused = binding_keys - placeholders
         if unused:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-011", "binding-not-referenced-by-placeholder",
                 f"url_template declares binding(s) {sorted(unused)} not "
                 "referenced by the template"
             )
@@ -1381,7 +1395,8 @@ class AdbcTransport(ValueExpressionScopes, StrictModel):
     @model_validator(mode="after")
     def _require_dsn_or_kwargs(self) -> "AdbcTransport":
         if self.dsn is None and not self.db_kwargs:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-004", "adbc-transport-no-connection-state",
                 "AdbcTransport requires at least one of `dsn` or `db_kwargs` "
                 "— the transport must carry some connection state."
             )
@@ -1749,7 +1764,8 @@ class ErrorMap(StrictModel):
     @model_validator(mode="after")
     def _key_attrs_and_codes_together(self) -> "ErrorMap":
         if (self.key_attrs is None) != (self.codes is None):
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-067", "key-attrs-and-codes-not-together",
                 "error_map requires `key_attrs` and `codes` together "
                 "(one without the other cannot classify anything; omit both "
                 "instead of declaring only one)"
@@ -1880,12 +1896,14 @@ class SqlStageCapabilities(StrictModel):
     @model_validator(mode="after")
     def _dedicated_schema_matches_scope(self) -> "SqlStageCapabilities":
         if self.schema_ == "dedicated" and self.dedicated_schema is None:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-013", "dedicated-schema-missing-name",
                 "stage.schema='dedicated' requires `dedicated_schema` "
                 "(engine ADR §5 — a dedicated staging schema must be named)"
             )
         if self.schema_ == "target" and self.dedicated_schema is not None:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-013", "target-schema-has-dedicated-name",
                 "stage.schema='target' must omit `dedicated_schema` (or set it "
                 "null) (engine ADR §5 — dedicated_schema is meaningful only for "
                 "schema='dedicated')"
@@ -1978,7 +1996,8 @@ class SqlBulkLoad(StrictModel):
         if isinstance(data, dict):
             for family, mechanism in data.items():
                 if mechanism is None:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-CTOR-015", "bulk-load-family-null",
                         f"bulk_load.{family} is null; declare a mechanism or "
                         "omit the key — an absent family is the only 'none' "
                         "(it lands via executemany)"
@@ -2105,7 +2124,8 @@ class WriteUnit(StrictModel):
     @model_validator(mode="after")
     def _at_least_one_bound(self) -> "WriteUnit":
         if self.rows is None and self.bytes is None:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-014", "write-unit-no-bound",
                 "write_unit requires at least one of `rows` or `bytes` "
                 "(an empty write_unit expresses no preference; "
                 "omit the block entirely instead)"
@@ -2253,12 +2273,18 @@ class ConnectorBase(StrictModel):
     @field_validator("display_name")
     @classmethod
     def _validate_display_name_field(cls, v: str | None) -> str | None:
-        return validate_display_name(v)
+        try:
+            return validate_display_name(v)
+        except ValueError as detail:
+            raise violation("RULE-SHRD-011", "display-name-has-whitespace", str(detail)) from None
 
     @field_validator("tags")
     @classmethod
     def _validate_tags_field(cls, v: list[str] | None) -> list[str] | None:
-        return validate_tags(v)
+        try:
+            return validate_tags(v)
+        except ValueError as detail:
+            raise violation("RULE-SHRD-012", "tags-invalid", str(detail)) from None
 
     @model_validator(mode="before")
     @classmethod
@@ -2316,7 +2342,8 @@ class ConnectorBase(StrictModel):
         def _check(ref: str | None, where: str) -> None:
             if ref is None or ref in transports:
                 return
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-005", "transport-ref-undeclared",
                 f"{where} transport_ref={ref!r} is not declared in `transports` "
                 f"(declared: {sorted(transports)!r}; spec: §Transport Selection)"
             )
@@ -2363,7 +2390,8 @@ class ConnectorBase(StrictModel):
 
         duplicate_secrets = sorted({p for p in secret_paths if secret_paths.count(p) > 1})
         if duplicate_secrets:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-006", "duplicate-secret-storage-path",
                 f"connection_contract declares the same secret storage path more than once: "
                 f"{duplicate_secrets!r} (spec: §Connection Inputs — secret-storage uniqueness)"
             )
@@ -2371,7 +2399,8 @@ class ConnectorBase(StrictModel):
         all_paths = set(secret_paths) | non_secret_paths
         unresolved = sorted(p for p in contract.required_for_activation if p not in all_paths)
         if unresolved:
-            raise ValueError(
+            raise violation(
+                "RULE-CTOR-007", "activation-prerequisite-unresolved",
                 f"connection_contract.required_for_activation paths {unresolved} do not "
                 "resolve to any declared input or post_auth_output "
                 "(spec: §Save-Time Validation)"
@@ -2382,7 +2411,8 @@ class ConnectorBase(StrictModel):
             for idx, rule in enumerate(contract.validation.rules):
                 when_field = rule.when.field
                 if when_field not in input_names:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-CTOR-008", "validation-predicate-undeclared-input",
                         f"connection_contract.validation.rules[{idx}].when.field "
                         f"references undeclared input '{when_field}' (spec: §Cross-Input Validation)"
                     )
@@ -2390,7 +2420,8 @@ class ConnectorBase(StrictModel):
                     refs = getattr(rule, kind) or []
                     bad = [r for r in refs if r not in input_names]
                     if bad:
-                        raise ValueError(
+                        raise violation(
+                            "RULE-CTOR-009", f"validation-{kind}-undeclared-input",
                             f"connection_contract.validation.rules[{idx}].{kind} "
                             f"references undeclared inputs {bad} (spec: §Cross-Input Validation)"
                         )
@@ -2491,7 +2522,10 @@ class FileConnector(ConnectorBase):
 
     @model_validator(mode="after")
     def _validate_no_post_auth_contract(self) -> "FileConnector":
-        _reject_post_auth_contract(self.connection_contract, "file")
+        try:
+            _reject_post_auth_contract(self.connection_contract, "file")
+        except ValueError as detail:
+            raise violation("RULE-CTOR-010", "post-auth-contract-on-static-kind", str(detail)) from None
         return self
 
 
@@ -2518,7 +2552,10 @@ class S3Connector(ConnectorBase):
 
     @model_validator(mode="after")
     def _validate_no_post_auth_contract(self) -> "S3Connector":
-        _reject_post_auth_contract(self.connection_contract, "s3")
+        try:
+            _reject_post_auth_contract(self.connection_contract, "s3")
+        except ValueError as detail:
+            raise violation("RULE-CTOR-010", "post-auth-contract-on-static-kind", str(detail)) from None
         return self
 
 
@@ -2545,7 +2582,10 @@ class StdoutConnector(ConnectorBase):
 
     @model_validator(mode="after")
     def _validate_no_post_auth_contract(self) -> "StdoutConnector":
-        _reject_post_auth_contract(self.connection_contract, "stdout")
+        try:
+            _reject_post_auth_contract(self.connection_contract, "stdout")
+        except ValueError as detail:
+            raise violation("RULE-CTOR-010", "post-auth-contract-on-static-kind", str(detail)) from None
         return self
 
 

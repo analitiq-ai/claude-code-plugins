@@ -168,7 +168,8 @@ class ConnectionEndpointRef(_EndpointRefBase):
         if self.endpoint_id is None:
             set_derived_field(self, "endpoint_id", canonical)
         elif self.endpoint_id != canonical:
-            raise ValueError(
+            raise violation(
+                "RULE-STRM-003", "endpoint-id-not-derived",
                 f"endpoint_id {self.endpoint_id!r} does not match the id derived "
                 f"from database_object ({canonical!r}); it is derived from the "
                 "locator and cannot be chosen independently"
@@ -293,7 +294,8 @@ class Filter(StrictModel):
     def _validate_value_presence(self) -> "Filter":
         unary = {"is_null", "is_not_null"}
         if self.operator in unary and self.value is not None:
-            raise ValueError(
+            raise violation(
+                "RULE-STRM-004", "unary-operator-with-value",
                 f"filters[].value must be omitted for unary operator {self.operator!r}"
             )
         # Non-unary operators can carry `value=None` here because Pydantic
@@ -931,9 +933,13 @@ class PipeExpression(StrictModel):
         # Mirrored in the published schema by `_pipe_args_positional_grammar`
         # (prefixItems/items); keep the two in lockstep.
         if not isinstance(self.args[0], GetExpression):
-            raise ValueError("pipe args[0] must be a 'get' expression (the seed)")
+            raise violation(
+                "RULE-STRM-005", "pipe-missing-seed-get",
+                "pipe args[0] must be a 'get' expression (the seed)")
         if not all(isinstance(arg, FnExpression) for arg in self.args[1:]):
-            raise ValueError("pipe args[1:] must all be 'fn' conversion stages")
+            raise violation(
+                "RULE-STRM-005", "pipe-non-fn-stage",
+                "pipe args[1:] must all be 'fn' conversion stages")
         return self
 
 
@@ -970,9 +976,12 @@ class ArrowFieldSpec(StrictModel):
 
     @model_validator(mode="after")
     def _validate_container_shape(self) -> "ArrowFieldSpec":
-        enforce_container_shape(
-            self.arrow_type, self.properties, self.items
-        )
+        try:
+            enforce_container_shape(self.arrow_type, self.properties, self.items)
+        except ValueError as detail:
+            raise violation(
+                "RULE-STRM-006", "arrow-field-spec-container-shape-mismatch", str(detail)
+            ) from None
         return self
 
 
@@ -1036,9 +1045,12 @@ class ConstantValue(StrictModel):
 
     @model_validator(mode="after")
     def _validate_container_shape(self) -> "ConstantValue":
-        enforce_container_shape(
-            self.arrow_type, self.properties, self.items
-        )
+        try:
+            enforce_container_shape(
+                self.arrow_type, self.properties, self.items
+            )
+        except ValueError as detail:
+            raise violation("RULE-STRM-007", "constant-container-shape-mismatch", str(detail)) from None
         # Constants carry the actual payload, so we additionally pin the
         # JSON kind of `value` against the declared `arrow_type`. Object →
         # dict; List → list; Json → dict or list; everything else → scalar
@@ -1055,22 +1067,26 @@ class ConstantValue(StrictModel):
         if self.value is None:
             return self
         if self.arrow_type == "Object" and not isinstance(self.value, dict):
-            raise ValueError(
+            raise violation(
+                "RULE-STRM-007", "constant-value-not-json-object",
                 "constant.value must be a JSON object when arrow_type is 'Object'"
             )
         if self.arrow_type == "List" and not isinstance(self.value, list):
-            raise ValueError(
+            raise violation(
+                "RULE-STRM-007", "constant-value-not-json-array",
                 "constant.value must be a JSON array when arrow_type is 'List'"
             )
         if self.arrow_type == "Json" and not isinstance(self.value, (dict, list)):
-            raise ValueError(
+            raise violation(
+                "RULE-STRM-007", "constant-value-not-json-object-or-array",
                 "constant.value must be a JSON object or array when "
                 "arrow_type is 'Json'"
             )
         if self.arrow_type not in ("Object", "List", "Json") and isinstance(
             self.value, (dict, list)
         ):
-            raise ValueError(
+            raise violation(
+                "RULE-STRM-007", "constant-value-not-scalar",
                 f"constant.value must be a JSON scalar when arrow_type is "
                 f"{self.arrow_type!r}; got {type(self.value).__name__}"
             )
@@ -1190,9 +1206,12 @@ class AssignmentTarget(StrictModel):
 
     @model_validator(mode="after")
     def _validate_container_shape(self) -> "AssignmentTarget":
-        enforce_container_shape(
-            self.arrow_type, self.properties, self.items
-        )
+        try:
+            enforce_container_shape(
+                self.arrow_type, self.properties, self.items
+            )
+        except ValueError as detail:
+            raise violation("RULE-STRM-010", "assignment-target-container-shape-mismatch", str(detail)) from None
         return self
 
 
@@ -1271,11 +1290,13 @@ class ValidationRule(StrictModel):
         unary = {"required", "not_null"}
         needs_value = {"min_length", "max_length", "pattern", "range", "in_list"}
         if self.type in unary and self.value is not None:
-            raise ValueError(
+            raise violation(
+                "RULE-STRM-009", "validation-rule-value-forbidden",
                 f"validation rule {self.type!r} must omit 'value'"
             )
         if self.type in needs_value and self.value is None:
-            raise ValueError(
+            raise violation(
+                "RULE-STRM-009", "validation-rule-value-required",
                 f"validation rule {self.type!r} requires 'value'"
             )
         return self
@@ -1368,7 +1389,8 @@ class StreamMapping(StrictModel):
                 head, *rest = rule.field
                 node: AssignmentTarget | ArrowFieldSpec | None = declared.get(head)
                 if node is None:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-STRM-015", "validation-rule-field-unknown-target",
                         f"{where} {rule.field!r} names no assignment target: "
                         f"{head!r} is not a declared assignments[].target.path "
                         f"(declared: {sorted(declared)})"
@@ -1380,7 +1402,8 @@ class StreamMapping(StrictModel):
                         # Report the prefix as tokens, not joined by a dot: this
                         # contract spells nesting one token at a time, and an
                         # error message is a place authors copy from.
-                        raise ValueError(
+                        raise violation(
+                            "RULE-STRM-015", "validation-rule-field-unresolved-nesting",
                             f"{where} {rule.field!r} does not resolve: "
                             f"{walked!r} declares no field {token!r} under its "
                             "`properties`"
@@ -1452,12 +1475,18 @@ class StreamAuthored(StrictModel):
     @field_validator("display_name")
     @classmethod
     def _validate_display_name_field(cls, v: str | None) -> str | None:
-        return validate_display_name(v)
+        try:
+            return validate_display_name(v)
+        except ValueError as detail:
+            raise violation("RULE-SHRD-011", "display-name-has-whitespace", str(detail)) from None
 
     @field_validator("tags")
     @classmethod
     def _validate_tags_field(cls, v: list[str] | None) -> list[str] | None:
-        return validate_tags(v)
+        try:
+            return validate_tags(v)
+        except ValueError as detail:
+            raise violation("RULE-SHRD-012", "tag-invalid", str(detail)) from None
 
     @model_validator(mode="after")
     def _destinations_unique(self) -> "StreamAuthored":

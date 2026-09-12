@@ -846,13 +846,14 @@ def _database_endpoint_locator_findings(ep_doc: Any) -> list[dict]:
 def endpoint_filename_findings(ep_doc: Any, filename: str) -> list[dict]:
     """Public gate: an endpoint file must be named `{endpoint_id}.json`.
 
-    Returns standard `{validator, severity, path, message}` findings carrying the
-    `endpoint-filename` id — an error when `filename` disagrees with the doc's
-    `endpoint_id`, a warning when the id is missing/unusable, empty when they
-    agree. Exported so a filesystem-walking consumer that assembles a pipeline
-    bundle (and so cannot reach the gate through `validate_document`, whose bundle
-    entry point takes filename-less in-memory docs) enforces the invariant through
-    this one shared implementation instead of duplicating it. Pair with
+    Returns `endpoint-filename` findings citing RULE-PKG-031: `kind: "fail"`
+    (carrying `severity: "error"`) when `filename` disagrees with the doc's
+    `endpoint_id`, `kind: "notApplicable"` (no `severity`) when the id is
+    missing/unusable, empty when they agree. Exported so a filesystem-walking
+    consumer that assembles a pipeline bundle (and so cannot reach the gate
+    through `validate_document`, whose bundle entry point takes filename-less
+    in-memory docs) enforces the invariant through this one shared
+    implementation instead of duplicating it. Pair with
     `is_stem_addressed_endpoint_path` to apply the gate on the same layout
     condition the validator uses."""
     if not isinstance(ep_doc, dict):

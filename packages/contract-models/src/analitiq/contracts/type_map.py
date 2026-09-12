@@ -32,6 +32,7 @@ from analitiq.contracts.arrow_grammar import (
 )
 from analitiq.contracts.endpoints import ARROW_TYPE_PATTERN
 from analitiq.contracts.shared.common import StrictModel
+from analitiq.contracts.shared.rules import violation
 
 # A literal `arrow_type` uses the SAME strict Arrow vocabulary the endpoint
 # `arrow_type` does (`ARROW_TYPE_PATTERN`, incl. the `Json`/`Object`/`List`
@@ -279,7 +280,10 @@ class TypeMapReadExactRule(_TypeMapRuleBase):
         # Cross-parameter bounds the field pattern cannot express
         # (Decimal scale <= precision).
         validate_cross_params(self.arrow_type)
-        _guard_container_not_collapsed(self.native_type, "exact", self.arrow_type)
+        try:
+            _guard_container_not_collapsed(self.native_type, "exact", self.arrow_type)
+        except ValueError as detail:
+            raise violation("RULE-TMAP-001", "read-exact-container-collapsed", str(detail)) from None
         return self
 
 
@@ -292,17 +296,30 @@ class TypeMapReadRegexRule(_TypeMapRuleBase):
     @model_validator(mode="after")
     def _check(self) -> "TypeMapReadRegexRule":
         # `arrow_type` is a (possibly templated) Arrow type — validate its shape.
-        _validate_type_map_arrow_type(self.arrow_type)
-        compiled = _compile_ecma_matcher(self.native_type)
-        _validate_render_placeholders(self.arrow_type)
-        _guard_container_not_collapsed(self.native_type, "regex", self.arrow_type)
+        try:
+            _validate_type_map_arrow_type(self.arrow_type)
+        except ValueError as detail:
+            raise violation("RULE-TMAP-006", "read-regex-arrow-type-invalid", str(detail)) from None
+        try:
+            compiled = _compile_ecma_matcher(self.native_type)
+        except ValueError as detail:
+            raise violation("RULE-TMAP-005", "read-regex-native-type-not-ecma", str(detail)) from None
+        try:
+            _validate_render_placeholders(self.arrow_type)
+        except ValueError as detail:
+            raise violation("RULE-TMAP-007", "read-regex-malformed-placeholder", str(detail)) from None
+        try:
+            _guard_container_not_collapsed(self.native_type, "regex", self.arrow_type)
+        except ValueError as detail:
+            raise violation("RULE-TMAP-002", "read-regex-container-collapsed", str(detail)) from None
 
         # Every `${name}` in the `arrow_type` render must name a `native_type` capture.
         capture_names = set(compiled.groupindex.keys())
         placeholders = _PLACEHOLDER_RE.findall(self.arrow_type)
         for name in placeholders:
             if name not in capture_names:
-                raise ValueError(
+                raise violation(
+                    "RULE-TMAP-003", "render-references-unknown-capture",
                     f"render references ${{{name}}} but the matcher has no matching "
                     f"(?<{name}>…) capture group"
                 )
@@ -317,7 +334,8 @@ class TypeMapReadRegexRule(_TypeMapRuleBase):
         # discarded into a hardcoded nested `<…>`/`[…]` arrow_type (governed by the
         # schemaless-container rule instead).
         if capture_names and not placeholders and "(" in self.arrow_type:
-            raise ValueError(
+            raise violation(
+                "RULE-TMAP-004", "capture-discarded-by-hardcoded-arrow-type",
                 f"native_type {self.native_type!r} captures {sorted(capture_names)} but arrow_type "
                 f"{self.arrow_type!r} is a hardcoded parameterized type that discards them; "
                 "reference the captures (e.g. `Decimal128(${p}, ${s})`) or use a "
@@ -327,10 +345,13 @@ class TypeMapReadRegexRule(_TypeMapRuleBase):
         # what the rule RENDERS must be an Arrow type whatever the native_type matches,
         # and a templated position carries no value of its own — so the only
         # thing that decides it is the capture the render draws from.
-        validate_template_bounds(
-            self.arrow_type,
-            lambda name, probes: _capture_language(self.native_type, name, probes),
-        )
+        try:
+            validate_template_bounds(
+                self.arrow_type,
+                lambda name, probes: _capture_language(self.native_type, name, probes),
+            )
+        except ValueError as detail:
+            raise violation("RULE-TMAP-010", "capture-cannot-satisfy-template-bound", str(detail)) from None
         return self
 
 
@@ -344,7 +365,10 @@ class TypeMapWriteExactRule(_TypeMapRuleBase):
     def _check(self) -> "TypeMapWriteExactRule":
         # Cross-parameter bounds the field pattern cannot express
         # (Decimal scale <= precision).
-        validate_cross_params(self.arrow_type)
+        try:
+            validate_cross_params(self.arrow_type)
+        except ValueError as detail:
+            raise violation("RULE-TMAP-008", "write-exact-cross-param-bound", str(detail)) from None
         # A write `native_type` render may carry `${length}` DDL hints — they must be
         # syntactically valid (no empty `${}` / unclosed `${`).
         _validate_render_placeholders(self.native_type)
@@ -359,7 +383,10 @@ class TypeMapWriteRegexRule(_TypeMapRuleBase):
 
     @model_validator(mode="after")
     def _check(self) -> "TypeMapWriteRegexRule":
-        _compile_ecma_matcher(self.arrow_type)
+        try:
+            _compile_ecma_matcher(self.arrow_type)
+        except ValueError as detail:
+            raise violation("RULE-TMAP-009", "write-regex-arrow-type-not-ecma", str(detail)) from None
         _validate_render_placeholders(self.native_type)
         return self
 
