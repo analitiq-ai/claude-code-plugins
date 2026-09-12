@@ -1,0 +1,24 @@
+name: AI Review
+
+# Thin caller for the org-wide reusable workflow in analitiq-ai/.github. The
+# `if:` below is the security boundary on a public repo: anyone can comment
+# `/review` on a PR here, so the job only runs when the comment is from the
+# Analitiq-Bot account. Don't drop this check if you copy this file.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: >
+      github.event.issue.pull_request &&
+      github.event.comment.user.login == 'Analitiq-Bot' &&
+      startsWith(github.event.comment.body, '/review')
+    uses: analitiq-ai/.github/.github/workflows/ai-review.yml@main
+    secrets:
+      OPEN_ROUTER_KEY: ${{ secrets.OPEN_ROUTER_KEY }}
