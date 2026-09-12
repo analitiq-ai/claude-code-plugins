@@ -141,6 +141,27 @@ def test_exact_write_native_render_placeholders_validated():
     _accepts(WRITE, [{"match": "exact", "arrow_type": "Utf8", "native_type": "VARCHAR(${length})"}])
     _rejects(WRITE, [{"match": "exact", "arrow_type": "Utf8", "native_type": "VARCHAR(${})"}])
     _rejects(WRITE, [{"match": "exact", "arrow_type": "Utf8", "native_type": "VARCHAR(${length)"}])
+    # The rejection must cite the rule it violates, the same way every other
+    # raise in this model does — RULE-TMAP-008's own statement claims this
+    # half ("...the native_type DDL it renders MUST carry only well-formed
+    # placeholders").
+    with pytest.raises(ValidationError) as exc:
+        WRITE.validate_python([{"match": "exact", "arrow_type": "Utf8", "native_type": "VARCHAR(${})"}])
+    assert "RULE-TMAP-008" in str(exc.value)
+
+
+def test_regex_write_native_render_placeholders_validated():
+    # Same obligation, write regex side: RULE-TMAP-009 covers the identical
+    # placeholder well-formedness check on `native_type`, mirroring
+    # RULE-TMAP-008 for the exact rule above.
+    _accepts(WRITE, [{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+)\)",
+                      "native_type": "NUMERIC(${p}, ${length})"}])
+    _rejects(WRITE, [{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+)\)",
+                      "native_type": "NUMERIC(${})"}])
+    with pytest.raises(ValidationError) as exc:
+        WRITE.validate_python([{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+)\)",
+                               "native_type": "NUMERIC(${})"}])
+    assert "RULE-TMAP-009" in str(exc.value)
 
 
 def test_regex_rejects_python_named_group():
