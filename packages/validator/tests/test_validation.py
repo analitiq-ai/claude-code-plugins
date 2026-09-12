@@ -351,7 +351,29 @@ class TestFourWalkerRulesAreAttributed:
 
     @pytest.mark.parametrize("node,expected_message_id", [
         ({"native_type": "map", "arrow_type": "Object"}, "object-container-missing-properties"),
+        (
+            {"native_type": "map", "arrow_type": "Object", "properties": {}},
+            "object-container-invalid-properties",
+        ),
+        (
+            {
+                "native_type": "map", "arrow_type": "Object",
+                "properties": {"x": {"type": "string"}}, "items": {"type": "string"},
+            },
+            "object-container-has-items",
+        ),
         ({"native_type": "array", "arrow_type": "List"}, "list-container-missing-items"),
+        (
+            {"native_type": "array", "arrow_type": "List", "items": True},
+            "list-container-invalid-items",
+        ),
+        (
+            {
+                "native_type": "array", "arrow_type": "List",
+                "items": {"type": "string"}, "properties": {"x": {"type": "string"}},
+            },
+            "list-container-has-properties",
+        ),
         (
             {"native_type": "json", "arrow_type": "Json", "properties": {"x": {"type": "string"}}},
             "json-container-shape-invalid",
@@ -360,7 +382,11 @@ class TestFourWalkerRulesAreAttributed:
             {"native_type": "string", "arrow_type": "Utf8", "properties": {"x": {"type": "string"}}},
             "scalar-container-shape-invalid",
         ),
-    ], ids=["object", "list", "json", "scalar"])
+    ], ids=[
+        "object-missing-properties", "object-invalid-properties", "object-has-items",
+        "list-missing-items", "list-invalid-items", "list-has-properties",
+        "json", "scalar",
+    ])
     @pytest.mark.parametrize("build,expected_rule,base_path", [
         (_read_endpoint, "RULE-ENDP-005", "/operations/read/response/schema/properties/a"),
         (_write_endpoint, "RULE-ENDP-006", "/operations/write/insert/input/schema/properties/a"),

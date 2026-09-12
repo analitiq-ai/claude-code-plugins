@@ -1545,9 +1545,10 @@ def _validate_arrow_type_in_json_schema(
 
 #: Reference keywords the contract does not author, and why each is refused
 #: rather than tolerated. Every one of them would let a subtree escape every
-#: structural check — the harm this refusal closes for all six. Which of them
-#: RULE-ENDP-026's own statement covers, as opposed to merely sharing that
-#: harm, is a narrower question the constant right below answers.
+#: structural check — the harm this refusal closes for every keyword named
+#: here. Which of them RULE-ENDP-026's own statement covers, as opposed to
+#: merely sharing that harm, is a narrower question the constant right below
+#: answers.
 _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
     "$id": (
         "declares a new base URI, which under 2020-12 retargets every `#`-leading "
@@ -1624,9 +1625,16 @@ def _validate_schema_refs(schema: Any, path: str, errors: list[RuleViolation]) -
       schema.
       A pointer into one reaches a subtree nothing checked — the same hole as a
       non-local ref, spelled locally.
-    * the reference keywords in :data:`_REFUSED_REFERENCE_KEYWORDS` (`$id`,
-      `$dynamicRef`, anchors), each of which either moves the base URI out from
-      under the resolver or defers the target to evaluation time.
+    * the reference keywords in :data:`_REFUSED_REFERENCE_KEYWORDS`: `$id`
+      moves the base URI out from under the resolver, `$dynamicRef`/
+      `$recursiveRef` defer the target to evaluation time, and `$anchor`/
+      `$dynamicAnchor`/`$recursiveAnchor` declare a plain-name fragment target
+      this contract's JSON-Pointer-only addressing can never reach — three
+      distinct mechanisms, not one. Only the first two are what
+      RULE-ENDP-026's own statement names
+      (:data:`_KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS`); the anchor trio is
+      refused here on the same underlying harm but currently carries no rule
+      id of its own.
 
     Refusing all of them is what makes it safe for declared-path resolution to
     FOLLOW a `$ref` (see
