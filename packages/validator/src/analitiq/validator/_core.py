@@ -243,7 +243,6 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
             if isinstance(original, MultiRuleViolation):
                 for v in original.violations:
                     findings.append(finding(
-                        "contract-model",
                         rule=v.rule_id,
                         message_id=v.message_id,
                         kind="fail",

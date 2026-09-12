@@ -180,11 +180,12 @@ def test_a_nested_dialect_declaration_is_a_contract_model_error(validator):
     """`$schema` below the root of an embedded schema is refused by the
     contract model, whatever its value, and nothing downstream of that model
     crashes on it — a "validator bug" finding would hide the actionable one and
-    blame the tool for a defect in the document."""
+    blame the tool for a defect in the document. Attributed to RULE-ENDP-064,
+    the walker rule this exact "$schema on a subschema" complaint belongs to."""
     ep = _endpoint("STRING", "Utf8")
     ep["operations"]["read"]["response"]["schema"]["items"]["$schema"] = 5
     findings = validator.validate_document(ep)
-    assert any(f.get("rule") is None for f in _errors(findings)), findings
+    assert any(f.get("rule") == "RULE-ENDP-064" for f in _errors(findings)), findings
     assert not [f for f in findings if "validator bug" in f["message"]], findings
 
 
@@ -253,10 +254,16 @@ class TestFourWalkerRulesAreAttributed:
     """
 
     def _rule_findings(self, validator, doc):
-        return [
-            f for f in _errors(validator.validate_document(doc))
-            if f["validator"] == "contract-model"
-        ]
+        # Isolated to the model-validation pass itself (not the full
+        # validate_document dispatch, which also runs cross-document checks
+        # on the same api-endpoint doc — RULE-ENDP-046/047/048/063 — that
+        # would otherwise leak into these exact-list assertions): a finding
+        # no longer names which pass produced it, so this is now the only
+        # way to isolate what a `MultiRuleViolation` from these four walker
+        # rules expands into.
+        from analitiq.validator._core import _model_findings
+        from analitiq.validator.connectors import _API_ENDPOINT_ADAPTER
+        return _errors(_model_findings(doc, _API_ENDPOINT_ADAPTER))
 
     def test_response_schema_pairing_miss_is_rule_endp_005(self, validator):
         doc = _read_endpoint({
