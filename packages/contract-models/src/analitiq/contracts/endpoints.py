@@ -1194,7 +1194,7 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
         # placeholder name and sends the author to respell something that must
         # not be in the path at all.
         if TEMPLATE_SIGIL in self.path:
-            raise violation("RULE-ENDP-061", f"path={self.path!r}")
+            raise violation("RULE-ENDP-061", "template-sigil-in-path", f"path={self.path!r}")
         placeholders = PATH_PLACEHOLDER_RE.findall(self.path)
         # A brace the placeholder pattern did not consume is a brace that
         # reaches the URL as itself: `{}`, `{{name}}`, an unclosed `{`, a
@@ -1202,7 +1202,8 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
         # check agrees the path is fine and the braces ship.
         if set("{}") & set(PATH_PLACEHOLDER_RE.sub("", self.path)):
             raise violation(
-                "RULE-ENDP-060", f"path={self.path!r}; a brace delimits no placeholder"
+                "RULE-ENDP-060", "unmatched-path-brace",
+                f"path={self.path!r}; a brace delimits no placeholder"
             )
         for ph in placeholders:
             # `fullmatch`, not `match`: `$` also matches before a trailing
@@ -1210,31 +1211,35 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
             # the same string rejects.
             if not PATH_PLACEHOLDER_NAME_RE.fullmatch(ph):
                 raise violation(
-                    "RULE-ENDP-060",
+                    "RULE-ENDP-060", "malformed-placeholder-name",
                     f"placeholder {ph!r} does not match "
                     f"{PATH_PLACEHOLDER_NAME_PATTERN!r}",
                 )
         repeated = find_duplicates(placeholders)
         if repeated:
             raise violation(
-                "RULE-ENDP-059", f"path={self.path!r}; repeated={repeated!r}"
+                "RULE-ENDP-059", "repeated-placeholder",
+                f"path={self.path!r}; repeated={repeated!r}"
             )
         placeholder_set = set(placeholders)
         # Use explicit `is None`: `path_params={}` is meaningfully different
         # from omitted, and the falsy-check version treats them the same.
         if placeholder_set and self.path_params is None:
             raise violation(
-                "RULE-ENDP-001",
+                "RULE-ENDP-001", "path-params-missing",
                 f"path declares {sorted(placeholder_set)!r}; path_params missing",
             )
         if not placeholder_set and self.path_params is not None:
-            raise violation("RULE-ENDP-001", "path_params present; path declares none")
+            raise violation(
+                "RULE-ENDP-001", "path-params-with-no-placeholders",
+                "path_params present; path declares none",
+            )
         if self.path_params is not None:
             extra = set(self.path_params) - placeholder_set
             missing = placeholder_set - set(self.path_params)
             if extra or missing:
                 raise violation(
-                    "RULE-ENDP-001",
+                    "RULE-ENDP-001", "path-params-mismatch",
                     f"extra={sorted(extra)!r}; missing={sorted(missing)!r}",
                 )
         return self
@@ -2737,7 +2742,7 @@ class DatabaseEndpointDoc(_EndpointBase):
         """RULE-DBEP-001: the name every downstream lookup addresses is one column."""
         dups = find_duplicates(self.columns, key=lambda c: c.name)
         if dups:
-            raise violation("RULE-DBEP-001", f"duplicates={dups!r}")
+            raise violation("RULE-DBEP-001", "duplicate-column-name", f"duplicates={dups!r}")
         return self
 
     @model_validator(mode="after")
@@ -2750,7 +2755,7 @@ class DatabaseEndpointDoc(_EndpointBase):
         declared = [c.ordinal_position for c in self.columns if c.ordinal_position is not None]
         dups = find_duplicates(declared)
         if dups:
-            raise violation("RULE-DBEP-002", f"duplicates={dups!r}")
+            raise violation("RULE-DBEP-002", "duplicate-ordinal-position", f"duplicates={dups!r}")
         return self
 
     @model_validator(mode="after")
@@ -2761,7 +2766,7 @@ class DatabaseEndpointDoc(_EndpointBase):
         declared = {c.name for c in self.columns}
         extra = sorted(set(self.primary_keys) - declared)
         if extra:
-            raise violation("RULE-DBEP-003", f"not declared: {extra!r}")
+            raise violation("RULE-DBEP-003", "primary-key-not-a-column", f"not declared: {extra!r}")
         return self
 
 
@@ -3140,6 +3145,7 @@ def _validate_param_wiring(
             if allow_from_input and param.default is None:
                 raise violation(
                     "RULE-ENDP-028",
+                    "write-path-param-no-default",
                     f"request.path_params[{placeholder!r}] binds to param {name!r}, "
                     "which declares no `default` — on a write operation a param "
                     "has no other source, so the placeholder can never be "
@@ -3605,6 +3611,7 @@ def _validate_required_params_have_a_source(
     if findings:
         raise violation(
             "RULE-ENDP-066",
+            "required-param-no-source",
             "required and given no source, so the value each binds resolves "
             "to nothing on every run — "
             + "; ".join(f"params[{n!r}]: {w}" for n, w in findings)
@@ -3648,11 +3655,13 @@ def _validate_filters_wiring(
             if param is None:
                 raise violation(
                     "RULE-ENDP-070",
+                    "filter-lands-on-undeclared-param",
                     f"filters.{field}.{operator} names undeclared param {name!r}",
                 )
             if param.controlled_by is not None:
                 raise violation(
                     "RULE-ENDP-002",
+                    "filter-lands-on-controlled-param",
                     f"filters.{field}.{operator} names param {name!r}, which "
                     f"declares controlled_by={param.controlled_by!r}",
                 )
@@ -3660,6 +3669,7 @@ def _validate_filters_wiring(
                 other_field, other_operator = seen[name]
                 raise violation(
                     "RULE-ENDP-071",
+                    "two-filter-landings-same-param",
                     f"filters.{other_field}.{other_operator} and "
                     f"filters.{field}.{operator} both land on param {name!r}",
                 )
@@ -3670,6 +3680,7 @@ def _validate_filters_wiring(
                 if current_value not in placeholders:
                     raise violation(
                         "RULE-ENDP-072",
+                        "template-missing-own-filter-value",
                         f"filters.{field}.{operator}.template {landing.template!r} "
                         f"does not interpolate ${{{current_value}}} — every value "
                         "for this field/operator renders the identical request",
@@ -3681,6 +3692,7 @@ def _validate_filters_wiring(
                 if extra:
                     raise violation(
                         "RULE-ENDP-072",
+                        "template-interpolates-other-filter-value",
                         f"filters.{field}.{operator}.template {landing.template!r} "
                         f"also interpolates {extra!r} — a filters template's only "
                         "dependency is the field/operator entry it is declared on",

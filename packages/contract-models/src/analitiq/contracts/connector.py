@@ -142,7 +142,7 @@ def _reject_malformed(node: Any, where: str) -> None:
     try:
         validate_expression_shapes(node, where, function_fields=_DERIVED_VALUE_FIELDS)
     except ValueError as detail:
-        raise violation("RULE-CTOR-065", str(detail)) from None
+        raise violation("RULE-CTOR-065", "derived-value-expression-shape", str(detail)) from None
 
 
 def _reject_unqualified(node: Any, where: str) -> None:
@@ -155,6 +155,7 @@ def _reject_unqualified(node: Any, where: str) -> None:
     if unqualified:
         raise violation(
             "RULE-CTOR-057",
+            "unqualified-resolution-token",
             f"{where}: {', '.join(sorted(set(unqualified)))} "
             f"names no resolution scope ({', '.join(RESOLUTION_SCOPES)}); "
             "without one the value read is whatever the resolver finds under "
@@ -501,7 +502,7 @@ class ConnectionContractInput(StrictModel):
         extra = [v for v in offered if v not in self.enum]
         missing = [v for v in self.enum if v not in offered]
         if extra or missing:
-            raise violation("RULE-CONN-001", f"extra={extra!r}; missing={missing!r}")
+            raise violation("RULE-CONN-001", "ui-options-enum-mismatch", f"extra={extra!r}; missing={missing!r}")
         return self
 
     @model_validator(mode="after")
@@ -511,7 +512,8 @@ class ConnectionContractInput(StrictModel):
             return self
         if self.default not in self.enum:
             raise violation(
-                "RULE-CONN-002", f"value={self.default!r} not in {self.enum!r}"
+                "RULE-CONN-002", "default-not-an-enum-member",
+                f"value={self.default!r} not in {self.enum!r}"
             )
         return self
 
@@ -1158,7 +1160,7 @@ class HttpTransport(
             return self
         authority = _url_authority(text)
         if "@" in authority:
-            raise violation("RULE-CTOR-066", f"base_url authority {authority!r}")
+            raise violation("RULE-CTOR-066", "userinfo-in-base-url", f"base_url authority {authority!r}")
         return self
 
 
@@ -2295,6 +2297,7 @@ class ConnectorBase(StrictModel):
         if self.default_transport not in self.transports:
             raise violation(
                 "RULE-CTOR-001",
+                "default-transport-undeclared",
                 f"value={self.default_transport!r} "
                 f"not in {sorted(self.transports)!r}",
             )

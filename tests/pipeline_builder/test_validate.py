@@ -194,12 +194,12 @@ def test_bundle_endpoint_missing_id_warns(tmp_path):
 
 def test_diagnostics_fails_closed_on_a_published_notapplicable_finding():
     """`_diagnostics` reduces published `analitiq.validator` findings through
-    the same predicate `analitiq.validator`'s own `passed` does
-    (`finding_costs_a_pass`), not a second one that only ever knew about
-    `severity`. A `notApplicable` naming an error-tier rule carries no
-    `severity` at all — the bug this pins is that check reading its absence
-    as "fine" instead of as "unchecked, and error-tier rules don't get that
-    benefit of the doubt."""
+    `_finding_costs_a_pass`, this adapter's local copy of
+    `analitiq.validator.finding_costs_a_pass`, not a second predicate that only
+    ever knew about `severity`. A `notApplicable` naming an error-tier rule
+    carries no `severity` at all — the bug this pins is that check reading its
+    absence as "fine" instead of as "unchecked, and error-tier rules don't get
+    that benefit of the doubt."""
     published = {
         "validator": "endpoint-transport-ref", "rule": "RULE-ENDP-047",
         "message_id": "transport-ref-check-skipped-no-sibling",
@@ -213,6 +213,33 @@ def test_diagnostics_fails_closed_on_a_published_notapplicable_finding():
     assert V._diagnostics([published])["passed"] is False
     assert V._diagnostics([local_ok])["passed"] is True
     assert V._diagnostics([local_bad])["passed"] is False
+
+
+def test_finding_costs_a_pass_matches_the_published_predicate():
+    """`_finding_costs_a_pass` is a local copy, kept because this adapter
+    installs a released `analitiq-validator` that predates the export
+    (`_finding_costs_a_pass`'s own docstring says why) — this is what holds the
+    copy to the source it was copied from. Running from source
+    (`ANALITIQ_VALIDATOR_FROM_SOURCE`, set by the repo-root `conftest.py`) puts
+    both on `sys.path` at once, so this compares outputs directly rather than
+    trusting the two reads stayed in sync."""
+    from analitiq.contracts.shared.rules import all_rules
+    from analitiq.validator import finding_costs_a_pass
+
+    error_rule = next(r for r in all_rules() if r.severity == "error")
+    warning_rule = next(r for r in all_rules() if r.severity == "warning")
+    cases = [
+        {"kind": "fail", "severity": "error"},
+        {"kind": "fail", "severity": "warning"},
+        {"kind": "notApplicable", "rule": error_rule.id},
+        {"kind": "notApplicable", "rule": warning_rule.id},
+        {"kind": "notApplicable"},
+        {"kind": "informational", "rule": error_rule.id},
+        {"severity": "error"},
+        {"severity": "warning"},
+    ]
+    for case in cases:
+        assert V._finding_costs_a_pass(case) == finding_costs_a_pass(case), case
 
 
 def _add_wise_endpoint(root: Path, endpoint_id: str = "transfers") -> None:

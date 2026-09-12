@@ -23,7 +23,6 @@ is written once and every target inherits it.
 """
 from __future__ import annotations
 
-import re
 from functools import cache
 from typing import Any, Callable
 
@@ -64,39 +63,43 @@ def rule_by_id(rule_id: str) -> RuleRecord:
     return _load()[1][rule_id]
 
 
-#: The `[RULE-ID] ` prefix :func:`violation` writes, anchored to the start of
-#: the message. Locates a marker this module itself generates — the same kind
-#: of lexical anchor as a backticked identifier or a generated-block marker —
-#: never a judgment about what the surrounding English means.
-_VIOLATION_PREFIX = re.compile(r"^\[(?P<id>RULE-[A-Z]+-\d+)\] ")
+class RuleViolation(ValueError):
+    """The error an enforcer raises, with the rule and complaint it names
+    carried as attributes rather than encoded into the message text.
 
-
-def extract_rule_id(message: str) -> str | None:
-    """The rule id :func:`violation` embedded at the front of `message`, or
-    `None` if it carries none.
-
-    A field constraint pydantic enforces on its own — a `Literal`, a pattern, a
-    bound — raises with no such prefix, so this returns `None` for it exactly
-    as often as `violation` was never the one raising: the two functions own
-    opposite ends of the same format, so a finding built from either answers
-    "which rule" through this one parser rather than a second one that could
-    read the format differently.
+    Pydantic re-wraps a ``@model_validator``/``@field_validator``'s raised
+    ``ValueError`` — prefixing its rendered message with ``"Value error, "``
+    and flattening every one raised the same way to the generic error type
+    ``"value_error"`` — but preserves the original exception object itself at
+    ``ValidationError.errors()[i]["ctx"]["error"]``. A finding built from a
+    model rejection reads `rule_id`/`message_id` off that original object
+    rather than parsing the wrapped string, which pydantic's own wrapping
+    would defeat.
     """
-    match = _VIOLATION_PREFIX.match(message)
-    return match.group("id") if match else None
+
+    def __init__(self, rule_id: str, message_id: str, message: str) -> None:
+        super().__init__(message)
+        self.rule_id = rule_id
+        self.message_id = message_id
 
 
-def violation(rule_id: str, detail: str) -> ValueError:
-    """The error an enforcer raises, with the rule it applies already named.
+def violation(rule_id: str, message_id: str, detail: str) -> RuleViolation:
+    """The error an enforcer raises, with the rule and complaint it applies
+    already named.
 
-    A finding is actionable when it carries the id, because the id is what the
-    plugin prose cites, and the statement, because the id alone says nothing to
-    a reader without the reference open. Both are read from the record, so a
-    reworded rule rewords its own diagnostic. An id no record defines raises
-    ``KeyError`` here rather than emitting a citation that resolves to nothing.
+    A finding is actionable when it carries the rule id, because that is what
+    the plugin prose cites, and the statement, because the id alone says
+    nothing to a reader without the reference open. `message_id` is which of
+    this rule's distinct complaints this one is (`rules/SCHEMA.md`,
+    "Findings") — a rule can be violated in more than one way, and a consumer
+    branches on this rather than parsing `detail`. Both the statement and the
+    rule id are read from the record, so a reworded rule rewords its own
+    diagnostic. An id no record defines raises ``KeyError`` here rather than
+    emitting a citation that resolves to nothing.
     """
     rule = rule_by_id(rule_id)
-    return ValueError(f"[{rule.id}] {' '.join(rule.statement.split())} ({detail})")
+    message = f"[{rule.id}] {' '.join(rule.statement.split())} ({detail})"
+    return RuleViolation(rule.id, message_id, message)
 
 
 # --- Shared primitives ------------------------------------------------------
@@ -146,7 +149,7 @@ class HeaderMergeRules:
             & {header_name_key(h) for h in removals}
         )
         if overlap:
-            raise violation("RULE-HTTP-001", f"overlap={overlap!r}")
+            raise violation("RULE-HTTP-001", "header-set-and-removed", f"overlap={overlap!r}")
         return self
 
 
@@ -202,12 +205,12 @@ class DeclaredHeaderNames:
     def _no_content_length_header(self):
         for name, where in self.declared_header_names():
             if self._matches(name, FORBIDDEN_CONTENT_LENGTH_HEADER):
-                raise violation("RULE-HTTP-002", where)
+                raise violation("RULE-HTTP-002", "content-length-header-declared", where)
         return self
 
     @model_validator(mode="after")
     def _no_content_type_header(self):
         for name, where in self.declared_header_names():
             if self._matches(name, FORBIDDEN_CONTENT_TYPE_HEADER):
-                raise violation("RULE-HTTP-003", where)
+                raise violation("RULE-HTTP-003", "content-type-header-declared", where)
         return self

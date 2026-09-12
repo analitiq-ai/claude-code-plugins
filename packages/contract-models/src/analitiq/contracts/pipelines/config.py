@@ -84,7 +84,7 @@ class PipelineConnections(StrictModel):
         """RULE-PIPE-001: a repeated reference would write the same records twice."""
         dups = find_duplicates(self.destinations)
         if dups:
-            raise violation("RULE-PIPE-001", f"duplicates={dups!r}")
+            raise violation("RULE-PIPE-001", "duplicate-destination", f"duplicates={dups!r}")
         return self
 
 

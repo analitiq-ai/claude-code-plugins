@@ -100,17 +100,35 @@ def _finding(validator: str, severity: str, path: str, message: str) -> dict:
     return {"validator": validator, "severity": severity, "path": path, "message": message}
 
 
-def _diagnostics(findings: list[dict]) -> dict:
-    # Reduces over the same predicate analitiq.validator's own passed does
-    # (analitiq.validator.finding_costs_a_pass), rather than a second one that
-    # only ever knew about severity: a published finding can now be
-    # notApplicable against a rule this predicate looks up, which a bare
-    # `severity == "error"` check reads past silently. This adapter's own
-    # locally-minted findings (no `kind` key) are unaffected — the shared
-    # predicate grades those exactly as this line always did.
-    from analitiq.validator import finding_costs_a_pass
+def _finding_costs_a_pass(f: dict) -> bool:
+    """A local copy of ``analitiq.validator.finding_costs_a_pass``.
 
-    passed = not any(finding_costs_a_pass(f) for f in findings)
+    Not imported: this adapter self-installs ``analitiq-validator`` at
+    ``VALIDATOR_PIN`` (``_bootstrap.py``), a released version that predates
+    this predicate's addition, so importing it would raise ``ImportError`` in
+    every normal (non-source) run. ``test_finding_costs_a_pass_matches_the_published_predicate``
+    holds this copy to the source one so the two cannot silently diverge; fold
+    this back into an import once the pin reaches a release that carries it.
+    """
+    kind = f.get("kind", "fail")
+    if kind == "fail":
+        return f.get("severity") == "error"
+    if kind == "notApplicable":
+        rule = f.get("rule")
+        if rule is None:
+            return True
+        from analitiq.contracts.shared.rules import rule_by_id
+        return rule_by_id(rule).severity == "error"
+    return False
+
+
+def _diagnostics(findings: list[dict]) -> dict:
+    # A published finding can now be notApplicable against a rule this
+    # predicate looks up, which a bare `severity == "error"` check reads past
+    # silently. This adapter's own locally-minted findings (no `kind` key) are
+    # unaffected — `_finding_costs_a_pass` grades those exactly as this line
+    # always did.
+    passed = not any(_finding_costs_a_pass(f) for f in findings)
     return {"passed": passed, "findings": findings}
 
 

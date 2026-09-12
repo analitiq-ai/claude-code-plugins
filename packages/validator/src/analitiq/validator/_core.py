@@ -38,7 +38,13 @@ from typing import Any, Callable, Iterator
 
 from pydantic import TypeAdapter, ValidationError
 
-from analitiq.contracts.shared.rules import extract_rule_id, rule_by_id
+# `analitiq.contracts.shared.rules` (`rule_by_id`, `RuleViolation`) is
+# imported lazily, inside the functions below that need it, never at this
+# module's own top level: `connectors`/`pipelines` import THIS module before
+# their own guarded `try/except ImportError` around the contract models runs,
+# so an unconditional import here would raise before that guard ever sees it,
+# turning a missing `analitiq-contract-models` into a raw traceback instead of
+# the structured "Missing dependency" diagnostic the guard exists to produce.
 
 # The set of legal validator ids. The framework owns `contract-model` (emitted by
 # `_model_findings`) and `document` (the unrecognized-artifact verdict); each
@@ -156,6 +162,7 @@ def finding(
         raise ValueError(f"unknown kind: {kind!r}")
     record = None
     if rule is not None:
+        from analitiq.contracts.shared.rules import rule_by_id
         try:
             record = rule_by_id(rule)
         except KeyError:
@@ -203,7 +210,10 @@ def finding_costs_a_pass(f: dict) -> bool:
         return f.get("severity") == "error"
     if kind == "notApplicable":
         rule = f.get("rule")
-        return rule is None or rule_by_id(rule).severity == "error"
+        if rule is None:
+            return True
+        from analitiq.contracts.shared.rules import rule_by_id
+        return rule_by_id(rule).severity == "error"
     return False
 
 
@@ -214,16 +224,21 @@ def finding_costs_a_pass(f: dict) -> bool:
 def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     """Validate `doc` against a contract model; map each error to a finding.
 
-    A rejection raised through `rules.violation` carries its rule id as the
-    `[RULE-ID] ` prefix on `err["msg"]`; `extract_rule_id` reads it back, so
-    the finding names the same rule the raise did. A field constraint pydantic
-    enforces on its own — no `violation` call behind it — carries no such
-    prefix, and the finding's `rule` is `None` for it (`rules/SCHEMA.md`'s "a
-    field constraint on a contract model rejected, and no record claims it").
-    `message_id` is pydantic's own error-type string (`err["type"]`, e.g.
-    `"missing"`, `"string_pattern_mismatch"`) — an existing, already-stable
-    vocabulary reused rather than a second one invented beside it.
+    A rejection raised through `rules.violation` carries its `rule_id` and
+    `message_id` as attributes on a `RuleViolation`. Pydantic re-wraps that
+    raised `ValueError` — prefixing the rendered message with `"Value error, "`
+    and flattening its `err["type"]` to the generic `"value_error"` — but
+    preserves the original exception at `err["ctx"]["error"]`, which is where
+    this reads the two back rather than parsing the wrapped string pydantic
+    itself defeats. A field constraint pydantic enforces on its own — no
+    `violation` call behind it — carries no such context, and the finding's
+    `rule` is `None` for it (`rules/SCHEMA.md`'s "a field constraint on a
+    contract model rejected, and no record claims it"); its `message_id` is
+    pydantic's own error-type string (`err["type"]`, e.g. `"missing"`,
+    `"string_pattern_mismatch"`) — an existing, already-stable vocabulary
+    reused rather than a second one invented beside it.
     """
+    from analitiq.contracts.shared.rules import RuleViolation
     try:
         adapter.validate_python(doc)
         return []
@@ -231,10 +246,15 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
         findings: list[dict] = []
         for err in exc.errors():
             path = "/" + "/".join(str(p) for p in err["loc"])
+            original = err.get("ctx", {}).get("error")
+            if isinstance(original, RuleViolation):
+                rule, message_id = original.rule_id, original.message_id
+            else:
+                rule, message_id = None, err["type"]
             findings.append(finding(
                 "contract-model",
-                rule=extract_rule_id(err["msg"]),
-                message_id=err["type"],
+                rule=rule,
+                message_id=message_id,
                 kind="fail",
                 path=path,
                 message=err["msg"],

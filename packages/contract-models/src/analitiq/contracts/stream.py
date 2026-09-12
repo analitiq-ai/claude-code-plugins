@@ -76,7 +76,7 @@ def _check_unique_destinations(
         ),
     )
     if dups:
-        raise violation("RULE-STRM-001", f"duplicates={dups!r}")
+        raise violation("RULE-STRM-001", "duplicate-destination", f"duplicates={dups!r}")
     return destinations
 
 
@@ -477,6 +477,7 @@ class StreamSource(StrictModel):
             if filt.operator not in allowed:
                 raise violation(
                     "RULE-STRM-012",
+                    "operator-not-valid-for-scope",
                     f"filters[].operator {filt.operator!r} is not valid for a "
                     f"{self.endpoint_ref.scope} source "
                     f"(allowed: {sorted(allowed)})",
@@ -499,6 +500,7 @@ class StreamSource(StrictModel):
             if pair in seen:
                 raise violation(
                     "RULE-STRM-041",
+                    "duplicate-filter-landing",
                     f"filters[] has two entries for field={filt.field!r} "
                     f"operator={filt.operator!r}",
                 )
@@ -538,6 +540,7 @@ class StreamSource(StrictModel):
         if declared:
             raise violation(
                 "RULE-STRM-014",
+                "database-only-feature-on-api-source",
                 f"{self.endpoint_ref.scope} source declares {declared!r}",
             )
         return self
@@ -1344,7 +1347,7 @@ class StreamMapping(StrictModel):
         """RULE-STRM-002: array position never decides a destination field's value."""
         dups = find_duplicates(self.assignments, key=lambda a: a.target.path)
         if dups:
-            raise violation("RULE-STRM-002", f"duplicates={dups!r}")
+            raise violation("RULE-STRM-002", "duplicate-assignment-target", f"duplicates={dups!r}")
         return self
 
     @model_validator(mode="after")
