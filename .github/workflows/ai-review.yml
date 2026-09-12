@@ -1,9 +1,12 @@
 name: AI Review
 
-# Thin caller for the org-wide reusable workflow in analitiq-ai/.github. The
-# `if:` below is the security boundary on a public repo: anyone can comment
-# `/review` on a PR here, so the job only runs when the comment is from the
-# Analitiq-Bot account. Don't drop this check if you copy this file.
+# Thin caller for the org-wide reusable workflow in analitiq-ai/.github. On a
+# public repo, anyone can comment `/review` on a PR here, so the `if:` below
+# keeps the job from starting on comments from anyone but the Analitiq-Bot
+# account. It is a cost/noise gate, not the sole enforcement: the called
+# workflow independently re-checks the commenter and fails the run if it
+# isn't Analitiq-Bot. Don't drop this check if you copy this file — without
+# it the job still fires (and fails) on every comment on every issue here.
 
 on:
   issue_comment:
