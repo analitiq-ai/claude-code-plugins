@@ -67,5 +67,10 @@ fi
 # Bind it with `as` to sidestep the precedence trap entirely.
 jq --arg model "$MODEL" --arg diff "$DIFF_FILE" --argjson secs "$((END-START))" \
   '.choices[0].message.content as $c
-   | {model:$model, diff:$diff, wall_seconds:$secs, usage, parsed: (($c | fromjson?) // {parse_error: $c})}' \
+   | {model:$model, diff:$diff, wall_seconds:$secs, usage,
+      finish_reason: .choices[0].finish_reason,
+      has_tool_calls: (.choices[0].message.tool_calls != null),
+      parsed: (($c | fromjson?) // {parse_error: $c})}' \
   /tmp/bench_response.json > "$OUT_FILE"
+
+cp /tmp/bench_response.json "${OUT_FILE%.json}.raw.json"
