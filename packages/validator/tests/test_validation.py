@@ -253,7 +253,7 @@ class TestFourWalkerRulesAreAttributed:
     one finding per complaint instead of folding them into one.
     """
 
-    def _rule_findings(self, validator, doc):
+    def _rule_findings(self, doc):
         # Isolated to the model-validation pass itself (not the full
         # validate_document dispatch, which also runs cross-document checks
         # on the same api-endpoint doc — RULE-ENDP-046/047/048/063 — that
@@ -270,7 +270,7 @@ class TestFourWalkerRulesAreAttributed:
             "type": "object",
             "properties": {"a": {"native_type": "int"}},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["path"]) for f in findings
             if f["message_id"] == "native-arrow-pairing-incomplete"
@@ -281,7 +281,7 @@ class TestFourWalkerRulesAreAttributed:
             "type": "object",
             "properties": {"z": {"native_type": "int"}},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["path"]) for f in findings
             if f["message_id"] == "native-arrow-pairing-incomplete"
@@ -292,7 +292,7 @@ class TestFourWalkerRulesAreAttributed:
             "type": "object",
             "properties": {"b": {"$ref": "#/$defs/Typo"}},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
@@ -308,7 +308,7 @@ class TestFourWalkerRulesAreAttributed:
             "type": "object",
             "properties": {"a": {"$ref": "#/$defs/Typo"}},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
@@ -323,7 +323,7 @@ class TestFourWalkerRulesAreAttributed:
                 "type": "object", "$schema": JS, "properties": {},
             }},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
@@ -342,7 +342,7 @@ class TestFourWalkerRulesAreAttributed:
                 "b": {"$ref": "#/$defs/Typo"},
             },
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert sorted((f.get("rule"), f["path"]) for f in findings) == sorted([
             ("RULE-ENDP-005", "/operations/read/response/schema/properties/a"),
             ("RULE-ENDP-026", "/operations/read/response/schema/properties/b"),
@@ -360,7 +360,7 @@ class TestFourWalkerRulesAreAttributed:
                 "c": {"native_type": "int", "arrow_type": "NotArrowType"},
             },
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         unattributed = [f for f in findings if f.get("rule") is None]
         assert [(f["message_id"], f["path"]) for f in unattributed] == [
             ("value_error", "/operations/read/response/schema/properties/c"),
@@ -419,7 +419,7 @@ class TestFourWalkerRulesAreAttributed:
         # tests above) so the container-shape complaint is the only one this
         # node raises — isolating the message_id under test.
         doc = build({"type": "object", "properties": {"a": node}})
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         matches = [
             (f.get("rule"), f["path"]) for f in findings
             if f["message_id"] == expected_message_id
@@ -445,7 +445,7 @@ class TestFourWalkerRulesAreAttributed:
                 "b": node,
             },
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["path"]) for f in findings
             if f["message_id"] == expected_message_id
@@ -461,7 +461,7 @@ class TestFourWalkerRulesAreAttributed:
             "type": "object",
             "properties": {"b": {keyword: "x" if keyword != "$id" else "https://example.com/"}},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
@@ -489,7 +489,7 @@ class TestFourWalkerRulesAreAttributed:
                 "a": {"native_type": "dec", "arrow_type": "Decimal128(2, 9)"},
             },
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
@@ -504,7 +504,7 @@ class TestFourWalkerRulesAreAttributed:
             "type": "object",
             "properties": {"a": "not-a-schema"},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
