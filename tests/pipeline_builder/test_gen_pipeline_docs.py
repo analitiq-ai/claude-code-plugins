@@ -210,6 +210,26 @@ def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
     assert "RULE-TMAP-017" not in G.measured_reachable_connectors_ids()
 
 
+def test_pipeline_active_gate_is_excluded_but_active_stream_gate_is_not():
+    """RULE-PIPE-019 (`_check_pipeline_active`) and RULE-PIPE-014
+    (`_check_pipeline_active_gate`) are both computed as `require_runnable`-gated
+    by `_require_runnable_gated_pipelines_ids`'s AST walk. Only one of them
+    actually survives this adapter's own gate: `_require_runnable` is true only
+    when a pipeline's status is 'active', but RULE-PIPE-019 fires only when it
+    is NOT — a rule and its own gate that can never both hold — while
+    RULE-PIPE-014 fires exactly when status IS 'active' with no streams, which
+    is what the gate lets through. This is the same reachability-vs-gating
+    mismatch `measured_reachable_connectors_ids` fixed on the connectors.py
+    side, found again here rather than hand-excluded."""
+    gated = G._require_runnable_gated_pipelines_ids()
+    assert gated == {"RULE-PIPE-014", "RULE-PIPE-019"}, (
+        "the AST walk over validate_pipeline_bundle's require_runnable-gated "
+        "calls no longer finds the two ids this test expects"
+    )
+    survived = G._measured_reachable_pipelines_ids()
+    assert survived & gated == {"RULE-PIPE-014"}
+
+
 def test_filter_operator_scopes_are_disjoint_and_complete():
     """The empirically probed operator vocabulary matches the published Literal."""
     from typing import get_args

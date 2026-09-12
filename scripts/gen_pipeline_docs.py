@@ -380,6 +380,60 @@ def measured_reachable_connectors_ids() -> set[str]:
     return {rule_id for rule_id in observed if rule_id is not None}
 
 
+def _require_runnable_gated_pipelines_ids() -> set[str]:
+    """Rule ids from `analitiq.validator.pipelines` whose only emitter runs
+    inside `validate_pipeline_bundle`'s `if require_runnable:` block — found
+    by parsing that function's own AST for calls under that condition, not by
+    naming the functions. `validate_pipeline_bundle` always runs when this
+    adapter validates a stitched pipeline, so every rule it can emit is
+    reachable UNLESS gating on `require_runnable` makes it structurally
+    impossible — which is exactly the failure `measured_reachable_connectors_ids`
+    already fixed on the connectors.py side of this same function, found here
+    too: RULE-PIPE-019 fires only when a pipeline's status is not 'active', but
+    this adapter's own `_require_runnable` (`validate.py`) is true only when
+    status IS 'active' — a rule and its own gate that can never both hold.
+    """
+    import ast
+
+    tree = ast.parse((REPO_ROOT / "packages" / "validator" / "src" / "analitiq"
+                       / "validator" / "pipelines.py").read_text())
+    target = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "validate_pipeline_bundle"
+    )
+    gated_functions = {
+        call.func.id
+        for stmt in ast.walk(target)
+        if isinstance(stmt, ast.If)
+        and isinstance(stmt.test, ast.Name) and stmt.test.id == "require_runnable"
+        for call in ast.walk(stmt)
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+    }
+
+    from analitiq.contracts.shared.rules import all_rules
+
+    gated_symbols = {f"analitiq.validator.pipelines::{fn}" for fn in gated_functions}
+    return {rule.id for rule in all_rules() if rule.validator in gated_symbols}
+
+
+def _measured_reachable_pipelines_ids() -> set[str]:
+    """Which of `_require_runnable_gated_pipelines_ids()` actually survive —
+    measured the same way as the connectors.py half: run the adapter's real
+    `_require_runnable` and the published `validate_pipeline_bundle` on a
+    minimal ACTIVE pipeline (status='active', no streams), which is the only
+    state `_require_runnable` ever answers True for, so it exercises the full
+    space that gate can put this adapter's calls into."""
+    from analitiq.validator import validate_pipeline_bundle
+
+    adapter = _pipeline_validate_adapter()
+    pipeline = {"pipeline_id": "probe", "status": "active"}
+    bundle = {"pipeline": pipeline, "streams": [], "connections": [],
+              "connectors": [], "endpoints": []}
+    findings = validate_pipeline_bundle(
+        bundle, require_runnable=adapter._require_runnable(pipeline))
+    return {f.get("rule") for f in findings if f.get("rule") is not None}
+
+
 def render_validator_ids() -> str:
     """Every rule id this adapter's own `analitiq.validator` entry points can
     actually emit, whether the check needs a second document in hand
@@ -387,21 +441,24 @@ def render_validator_ids() -> str:
     document as a plain function rather than a `@model_validator` (a database
     endpoint's id, a type-map's own rule warnings) — never what a contract
     model rejects on its own, which is catalogued per model in
-    `references/rules/` instead of restated here. The
-    `analitiq.validator.pipelines` half is every rule bound there, since this
-    adapter always runs `validate_pipeline_bundle` when validating a stitched
-    pipeline; the `analitiq.validator.connectors` half is MEASURED
-    (`measured_reachable_connectors_ids`), not enumerated by hand — see that
-    function for why. A single-document contract-model rejection with no
-    `rules.violation` behind it carries a rule id too, when the model raised
-    one, but that half is open-ended by construction: it is whichever rule the
-    model names, not a set this function could enumerate."""
+    `references/rules/` instead of restated here. Both halves are MEASURED,
+    not enumerated by hand — see `measured_reachable_connectors_ids` and
+    `_measured_reachable_pipelines_ids` for why. A single-document
+    contract-model rejection with no `rules.violation` behind it carries a
+    rule id too, when the model raised one, but that half is open-ended by
+    construction: it is whichever rule the model names, not a set this
+    function could enumerate."""
     from analitiq.contracts.shared.rules import all_rules
 
     reachable_connectors_ids = measured_reachable_connectors_ids()
+    gated_pipelines_ids = _require_runnable_gated_pipelines_ids()
+    reachable_gated_pipelines_ids = _measured_reachable_pipelines_ids() & gated_pipelines_ids
     ids = sorted(
         rule.id for rule in all_rules()
-        if rule.validator_module == "analitiq.validator.pipelines"
+        if (
+            rule.validator_module == "analitiq.validator.pipelines"
+            and (rule.id not in gated_pipelines_ids or rule.id in reachable_gated_pipelines_ids)
+        )
         or rule.id in reachable_connectors_ids
     )
     if not ids:

@@ -214,7 +214,7 @@ def test_every_cross_document_rule_is_emitted_by_its_declared_enforcer():
             continue
         binding = f"{rule.validator_module}::{rule.validator_symbol}"
         if binding not in emitters.get(rule.id, set()):
-            unaccounted.append(f"{rule.id}: declares {binding!r}, which no finding() call emits it from")
+            unaccounted.append(f"{rule.id}: declares {binding!r}, but no finding() call emits it")
     assert not unaccounted, (
         "records whose `validator` names a analitiq.validator function that "
         f"emits no finding for the rule's own id: {unaccounted}"

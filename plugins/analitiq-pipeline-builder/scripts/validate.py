@@ -587,18 +587,23 @@ def _check_connector_endpoint_refs(streams, connections,
             ))
 
 
+def _require_runnable(pipeline_doc: object) -> bool:
+    """This plugin authors draft bundles by design: a draft pipeline is not yet
+    runnable, so its runnability verdicts are an author-time expectation, not a
+    defect. Ask the bundle validator for referential integrity only
+    (require_runnable=False) while the pipeline is a draft, and enforce runnability
+    once it is authored 'active'. A non-dict pipeline_doc already earned its own
+    contract-model finding at the single-document stage (see diagnostics_for) —
+    treat it as not-yet-active here rather than raising."""
+    return isinstance(pipeline_doc, dict) and pipeline_doc.get("status") == "active"
+
+
 def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> list[dict]:
     from analitiq.validator import validate_pipeline_bundle
     bundle, findings, complete, crashed = _assemble_bundle(pipeline_doc, document_path, root)
-    # This plugin authors draft bundles by design: a draft pipeline is not yet
-    # runnable, so its runnability verdicts are an author-time expectation, not a
-    # defect. Ask the bundle validator for referential integrity only
-    # (require_runnable=False) while the pipeline is a draft, and enforce runnability
-    # once it is authored 'active'. Every referential finding stays blocking either
-    # way. A non-dict pipeline_doc already earned its own contract-model finding at
-    # the single-document stage (see diagnostics_for) — treat it as not-yet-active
-    # here rather than raising and discarding what _assemble_bundle just decided.
-    require_runnable = isinstance(pipeline_doc, dict) and pipeline_doc.get("status") == "active"
+    # Every referential finding stays blocking whether or not runnability is
+    # enforced too — see _require_runnable for what the flag itself decides.
+    require_runnable = _require_runnable(pipeline_doc)
     if complete:
         # Each of these two is its own unit: a crash in one must not discard the
         # per-connection findings _assemble_bundle already decided above, nor the
