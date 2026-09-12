@@ -177,22 +177,37 @@ def test_renderer_emits_nonempty_block(block_id):
         f"{block_id} must end with exactly one newline")
 
 
-def test_reachable_connectors_symbols_are_live():
-    """`render_validator_ids`'s allowlist names each reachable `connectors.py`
-    function by its dotted `validator` symbol. `test_renderer_emits_nonempty_block`
-    only catches every symbol going stale at once — impossible while any
-    `analitiq.validator.pipelines`-bound rule exists — so a single renamed
-    symbol would silently drop that rule's id from the generated block with
-    nothing red. This pins each one against the live registry directly."""
-    from analitiq.contracts.shared.rules import all_rules
+def test_measured_reachable_connectors_ids_matches_expectation():
+    """`measured_reachable_connectors_ids` derives its answer by running probe
+    documents through the real adapter rather than naming functions by hand —
+    this pins the resulting *ids*, which is a legitimate test assertion target
+    (unlike a hand-typed allowlist of function names, which is what this
+    replaced). A rename inside `connectors.py` cannot break this test: the
+    measurement calls through the live dispatch, not by name, so there is
+    nothing here for a rename to go stale against."""
+    assert G.measured_reachable_connectors_ids() == {
+        "RULE-DBEP-011", "RULE-PKG-031", "RULE-TMAP-014", "RULE-TMAP-022",
+    }
 
-    bound = {rule.validator for rule in all_rules() if rule.validator}
-    stale = sorted(G._REACHABLE_CONNECTORS_SYMBOLS - bound)
-    assert not stale, (
-        f"_REACHABLE_CONNECTORS_SYMBOLS names symbols no rule binds: {stale} "
-        "— the function was renamed/removed and its rule id silently stopped "
-        "rendering into the validator-ids block"
+
+def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
+    """RULE-TMAP-017 is bound to `connectors.py` and genuinely fires in the
+    published validator, but `measured_reachable_connectors_ids` must not
+    include it: `validate.py`'s own write-coverage filter strips it before it
+    ever reaches this adapter's output. This is the case a hand-typed
+    allowlist got wrong once (excluded by name, correctly, but with nothing
+    checking the exclusion stayed correct) — asserting both halves here means
+    a future change that stops filtering it, or starts filtering something
+    else the same way, has to update this test consciously rather than drift
+    past it."""
+    from analitiq.validator import validate_document
+
+    raw = validate_document([], doc_path=Path("type-map-write.json"))
+    assert "RULE-TMAP-017" in {f.get("rule") for f in raw}, (
+        "probe stopped triggering the write-vocabulary check at the package "
+        "level — this test no longer measures the filter it claims to"
     )
+    assert "RULE-TMAP-017" not in G.measured_reachable_connectors_ids()
 
 
 def test_filter_operator_scopes_are_disjoint_and_complete():

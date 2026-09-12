@@ -282,52 +282,127 @@ def render_filter_operators() -> str:
     return "\n".join(out) + "\n"
 
 
-# This adapter (`plugins/analitiq-pipeline-builder/scripts/validate.py`) hands
-# `analitiq.validator.validate_document` only a `database_endpoint` or
-# `type_map_read`/`type_map_write` document, calls `endpoint_filename_findings`
-# directly during bundle assembly, and runs `validate_pipeline_bundle` over the
-# stitched bundle — see that module's own docstring for the full routing
-# table. It never hands a raw api-endpoint or connector.json document to
-# `validate_document`, so a rule whose only emitter lives on that path (an
-# api-endpoint check, or the connector-package `check_coverage`) can never
-# actually surface here, and citing it would send an author looking for a
-# finding this plugin cannot produce. `_write_vocabulary_findings`
-# (RULE-TMAP-017) is deliberately excluded even though `type_map_write`
-# reaches it: `validate.py`'s own write-coverage filter strips every
-# RULE-TMAP-017 finding before this adapter's caller ever sees one (a
-# connection's write map is gap-only by design, so the connector-oriented
-# full-vocabulary warning would fire on every authored one).
-_REACHABLE_CONNECTORS_SYMBOLS = {
-    "analitiq.validator.connectors::_database_endpoint_locator_findings",
-    "analitiq.validator.connectors::_type_map_rule_warnings",
-    "analitiq.validator.connectors::endpoint_filename_findings",
-}
+def _pipeline_validate_adapter():
+    """Import `plugins/analitiq-pipeline-builder/scripts/validate.py` by path —
+    the same technique `render_validator_claims.py`'s own `_pipeline_adapter()`
+    uses, and for the same reason: this adapter's own downstream behavior (its
+    write-coverage filter, below) is part of what a probe run through it
+    measures, so the probe has to call the adapter, not the bare validator
+    package. Import is side-effect-free — `_bootstrap`'s venv build and
+    re-exec only fire from the adapter's own `main()`, never at import time."""
+    import importlib.util
+
+    scripts_dir = str(DOCS_ROOT / "scripts")
+    spec = importlib.util.spec_from_file_location(
+        "_gen_pipeline_docs_validate_adapter", DOCS_ROOT / "scripts" / "validate.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    sys.path.insert(0, scripts_dir)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(scripts_dir)
+    return module
+
+
+def measured_reachable_connectors_ids() -> set[str]:
+    """RULE-* ids from `analitiq.validator.connectors` this adapter's own
+    entry points actually surface in its output — MEASURED by running
+    documents engineered to trip each connectors.py-bound check through the
+    same functions `plugins/analitiq-pipeline-builder/scripts/validate.py`
+    calls, and reading back which ids appear in the returned findings, rather
+    than reasoned about from a hand-typed allowlist of "reachable" function
+    names. That allowlist previously went stale in ways nothing caught: by
+    naming a function this adapter's entities never route to at all (an
+    api-endpoint/connector-package check — this function never constructs
+    such a document, so those checks are never even probed), and separately
+    by naming one whose finding the adapter's own write-vocabulary filter
+    (`_type_map_findings` in `validate.py`) discards before it ever reaches
+    output — probing `type_map_write` through the adapter's own
+    `diagnostics_for`, filter included, is what proves that exclusion instead
+    of asserting it.
+
+    `endpoint_filename_findings` is never reached via dispatch at all —
+    `validate.py` calls it directly during bundle assembly (see that module's
+    own docstring) — so it is measured directly rather than through
+    `diagnostics_for`.
+    """
+    import json
+    import tempfile
+
+    adapter = _pipeline_validate_adapter()
+    observed: set[str | None] = set()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+
+        # RULE-DBEP-011: an endpoint_id disagreeing with the handle derived
+        # from database_object.
+        endpoint = {
+            "endpoint_id": "public__orders__wronghash",
+            "database_object": {"schema": "public", "name": "orders", "object_type": "table"},
+        }
+        path = root / "endpoint.json"
+        path.write_text(json.dumps(endpoint))
+        observed |= {f.get("rule") for f in adapter.diagnostics_for(
+            "database_endpoint", path)["findings"]}
+
+        # RULE-TMAP-022 (a duplicate rule) and RULE-TMAP-014 (a regex read
+        # matcher containing a lowercase literal, which an UPPERCASED native
+        # can never match) both fire on one read map.
+        read_rules = [
+            {"match": "exact", "native_type": "INT", "arrow_type": "Int32"},
+            {"match": "exact", "native_type": "INT", "arrow_type": "Int32"},
+            {"match": "regex", "native_type": "^duplicate_probe$", "arrow_type": "Utf8"},
+        ]
+        path = root / "type-map-read.json"
+        path.write_text(json.dumps(read_rules))
+        observed |= {f.get("rule") for f in adapter.diagnostics_for(
+            "type_map_read", path)["findings"]}
+
+        # RULE-TMAP-017 (write-vocabulary coverage) fires in the published
+        # validator on an empty write map — reachable at that layer — but
+        # going through the adapter's own diagnostics_for exercises its
+        # write-coverage filter too, so this measures whether the id survives
+        # to the adapter's own output. It does not: excluded below by what
+        # this probe observes, not by name.
+        path = root / "type-map-write.json"
+        path.write_text(json.dumps([]))
+        observed |= {f.get("rule") for f in adapter.diagnostics_for(
+            "type_map_write", path)["findings"]}
+
+    from analitiq.validator import endpoint_filename_findings
+    observed |= {
+        f.get("rule") for f in
+        endpoint_filename_findings({"endpoint_id": "probe"}, "wrong-name.json")
+    }
+
+    return {rule_id for rule_id in observed if rule_id is not None}
 
 
 def render_validator_ids() -> str:
     """Every rule id this adapter's own `analitiq.validator` entry points can
-    actually emit — the reachable subset of what
-    `packages/validator/tests/test_check_registry_census.py` polices
-    package-wide, deliberately excluding every rule reachable only through a
-    contract model's own `@model_validator`s: those are already catalogued in
-    full, per model, in `references/rules/database-endpoint.md` and
-    `references/rules/type-map.md` — restating their ids here would be the
-    same rule twice, one copy free to drift from the registry that renders
-    the other. (Not every id below comes from a check that needs a second
-    document in hand — `_database_endpoint_locator_findings` and
-    `_type_map_rule_warnings` grade one document alone, just as a function in
-    `analitiq.validator` rather than a `@model_validator`; what unifies this
-    set is reachability through THIS adapter's entry points, not whether the
-    check is cross-document.) A single-document contract-model rejection with
-    no `rules.violation` behind it carries a rule id too, when the model
-    raised one, but that half is open-ended by construction: it is whichever
-    rule the model names, not a set this function could enumerate."""
+    actually emit, whether the check needs a second document in hand
+    (referential integrity across a bundle, filename↔id) or grades one
+    document as a plain function rather than a `@model_validator` (a database
+    endpoint's id, a type-map's own rule warnings) — never what a contract
+    model rejects on its own, which is catalogued per model in
+    `references/rules/` instead of restated here. The
+    `analitiq.validator.pipelines` half is every rule bound there, since this
+    adapter always runs `validate_pipeline_bundle` when validating a stitched
+    pipeline; the `analitiq.validator.connectors` half is MEASURED
+    (`measured_reachable_connectors_ids`), not enumerated by hand — see that
+    function for why. A single-document contract-model rejection with no
+    `rules.violation` behind it carries a rule id too, when the model raised
+    one, but that half is open-ended by construction: it is whichever rule the
+    model names, not a set this function could enumerate."""
     from analitiq.contracts.shared.rules import all_rules
 
+    reachable_connectors_ids = measured_reachable_connectors_ids()
     ids = sorted(
         rule.id for rule in all_rules()
         if rule.validator_module == "analitiq.validator.pipelines"
-        or rule.validator in _REACHABLE_CONNECTORS_SYMBOLS
+        or rule.id in reachable_connectors_ids
     )
     if not ids:
         raise RuntimeError("no rule is bound to a validator function this adapter reaches")
