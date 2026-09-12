@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
+from analitiq.contracts.endpoints import _REFUSED_REFERENCE_KEYWORDS
 from analitiq.validator.connectors import (
     _DATABASE_KINDS,
     _READ_MAP_FILENAME,
@@ -113,16 +114,15 @@ JS = "https://json-schema.org/draft/2020-12/schema"
 
 
 def _endpoint(native_type, arrow_type, endpoint_id="widgets", path="/widgets"):
-    return {
-        "$schema": API, "endpoint_id": endpoint_id,
-        "operations": {"read": {
-            "request": {"method": "GET", "path": path}, "params": {},
-            "response": {
-                "records": {"ref": "response.body"},
-                "schema": {"$schema": JS, "type": "array", "items": {"type": "object",
-                    "properties": {"a": {"type": "string",
-                        "native_type": native_type, "arrow_type": arrow_type}}}},
-            }}}}
+    # Delegates to `_read_endpoint` (defined below — resolved at call time,
+    # not at def time, so the forward reference is fine) rather than building
+    # a second copy of the same read-endpoint skeleton.
+    return _read_endpoint(
+        {"$schema": JS, "type": "array", "items": {"type": "object",
+            "properties": {"a": {"type": "string",
+                "native_type": native_type, "arrow_type": arrow_type}}}},
+        endpoint_id, path,
+    )
 
 
 def test_valid_embedded_schema_passes(validator):
@@ -201,6 +201,308 @@ def test_a_root_non_string_dialect_declaration_is_a_document_error(validator):
     errors = _errors(findings)
     assert any(e["validator"] == "embedded-json-schema" for e in errors), errors
     assert not [f for f in findings if "validator bug" in f["message"]], findings
+
+
+def _read_endpoint(response_schema, endpoint_id="widgets", path="/widgets"):
+    return {
+        "$schema": API, "endpoint_id": endpoint_id,
+        "operations": {"read": {
+            "request": {"method": "GET", "path": path}, "params": {},
+            "response": {"records": {"ref": "response.body"}, "schema": response_schema},
+        }}}
+
+
+def _write_endpoint(input_schema, endpoint_id="widgets", path="/widgets"):
+    return {
+        "$schema": API, "endpoint_id": endpoint_id,
+        "operations": {"write": {"insert": {
+            "request": {
+                "method": "POST", "path": path,
+                "headers": {"Accept": "application/json"},
+                "body": {"r": {"from_input": "record"}},
+            },
+            "params": {},
+            "input": {"schema": input_schema},
+        }}}}
+
+
+#: One entry per key of `_REFUSED_REFERENCE_KEYWORDS`, shared by the
+#: parametrized case below and the test that pins this list stays exhaustive
+#: over that dict — a single list, not two copies that could disagree.
+_REFUSED_KEYWORD_ATTRIBUTION = [
+    # Covered by RULE-ENDP-026's own statement ("retargets the base URI"
+    # or "defers a reference to evaluation time").
+    ("$id", "RULE-ENDP-026", "ref-refused-keyword"),
+    ("$dynamicRef", "RULE-ENDP-026", "ref-refused-keyword"),
+    ("$recursiveRef", "RULE-ENDP-026", "ref-refused-keyword"),
+    # Refused on the same underlying harm, but the statement names
+    # neither mechanism for these — stay unattributed until it does.
+    ("$anchor", None, "value_error"),
+    ("$dynamicAnchor", None, "value_error"),
+    ("$recursiveAnchor", None, "value_error"),
+]
+
+
+class TestFourWalkerRulesAreAttributed:
+    """RULE-ENDP-005/006/026/064: `_validate_arrow_type_in_json_schema` and
+    `_validate_schema_refs` accumulate one `RuleViolation` per complaint, and
+    `ResponseExtraction._validate`/`WriteInput._validate` raise them together
+    as one `MultiRuleViolation`, each entry keeping its own `rule_id` and a
+    `path` located to the offending node — `_model_findings` expands it into
+    one finding per complaint instead of folding them into one.
+    """
+
+    def _rule_findings(self, validator, doc):
+        return [
+            f for f in _errors(validator.validate_document(doc))
+            if f["validator"] == "contract-model"
+        ]
+
+    def test_response_schema_pairing_miss_is_rule_endp_005(self, validator):
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {"a": {"native_type": "int"}},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["path"]) for f in findings
+            if f["message_id"] == "native-arrow-pairing-incomplete"
+        ] == [("RULE-ENDP-005", "/operations/read/response/schema/properties/a")]
+
+    def test_write_input_schema_pairing_miss_is_rule_endp_006(self, validator):
+        doc = _write_endpoint({
+            "type": "object",
+            "properties": {"z": {"native_type": "int"}},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["path"]) for f in findings
+            if f["message_id"] == "native-arrow-pairing-incomplete"
+        ] == [("RULE-ENDP-006", "/operations/write/insert/input/schema/properties/z")]
+
+    def test_dangling_ref_in_response_schema_is_rule_endp_026(self, validator):
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {"b": {"$ref": "#/$defs/Typo"}},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["message_id"], f["path"]) for f in findings
+        ] == [(
+            "RULE-ENDP-026", "ref-dangling",
+            "/operations/read/response/schema/properties/b",
+        )]
+
+    def test_dangling_ref_in_write_input_schema_is_also_rule_endp_026(self, validator):
+        # `_validate_schema_refs` binds both `ResponseExtraction` and
+        # `WriteInput` — this is the caller the pre-existing embedded-ref
+        # tests never construct.
+        doc = _write_endpoint({
+            "type": "object",
+            "properties": {"a": {"$ref": "#/$defs/Typo"}},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["message_id"], f["path"]) for f in findings
+        ] == [(
+            "RULE-ENDP-026", "ref-dangling",
+            "/operations/write/insert/input/schema/properties/a",
+        )]
+
+    def test_schema_keyword_below_root_is_rule_endp_064(self, validator):
+        doc = _write_endpoint({
+            "type": "object",
+            "properties": {"b": {
+                "type": "object", "$schema": JS, "properties": {},
+            }},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["message_id"], f["path"]) for f in findings
+        ] == [(
+            "RULE-ENDP-064", "schema-keyword-on-subschema",
+            "/operations/write/insert/input/schema/properties/b",
+        )]
+
+    def test_two_simultaneous_violations_are_two_separate_findings(self, validator):
+        # A pairing miss and a dangling ref at different nodes of the same
+        # schema: each must land as its own attributed, located finding — not
+        # folded into one message attributed to only the first one found.
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {
+                "a": {"native_type": "int"},
+                "b": {"$ref": "#/$defs/Typo"},
+            },
+        })
+        findings = self._rule_findings(validator, doc)
+        assert sorted((f.get("rule"), f["path"]) for f in findings) == sorted([
+            ("RULE-ENDP-005", "/operations/read/response/schema/properties/a"),
+            ("RULE-ENDP-026", "/operations/read/response/schema/properties/b"),
+        ])
+
+    def test_unattributed_complaint_still_carries_its_own_path(self, validator):
+        # No registered rule covers an arrow_type spelling that fails the
+        # canonical-vocabulary pattern; it must still surface as its own
+        # `rule=None` finding, located, rather than vanishing into a joined
+        # message or being silently dropped alongside an attributed sibling.
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {
+                "a": {"native_type": "int"},
+                "c": {"native_type": "int", "arrow_type": "NotArrowType"},
+            },
+        })
+        findings = self._rule_findings(validator, doc)
+        unattributed = [f for f in findings if f.get("rule") is None]
+        assert [(f["message_id"], f["path"]) for f in unattributed] == [
+            ("value_error", "/operations/read/response/schema/properties/c"),
+        ]
+        # And the attributed sibling is not displaced by it.
+        assert ("RULE-ENDP-005", "/operations/read/response/schema/properties/a") in [
+            (f.get("rule"), f["path"]) for f in findings
+        ]
+
+    @pytest.mark.parametrize("node,expected_message_id", [
+        ({"native_type": "map", "arrow_type": "Object"}, "object-container-missing-properties"),
+        (
+            {"native_type": "map", "arrow_type": "Object", "properties": {}},
+            "object-container-invalid-properties",
+        ),
+        (
+            {
+                "native_type": "map", "arrow_type": "Object",
+                "properties": {"x": {"type": "string"}}, "items": {"type": "string"},
+            },
+            "object-container-has-items",
+        ),
+        ({"native_type": "array", "arrow_type": "List"}, "list-container-missing-items"),
+        (
+            {"native_type": "array", "arrow_type": "List", "items": True},
+            "list-container-invalid-items",
+        ),
+        (
+            {
+                "native_type": "array", "arrow_type": "List",
+                "items": {"type": "string"}, "properties": {"x": {"type": "string"}},
+            },
+            "list-container-has-properties",
+        ),
+        (
+            {"native_type": "json", "arrow_type": "Json", "properties": {"x": {"type": "string"}}},
+            "json-container-shape-invalid",
+        ),
+        (
+            {"native_type": "string", "arrow_type": "Utf8", "properties": {"x": {"type": "string"}}},
+            "scalar-container-shape-invalid",
+        ),
+    ], ids=[
+        "object-missing-properties", "object-invalid-properties", "object-has-items",
+        "list-missing-items", "list-invalid-items", "list-has-properties",
+        "json", "scalar",
+    ])
+    @pytest.mark.parametrize("build,expected_rule,base_path", [
+        (_read_endpoint, "RULE-ENDP-005", "/operations/read/response/schema/properties/a"),
+        (_write_endpoint, "RULE-ENDP-006", "/operations/write/insert/input/schema/properties/a"),
+    ], ids=["response", "write_input"])
+    def test_container_shape_complaint_is_attributed(
+        self, validator, node, expected_message_id, build, expected_rule, base_path,
+    ):
+        # `native_type`+`arrow_type` are both set (unlike the pairing-miss
+        # tests above) so the container-shape complaint is the only one this
+        # node raises — isolating the message_id under test.
+        doc = build({"type": "object", "properties": {"a": node}})
+        findings = self._rule_findings(validator, doc)
+        matches = [
+            (f.get("rule"), f["path"]) for f in findings
+            if f["message_id"] == expected_message_id
+        ]
+        assert matches == [(expected_rule, base_path)], findings
+
+    @pytest.mark.parametrize("node,expected_message_id", [
+        ({"$ref": 5}, "ref-not-string"),
+        ({"$ref": "https://example.com/x"}, "ref-not-in-document"),
+        ({"$ref": "#anchor"}, "ref-anchor-fragment"),
+        ({"$ref": "#/$defs/B"}, "ref-resolves-to-boolean"),
+        ({"$ref": "#/properties/a/default"}, "ref-non-schema-position"),
+    ], ids=[
+        "not-string", "not-in-document", "anchor-fragment",
+        "resolves-to-boolean", "non-schema-position",
+    ])
+    def test_every_ref_complaint_kind_is_rule_endp_026(self, validator, node, expected_message_id):
+        doc = _read_endpoint({
+            "type": "object",
+            "$defs": {"B": True},
+            "properties": {
+                "a": {"type": "string", "default": "hi"},
+                "b": node,
+            },
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["path"]) for f in findings
+            if f["message_id"] == expected_message_id
+        ] == [("RULE-ENDP-026", "/operations/read/response/schema/properties/b")]
+
+    @pytest.mark.parametrize(
+        "keyword,expected_rule,expected_message_id", _REFUSED_KEYWORD_ATTRIBUTION,
+    )
+    def test_every_refused_reference_keyword_gets_its_own_finding(
+        self, validator, keyword, expected_rule, expected_message_id,
+    ):
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {"b": {keyword: "x" if keyword != "$id" else "https://example.com/"}},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["message_id"], f["path"]) for f in findings
+        ] == [(
+            expected_rule, expected_message_id,
+            "/operations/read/response/schema/properties/b",
+        )]
+
+    def test_refused_keyword_attribution_covers_every_refused_keyword(self):
+        # `_REFUSED_KEYWORD_ATTRIBUTION` above is a hand-typed list; pin it
+        # against the walker's own dict so a keyword added to
+        # `_REFUSED_REFERENCE_KEYWORDS` without a matching case here fails
+        # loudly instead of leaving this test's "every" silently false.
+        tested = {keyword for keyword, _, _ in _REFUSED_KEYWORD_ATTRIBUTION}
+        assert tested == _REFUSED_REFERENCE_KEYWORDS.keys()
+
+    def test_cross_parameter_bound_violation_is_unattributed_and_located(self, validator):
+        # `validate_cross_params` rejects Decimal scale > precision — a
+        # complaint kind no registered rule covers, alongside the
+        # arrow-pattern-mismatch case (`test_unattributed_complaint_still_
+        # carries_its_own_path` above) and the malformed-node case (below) —
+        # so it too must surface `rule=None` but still located.
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {
+                "a": {"native_type": "dec", "arrow_type": "Decimal128(2, 9)"},
+            },
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["message_id"], f["path"]) for f in findings
+        ] == [(
+            None, "value_error", "/operations/read/response/schema/properties/a",
+        )]
+
+    def test_malformed_schema_node_violation_is_unattributed_and_located(self, validator):
+        # A non-dict, non-boolean value at a schema position — the third and
+        # last of the complaint kinds no registered rule covers — reaches
+        # `_model_findings` the same way: unattributed, but located.
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {"a": "not-a-schema"},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["message_id"], f["path"]) for f in findings
+        ] == [(
+            None, "value_error", "/operations/read/response/schema/properties/a",
+        )]
 
 
 @pytest.fixture

@@ -237,16 +237,39 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     pydantic's own error-type string (`err["type"]`, e.g. `"missing"`,
     `"string_pattern_mismatch"`) — an existing, already-stable vocabulary
     reused rather than a second one invented beside it.
+
+    An enforcer that walks a whole document and finds several unrelated
+    complaints cannot raise once per complaint — a `@model_validator` returns
+    the model or raises, nothing between — so it raises one
+    `MultiRuleViolation` carrying every `RuleViolation` it found, tagged or
+    not. That expands into one finding PER ENTRY here, each keeping its own
+    `rule_id`/`message_id`/`message` rather than the single joined `err["msg"]`
+    pydantic rendered for the whole raise, and each `path` extended past
+    `err["loc"]` by the entry's own `path` suffix when it set one. A raise
+    with only one complaint — a bare `RuleViolation`, a bare `ValueError` —
+    takes the branch below instead, its own separate path through this
+    function.
     """
-    from analitiq.contracts.shared.rules import RuleViolation
+    from analitiq.contracts.shared.rules import MultiRuleViolation, RuleViolation
     try:
         adapter.validate_python(doc)
         return []
     except ValidationError as exc:
         findings: list[dict] = []
         for err in exc.errors():
-            path = "/" + "/".join(str(p) for p in err["loc"])
+            base_path = "/" + "/".join(str(p) for p in err["loc"])
             original = err.get("ctx", {}).get("error")
+            if isinstance(original, MultiRuleViolation):
+                for v in original.violations:
+                    findings.append(finding(
+                        "contract-model",
+                        rule=v.rule_id,
+                        message_id=v.message_id,
+                        kind="fail",
+                        path=base_path + (v.path or ""),
+                        message=v.message,
+                    ))
+                continue
             if isinstance(original, RuleViolation):
                 rule, message_id = original.rule_id, original.message_id
             else:
@@ -256,7 +279,7 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
                 rule=rule,
                 message_id=message_id,
                 kind="fail",
-                path=path,
+                path=base_path,
                 message=err["msg"],
             ))
         return findings

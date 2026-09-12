@@ -75,15 +75,63 @@ class RuleViolation(ValueError):
     model rejection reads `rule_id`/`message_id` off that original object
     rather than parsing the wrapped string, which pydantic's own wrapping
     would defeat.
+
+    `rule_id` is `None` for a complaint no record claims — the
+    ``rule=None`` framework fallback ``rules/SCHEMA.md`` documents, minted
+    directly rather than through :func:`violation`, which requires a
+    resolvable id. `path` is `None` unless the enforcer knows a location more
+    precise than pydantic's own ``err["loc"]`` (`rules/SCHEMA.md`'s Findings
+    section names no format for it); ``_model_findings`` only reads it off a
+    violation it unpacks from a :class:`MultiRuleViolation` — a bare
+    `RuleViolation` raised on its own resolves its finding's `path` from
+    ``err["loc"]`` alone, whether or not it sets one.
     """
 
-    def __init__(self, rule_id: str, message_id: str, message: str) -> None:
+    def __init__(
+        self, rule_id: str | None, message_id: str, message: str, *,
+        path: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.rule_id = rule_id
         self.message_id = message_id
+        self.message = message
+        self.path = path
 
 
-def violation(rule_id: str, message_id: str, detail: str) -> RuleViolation:
+class MultiRuleViolation(ValueError):
+    """Every :class:`RuleViolation` found while validating one document,
+    where a ``@model_validator`` gets exactly one raise to speak for all of
+    them.
+
+    Pydantic's `mode="after"` validator has two outcomes — return the model,
+    or raise once — so an enforcer that walks a whole document and finds
+    several unrelated complaints cannot raise once per complaint. It does not
+    follow that the document can only be told about one of them: this
+    exception carries the whole list, and ``_model_findings``
+    (`analitiq.validator._core`) unpacks it into one finding per entry — each
+    with its own `rule_id`, `message_id` and `path` — rather than folding
+    them into a single attributed-to-one, joined-text finding. An enforcer
+    with only one complaint raises a bare `RuleViolation` or `ValueError`
+    instead; ``_model_findings`` recognises both shapes, each through its own
+    branch.
+    """
+
+    def __init__(self, violations: list[RuleViolation]) -> None:
+        if not violations:
+            # An empty list has nothing for `_model_findings` to expand into a
+            # finding — pydantic still recorded a `ValidationError` for this
+            # raise, so a caller reaching here with nothing to report would
+            # make that rejection surface as zero findings, and a document
+            # pydantic refused would read as passed. Refusing to construct is
+            # what keeps that impossible rather than merely unlikely.
+            raise ValueError("MultiRuleViolation requires at least one RuleViolation")
+        super().__init__("; ".join(v.message for v in violations))
+        self.violations = violations
+
+
+def violation(
+    rule_id: str, message_id: str, detail: str, *, path: str | None = None,
+) -> RuleViolation:
     """The error an enforcer raises, with the rule and complaint it applies
     already named.
 
@@ -95,11 +143,23 @@ def violation(rule_id: str, message_id: str, detail: str) -> RuleViolation:
     branches on this rather than parsing `detail`. Both the statement and the
     rule id are read from the record, so a reworded rule rewords its own
     diagnostic. An id no record defines raises ``KeyError`` here rather than
-    emitting a citation that resolves to nothing.
+    emitting a citation that resolves to nothing. `path` is optional; see
+    `RuleViolation` for what omitting it means for the resulting finding.
     """
     rule = rule_by_id(rule_id)
     message = f"[{rule.id}] {' '.join(rule.statement.split())} ({detail})"
-    return RuleViolation(rule.id, message_id, message)
+    return RuleViolation(rule.id, message_id, message, path=path)
+
+
+def unattributed_violation(detail: str, *, path: str | None = None) -> RuleViolation:
+    """A complaint no registered rule covers: `rule_id=None`,
+    `message_id="value_error"` — the same pairing `_model_findings`
+    (`analitiq.validator._core`) already falls back to for a plain
+    `ValueError` reaching it, since pydantic flattens any `ValueError`'s
+    `err["type"]` to that literal string. One place to mint that pairing
+    rather than every call site retyping it.
+    """
+    return RuleViolation(None, "value_error", detail, path=path)
 
 
 # --- Shared primitives ------------------------------------------------------

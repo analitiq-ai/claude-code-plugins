@@ -25,6 +25,7 @@ import pytest
 from pydantic import ValidationError
 
 from analitiq.contracts.endpoints import (
+    _KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS,
     _OperationKind,
     _REFUSED_REFERENCE_KEYWORDS,
     _unresolved_harm,
@@ -56,7 +57,7 @@ from analitiq.contracts.shared.json_schema import (
     resolve_schema_ref,
     walk_structural_positions,
 )
-from analitiq.contracts.shared.rules import all_rules
+from analitiq.contracts.shared.rules import all_rules, RuleViolation
 
 
 API_SCHEMA_URL = "https://schemas.analitiq.ai/api-endpoint/latest.json"
@@ -437,6 +438,14 @@ class TestRuleRegistration:
         enforcer = rule.validator_symbol.split(".")[-1]
         assert hasattr(ResponseExtraction, enforcer)
         assert hasattr(WriteInput, enforcer)
+
+    def test_rule_endp_026_attributed_keywords_are_a_subset_of_the_refused_ones(self):
+        # `_KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS` is a hand-picked subset of
+        # `_REFUSED_REFERENCE_KEYWORDS` — pin the relation so a typo in either
+        # set (e.g. a misspelled keyword dropped from RULE-ENDP-026's coverage
+        # with no test noticing) fails here rather than silently misattributing
+        # a keyword's finding.
+        assert _KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS <= _REFUSED_REFERENCE_KEYWORDS.keys()
 
 
 # ---------------------------------------------------------------------------
@@ -1423,7 +1432,13 @@ class TestOneStructuralWalk:
         doc, non_dict = self._document()
         positions = dict(walk_structural_positions(doc))
         dict_positions = {t for t, node in positions.items() if isinstance(node, dict)}
-        refused = min(_REFUSED_REFERENCE_KEYWORDS)
+        # `$id` specifically, not `min(_REFUSED_REFERENCE_KEYWORDS)`: it is one
+        # of the keywords RULE-ENDP-026's own statement covers ("retargets the
+        # base URI"), so the `ref-refused-keyword` assertions below actually
+        # exercise the RULE-ENDP-026-attributed branch rather than the
+        # `$anchor`-shaped unattributed one — `min()` would silently pick
+        # `$anchor`, which `_KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS` excludes.
+        refused = "$id"
         for tokens in dict_positions:
             # One violation per node for each contract check: a `native_type`
             # without its `arrow_type`, and a refused reference keyword.
@@ -1434,22 +1449,44 @@ class TestOneStructuralWalk:
         assert pointers[0] == "/p"
         assert sorted(pointers) == sorted(self._pointer("/p", t) for t in dict_positions)
 
-        arrow_errors: list[str] = []
-        _validate_arrow_type_in_json_schema(doc, "input.schema", arrow_errors)
-        paired = " declares only one of native_type/arrow_type"
-        malformed = " is not a JSON Schema object/boolean"
-        assert sorted(e.split(paired)[0] for e in arrow_errors if paired in e) == sorted(
-            self._dotted("input.schema", t) for t in dict_positions)
-        assert [e.split(malformed)[0] for e in arrow_errors if malformed in e] == [
-            self._dotted("input.schema", non_dict)]
+        # `_validate_arrow_type_in_json_schema` and `_validate_schema_refs` now
+        # accumulate `RuleViolation`s, each carrying its own `rule_id`,
+        # `message_id` and `path` (`/schema` + this walker's own pointer
+        # dialect — independent of the `path` prose prefix passed in below) —
+        # branch on those structured fields rather than parsing `.message`,
+        # which is what RULE-ENDP-005/006/026/064's attribution exists for.
+        arrow_errors: list[RuleViolation] = []
+        _validate_arrow_type_in_json_schema(doc, "input.schema", arrow_errors, "RULE-ENDP-006")
+        paired = [e for e in arrow_errors if e.message_id == "native-arrow-pairing-incomplete"]
+        malformed = [e for e in arrow_errors if e.message_id == "value_error"]
+        assert all(e.rule_id == "RULE-ENDP-006" for e in paired)
+        assert sorted(e.path for e in paired) == sorted(
+            "/schema" + self._pointer("", t) for t in dict_positions)
+        assert all(e.rule_id is None for e in malformed)
+        assert [e.path for e in malformed] == ["/schema" + self._pointer("", non_dict)]
         assert len(arrow_errors) == len(dict_positions) + 1
+        # The dotted dialect (`_dotted_position`, message text) is a separate
+        # rendering from the pointer dialect (`path`) just pinned above —
+        # every walked position must appear in it too, not just in `path`.
+        paired_messages = {e.message for e in paired}
+        assert all(
+            any(self._dotted("input.schema", t) in msg for msg in paired_messages)
+            for t in dict_positions
+        )
+        assert self._dotted("input.schema", non_dict) in malformed[0].message
 
-        ref_errors: list[str] = []
+        ref_errors: list[RuleViolation] = []
         _validate_schema_refs(doc, "input.schema", ref_errors)
-        marker = f".{refused} is not authorable"
-        assert sorted(e.split(marker)[0] for e in ref_errors if marker in e) == sorted(
-            self._dotted("input.schema", t) for t in dict_positions)
+        refused_violations = [e for e in ref_errors if e.message_id == "ref-refused-keyword"]
+        assert all(e.rule_id == "RULE-ENDP-026" for e in refused_violations)
+        assert sorted(e.path for e in refused_violations) == sorted(
+            "/schema" + self._pointer("", t) for t in dict_positions)
         assert len(ref_errors) == len(dict_positions)
+        refused_messages = {e.message for e in refused_violations}
+        assert all(
+            any(f"{self._dotted('input.schema', t)}.{refused}" in msg for msg in refused_messages)
+            for t in dict_positions
+        )
 
 
 class TestMaterializeMatchesTheNaiveFold:
