@@ -342,7 +342,12 @@ class RuleRecord:
         unknown = [o for o in self.owners if o not in OWNERS]
         if unknown:
             self._fail(f"unknown owner(s) {unknown}; expected from {OWNERS}")
-        if self.validator:
+        if self.validator is not None:
+            # `is not None`, not truthiness: an authored `validator: ""` is a
+            # non-null, malformed binding, not the same state as `null` — it
+            # must fail the dotted-format check just below, not skip it and
+            # read as unmechanized.
+            #
             # The binding names what is IMPORTED, so the left half is a dotted
             # identifier chain and nothing else. A path was the earlier form:
             # it shipped in this package's rules.json pointing into a tree no
@@ -379,7 +384,7 @@ class RuleRecord:
                 f"unknown enforcement_location {self.enforcement_location!r}; "
                 f"expected one of {ENFORCEMENT_LOCATIONS}"
             )
-        if self.validator and self.enforcement_location is not None:
+        if self.validator is not None and self.enforcement_location is not None:
             # A non-null validator already answers where the rule is enforced
             # — a second answer here is a second place the two could disagree.
             self._fail(
@@ -388,7 +393,7 @@ class RuleRecord:
                 "the other"
             )
         if (
-            not self.validator
+            self.validator is None
             and self.enforcement_location is None
             and self.status in IN_FORCE_STATUSES
         ):

@@ -8,7 +8,7 @@ tier: shape
 severity: error
 scopes: [connector]
 validator: null
-enforcement_location: engine
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 targets: [DatabaseTls]
 rationale: >

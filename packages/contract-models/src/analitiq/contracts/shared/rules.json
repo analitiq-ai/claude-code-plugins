@@ -1119,7 +1119,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1131,7 +1131,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Pre-encoding is the instinct of anyone who has hand-built a DSN, and it fails in the most expensive way: the double-encoded DSN is still well-formed, so the connection is attempted and rejected as a bad credential rather than as a malformed URL, sending the author after the secret instead of the binding. A pre-encoded value is also a perfectly well-formed value expression, so nothing here can see it — the second encoding exists only in the DSN the runtime renders at connection time.\n",
+   "rationale": "Pre-encoding is the instinct of anyone who has hand-built a DSN. A pre-encoded value is a perfectly well-formed value expression, so nothing here can see it — the second encoding exists only in the DSN the runtime renders at connection time. Known enforcement gap, and not a reliable one even there: the runtime's encoding function treats letters, digits and a handful of punctuation marks as already-safe, so a value built only from those — many real passwords and tokens among them — encodes to itself, and double-encoding it is a no-op the connection survives. Only a value containing a character the function actually transforms doubles that transformation into a credential the server rejects, read as a bad secret rather than a bad binding.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1439,7 +1439,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin"
    ],
@@ -1591,7 +1591,7 @@
     "api-endpoint"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin"
    ],
@@ -1617,7 +1617,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1860,7 +1860,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2228,7 +2228,7 @@
     "database-endpoint"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4605,7 +4605,7 @@
     "pipeline"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4985,7 +4985,7 @@
     "connector-package"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5374,7 +5374,7 @@
     "connector-package"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5775,7 +5775,7 @@
     "any"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -6367,7 +6367,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6379,7 +6379,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The value field is deliberately typed open so each rule type can carry its own payload — a bound, a regex, a range object, a list of admitted values — and that openness is what leaves the shape unchecked: a rule whose payload is the wrong kind validates here and fails only when the rule runs against a record, mid-transfer, on data the author is not looking at. The presence check `RULE-STRM-009` settles only whether a payload is present, so an author who reads a clean validation as confirmation of the payload has read too much into it. Catching a violation means reading each rule's value against the meaning of its type in the stream spec.\n",
+   "rationale": "The value field is deliberately typed open so each rule type can carry its own payload — a bound, a regex, a range object, a list of admitted values — and that openness is what leaves the shape unchecked: a rule whose payload is the wrong kind validates here, and what happens when the rule runs against a record, mid-transfer, depends on which kind it is. A `range` payload of the wrong shape raises there, reliably; the others do not: a wrong-shaped `pattern` payload can still interpolate into a syntactically valid, silently-wrong regex, and a wrong-shaped `in_list` payload can iterate into a value set with no error rather than raising. The presence check `RULE-STRM-009` settles only whether a payload is present, so an author who reads a clean validation as confirmation of the payload has read too much into it. Catching a violation means reading each rule's value against the meaning of its type in the stream spec.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6521,7 +6521,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6546,7 +6546,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"

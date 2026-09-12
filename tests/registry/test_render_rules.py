@@ -274,6 +274,16 @@ def test_a_validator_that_is_not_a_binding_is_refused(registry):
     assert "validator" in _refusal(registry)
 
 
+def test_an_empty_string_validator_is_refused_not_treated_as_null(registry):
+    """`validator: ""` is a non-null, malformed binding — a different state
+    from `null` the schema distinguishes. A truthiness check on `validator`
+    would let it skip the format check, skip the enforcement_location
+    conflict check, compile an empty-string validator into `rules.json`, and
+    report the rule as unmechanized instead of refusing it."""
+    _write(registry, validator='""')
+    assert "validator" in _refusal(registry)
+
+
 def test_a_validator_naming_a_source_path_is_refused(registry):
     """The binding names what is imported, never a path standing in for it.
 

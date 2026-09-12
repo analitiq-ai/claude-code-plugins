@@ -10,7 +10,7 @@ tier: reference
 severity: error
 scopes: [connector-package]
 validator: null
-enforcement_location: engine
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   The engine image ships no database drivers, so this file is the only
