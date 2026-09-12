@@ -1589,10 +1589,10 @@ _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
 #: doing either, so tagging them RULE-ENDP-026 would render a finding whose
 #: cited statement does not describe the actual complaint — attributing a
 #: rule id is only correct when the record's own wording backs it. They stay
-#: untagged until the record's statement is widened to name this third
-#: mechanism, which is a change to `rules/records/RULE-ENDP-026.yaml` alone
-#: and belongs in its own change, not folded into whichever diff first wires
-#: up attribution.
+#: untagged until the record's statement is widened to name this mechanism
+#: too, which is a change to `rules/records/RULE-ENDP-026.yaml` alone and
+#: belongs in its own change, not folded into whichever diff first wires up
+#: attribution.
 _KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS: frozenset[str] = frozenset({
     "$id", "$dynamicRef", "$recursiveRef",
 })
@@ -1625,16 +1625,16 @@ def _validate_schema_refs(schema: Any, path: str, errors: list[RuleViolation]) -
       schema.
       A pointer into one reaches a subtree nothing checked — the same hole as a
       non-local ref, spelled locally.
-    * the reference keywords in :data:`_REFUSED_REFERENCE_KEYWORDS`: `$id`
-      moves the base URI out from under the resolver, `$dynamicRef`/
-      `$recursiveRef` defer the target to evaluation time, and `$anchor`/
-      `$dynamicAnchor`/`$recursiveAnchor` declare a plain-name fragment target
-      this contract's JSON-Pointer-only addressing can never reach — three
-      distinct mechanisms, not one. Only the first two are what
-      RULE-ENDP-026's own statement names
-      (:data:`_KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS`); the anchor trio is
-      refused here on the same underlying harm but currently carries no rule
-      id of its own.
+    * the reference keywords in :data:`_REFUSED_REFERENCE_KEYWORDS`, refused
+      for more than one reason: `$id` moves the base URI out from under the
+      resolver, `$dynamicRef`/`$recursiveRef` defer the target to evaluation
+      time, and `$anchor`/`$dynamicAnchor`/`$recursiveAnchor` declare a
+      plain-name fragment target this contract's JSON-Pointer-only addressing
+      can never reach. Which of those reasons RULE-ENDP-026's own statement
+      actually names — and so which keywords the walker attributes to it,
+      versus leaving unattributed on the same underlying harm — is decided
+      once, by :data:`_KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS`, not restated
+      here.
 
     Refusing all of them is what makes it safe for declared-path resolution to
     FOLLOW a `$ref` (see

@@ -227,12 +227,8 @@ def _write_endpoint(input_schema, endpoint_id="widgets", path="/widgets"):
 
 
 class TestFourWalkerRulesAreAttributed:
-    """RULE-ENDP-005/006/026/064 — the walker error-accumulation redesign.
-
-    `_validate_arrow_type_in_json_schema` and `_validate_schema_refs` used to
-    accumulate plain strings and raise one bare `ValueError`, so every
-    document these four rules govern reached `_model_findings` as
-    `rule=None`. They now raise a `MultiRuleViolation` carrying one
+    """RULE-ENDP-005/006/026/064: `_validate_arrow_type_in_json_schema` and
+    `_validate_schema_refs` raise a `MultiRuleViolation` carrying one
     `RuleViolation` per complaint, each with its own `rule_id` and a `path`
     located to the offending node — `_model_findings` expands it into one
     finding per complaint instead of folding them into one.
@@ -429,6 +425,33 @@ class TestFourWalkerRulesAreAttributed:
             (f.get("rule"), f["path"]) for f in findings
             if f["message_id"] == expected_message_id
         ] == [("RULE-ENDP-026", "/operations/read/response/schema/properties/b")]
+
+    @pytest.mark.parametrize("keyword,expected_rule,expected_message_id", [
+        # Covered by RULE-ENDP-026's own statement ("retargets the base URI"
+        # or "defers a reference to evaluation time").
+        ("$id", "RULE-ENDP-026", "ref-refused-keyword"),
+        ("$dynamicRef", "RULE-ENDP-026", "ref-refused-keyword"),
+        ("$recursiveRef", "RULE-ENDP-026", "ref-refused-keyword"),
+        # Refused on the same underlying harm, but the statement names
+        # neither mechanism for these — stay unattributed until it does.
+        ("$anchor", None, "value_error"),
+        ("$dynamicAnchor", None, "value_error"),
+        ("$recursiveAnchor", None, "value_error"),
+    ])
+    def test_every_refused_reference_keyword_gets_its_own_finding(
+        self, validator, keyword, expected_rule, expected_message_id,
+    ):
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {"b": {keyword: "x" if keyword != "$id" else "https://example.com/"}},
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["message_id"], f["path"]) for f in findings
+        ] == [(
+            expected_rule, expected_message_id,
+            "/operations/read/response/schema/properties/b",
+        )]
 
     def test_cross_parameter_bound_violation_is_unattributed_and_located(self, validator):
         # `validate_cross_params` rejects Decimal scale > precision — one of

@@ -25,7 +25,9 @@ import pytest
 from pydantic import ValidationError
 
 from analitiq.contracts.endpoints import (
+    _KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS,
     _OperationKind,
+    _REFUSED_REFERENCE_KEYWORDS,
     _unresolved_harm,
     _validate_arrow_type_in_json_schema,
     _validate_schema_refs,
@@ -436,6 +438,14 @@ class TestRuleRegistration:
         enforcer = rule.validator_symbol.split(".")[-1]
         assert hasattr(ResponseExtraction, enforcer)
         assert hasattr(WriteInput, enforcer)
+
+    def test_rule_endp_026_attributed_keywords_are_a_subset_of_the_refused_ones(self):
+        # `_KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS` is a hand-picked subset of
+        # `_REFUSED_REFERENCE_KEYWORDS` — pin the relation so a typo in either
+        # set (e.g. a misspelled keyword dropped from RULE-ENDP-026's coverage
+        # with no test noticing) fails here rather than silently misattributing
+        # a keyword's finding.
+        assert _KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS <= _REFUSED_REFERENCE_KEYWORDS.keys()
 
 
 # ---------------------------------------------------------------------------

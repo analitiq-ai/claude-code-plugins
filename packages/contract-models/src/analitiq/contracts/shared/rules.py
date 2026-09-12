@@ -83,9 +83,8 @@ class RuleViolation(ValueError):
     precise than pydantic's own ``err["loc"]`` (`rules/SCHEMA.md`'s Findings
     section names no format for it); ``_model_findings`` only reads it off a
     violation it unpacks from a :class:`MultiRuleViolation` — a bare
-    `RuleViolation` raised on its own still resolves its finding's `path` from
-    ``err["loc"]`` alone, exactly as before this attribute existed, whether or
-    not it sets one.
+    `RuleViolation` raised on its own resolves its finding's `path` from
+    ``err["loc"]`` alone, whether or not it sets one.
     """
 
     def __init__(
@@ -111,10 +110,10 @@ class MultiRuleViolation(ValueError):
     exception carries the whole list, and ``_model_findings``
     (`analitiq.validator._core`) unpacks it into one finding per entry — each
     with its own `rule_id`, `message_id` and `path` — rather than folding
-    them into a single attributed-to-one, joined-text finding. Every other
-    enforcer in the registry still raises a bare `RuleViolation` or
-    `ValueError` and is completely unaffected: this is a second exception
-    shape ``_model_findings`` recognises, not a change to the existing one.
+    them into a single attributed-to-one, joined-text finding. An enforcer
+    with only one complaint raises a bare `RuleViolation` or `ValueError`
+    instead; ``_model_findings`` recognises both shapes, each through its own
+    branch.
     """
 
     def __init__(self, violations: list[RuleViolation]) -> None:
@@ -144,8 +143,8 @@ def violation(
     branches on this rather than parsing `detail`. Both the statement and the
     rule id are read from the record, so a reworded rule rewords its own
     diagnostic. An id no record defines raises ``KeyError`` here rather than
-    emitting a citation that resolves to nothing. `path` is optional and
-    unused by every call site that predates it — see `RuleViolation`.
+    emitting a citation that resolves to nothing. `path` is optional; see
+    `RuleViolation` for what omitting it means for the resulting finding.
     """
     rule = rule_by_id(rule_id)
     message = f"[{rule.id}] {' '.join(rule.statement.split())} ({detail})"

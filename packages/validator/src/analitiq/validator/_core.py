@@ -245,10 +245,10 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     not. That expands into one finding PER ENTRY here, each keeping its own
     `rule_id`/`message_id`/`message` rather than the single joined `err["msg"]`
     pydantic rendered for the whole raise, and each `path` extended past
-    `err["loc"]` by the entry's own `path` suffix when it set one. Every other
-    raise in this repo — a bare `RuleViolation`, a bare `ValueError` — takes
-    the branch below unchanged; this is a second exception shape recognised
-    here, not a change to the existing one.
+    `err["loc"]` by the entry's own `path` suffix when it set one. A raise
+    with only one complaint — a bare `RuleViolation`, a bare `ValueError` —
+    takes the branch below instead, its own separate path through this
+    function.
     """
     from analitiq.contracts.shared.rules import MultiRuleViolation, RuleViolation
     try:
