@@ -371,7 +371,10 @@ class TypeMapWriteExactRule(_TypeMapRuleBase):
             raise violation("RULE-TMAP-008", "write-exact-cross-param-bound", str(detail)) from None
         # A write `native_type` render may carry `${length}` DDL hints — they must be
         # syntactically valid (no empty `${}` / unclosed `${`).
-        _validate_render_placeholders(self.native_type)
+        try:
+            _validate_render_placeholders(self.native_type)
+        except ValueError as detail:
+            raise violation("RULE-TMAP-008", "write-exact-malformed-placeholder", str(detail)) from None
         return self
 
 
@@ -387,7 +390,10 @@ class TypeMapWriteRegexRule(_TypeMapRuleBase):
             _compile_ecma_matcher(self.arrow_type)
         except ValueError as detail:
             raise violation("RULE-TMAP-009", "write-regex-arrow-type-not-ecma", str(detail)) from None
-        _validate_render_placeholders(self.native_type)
+        try:
+            _validate_render_placeholders(self.native_type)
+        except ValueError as detail:
+            raise violation("RULE-TMAP-009", "write-regex-malformed-placeholder", str(detail)) from None
         return self
 
 
