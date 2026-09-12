@@ -1423,7 +1423,13 @@ class TestOneStructuralWalk:
         doc, non_dict = self._document()
         positions = dict(walk_structural_positions(doc))
         dict_positions = {t for t, node in positions.items() if isinstance(node, dict)}
-        refused = min(_REFUSED_REFERENCE_KEYWORDS)
+        # `$id` specifically, not `min(_REFUSED_REFERENCE_KEYWORDS)`: it is one
+        # of the keywords RULE-ENDP-026's own statement covers ("retargets the
+        # base URI"), so the `ref-refused-keyword` assertions below actually
+        # exercise the RULE-ENDP-026-attributed branch rather than the
+        # `$anchor`-shaped unattributed one — `min()` would silently pick
+        # `$anchor`, which `_KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS` excludes.
+        refused = "$id"
         for tokens in dict_positions:
             # One violation per node for each contract check: a `native_type`
             # without its `arrow_type`, and a refused reference keyword.
@@ -1450,6 +1456,15 @@ class TestOneStructuralWalk:
         assert all(e.rule_id is None for e in malformed)
         assert [e.path for e in malformed] == ["/schema" + self._pointer("", non_dict)]
         assert len(arrow_errors) == len(dict_positions) + 1
+        # The dotted dialect (`_dotted_position`, message text) is a separate
+        # rendering from the pointer dialect (`path`) just pinned above —
+        # every walked position must appear in it too, not just in `path`.
+        paired_messages = {e.message for e in paired}
+        assert all(
+            any(self._dotted("input.schema", t) in msg for msg in paired_messages)
+            for t in dict_positions
+        )
+        assert self._dotted("input.schema", non_dict) in malformed[0].message
 
         ref_errors: list[RuleViolation] = []
         _validate_schema_refs(doc, "input.schema", ref_errors)
@@ -1458,6 +1473,11 @@ class TestOneStructuralWalk:
         assert sorted(e.path for e in refused_violations) == sorted(
             "/schema" + self._pointer("", t) for t in dict_positions)
         assert len(ref_errors) == len(dict_positions)
+        refused_messages = {e.message for e in refused_violations}
+        assert all(
+            any(f"{self._dotted('input.schema', t)}.{refused}" in msg for msg in refused_messages)
+            for t in dict_positions
+        )
 
 
 class TestMaterializeMatchesTheNaiveFold:

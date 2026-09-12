@@ -48,6 +48,7 @@ from analitiq.contracts.shared.rules import (
     MultiRuleViolation,
     RuleViolation,
     find_duplicates,
+    unattributed_violation,
     violation,
 )
 from analitiq.contracts.shared.arrow_shape import (
@@ -1369,8 +1370,8 @@ def _validate_arrow_type_in_json_schema(
     `rule_id` is RULE-ENDP-005 from `ResponseExtraction._validate` and
     RULE-ENDP-006 from `WriteInput._validate` — the caller decides, since the
     two statements are identical up to which model they govern. It tags only
-    the native/arrow pairing complaint and the four container-shape
-    complaints below, which are what those two statements cover. The
+    the native/arrow pairing complaint and the container-shape complaints
+    below, which are what those two statements cover. The
     canonical-vocabulary-pattern, cross-parameter-bound and malformed-node
     complaints are not covered by any registered rule and are appended
     untagged (`rule_id=None`) regardless of the caller.
@@ -1379,9 +1380,14 @@ def _validate_arrow_type_in_json_schema(
         node_path = _dotted_position(path, tokens)
         # `/schema` because both `ResponseExtraction.schema_` and
         # `WriteInput.schema_` alias to that field name — pydantic's own
-        # `err["loc"]` already reaches the model instance itself (verified
-        # empirically against `ApiEndpointDoc`), so this suffix only needs to
-        # continue from there, not restate the endpoint doc's own ancestry.
+        # `err["loc"]` already reaches the model instance itself, so this
+        # suffix only needs to continue from there, not restate the endpoint
+        # doc's own ancestry. Pinned by `TestFourWalkerRulesAreAttributed` in
+        # `packages/validator/tests/test_validation.py`, which asserts a
+        # finding's full `path` (e.g.
+        # `/operations/read/response/schema/properties/a`) — a change to how
+        # far pydantic's `loc` reaches would move that assertion, not just
+        # this comment.
         pointer = "/schema" + pointer_position(tokens)
         # JSON Schema 2020-12 permits `true` / `false` as a whole-schema
         # short-form ("anything" / "nothing"). Those are valid but carry no
@@ -1391,8 +1397,7 @@ def _validate_arrow_type_in_json_schema(
         if isinstance(node, bool):
             continue
         if not isinstance(node, dict):
-            errors.append(RuleViolation(
-                None, "value_error",
+            errors.append(unattributed_violation(
                 f"{node_path} is not a JSON Schema object/boolean (got "
                 f"{type(node).__name__}); cannot validate arrow_type "
                 "(spec: §Native and Arrow Types)",
@@ -1410,8 +1415,7 @@ def _validate_arrow_type_in_json_schema(
             # slip through match() but is correctly rejected by Pydantic's
             # rust-regex field-level pattern. Use fullmatch here for parity.
             if not isinstance(arrow_value, str) or not ARROW_TYPE_RE.fullmatch(arrow_value):
-                errors.append(RuleViolation(
-                    None, "value_error",
+                errors.append(unattributed_violation(
                     f"{node_path}.arrow_type={arrow_value!r} is not a canonical Arrow "
                     "type. Parameterized canonical types must carry their "
                     "parameters: e.g. 'Timestamp(MICROSECOND)', "
@@ -1425,8 +1429,7 @@ def _validate_arrow_type_in_json_schema(
                 try:
                     validate_cross_params(arrow_value)
                 except ValueError as exc:
-                    errors.append(RuleViolation(
-                        None, "value_error",
+                    errors.append(unattributed_violation(
                         f"{node_path}.arrow_type: {exc} (spec: §Native and Arrow Types)",
                         path=pointer,
                     ))
@@ -1467,7 +1470,7 @@ def _validate_arrow_type_in_json_schema(
             if arrow_value == "Object":
                 if not has_properties:
                     errors.append(violation(
-                        rule_id, "object-container-shape-invalid",
+                        rule_id, "object-container-missing-properties",
                         f"{node_path}.arrow_type='Object' requires sibling 'properties' "
                         "(spec: §Native and Arrow Types)",
                         path=pointer,
@@ -1476,14 +1479,14 @@ def _validate_arrow_type_in_json_schema(
                     # Empty dict or non-dict shape is structurally meaningless for
                     # a declared Object.
                     errors.append(violation(
-                        rule_id, "object-container-shape-invalid",
+                        rule_id, "object-container-invalid-properties",
                         f"{node_path}.arrow_type='Object' requires non-empty "
                         "'properties' map (spec: §Native and Arrow Types)",
                         path=pointer,
                     ))
                 if has_items:
                     errors.append(violation(
-                        rule_id, "object-container-shape-invalid",
+                        rule_id, "object-container-has-items",
                         f"{node_path}.arrow_type='Object' must not carry 'items' "
                         "(spec: §Native and Arrow Types)",
                         path=pointer,
@@ -1491,7 +1494,7 @@ def _validate_arrow_type_in_json_schema(
             elif arrow_value == "List":
                 if not has_items:
                     errors.append(violation(
-                        rule_id, "list-container-shape-invalid",
+                        rule_id, "list-container-missing-items",
                         f"{node_path}.arrow_type='List' requires sibling 'items' "
                         "(spec: §Native and Arrow Types)",
                         path=pointer,
@@ -1501,7 +1504,7 @@ def _validate_arrow_type_in_json_schema(
                     # and tuple-form (`items: [...]`) — both contradict the
                     # single-spec contract that Column / ArrowFieldSpec enforce.
                     errors.append(violation(
-                        rule_id, "list-container-shape-invalid",
+                        rule_id, "list-container-invalid-items",
                         f"{node_path}.arrow_type='List' requires 'items' to be a "
                         "single field spec (object); boolean and tuple forms "
                         "are not permitted (spec: §Native and Arrow Types)",
@@ -1509,7 +1512,7 @@ def _validate_arrow_type_in_json_schema(
                     ))
                 if has_properties:
                     errors.append(violation(
-                        rule_id, "list-container-shape-invalid",
+                        rule_id, "list-container-has-properties",
                         f"{node_path}.arrow_type='List' must not carry 'properties' "
                         "(spec: §Native and Arrow Types)",
                         path=pointer,
@@ -1575,6 +1578,21 @@ _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
         "the same reason"
     ),
 }
+
+#: The subset of :data:`_REFUSED_REFERENCE_KEYWORDS` RULE-ENDP-026's own
+#: statement literally covers — "retargets the base URI" (`$id`) or "defers a
+#: reference to evaluation time" (`$dynamicRef`/`$recursiveRef`). `$anchor`
+#: and its dynamic/recursive kin declare an unreachable target rather than
+#: doing either, so tagging them RULE-ENDP-026 would render a finding whose
+#: cited statement does not describe the actual complaint — attributing a
+#: rule id is only correct when the record's own wording backs it. They stay
+#: untagged until the record's statement is widened to name this third
+#: mechanism, which is a change to `rules/records/RULE-ENDP-026.yaml` alone
+#: and belongs in its own change, not folded into whichever diff first wires
+#: up attribution.
+_KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS: frozenset[str] = frozenset({
+    "$id", "$dynamicRef", "$recursiveRef",
+})
 
 
 def _validate_schema_refs(schema: Any, path: str, errors: list[RuleViolation]) -> None:
@@ -1661,13 +1679,17 @@ def _validate_schema_refs(schema: Any, path: str, errors: list[RuleViolation]) -
 
         for keyword, why in _REFUSED_REFERENCE_KEYWORDS.items():
             if keyword in node:
-                errors.append(violation(
-                    "RULE-ENDP-026", "ref-refused-keyword",
+                detail = (
                     f"{node_path}.{keyword} is not authorable in an embedded "
                     f"response/input schema: `{keyword}` {why} "
-                    "(spec: §API Response Extraction — embedded schema references)",
-                    path=pointer,
-                ))
+                    "(spec: §API Response Extraction — embedded schema references)"
+                )
+                if keyword in _KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS:
+                    errors.append(violation(
+                        "RULE-ENDP-026", "ref-refused-keyword", detail, path=pointer,
+                    ))
+                else:
+                    errors.append(unattributed_violation(detail, path=pointer))
 
         if "$ref" in node:
             ref = node["$ref"]

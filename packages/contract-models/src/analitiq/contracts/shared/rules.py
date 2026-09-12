@@ -81,9 +81,11 @@ class RuleViolation(ValueError):
     directly rather than through :func:`violation`, which requires a
     resolvable id. `path` is `None` unless the enforcer knows a location more
     precise than pydantic's own ``err["loc"]`` (`rules/SCHEMA.md`'s Findings
-    section names no format for it); a raiser that never sets it costs
-    nothing — ``_model_findings`` falls back to ``err["loc"]`` exactly as it
-    always has, for every one of this class's other call sites.
+    section names no format for it); ``_model_findings`` only reads it off a
+    violation it unpacks from a :class:`MultiRuleViolation` — a bare
+    `RuleViolation` raised on its own still resolves its finding's `path` from
+    ``err["loc"]`` alone, exactly as before this attribute existed, whether or
+    not it sets one.
     """
 
     def __init__(
@@ -116,6 +118,14 @@ class MultiRuleViolation(ValueError):
     """
 
     def __init__(self, violations: list[RuleViolation]) -> None:
+        if not violations:
+            # An empty list has nothing for `_model_findings` to expand into a
+            # finding — pydantic still recorded a `ValidationError` for this
+            # raise, so a caller reaching here with nothing to report would
+            # make that rejection surface as zero findings, and a document
+            # pydantic refused would read as passed. Refusing to construct is
+            # what keeps that impossible rather than merely unlikely.
+            raise ValueError("MultiRuleViolation requires at least one RuleViolation")
         super().__init__("; ".join(v.message for v in violations))
         self.violations = violations
 
@@ -140,6 +150,17 @@ def violation(
     rule = rule_by_id(rule_id)
     message = f"[{rule.id}] {' '.join(rule.statement.split())} ({detail})"
     return RuleViolation(rule.id, message_id, message, path=path)
+
+
+def unattributed_violation(detail: str, *, path: str | None = None) -> RuleViolation:
+    """A complaint no registered rule covers: `rule_id=None`,
+    `message_id="value_error"` — the same pairing `_model_findings`
+    (`analitiq.validator._core`) already falls back to for a plain
+    `ValueError` reaching it, since pydantic flattens any `ValueError`'s
+    `err["type"]` to that literal string. One place to mint that pairing
+    rather than every call site retyping it.
+    """
+    return RuleViolation(None, "value_error", detail, path=path)
 
 
 # --- Shared primitives ------------------------------------------------------

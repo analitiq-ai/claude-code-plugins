@@ -277,11 +277,10 @@ def escape_pointer_token(name: str) -> str:
     resolves directly, never a URI. Symmetrising them would either encode a
     path nothing URI-decodes, or stop decoding refs a stock resolver decodes.
 
-    Not module-private: both `analitiq.validator.connectors` and
-    `analitiq.contracts.endpoints` escape a token outside a full
-    :func:`pointer_position` walk (a single map key, not a structural
-    position's tokens), so this is a shared primitive with two callers, not
-    an implementation detail of this module alone.
+    Not module-private: `analitiq.validator.connectors` escapes a token
+    outside a full :func:`pointer_position` walk too (a single map key, not a
+    structural position's tokens), so this is a shared primitive with more
+    than one caller, not an implementation detail of this module alone.
     """
     return name.replace("~", "~0").replace("/", "~1")
 

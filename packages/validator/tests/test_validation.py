@@ -349,6 +349,79 @@ class TestFourWalkerRulesAreAttributed:
             (f.get("rule"), f["path"]) for f in findings
         ]
 
+    @pytest.mark.parametrize("node,expected_message_id", [
+        ({"native_type": "map", "arrow_type": "Object"}, "object-container-missing-properties"),
+        ({"native_type": "array", "arrow_type": "List"}, "list-container-missing-items"),
+        (
+            {"native_type": "json", "arrow_type": "Json", "properties": {"x": {"type": "string"}}},
+            "json-container-shape-invalid",
+        ),
+        (
+            {"native_type": "string", "arrow_type": "Utf8", "properties": {"x": {"type": "string"}}},
+            "scalar-container-shape-invalid",
+        ),
+    ], ids=["object", "list", "json", "scalar"])
+    @pytest.mark.parametrize("build,expected_rule,base_path", [
+        (_read_endpoint, "RULE-ENDP-005", "/operations/read/response/schema/properties/a"),
+        (_write_endpoint, "RULE-ENDP-006", "/operations/write/insert/input/schema/properties/a"),
+    ], ids=["response", "write_input"])
+    def test_container_shape_complaint_is_attributed(
+        self, validator, node, expected_message_id, build, expected_rule, base_path,
+    ):
+        # `native_type`+`arrow_type` are both set (unlike the pairing-miss
+        # tests above) so the container-shape complaint is the only one this
+        # node raises — isolating the message_id under test.
+        doc = build({"type": "object", "properties": {"a": node}})
+        findings = self._rule_findings(validator, doc)
+        matches = [
+            (f.get("rule"), f["path"]) for f in findings
+            if f["message_id"] == expected_message_id
+        ]
+        assert matches == [(expected_rule, base_path)], findings
+
+    @pytest.mark.parametrize("node,expected_message_id", [
+        ({"$ref": 5}, "ref-not-string"),
+        ({"$ref": "https://example.com/x"}, "ref-not-in-document"),
+        ({"$ref": "#anchor"}, "ref-anchor-fragment"),
+        ({"$ref": "#/$defs/B"}, "ref-resolves-to-boolean"),
+        ({"$ref": "#/properties/a/default"}, "ref-non-schema-position"),
+    ], ids=[
+        "not-string", "not-in-document", "anchor-fragment",
+        "resolves-to-boolean", "non-schema-position",
+    ])
+    def test_every_ref_complaint_kind_is_rule_endp_026(self, validator, node, expected_message_id):
+        doc = _read_endpoint({
+            "type": "object",
+            "$defs": {"B": True},
+            "properties": {
+                "a": {"type": "string", "default": "hi"},
+                "b": node,
+            },
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["path"]) for f in findings
+            if f["message_id"] == expected_message_id
+        ] == [("RULE-ENDP-026", "/operations/read/response/schema/properties/b")]
+
+    def test_cross_parameter_bound_violation_is_unattributed_and_located(self, validator):
+        # `validate_cross_params` rejects Decimal scale > precision — one of
+        # the three complaint kinds no registered rule covers (alongside the
+        # arrow-pattern-mismatch and malformed-node cases already tested
+        # above), so it too must surface `rule=None` but still located.
+        doc = _read_endpoint({
+            "type": "object",
+            "properties": {
+                "a": {"native_type": "dec", "arrow_type": "Decimal128(2, 9)"},
+            },
+        })
+        findings = self._rule_findings(validator, doc)
+        assert [
+            (f.get("rule"), f["message_id"], f["path"]) for f in findings
+        ] == [(
+            None, "value_error", "/operations/read/response/schema/properties/a",
+        )]
+
 
 @pytest.fixture
 def connector_base():
