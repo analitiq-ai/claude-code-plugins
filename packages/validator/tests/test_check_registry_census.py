@@ -11,12 +11,12 @@ than the tool enforces, which is the failure the census exists to prevent: an
 author reads the rendered reference, sees no rule, and writes a document the
 validator rejects.
 
-The universe is `VALIDATOR_IDS`, which the package builds at import — each
-per-kind module declares its ids through `register_validator_ids` — so a new
-check is swept the moment it can emit a finding, without this file being
-edited. The mapping from id to enforcer is an AST walk for `finding("<id>",
-…)`: a call located by callee name and a literal first argument, never by
-reading what any surrounding text means.
+The universe is every literal `rule="RULE-…"` a `finding()` call carries — a
+`finding()` naming no rule is one of the framework's own no-rule cases
+(`rules/SCHEMA.md`'s case table) and carries no id to census. The mapping from
+rule id to emitter is an AST walk for `finding(…, rule="<id>", …)`: a call
+located by callee name and a literal `rule` keyword, never by reading what any
+surrounding text means.
 """
 from __future__ import annotations
 
@@ -25,24 +25,10 @@ from pathlib import Path
 
 VALIDATOR_SRC = Path(__file__).resolve().parents[1] / "src" / "analitiq" / "validator"
 
-#: Ids the framework emits, which are not checks and have no rule to bind.
-#: `finding()` accepts them so every failure path can report through one
-#: shape, including the paths that report the absence of a verdict.
-EXEMPT_VALIDATOR_IDS = {
-    "contract-model": (
-        "the contract models' own rejection, relabelled — each pydantic error "
-        "becomes a finding, and the rule it violates is registered against the "
-        "model validator or field that raised it"
-    ),
-    "document": (
-        "not a rule about a document but the verdict that there is no document "
-        "to judge: unrecognized kind, unreadable file, unparseable JSON"
-    ),
-}
 
-
-def _emitters() -> dict[str, set[str]]:
-    """Map each literal validator id to the `module::function` bindings emitting it.
+def _rule_id_emitters() -> dict[str, set[str]]:
+    """Map each literal `rule=` value on a `finding()` call to the
+    `module::function` bindings emitting it.
 
     The enclosing function is the outermost one, because that is the symbol a
     record can name: a helper defined inside a check is not importable, so a
@@ -55,15 +41,14 @@ def _emitters() -> dict[str, set[str]]:
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 walk(child, module, owner or child.name)
                 continue
-            if (
-                owner
-                and isinstance(child, ast.Call)
-                and getattr(child.func, "id", None) == "finding"
-                and child.args
-                and isinstance(child.args[0], ast.Constant)
-                and isinstance(child.args[0].value, str)
-            ):
-                found.setdefault(child.args[0].value, set()).add(f"{module}::{owner}")
+            if owner and isinstance(child, ast.Call) and getattr(child.func, "id", None) == "finding":
+                for kw in child.keywords:
+                    if (
+                        kw.arg == "rule"
+                        and isinstance(kw.value, ast.Constant)
+                        and isinstance(kw.value.value, str)
+                    ):
+                        found.setdefault(kw.value.value, set()).add(f"{module}::{owner}")
             walk(child, module, owner)
 
     for path in sorted(VALIDATOR_SRC.glob("*.py")):
@@ -73,56 +58,45 @@ def _emitters() -> dict[str, set[str]]:
     return found
 
 
-def test_every_registered_check_is_some_rules_enforcer(validator):
+def test_every_finding_rule_id_resolves_to_a_record():
+    """A `finding()` call naming a rule id the registry does not carry is a
+    document rejected by a rule its author was never shown."""
+    from analitiq.contracts.shared.rules import all_rules
+
+    emitters = _rule_id_emitters()
+    assert emitters, (
+        f"no `finding(…, rule=\"<id>\", …)` call sites found under {VALIDATOR_SRC} — "
+        "every cross-document check reports through `finding`, so this is a walk "
+        "that stopped matching rather than a package with no rule-bound checks in it"
+    )
+    known = {rule.id for rule in all_rules()}
+    unknown = sorted(set(emitters) - known)
+    assert not unknown, (
+        f"finding() call sites name rule ids the registry does not carry: {unknown}"
+    )
+
+
+def test_every_cross_document_rule_is_emitted_by_its_declared_enforcer():
     """The enforcer→registry direction, over the cross-document half.
 
-    A check with no record enforces a rule the registry does not carry, so
-    nothing renders it into the plugin references an agent authors against —
-    the document is rejected by a rule its author was never shown.
+    A record whose `validator` resolves into this package names the exact
+    `module::function` a rule's finding must come from — the same statement
+    the contract-models census makes of a `@model_validator`, applied to a
+    function that emits through `finding()` instead of raising through
+    `rules.violation`. A record naming a symbol nothing here emits from is
+    a rule the reference advertises and the tool cannot actually apply.
     """
     from analitiq.contracts.shared.rules import all_rules
 
-    emitters = _emitters()
-    assert emitters, (
-        f"no `finding(\"<id>\", …)` call sites found under {VALIDATOR_SRC} — "
-        "every check reports through `finding`, so this is a walk that stopped "
-        "matching rather than a package with no checks in it"
-    )
-    bound = {rule.validator for rule in all_rules() if rule.validator}
+    emitters = _rule_id_emitters()
     unaccounted = []
-    for check_id in sorted(validator.VALIDATOR_IDS):
-        if check_id in EXEMPT_VALIDATOR_IDS:
+    for rule in all_rules():
+        if not rule.validator_module or not rule.validator_module.startswith("analitiq.validator"):
             continue
-        if not emitters.get(check_id, set()) & bound:
-            unaccounted.append(check_id)
+        binding = f"{rule.validator_module}::{rule.validator_symbol}"
+        if binding not in emitters.get(rule.id, set()):
+            unaccounted.append(f"{rule.id}: declares {binding!r}, which no finding() call emits it from")
     assert not unaccounted, (
-        "registered validator checks that are no rule's enforcer — give each a "
-        "record in rules/records/ whose `validator` names the function emitting "
-        "it (then run `python3 scripts/render_rules.py write`), or add an "
-        f"explicit exemption with its reason: {unaccounted}"
+        "records whose `validator` names a analitiq.validator function that "
+        f"emits no finding for the rule's own id: {unaccounted}"
     )
-
-
-def test_every_registered_check_has_a_call_site(validator):
-    """An id nobody emits is a check that was deleted, leaving its declaration.
-
-    Without this the test above passes for it forever: an id with no emitter
-    can never be bound, so an exemption is the only way to make it green, and
-    the honest fix is to drop the id. It also keeps the census from grading a
-    typo — a registered id spelled one way and emitted another silently makes
-    two entries where the author meant one.
-    """
-    emitters = _emitters()
-    orphans = sorted(set(validator.VALIDATOR_IDS) - set(emitters))
-    assert not orphans, (
-        "validator ids declared through `register_validator_ids` that no "
-        f"`finding()` call emits — drop each from its module: {orphans}"
-    )
-
-
-def test_exemptions_name_live_validator_ids(validator):
-    """The rot direction of the exemption table: an exemption for an id that no
-    longer exists stays green forever, and silently exempts the next check to
-    reuse the name."""
-    stale = sorted(set(EXEMPT_VALIDATOR_IDS) - set(validator.VALIDATOR_IDS))
-    assert not stale, f"exemptions naming no registered validator id: {stale}"

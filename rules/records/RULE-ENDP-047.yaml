@@ -6,7 +6,7 @@ tier: reference
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.validator.connectors::_endpoint_transport_ref_findings"
-owners: [connector-plugin, engine]
+owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   This is the half of transport resolution that `RULE-CTOR-005` cannot reach:
   that rule resolves every ref site inside the connector document, and an

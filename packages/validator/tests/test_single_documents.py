@@ -104,14 +104,14 @@ def test_invalid_connection_is_detected_and_flagged(validator):
     doc = {"connector_id": "stripe", "parameters": {"password": "hunter2"}}
     findings = validator.validate_document(doc)
     errors = _errors(findings)
-    assert errors and all(e["validator"] == "contract-model" for e in errors)
+    assert errors and all(e["kind"] == "fail" for e in errors)
 
 
 def test_connection_missing_connector_id_is_unrecognized(validator):
     # `connector_id` IS the connection discriminator; without it the document is
     # not a connection (and matches no other kind) — the unrecognized verdict.
     findings = validator.validate_document({"display_name": "x"})
-    assert any(f["validator"] == "document" for f in _errors(findings))
+    assert any(f.get("message_id") == "unrecognized-document" for f in _errors(findings))
 
 
 # --- stream ------------------------------------------------------------------
@@ -124,7 +124,7 @@ def test_invalid_stream_is_detected_and_flagged(validator):
     doc = _valid_stream()
     doc["status"] = "bogus"  # not a valid lifecycle status
     errors = _errors(validator.validate_document(doc))
-    assert errors and all(e["validator"] == "contract-model" for e in errors)
+    assert errors and all(e["kind"] == "fail" for e in errors)
 
 
 def test_stream_extra_top_level_field_rejected(validator):
@@ -145,7 +145,7 @@ def test_invalid_pipeline_is_detected_and_flagged(validator):
     doc = _valid_pipeline()
     doc["status"] = "bogus"
     errors = _errors(validator.validate_document(doc))
-    assert errors and all(e["validator"] == "contract-model" for e in errors)
+    assert errors and all(e["kind"] == "fail" for e in errors)
 
 
 def test_single_pipeline_not_confused_with_bundle(validator):
@@ -163,7 +163,7 @@ def test_active_pipeline_without_streams_flagged(validator):
     single-doc path accepted.)"""
     doc = {**_valid_pipeline(), "status": "active"}
     errors = _errors(validator.validate_document(doc))
-    assert errors and all(e["validator"] == "contract-model" for e in errors)
+    assert errors and all(e["kind"] == "fail" for e in errors)
     assert any("at least one stream reference" in e["message"] for e in errors)
 
 

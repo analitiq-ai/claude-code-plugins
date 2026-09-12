@@ -672,7 +672,7 @@ def _assert_block_upholds_marker(marker: Marker, body: str, label: str,
     if marker.kind == "validate":
         assert not errors, (
             f"{label}, {where}, does not validate as {entity}: "
-            + "; ".join(f"{f['validator']} {f['path']}: {f['message']}"
+            + "; ".join(f"{f.get('rule')} {f['path']}: {f['message']}"
                         for f in errors)
             + " — the host validates on its own, so either the prose teaches "
               "an invalid shape or the marker's resource/pointer is wrong.")
@@ -738,7 +738,7 @@ def test_host_validates_clean(host_ref, tmp_path):
     for entity in sorted(entities):
         errors = _findings(entity, document, tmp_path / entity, host)
         assert not errors, f"{host_ref} as {entity}\n" + "\n".join(
-            f"{f['validator']} {f['path']}: {f['message']}" for f in errors)
+            f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors)
 
 
 @pytest.mark.parametrize("key,marker", GRADED)

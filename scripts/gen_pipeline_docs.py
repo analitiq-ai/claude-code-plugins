@@ -283,14 +283,24 @@ def render_filter_operators() -> str:
 
 
 def render_validator_ids() -> str:
-    from analitiq.validator import VALIDATOR_IDS
+    """Every rule id a cross-document check in `analitiq.validator` can emit —
+    the population `packages/validator/tests/test_check_registry_census.py`
+    polices from the other side. A single-document contract-model rejection
+    carries a rule id too, when a `rules.violation` raised it, but that half
+    has no registry of ids to enumerate here: it is whichever rule the model
+    names."""
+    from analitiq.contracts.shared.rules import all_rules
 
-    if not VALIDATOR_IDS:
-        raise RuntimeError("the validator exposed no finding ids")
+    ids = sorted(
+        rule.id for rule in all_rules()
+        if rule.validator and rule.validator.startswith("analitiq.validator.")
+    )
+    if not ids:
+        raise RuntimeError("no rule is bound to a validator-package enforcer")
     out = [
-        "Finding ids the validator can emit:",
+        "Rule ids a cross-document check in `analitiq.validator` can emit:",
         "",
-        ", ".join(f"`{v}`" for v in sorted(VALIDATOR_IDS)),
+        ", ".join(f"`{v}`" for v in ids),
     ]
     return "\n".join(out) + "\n"
 

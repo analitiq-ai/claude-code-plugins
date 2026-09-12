@@ -63,8 +63,8 @@ def _valid_bundle() -> dict:
     }
 
 
-def _validators(findings) -> set:
-    return {f["validator"] for f in findings}
+def _rules(findings) -> set:
+    return {f.get("rule") for f in findings}
 
 
 # --- happy path -------------------------------------------------------------
@@ -82,26 +82,14 @@ def test_valid_bundle_detected_and_dispatched(validator):
     assert [f for f in findings if f["severity"] == "error"] == []
 
 
-def test_all_finding_ids_are_registered(validator):
-    """Every id a bundle finding can carry is registered with the core."""
-    for vid in (
-        "bundle-pipeline",
-        "bundle-stream-ref",
-        "bundle-connection-ref",
-        "bundle-connector-ref",
-        "bundle-endpoint-ref",
-    ):
-        assert vid in validator.VALIDATOR_IDS
-
-
-# --- pipeline runnable (bundle-pipeline) ------------------------------------
+# --- pipeline runnable (RULE-PIPE-018/019/014) ------------------------------
 
 def test_missing_pipeline_id_flagged(validator):
     bundle = _valid_bundle()
     del bundle["pipeline"]["pipeline_id"]
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-pipeline" and f["path"] == "/pipeline/pipeline_id"
+        f["rule"] == "RULE-PIPE-018" and f["path"] == "/pipeline/pipeline_id"
         for f in findings
     )
 
@@ -115,7 +103,7 @@ def test_non_active_pipeline_flagged(validator, status):
         bundle["pipeline"]["status"] = status
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-pipeline" and f["path"] == "/pipeline/status"
+        f["rule"] == "RULE-PIPE-019" and f["path"] == "/pipeline/status"
         for f in findings
     )
 
@@ -126,7 +114,7 @@ def test_active_pipeline_with_no_stream_refs_flagged(validator):
     bundle["streams"] = []
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-pipeline" and f["path"] == "/pipeline/streams"
+        f["rule"] == "RULE-PIPE-014" and f["path"] == "/pipeline/streams"
         for f in findings
     )
 
@@ -137,18 +125,18 @@ def test_active_pipeline_with_no_runnable_stream_flagged(validator):
     bundle["streams"][0]["status"] = "draft"
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-pipeline" and f["path"] == "/streams"
+        f["rule"] == "RULE-PIPE-014" and f["path"] == "/streams"
         for f in findings
     )
 
 
-# --- stream refs (bundle-stream-ref) ----------------------------------------
+# --- stream refs (RULE-PIPE-011/RULE-STRM-032) ------------------------------
 
 def test_pipeline_stream_ref_without_document_flagged(validator):
     bundle = _valid_bundle()
     bundle["pipeline"]["streams"] = ["99999999-9999-4999-8999-999999999999_v1"]
     findings = validator.validate_pipeline_bundle(bundle)
-    assert any(f["validator"] == "bundle-stream-ref" for f in findings)
+    assert any(f["rule"] == "RULE-PIPE-011" for f in findings)
 
 
 def test_duplicate_stream_refs_collapsing_to_same_base_flagged(validator):
@@ -156,7 +144,7 @@ def test_duplicate_stream_refs_collapsing_to_same_base_flagged(validator):
     bundle["pipeline"]["streams"] = [f"{STREAM}_v1", f"{STREAM}_v2"]
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-stream-ref" and "resolve" in f["message"]
+        f["rule"] == "RULE-PIPE-011" and "resolve" in f["message"]
         for f in findings
     )
 
@@ -166,7 +154,7 @@ def test_duplicate_stream_documents_flagged(validator):
     bundle["streams"].append(dict(bundle["streams"][0]))
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-stream-ref" and "two bundled stream documents" in f["message"]
+        f["rule"] == "RULE-PIPE-011" and "two bundled stream documents" in f["message"]
         for f in findings
     )
 
@@ -176,7 +164,7 @@ def test_stream_document_without_id_flagged(validator):
     del bundle["streams"][0]["stream_id"]
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-stream-ref" and f["path"] == "/streams/0/stream_id"
+        f["rule"] == "RULE-PIPE-011" and f["path"] == "/streams/0/stream_id"
         for f in findings
     )
 
@@ -188,7 +176,7 @@ def test_stream_belonging_to_another_pipeline_flagged(validator):
     bundle["streams"][0]["pipeline_id"] = "77777777-7777-4777-8777-777777777777"
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-stream-ref" and f["path"] == "/streams/0/pipeline_id"
+        f["rule"] == "RULE-STRM-032" and f["path"] == "/streams/0/pipeline_id"
         for f in findings
     )
 
@@ -202,14 +190,14 @@ def test_stream_without_pipeline_id_not_flagged_here(validator):
     assert not any(f["path"] == "/streams/0/pipeline_id" for f in findings)
 
 
-# --- connection presence + scoping (bundle-connection-ref) ------------------
+# --- connection presence + scoping (RULE-PIPE-012/RULE-PIPE-013/RULE-STRM-033) ---
 
 def test_referenced_connection_absent_from_bundle_flagged(validator):
     bundle = _valid_bundle()
     bundle["connections"] = [c for c in bundle["connections"] if c["connection_id"] != DEST_CONN]
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-connection-ref" and f["path"] == "/pipeline/connections"
+        f["rule"] == "RULE-PIPE-012" and f["path"] == "/pipeline/connections"
         for f in findings
     )
 
@@ -220,7 +208,7 @@ def test_duplicate_connection_documents_flagged(validator):
     bundle["connections"].append({"connection_id": f"{SOURCE_CONN}_v2", "connector_id": "stripe"})
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-connection-ref" and f["path"] == "/connections/2/connection_id"
+        f["rule"] == "RULE-PIPE-012" and f["path"] == "/connections/2/connection_id"
         for f in findings
     )
 
@@ -233,7 +221,7 @@ def test_pipeline_pinning_two_versions_of_one_connection_flagged(validator):
     ]
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-connection-ref" and "two versions" in f["message"]
+        f["rule"] == "RULE-PIPE-013" and "two versions" in f["message"]
         for f in findings
     )
 
@@ -245,7 +233,7 @@ def test_endpoint_ref_connection_not_in_pipeline_flagged(validator):
     )
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-connection-ref"
+        f["rule"] == "RULE-STRM-033"
         and f["path"].endswith("/source/endpoint_ref/connection_id")
         for f in findings
     )
@@ -259,7 +247,7 @@ def test_destination_endpoint_ref_connection_not_in_pipeline_flagged(validator):
     )
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-connection-ref"
+        f["rule"] == "RULE-STRM-033"
         and f["path"].endswith("/destinations/0/endpoint_ref/connection_id")
         for f in findings
     )
@@ -272,7 +260,7 @@ def test_stream_source_pointing_at_a_destination_connection_flagged(validator):
     bundle["streams"][0]["source"]["endpoint_ref"]["connection_id"] = f"{DEST_CONN}_v1"
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-connection-ref"
+        f["rule"] == "RULE-STRM-033"
         and f["path"].endswith("/source/endpoint_ref/connection_id")
         for f in findings
     )
@@ -285,20 +273,20 @@ def test_stream_destination_pointing_at_the_source_connection_flagged(validator)
     bundle["streams"][0]["destinations"][0]["endpoint_ref"]["connection_id"] = f"{SOURCE_CONN}_v1"
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-connection-ref"
+        f["rule"] == "RULE-STRM-033"
         and f["path"].endswith("/destinations/0/endpoint_ref/connection_id")
         for f in findings
     )
 
 
-# --- connector refs (bundle-connector-ref) ----------------------------------
+# --- connector refs (RULE-CONN-011) -----------------------------------------
 
 def test_connection_connector_not_bundled_flagged(validator):
     bundle = _valid_bundle()
     bundle["connectors"] = ["stripe"]  # drop snowflake
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-connector-ref" and "snowflake" in f["message"]
+        f["rule"] == "RULE-CONN-011" and "snowflake" in f["message"]
         for f in findings
     )
 
@@ -317,7 +305,7 @@ def test_connector_id_matched_verbatim_not_version_stripped(validator):
     bundle["connections"][0]["connector_id"] = "custom_v2"
     bundle["connectors"] = ["custom_v3", "snowflake"]
     findings = validator.validate_pipeline_bundle(bundle)
-    assert any(f["validator"] == "bundle-connector-ref" for f in findings)
+    assert any(f["rule"] == "RULE-CONN-011" for f in findings)
 
     bundle["connectors"] = ["custom_v2", "snowflake"]
     assert validator.validate_pipeline_bundle(bundle) == []
@@ -334,17 +322,17 @@ def test_connector_meta_dict_without_recognized_id_key_not_matched(validator):
     bundle = _valid_bundle()
     bundle["connectors"] = [{"name": "stripe"}, {"name": "snowflake"}]  # no id/slug/connector_id
     findings = validator.validate_pipeline_bundle(bundle)
-    assert any(f["validator"] == "bundle-connector-ref" for f in findings)
+    assert any(f["rule"] == "RULE-CONN-011" for f in findings)
 
 
-# --- connection-scoped endpoints (bundle-endpoint-ref) ----------------------
+# --- connection-scoped endpoints (RULE-STRM-034/RULE-STRM-042) --------------
 
 def test_connection_scoped_endpoint_missing_document_flagged(validator):
     bundle = _valid_bundle()
     bundle["endpoints"] = []
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-endpoint-ref"
+        f["rule"] == "RULE-STRM-034"
         and f["path"].endswith("/destinations/0/endpoint_ref")
         for f in findings
     )
@@ -358,7 +346,7 @@ def test_duplicate_connection_scoped_endpoint_documents_flagged(validator):
     )
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-endpoint-ref" and f["path"] == "/endpoints/1"
+        f["rule"] == "RULE-STRM-034" and f["path"] == "/endpoints/1"
         for f in findings
     )
 
@@ -372,7 +360,7 @@ def test_connection_scoped_endpoint_wrong_endpoint_id_flagged(validator):
     ]
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-endpoint-ref"
+        f["rule"] == "RULE-STRM-034"
         and f["path"].endswith("/destinations/0/endpoint_ref")
         for f in findings
     )
@@ -387,7 +375,7 @@ def test_connector_scoped_endpoint_entry_does_not_satisfy_connection_ref(validat
     ]
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-endpoint-ref"
+        f["rule"] == "RULE-STRM-034"
         and f["path"].endswith("/destinations/0/endpoint_ref")
         for f in findings
     )
@@ -409,7 +397,7 @@ def test_connector_scoped_endpoint_needs_no_bundled_document(validator):
     # endpoint document for it; a valid bundle must not flag that.
     findings = validator.validate_pipeline_bundle(bundle)
     assert not any(
-        f["validator"] == "bundle-endpoint-ref" and "transfers" in f["message"]
+        f["rule"] == "RULE-STRM-034" and "transfers" in f["message"]
         for f in findings
     )
 
@@ -423,7 +411,7 @@ def test_connection_without_connector_id_flagged(validator):
     del bundle["connections"][0]["connector_id"]
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-connector-ref" and f["path"] == "/connections/0/connector_id"
+        f["rule"] == "RULE-CONN-011" and f["path"] == "/connections/0/connector_id"
         for f in findings
     )
 
@@ -433,7 +421,7 @@ def test_endpoint_ref_without_connection_id_flagged(validator):
     del bundle["streams"][0]["source"]["endpoint_ref"]["connection_id"]
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-connection-ref"
+        f["rule"] == "RULE-STRM-033"
         and f["path"].endswith("/source/endpoint_ref/connection_id")
         for f in findings
     )
@@ -444,7 +432,7 @@ def test_connection_scoped_endpoint_ref_without_endpoint_id_flagged(validator):
     del bundle["streams"][0]["destinations"][0]["endpoint_ref"]["endpoint_id"]
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-endpoint-ref"
+        f["rule"] == "RULE-STRM-034"
         and f["path"].endswith("/destinations/0/endpoint_ref")
         for f in findings
     )
@@ -455,7 +443,7 @@ def test_stream_source_without_endpoint_ref_flagged(validator):
     bundle["streams"][0]["source"] = {}
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-endpoint-ref" and f["path"] == "/streams/0/source/endpoint_ref"
+        f["rule"] == "RULE-STRM-042" and f["path"] == "/streams/0/source/endpoint_ref"
         for f in findings
     )
 
@@ -465,7 +453,7 @@ def test_stream_destination_without_endpoint_ref_flagged(validator):
     bundle["streams"][0]["destinations"][0] = {}
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-endpoint-ref"
+        f["rule"] == "RULE-STRM-042"
         and f["path"] == "/streams/0/destinations/0/endpoint_ref"
         for f in findings
     )
@@ -476,7 +464,7 @@ def test_pipeline_streams_not_a_list_flagged(validator):
     bundle["pipeline"]["streams"] = f"{STREAM}_v2"  # a bare string, not a list
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-stream-ref" and f["path"] == "/pipeline/streams"
+        f["rule"] == "RULE-PIPE-011" and f["path"] == "/pipeline/streams"
         for f in findings
     )
 
@@ -485,7 +473,8 @@ def test_pipeline_streams_not_a_list_flagged(validator):
 
 def test_non_mapping_bundle_flagged(validator):
     findings = validator.validate_pipeline_bundle(["not", "a", "bundle"])
-    assert findings and findings[0]["validator"] == "bundle-pipeline"
+    assert findings and findings[0]["message_id"] == "bundle-not-a-mapping"
+    assert "rule" not in findings[0]
 
 
 def test_bundle_without_pipeline_flagged(validator):
@@ -500,7 +489,7 @@ def test_multiple_defects_all_reported(validator):
     bundle["connectors"] = []
     bundle["endpoints"] = []
     findings = validator.validate_pipeline_bundle(bundle)
-    assert {"bundle-pipeline", "bundle-connector-ref", "bundle-endpoint-ref"} <= _validators(findings)
+    assert {"RULE-PIPE-019", "RULE-CONN-011", "RULE-STRM-034"} <= _rules(findings)
 
 
 # --- referential integrity vs runnability (require_runnable) -----------------
@@ -514,7 +503,7 @@ def test_draft_bundle_fails_runnable_by_default(validator):
     bundle["pipeline"]["status"] = "draft"
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["validator"] == "bundle-pipeline" and f["path"] == "/pipeline/status"
+        f["rule"] == "RULE-PIPE-019" and f["path"] == "/pipeline/status"
         for f in findings
     )
 
@@ -547,7 +536,7 @@ def test_referential_checks_still_run_without_runnable_gate(validator):
     bundle["pipeline"]["status"] = "draft"
     bundle["connectors"] = ["stripe"]  # drop snowflake
     findings = validator.validate_pipeline_bundle(bundle, require_runnable=False)
-    assert any(f["validator"] == "bundle-connector-ref" for f in findings)
+    assert any(f["rule"] == "RULE-CONN-011" for f in findings)
 
 
 def test_missing_pipeline_id_flagged_even_without_runnable(validator):
@@ -558,6 +547,6 @@ def test_missing_pipeline_id_flagged_even_without_runnable(validator):
     del bundle["pipeline"]["pipeline_id"]
     findings = validator.validate_pipeline_bundle(bundle, require_runnable=False)
     assert any(
-        f["validator"] == "bundle-pipeline" and f["path"] == "/pipeline/pipeline_id"
+        f["rule"] == "RULE-PIPE-018" and f["path"] == "/pipeline/pipeline_id"
         for f in findings
     )

@@ -36,9 +36,9 @@ than left to the reader.
 
 - **Reject.** The validator answers with a finding at severity `error`, or,
   for the contract models used on their own, the model refuses the document.
-  A pydantic `ValidationError` reaches the validator as an `error` finding
-  under the `contract-model` id, so a model that refuses and a check that
-  reports `error` are one event here. A finding carries `error` or `warning`
+  A pydantic `ValidationError` reaches the validator as an `error`-severity
+  `fail` finding, so a model that refuses and a check that reports `error` are
+  one event here. A finding carries `error` or `warning`
   and nothing else, while a record may also declare `info` — so what answers
   the question is whether a document is rejected, never the label a record
   declares. A record reaching any severity is a bump only when an enforcer

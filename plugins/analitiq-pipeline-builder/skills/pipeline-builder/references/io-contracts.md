@@ -126,8 +126,8 @@ For unsupported cases (e.g., a connector kind the engine can't run —
 
 A finding may arrive in either of two shapes: locally minted by this adapter
 (`validator`, `severity`, `path`, `message`), or forwarded unchanged from
-`analitiq.validator` (`validator`, `rule`, `message_id`, `kind`, `path`,
-`message`, with `severity` present only for `kind: "fail"`). `passed` is
+`analitiq.validator` (`rule`, `message_id`, `kind`, `path`, `message`, with
+`severity` present only for `kind: "fail"`). `passed` is
 computed by the same fail-closed predicate over either shape: `false` when a
 `fail` finding is `severity: "error"`, or when a `notApplicable` finding names
 a rule that is `error`-tier (or names none at all) — a check that could not
@@ -146,7 +146,6 @@ naming a lesser-tier rule do not fail validation.
       "message": "Field required"
     },
     {
-      "validator": "type-map-coverage",
       "message_id": "coverage-check-skipped-no-path",
       "kind": "notApplicable",
       "path": "/",
@@ -157,13 +156,14 @@ naming a lesser-tier rule do not fail validation.
 ```
 
 <!-- BEGIN GENERATED: validator-ids -->
-Finding ids the validator can emit:
+Rule ids a cross-document check in `analitiq.validator` can emit:
 
-`bundle-connection-ref`, `bundle-connector-ref`, `bundle-endpoint-ref`, `bundle-pipeline`, `bundle-stream-ref`, `contract-model`, `document`, `embedded-json-schema`, `embedded-schema-example`, `endpoint-filename`, `endpoint-id-locator`, `endpoint-id-unique`, `endpoint-transport-ref`, `type-map-coverage`, `type-map-rule`, `type-map-write-coverage`
+`RULE-CONN-011`, `RULE-DBEP-011`, `RULE-ENDP-046`, `RULE-ENDP-047`, `RULE-ENDP-048`, `RULE-ENDP-063`, `RULE-PIPE-011`, `RULE-PIPE-012`, `RULE-PIPE-013`, `RULE-PIPE-014`, `RULE-PIPE-018`, `RULE-PIPE-019`, `RULE-PKG-030`, `RULE-PKG-031`, `RULE-PKG-032`, `RULE-PKG-033`, `RULE-PKG-035`, `RULE-STRM-032`, `RULE-STRM-033`, `RULE-STRM-034`, `RULE-STRM-042`, `RULE-TMAP-014`, `RULE-TMAP-017`, `RULE-TMAP-022`
 <!-- END GENERATED: validator-ids -->
 
 Pass `--bundle-root` when validating the stitched pipeline; that is what runs
-the cross-document checks and what makes the `bundle-*` ids reachable.
+the cross-document checks (the `RULE-PIPE-*`/`RULE-STRM-*`/`RULE-CONN-011`
+referential rules above) and makes their findings reachable.
 
 The adapter adds ids of its own, for checks the published bundle validator
 structurally cannot make:

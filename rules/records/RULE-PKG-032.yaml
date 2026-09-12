@@ -6,7 +6,7 @@ tier: reference
 severity: error
 scopes: [connector-package]
 validator: "analitiq.validator.connectors::check_coverage"
-owners: [connector-plugin, engine]
+owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   The id is what a stream pins, and a release resolves it to one document, so
   two documents claiming it means every stream that pins it reads whichever the

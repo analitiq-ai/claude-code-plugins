@@ -86,8 +86,8 @@ carries the phrasing tables — and halt rather than inventing a member:
 ## Registered rules for every document
 
 Every rule this plugin owns is rendered under `references/rules/`, split by the
-artifact it binds. The file for the document being authored is the whole of what
-that document must satisfy — nothing in the other files applies to it, and every
+artifact it binds. For a document being authored, the matching file is the whole
+of what it must satisfy — nothing in the other files applies to it — and every
 `RULE-*` id this plugin's prose cites resolves in one of them:
 
 - `references/rules/pipeline.md` — the pipeline document
@@ -95,6 +95,11 @@ that document must satisfy — nothing in the other files applies to it, and eve
 - `references/rules/connection.md` — a connection document
 - `references/rules/database-endpoint.md` — a database endpoint document
 - `references/rules/type-map.md` — a read or write type map
+- `references/rules/api-endpoint.md` — an api-endpoint document: authored by
+  connector-builder, only read here (registry-browser downloads it; a stream's
+  `endpoint_ref` cites its `endpoint_id`)
+- `references/rules/connector-package.md` — the connector release
+  registry-browser downloads, likewise read but never authored here
 - `references/rules/shared.md` — the artifact kinds too small for a file of
   their own
 

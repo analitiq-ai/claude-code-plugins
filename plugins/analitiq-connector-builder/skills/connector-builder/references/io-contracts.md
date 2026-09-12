@@ -328,25 +328,8 @@ access and may not guess field types).
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["validator", "message_id", "kind", "path", "message"],
+        "required": ["message_id", "kind", "path", "message"],
         "properties": {
-          "validator": {
-            "type": "string",
-            "description": "Validator id.",
-            "enum": [
-              "contract-model",
-              "document",
-              "type-map-coverage",
-              "type-map-rule",
-              "type-map-write-coverage",
-              "endpoint-filename",
-              "endpoint-id-unique",
-              "endpoint-id-locator",
-              "endpoint-transport-ref",
-              "embedded-json-schema",
-              "embedded-schema-example"
-            ]
-          },
           "rule": {
             "type": "string",
             "description": "The rule id this finding concerns; absent when none does."
@@ -377,10 +360,12 @@ access and may not guess field types).
 ```
 
 This is `finding()`'s current shape; the `analitiq-validator` release this
-skill's self-install line pins predates it and still returns the previous
-`validator`/`severity`/`path`/`message` shape with no `message_id`/`kind` at
-all. A finding missing those two keys is that older shape, not a malformed
-one — treat both until the pin catches up to a release carrying this schema.
+skill's self-install line pins predates it and still returns the original
+shape — `validator` (a coarse per-check category), `severity`, `path`,
+`message`, with no `rule`, `message_id` or `kind` at all. A finding carrying
+`validator` instead of `rule`/`message_id`/`kind` is that older shape, not a
+malformed one — treat both until the pin catches up to a release carrying this
+schema.
 
 ## DriftVerdict
 

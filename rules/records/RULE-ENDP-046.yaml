@@ -7,7 +7,7 @@ tier: reference
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.validator.connectors::_endpoint_locator_findings"
-owners: [connector-plugin, engine]
+owners: [connector-plugin, pipeline-plugin, engine]
 targets: [ApiEndpointDoc]
 rationale: >
   Deriving the handle from the locator is what makes re-authoring the same

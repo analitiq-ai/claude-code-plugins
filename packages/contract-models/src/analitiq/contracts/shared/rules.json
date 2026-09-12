@@ -3454,7 +3454,8 @@
    "validator": "analitiq.validator.connectors::_endpoint_locator_findings",
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "targets": [
     "ApiEndpointDoc"
@@ -3478,7 +3479,8 @@
    "validator": "analitiq.validator.connectors::_endpoint_transport_ref_findings",
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "targets": [],
    "fields": [],
@@ -3500,7 +3502,8 @@
    "validator": "analitiq.validator.connectors::_embedded_schema_findings",
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "targets": [],
    "fields": [],
@@ -3879,7 +3882,8 @@
    "validator": "analitiq.validator.connectors::_embedded_schema_example_findings",
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "targets": [],
    "fields": [],
@@ -5208,7 +5212,8 @@
    "validator": "analitiq.validator.connectors::check_coverage",
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "targets": [],
    "fields": [],
@@ -5253,7 +5258,8 @@
    "validator": "analitiq.validator.connectors::check_coverage",
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "targets": [],
    "fields": [],
@@ -5275,7 +5281,8 @@
    "validator": "analitiq.validator.connectors::check_coverage",
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "targets": [],
    "fields": [],
@@ -5319,7 +5326,8 @@
    "validator": "analitiq.validator.connectors::check_coverage",
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "targets": [],
    "fields": [],

@@ -7,8 +7,8 @@ the Analitiq services validate against) and reduces every backend into one
 Diagnostics envelope: ``{"passed": bool, "findings": [...]}``, `passed` fails
 closed over every finding — a locally minted one (`validator`, `severity`,
 `path`, `message`) or one forwarded unchanged from `analitiq.validator`
-(`validator`, `rule`, `message_id`, `kind`, `path`, `message`, `severity` only
-for `kind: "fail"`) — through `_finding_costs_a_pass` (`skills/pipeline-builder/references/io-contracts.md`'s
+(`rule`, `message_id`, `kind`, `path`, `message`, `severity` only for
+`kind: "fail"`) — through `_finding_costs_a_pass` (`skills/pipeline-builder/references/io-contracts.md`'s
 `Diagnostics` section owns the shape and the predicate in full).
 
 The published package exposes one single-document entry point plus one bundle
@@ -249,7 +249,15 @@ def _type_map_findings(entity: str, doc, document_path: Path) -> list[dict]:
         # on every authored connection write map forever, and its remedy ("add
         # rules") is exactly the shadowing the gap-only rule forbids. Filtering it
         # is the same adapter-adapts-published-behavior move as require_runnable.
-        findings = [f for f in findings if f.get("validator") != "type-map-write-coverage"]
+        # Checked both ways: the currently-pinned release predates the `rule`
+        # axis and still names this check `validator="type-map-write-coverage"`;
+        # a release carrying this PR's shape names it `rule="RULE-TMAP-017"`
+        # instead and drops `validator` entirely.
+        findings = [
+            f for f in findings
+            if f.get("validator") != "type-map-write-coverage"
+            and f.get("rule") != "RULE-TMAP-017"
+        ]
     return findings
 
 

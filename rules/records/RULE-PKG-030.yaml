@@ -7,7 +7,7 @@ tier: reference
 severity: error
 scopes: [connector-package]
 validator: "analitiq.validator.connectors::check_coverage"
-owners: [connector-plugin, engine]
+owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   The maps are separate documents from `connector.json`, so nothing about the
   connector document is wrong when one is missing — the connector simply has no
