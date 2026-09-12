@@ -134,12 +134,12 @@ def test_bound_rules_name_a_real_enforcer():
 
 
 def test_every_active_unenforced_rule_names_an_enforcement_location():
-    """`validator: null` on a record that currently binds an author
-    (`status` `active`/`deprecated`) must name where the obligation is
-    actually checked — `RuleRecord` already refuses this at construction, so a
-    record failing this in the loaded registry would have failed to load at
-    all; this is the registry-level restatement the sibling tests in this file
-    make for every other required axis."""
+    """`validator: null` on a record whose `status` is in `IN_FORCE_STATUSES`
+    must name where the obligation is actually checked — `RuleRecord` already
+    refuses this at construction, so a record failing this in the loaded
+    registry would have failed to load at all; this is the registry-level
+    restatement the sibling tests in this file make for every other required
+    axis."""
     missing = [
         r.id for r in all_rules()
         if not r.validator and r.enforcement_location is None

@@ -73,8 +73,8 @@ SEVERITIES = ("error", "warning", "info")
 STATUSES = ("draft", "active", "deprecated", "retired")
 
 #: The statuses under which a record binds an author — `active` and
-#: `deprecated` are both currently in force, `draft` is not yet and `retired`
-#: no longer is. `census/consumption/records.py`'s `_BINDING_STATUSES` derives
+#: `deprecated` are currently in force, `draft` is not yet and `retired` no
+#: longer is. `census/consumption/records.py`'s `_BINDING_STATUSES` derives
 #: from this rather than repeating it: the same lifecycle question asked from
 #: the reachability-census side of the registry.
 IN_FORCE_STATUSES = ("active", "deprecated")
