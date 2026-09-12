@@ -124,6 +124,16 @@ For unsupported cases (e.g., a connector kind the engine can't run —
 
 ## `Diagnostics` (output of `scripts/validate.py`)
 
+A finding may arrive in either of two shapes: locally minted by this adapter
+(`validator`, `severity`, `path`, `message`), or forwarded unchanged from
+`analitiq.validator` (`validator`, `rule`, `message_id`, `kind`, `path`,
+`message`, with `severity` present only for `kind: "fail"`). `passed` is
+computed by the same fail-closed predicate over either shape: `false` when a
+`fail` finding is `severity: "error"`, or when a `notApplicable` finding names
+a rule that is `error`-tier (or names none at all) — a check that could not
+run does not get the benefit of the doubt. A `warning` and a `notApplicable`
+naming a lesser-tier rule do not fail validation.
+
 <!-- illustrative -->
 ```jsonc
 {
@@ -134,13 +144,17 @@ For unsupported cases (e.g., a connector kind the engine can't run —
       "severity": "error",
       "path": "/schedule/interval_minutes",
       "message": "Field required"
+    },
+    {
+      "validator": "type-map-coverage",
+      "message_id": "coverage-check-skipped-no-path",
+      "kind": "notApplicable",
+      "path": "/",
+      "message": "type-map coverage skipped: no filesystem-anchored document path."
     }
   ]
 }
 ```
-
-`passed` is `true` only when no `error`-severity finding exists — a `warning`
-does not fail validation.
 
 <!-- BEGIN GENERATED: validator-ids -->
 Finding ids the validator can emit:

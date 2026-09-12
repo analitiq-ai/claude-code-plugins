@@ -84,7 +84,7 @@ class PipelineConnections(StrictModel):
         """RULE-PIPE-001: a repeated reference would write the same records twice."""
         dups = find_duplicates(self.destinations)
         if dups:
-            raise violation("RULE-PIPE-001", f"duplicates={dups!r}")
+            raise violation("RULE-PIPE-001", "duplicate-destination", f"duplicates={dups!r}")
         return self
 
 
@@ -154,7 +154,8 @@ class Schedule(StrictModel):
     @classmethod
     def _validate_timezone(cls, v: str) -> str:
         if v not in available_timezones():
-            raise ValueError(
+            raise violation(
+                "RULE-PIPE-015", "unknown-iana-timezone",
                 f"Invalid timezone: {v}. Use IANA timezone names "
                 "(e.g., 'UTC', 'America/New_York')."
             )
@@ -164,25 +165,30 @@ class Schedule(StrictModel):
     def _validate_schedule_fields(self) -> "Schedule":
         if self.type == "manual":
             if self.interval_minutes is not None or self.cron_expression is not None:
-                raise ValueError(
+                raise violation(
+                    "RULE-PIPE-002", "manual-schedule-has-interval-or-cron",
                     "schedule.type='manual' must not include interval_minutes or cron_expression"
                 )
         elif self.type == "interval":
             if self.interval_minutes is None:
-                raise ValueError(
+                raise violation(
+                    "RULE-PIPE-002", "interval-schedule-missing-interval-minutes",
                     "interval_minutes is required when schedule.type is 'interval'"
                 )
             if self.cron_expression is not None:
-                raise ValueError(
+                raise violation(
+                    "RULE-PIPE-002", "interval-schedule-has-cron-expression",
                     "schedule.type='interval' must not include cron_expression"
                 )
         else:  # type == "cron"
             if self.cron_expression is None:
-                raise ValueError(
+                raise violation(
+                    "RULE-PIPE-002", "cron-schedule-missing-cron-expression",
                     "cron_expression is required when schedule.type is 'cron'"
                 )
             if self.interval_minutes is not None:
-                raise ValueError(
+                raise violation(
+                    "RULE-PIPE-002", "cron-schedule-has-interval-minutes",
                     "schedule.type='cron' must not include interval_minutes"
                 )
         return self
@@ -362,17 +368,26 @@ class PipelineAuthored(StrictModel):
     @field_validator("display_name")
     @classmethod
     def _validate_display_name_field(cls, v: str | None) -> str | None:
-        return validate_display_name(v)
+        try:
+            return validate_display_name(v)
+        except ValueError as detail:
+            raise violation("RULE-SHRD-011", "display-name-has-whitespace", str(detail)) from None
 
     @field_validator("tags")
     @classmethod
     def _validate_tags_field(cls, v: list[str] | None) -> list[str] | None:
-        return validate_tags(v)
+        try:
+            return validate_tags(v)
+        except ValueError as detail:
+            raise violation("RULE-SHRD-012", "tag-invalid", str(detail)) from None
 
     @field_validator("streams")
     @classmethod
     def _validate_streams_unique_base(cls, v: list[str]) -> list[str]:
-        return _check_streams_unique_base(v)
+        try:
+            return _check_streams_unique_base(v)
+        except ValueError as detail:
+            raise violation("RULE-PIPE-003", "duplicate-stream-base-id", str(detail)) from None
 
     @model_validator(mode="after")
     def _check_active_requires_streams(self) -> "PipelineAuthored":
@@ -385,7 +400,8 @@ class PipelineAuthored(StrictModel):
         document. `draft`/`inactive` allow an empty `streams` array.
         """
         if self.status == "active" and not self.streams:
-            raise ValueError(
+            raise violation(
+                "RULE-PIPE-004", "active-pipeline-no-streams",
                 "status='active' requires at least one stream reference"
             )
         return self

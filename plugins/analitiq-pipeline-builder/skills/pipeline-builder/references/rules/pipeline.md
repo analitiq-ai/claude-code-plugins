@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds a **`pipeline`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 13 of the 31 below have no validator, so nothing rejects
+all hold: 13 of the 33 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **14** shape · **5** coherence · **7** reference · **3** process · **2** choice.
+In this file: **14** shape · **5** coherence · **9** reference · **3** process · **2** choice.
 
 ## Contents
 
@@ -82,6 +82,8 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-PIPE-012 | Every connection a pipeline references MUST resolve to exactly one connection document in the run assembled from it. | `pipeline` | error | validator |
 | RULE-PIPE-013 | A pipeline MUST NOT reference two connections that reduce to the same version-stripped base id. | `pipeline` | error | validator |
 | RULE-PIPE-014 | A pipeline in the status that schedules it MUST reference at least one stream that is itself in a runnable status. | `pipeline` | error | validator |
+| RULE-PIPE-018 | A pipeline bundle's pipeline document MUST declare a non-empty `pipeline_id`. | `pipeline` | error | validator |
+| RULE-PIPE-019 | When a bundle is checked for runnability, its pipeline document's `status` MUST be `active`. | `pipeline` | error | validator |
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 

@@ -3,10 +3,13 @@
 
 This is a thin **adapter**: it dispatches to the published `analitiq-validator`
 + `analitiq-contract-models` packages (the same offline, model-driven contract
-the Analitiq services validate against) and normalizes every backend into one
-Diagnostics envelope:
-
-    {"passed": bool, "findings": [{"validator", "severity", "path", "message"}]}
+the Analitiq services validate against) and reduces every backend into one
+Diagnostics envelope: ``{"passed": bool, "findings": [...]}``, `passed` fails
+closed over every finding — a locally minted one (`validator`, `severity`,
+`path`, `message`) or one forwarded unchanged from `analitiq.validator`
+(`validator`, `rule`, `message_id`, `kind`, `path`, `message`, `severity` only
+for `kind: "fail"`) — through `_finding_costs_a_pass` (`skills/pipeline-builder/references/io-contracts.md`'s
+`Diagnostics` section owns the shape and the predicate in full).
 
 The published package exposes one single-document entry point plus one bundle
 entry point. This adapter routes each entity as follows:
@@ -66,8 +69,10 @@ Validation is offline — no schema is fetched. Usage::
 
     python3 plugins/analitiq-pipeline-builder/scripts/validate.py --entity pipeline --document path/to/pipeline.json --bundle-root .
 
-Exit status is ``0`` iff ``passed`` (no error-severity finding), ``1`` on any
-error finding or an unreadable document, ``2`` on a CLI usage error.
+Exit status is ``0`` iff ``passed`` (``_finding_costs_a_pass`` owns the full
+predicate — a ``fail`` finding at ``severity: "error"``, or an unchecked
+error-tier rule, both cost it), ``1`` on an unreadable document, ``2`` on a CLI
+usage error.
 """
 from __future__ import annotations
 
@@ -100,8 +105,35 @@ def _finding(validator: str, severity: str, path: str, message: str) -> dict:
     return {"validator": validator, "severity": severity, "path": path, "message": message}
 
 
+def _finding_costs_a_pass(f: dict) -> bool:
+    """A local copy of ``analitiq.validator.finding_costs_a_pass``.
+
+    Not imported: this adapter self-installs ``analitiq-validator`` at
+    ``VALIDATOR_PIN`` (``_bootstrap.py``), a released version that predates
+    this predicate's addition, so importing it would raise ``ImportError`` in
+    every normal (non-source) run. ``test_finding_costs_a_pass_matches_the_published_predicate``
+    holds this copy to the source one so the two cannot silently diverge; fold
+    this back into an import once the pin reaches a release that carries it.
+    """
+    kind = f.get("kind", "fail")
+    if kind == "fail":
+        return f.get("severity") == "error"
+    if kind == "notApplicable":
+        rule = f.get("rule")
+        if rule is None:
+            return True
+        from analitiq.contracts.shared.rules import rule_by_id
+        return rule_by_id(rule).severity == "error"
+    return False
+
+
 def _diagnostics(findings: list[dict]) -> dict:
-    passed = all(f.get("severity") != "error" for f in findings)
+    # A published finding can now be notApplicable against a rule this
+    # predicate looks up, which a bare `severity == "error"` check reads past
+    # silently. This adapter's own locally-minted findings (no `kind` key) are
+    # unaffected — `_finding_costs_a_pass` grades those exactly as this line
+    # always did.
+    passed = not any(_finding_costs_a_pass(f) for f in findings)
     return {"passed": passed, "findings": findings}
 
 

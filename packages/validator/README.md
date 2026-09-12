@@ -80,7 +80,10 @@ it discovers the sibling `type-map-read.json` / `type-map-write.json` and
 (validation is always model-driven and offline).
 
 Output is a JSON report (`{"passed": bool, "findings": [...]}`) on stdout; the
-process exits non-zero when any finding has severity `error`.
+process exits non-zero exactly when `passed` is `false` — a `fail` finding at
+`severity: "error"`, or a `notApplicable` finding naming a rule that is (or,
+naming none, might as well be) error-tier, since a check that could not run
+gets no benefit of the doubt.
 
 A pipeline bundle is assembled from many documents, so it is validated as a
 library call rather than from a single file:

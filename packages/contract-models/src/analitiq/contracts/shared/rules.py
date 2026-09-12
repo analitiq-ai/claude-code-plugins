@@ -51,17 +51,55 @@ def all_rules() -> list[RuleRecord]:
     return list(_load()[0])
 
 
-def violation(rule_id: str, detail: str) -> ValueError:
-    """The error an enforcer raises, with the rule it applies already named.
+def rule_by_id(rule_id: str) -> RuleRecord:
+    """The record naming this id.
 
-    A finding is actionable when it carries the id, because the id is what the
-    plugin prose cites, and the statement, because the id alone says nothing to
-    a reader without the reference open. Both are read from the record, so a
-    reworded rule rewords its own diagnostic. An id no record defines raises
-    ``KeyError`` here rather than emitting a citation that resolves to nothing.
+    The public door onto the same index :func:`violation` reads, so a caller
+    outside this module — the validator's own ``finding()``, deriving a
+    finding's severity from the rule it names — resolves an id through the
+    same path ``violation`` does, rather than a second lookup that could
+    disagree with it. Raises ``KeyError`` for an id no record defines.
     """
-    rule = _load()[1][rule_id]
-    return ValueError(f"[{rule.id}] {' '.join(rule.statement.split())} ({detail})")
+    return _load()[1][rule_id]
+
+
+class RuleViolation(ValueError):
+    """The error an enforcer raises, with the rule and complaint it names
+    carried as attributes rather than encoded into the message text.
+
+    Pydantic re-wraps a ``@model_validator``/``@field_validator``'s raised
+    ``ValueError`` — prefixing its rendered message with ``"Value error, "``
+    and flattening every one raised the same way to the generic error type
+    ``"value_error"`` — but preserves the original exception object itself at
+    ``ValidationError.errors()[i]["ctx"]["error"]``. A finding built from a
+    model rejection reads `rule_id`/`message_id` off that original object
+    rather than parsing the wrapped string, which pydantic's own wrapping
+    would defeat.
+    """
+
+    def __init__(self, rule_id: str, message_id: str, message: str) -> None:
+        super().__init__(message)
+        self.rule_id = rule_id
+        self.message_id = message_id
+
+
+def violation(rule_id: str, message_id: str, detail: str) -> RuleViolation:
+    """The error an enforcer raises, with the rule and complaint it applies
+    already named.
+
+    A finding is actionable when it carries the rule id, because that is what
+    the plugin prose cites, and the statement, because the id alone says
+    nothing to a reader without the reference open. `message_id` is which of
+    this rule's distinct complaints this one is (`rules/SCHEMA.md`,
+    "Findings") — a rule can be violated in more than one way, and a consumer
+    branches on this rather than parsing `detail`. Both the statement and the
+    rule id are read from the record, so a reworded rule rewords its own
+    diagnostic. An id no record defines raises ``KeyError`` here rather than
+    emitting a citation that resolves to nothing.
+    """
+    rule = rule_by_id(rule_id)
+    message = f"[{rule.id}] {' '.join(rule.statement.split())} ({detail})"
+    return RuleViolation(rule.id, message_id, message)
 
 
 # --- Shared primitives ------------------------------------------------------
@@ -111,7 +149,7 @@ class HeaderMergeRules:
             & {header_name_key(h) for h in removals}
         )
         if overlap:
-            raise violation("RULE-HTTP-001", f"overlap={overlap!r}")
+            raise violation("RULE-HTTP-001", "header-set-and-removed", f"overlap={overlap!r}")
         return self
 
 
@@ -167,12 +205,12 @@ class DeclaredHeaderNames:
     def _no_content_length_header(self):
         for name, where in self.declared_header_names():
             if self._matches(name, FORBIDDEN_CONTENT_LENGTH_HEADER):
-                raise violation("RULE-HTTP-002", where)
+                raise violation("RULE-HTTP-002", "content-length-header-declared", where)
         return self
 
     @model_validator(mode="after")
     def _no_content_type_header(self):
         for name, where in self.declared_header_names():
             if self._matches(name, FORBIDDEN_CONTENT_TYPE_HEADER):
-                raise violation("RULE-HTTP-003", where)
+                raise violation("RULE-HTTP-003", "content-type-header-declared", where)
         return self

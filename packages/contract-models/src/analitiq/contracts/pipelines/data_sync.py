@@ -24,6 +24,7 @@ from typing import Literal
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from analitiq.contracts.shared.common import NonEmptyStr, StrictModel
+from analitiq.contracts.shared.rules import violation
 from analitiq.contracts.shared.types import ISO_TS_PATTERN, CoerceInt, to_iso8601
 
 
@@ -121,7 +122,8 @@ class PublicRunError(StrictModel):
         exception string or the engine's internal-only detail under a known
         category."""
         if self.message != PUBLIC_ERROR_MESSAGES[self.code]:
-            raise ValueError(
+            raise violation(
+                "RULE-DSYNC-002", "message-does-not-match-code",
                 "message must be the canonical customer-safe text for "
                 f"{self.code.value} (see PUBLIC_ERROR_MESSAGES)"
             )
@@ -215,9 +217,13 @@ class PipelineRunStatusData(StrictModel):
         one."""
         terminal_failure = self.status in (PublicRunStatus.FAILED, PublicRunStatus.PARTIAL)
         if self.error is not None and not terminal_failure:
-            raise ValueError("error may only be set on a failed or partial run")
+            raise violation(
+                "RULE-DSYNC-001", "error-set-on-non-failure-status",
+                "error may only be set on a failed or partial run")
         if self.status is PublicRunStatus.FAILED and self.error is None:
-            raise ValueError("a failed run must carry an error category")
+            raise violation(
+                "RULE-DSYNC-001", "failed-status-missing-error",
+                "a failed run must carry an error category")
         return self
 
 

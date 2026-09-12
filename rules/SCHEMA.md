@@ -156,11 +156,7 @@ itself lives.
 
 A finding is not a record; it is one thing a check said about one document,
 raised by a field constraint or `@model_validator` in `analitiq.contracts`, or
-produced by a check in `analitiq.validator`. This is the shape the registry is
-moving to: today,
-`finding()` in `analitiq.validator._core` returns `validator`, `severity`,
-`path` and `message`, with `validator` naming the check's own category rather
-than the rule id. Once it does, every finding carries:
+produced by a check in `analitiq.validator`. Every finding carries:
 
 | Field | What it is |
 |---|---|

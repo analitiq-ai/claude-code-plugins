@@ -5,8 +5,10 @@ pipeline JSON documents against the **contract models**
 (`analitiq-contract-models`) plus the cross-file coverage and advisory checks a
 single-document model cannot express, and validates an assembled **pipeline
 bundle** for cross-document referential integrity. Output is a JSON report
-(`{"passed": bool, "findings": [...]}`); the CLI exits non-zero on any
-error-severity finding.
+(`{"passed": bool, "findings": [...]}`); the CLI exits non-zero exactly when
+`passed` is `False` — `finding_costs_a_pass` owns the full predicate, which
+also fails closed on an unchecked error-tier rule, not only a `fail` finding
+at `severity: "error"`.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which self-registers its detector→validator
@@ -14,7 +16,7 @@ pairs (and its validator ids) with the core dispatch registry — a new kind is 
 new module registering the same way, without touching `_core`. The public surface
 is re-exported here.
 """
-from ._core import finding, main, validate_document, VALIDATOR_IDS
+from ._core import finding, finding_costs_a_pass, main, validate_document, VALIDATOR_IDS
 from . import connectors  # noqa: F401  — imported for its self-registration side effect
 from . import pipelines  # noqa: F401  — imported for its self-registration side effect
 from . import connections  # noqa: F401  — imported for its self-registration side effect
@@ -42,6 +44,7 @@ from .streams import is_stream_doc
 
 __all__ = [
     "finding",
+    "finding_costs_a_pass",
     "main",
     "validate_document",
     "VALIDATOR_IDS",

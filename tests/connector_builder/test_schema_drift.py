@@ -1770,19 +1770,23 @@ def test_diagnostics_enum_matches_the_package() -> None:
 
 
 def test_diagnostics_severities_are_the_ones_finding_accepts() -> None:
-    """Every severity the fragment declares must be one `finding()` will emit.
+    """Every severity the fragment declares must be one a `fail` finding
+    actually carries, and the registry must never bind a validator to a
+    severity the fragment doesn't name.
 
-    One-directional, and deliberately so. `finding()` is the sole construction
-    point and holds its severity vocabulary as an inline tuple that nothing
-    exports, so the set is not enumerable from outside the package: what is
-    decidable here is that each severity the prose offers is accepted, and that
-    a non-member is refused (without which the first half passes on a function
-    that stopped checking at all). The direction this cannot see — the
-    validator gaining a severity the fragment never names — needs
-    `analitiq.validator` to export the vocabulary beside `VALIDATOR_IDS`
-    first; until it does, that half is a reader's obligation on any change to
-    `finding()`.
+    `finding()` no longer accepts a severity literal — it derives one from the
+    rule a `fail` finding names (`rules/SCHEMA.md`, "Findings"), so a finding's
+    severity is now enumerable from the registry: `all_rules()` is public, and
+    a bound rule's `severity` is exactly what a `fail` finding for it produces
+    (`finding()` refuses to build one otherwise — see
+    `test_fail_finding_refuses_an_info_tier_rule` in
+    `packages/validator/tests/test_core.py`). Both directions close here: each
+    documented severity is one a real rule of that severity produces, found
+    dynamically rather than named so a retired or renamed example does not go
+    stale; and no validator-bound rule's severity falls outside the documented
+    set.
     """
+    from analitiq.contracts.shared.rules import all_rules
     from analitiq.validator._core import finding
 
     documented = set(_diagnostics_finding_item()["properties"]["severity"]["enum"])
@@ -1791,28 +1795,66 @@ def test_diagnostics_severities_are_the_ones_finding_accepts() -> None:
         "enum is gone — an orchestrator branches on this value to decide "
         "whether to re-dispatch a creator."
     )
-    for severity in sorted(documented):
-        finding("document", severity, "/", "probe")
-    with pytest.raises(ValueError):
-        finding("document", "not-a-severity", "/", "probe")
+    produced = set()
+    for severity in documented:
+        rule = next((r for r in all_rules() if r.severity == severity and r.validator), None)
+        assert rule is not None, (
+            f"no registry rule is bound to a validator at severity={severity!r} "
+            "— pick a different fixture; the enum this test grades still names it"
+        )
+        produced.add(finding(
+            "document", rule=rule.id, message_id="probe", kind="fail",
+            path="/", message="probe")["severity"])
+    assert produced == documented, (produced, documented)
+
+    # `mechanism: default` binds `validator` to a field the rendered reference
+    # reads members off of, not a check that rejects anything (a permission,
+    # not a rejection — `packages/contract-models/tests/unit/test_rule_registry.py`'s
+    # `test_a_rule_bound_to_a_pydantic_validator_costs_an_error` documents the
+    # same exemption). Such a rule never reaches `finding()`, so its severity
+    # is not one a fail finding could ever be asked to carry.
+    bound_severities = {
+        r.severity for r in all_rules() if r.validator and r.mechanism != "default"
+    }
+    assert bound_severities <= documented, _diff_msg(
+        "severities a bound rule can carry",
+        bound_severities,
+        documented,
+        "update the `severity` enum in "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md — "
+        "a validator is now bound to a rule at a severity no fail finding may report.",
+    )
+    assert "severity" not in finding(
+        "document", message_id="probe", kind="notApplicable", path="/", message="probe")
 
 
 def test_diagnostics_properties_match_the_finding_constructor() -> None:
     """The `Diagnostics` finding shape, pinned to the only thing that builds one.
 
-    `finding()` is the sole construction point across every document kind and
-    its signature is closed, so a property the fragment names that the
-    signature does not is a field no consumer will ever see — which is how
-    `rule_doc` survived in the prose. The enum inside is pinned separately by
+    `finding()` is the sole construction point across every document kind, but
+    its output is no longer its parameter list one-for-one: `severity` is
+    derived, present only for a `fail` finding, so the pin compares the
+    fragment against the UNION of keys two representative calls actually
+    produce (one `fail`, carrying `severity`; one `notApplicable`, not) rather
+    than `inspect.signature`. A property the fragment names that neither call
+    produces is a field no consumer will ever see — which is how `rule_doc`
+    survived in the prose. The enum inside is pinned separately by
     `test_validator_ids_match_package`; nothing pinned the property SET.
     """
-    import inspect
-
+    from analitiq.contracts.shared.rules import all_rules
     from analitiq.validator._core import finding
+
+    rule = next((r for r in all_rules() if r.severity == "error" and r.validator), None)
+    assert rule is not None, "no registry rule is bound to a validator at severity=error"
+    fail_finding = finding(
+        "document", rule=rule.id, message_id="probe", kind="fail",
+        path="/", message="probe")
+    not_applicable_finding = finding(
+        "document", message_id="probe", kind="notApplicable", path="/", message="probe")
 
     item = _diagnostics_finding_item()
     stated = set(item["properties"])
-    produced = set(inspect.signature(finding).parameters)
+    produced = set(fail_finding) | set(not_applicable_finding)
     assert stated == produced, _diff_msg(
         "Diagnostics finding properties",
         produced,
@@ -1822,10 +1864,12 @@ def test_diagnostics_properties_match_the_finding_constructor() -> None:
         "to match the finding() signature — a property nothing constructs is "
         "prose an agent will look for and never find.",
     )
-    assert set(item["required"]) == produced, (
+    always_present = set(fail_finding) & set(not_applicable_finding)
+    assert set(item["required"]) == always_present, (
         f"Diagnostics `required` {sorted(item['required'])} does not match the "
-        f"finding() signature {sorted(produced)} — every argument is positional "
-        "and non-optional, so every property is required."
+        f"keys both a `fail` and a `notApplicable` finding carry "
+        f"{sorted(always_present)} — `rule` and `severity` are each present on "
+        "only one of the two, so neither belongs in `required`."
     )
 
 

@@ -27,6 +27,7 @@ from pydantic import (
     model_validator,
 )
 
+from analitiq.contracts.shared.rules import violation
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
     DISPLAY_NAME_MAX,
@@ -207,12 +208,18 @@ class ConnectionAuthored(StrictModel):
     @field_validator("display_name")
     @classmethod
     def _validate_display_name_field(cls, v: str | None) -> str | None:
-        return validate_display_name(v)
+        try:
+            return validate_display_name(v)
+        except ValueError as detail:
+            raise violation("RULE-SHRD-011", "display-name-has-whitespace", str(detail)) from None
 
     @field_validator("tags")
     @classmethod
     def _validate_tags_field(cls, v: list[str] | None) -> list[str] | None:
-        return validate_tags(v)
+        try:
+            return validate_tags(v)
+        except ValueError as detail:
+            raise violation("RULE-SHRD-012", "tag-invalid", str(detail)) from None
 
 
 class ConnectionStoredMaps(StrictModel):
@@ -264,11 +271,16 @@ class ConnectionStoredMaps(StrictModel):
 
     @model_validator(mode="after")
     def _validate_no_secret_keys(self) -> "ConnectionStoredMaps":
-        _validate_non_secret_maps(
-            parameters=self.parameters,
-            selections=self.selections,
-            discovered=self.discovered,
-        )
+        try:
+            _validate_non_secret_maps(
+                parameters=self.parameters,
+                selections=self.selections,
+                discovered=self.discovered,
+            )
+        except ValueError as detail:
+            raise violation(
+                "RULE-CONN-004", "secret-shaped-key-in-non-secret-map", str(detail)
+            ) from None
         return self
 
 

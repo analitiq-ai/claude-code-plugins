@@ -328,7 +328,10 @@ class TemplateExpression(_EndpointModel):
     @field_validator("template")
     @classmethod
     def _placeholders_qualified(cls, value: str) -> str:
-        return _validate_template_placeholders(value)
+        try:
+            return _validate_template_placeholders(value)
+        except ValueError as detail:
+            raise violation("RULE-ENDP-049", "unqualified-template-placeholder", str(detail)) from None
 
 
 # `path_params` / `headers` / `query` recognize `from_param` as an untyped
@@ -372,7 +375,10 @@ class TemplateFilterLanding(_EndpointModel):
     @field_validator("template")
     @classmethod
     def _placeholders_qualified(cls, value: str) -> str:
-        return _validate_template_placeholders(value)
+        try:
+            return _validate_template_placeholders(value)
+        except ValueError as detail:
+            raise violation("RULE-ENDP-069", "unqualified-template-placeholder", str(detail)) from None
 
 
 def _filter_landing_discriminator(v: Any) -> str | None:
@@ -566,9 +572,10 @@ class Param(_EndpointModel):
             )
         if (self.location == "query" and self.type in ("array", "object")
                 and (self.style is None or self.explode is None)):
-            raise ValueError(
-                    f"query params with type={self.type!r} must declare `style` and `explode` "
-                    "(spec: §Parameter Validation and Operators)"
+            raise violation(
+                "RULE-ENDP-003", "container-query-param-missing-style-explode",
+                f"query params with type={self.type!r} must declare `style` and `explode` "
+                "(spec: §Parameter Validation and Operators)"
                 )
         return self
 
@@ -1038,7 +1045,8 @@ class Replication(_EndpointModel):
             single_keys = sorted(k for k in cm if k in _SINGLE_CM_FIELDS)
             window_keys = sorted(k for k in cm if k in _WINDOW_CM_FIELDS)
             if single_keys and window_keys:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-004", "cursor-mapping-mixes-single-and-window",
                     f"cursor_mappings[{i}] must not mix single-param and "
                     f"bounded-window forms; got single={single_keys!r} and "
                     f"window={window_keys!r} (spec: §Replication — declare "
@@ -1194,7 +1202,7 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
         # placeholder name and sends the author to respell something that must
         # not be in the path at all.
         if TEMPLATE_SIGIL in self.path:
-            raise violation("RULE-ENDP-061", f"path={self.path!r}")
+            raise violation("RULE-ENDP-061", "template-sigil-in-path", f"path={self.path!r}")
         placeholders = PATH_PLACEHOLDER_RE.findall(self.path)
         # A brace the placeholder pattern did not consume is a brace that
         # reaches the URL as itself: `{}`, `{{name}}`, an unclosed `{`, a
@@ -1202,7 +1210,8 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
         # check agrees the path is fine and the braces ship.
         if set("{}") & set(PATH_PLACEHOLDER_RE.sub("", self.path)):
             raise violation(
-                "RULE-ENDP-060", f"path={self.path!r}; a brace delimits no placeholder"
+                "RULE-ENDP-060", "unmatched-path-brace",
+                f"path={self.path!r}; a brace delimits no placeholder"
             )
         for ph in placeholders:
             # `fullmatch`, not `match`: `$` also matches before a trailing
@@ -1210,31 +1219,35 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
             # the same string rejects.
             if not PATH_PLACEHOLDER_NAME_RE.fullmatch(ph):
                 raise violation(
-                    "RULE-ENDP-060",
+                    "RULE-ENDP-060", "malformed-placeholder-name",
                     f"placeholder {ph!r} does not match "
                     f"{PATH_PLACEHOLDER_NAME_PATTERN!r}",
                 )
         repeated = find_duplicates(placeholders)
         if repeated:
             raise violation(
-                "RULE-ENDP-059", f"path={self.path!r}; repeated={repeated!r}"
+                "RULE-ENDP-059", "repeated-placeholder",
+                f"path={self.path!r}; repeated={repeated!r}"
             )
         placeholder_set = set(placeholders)
         # Use explicit `is None`: `path_params={}` is meaningfully different
         # from omitted, and the falsy-check version treats them the same.
         if placeholder_set and self.path_params is None:
             raise violation(
-                "RULE-ENDP-001",
+                "RULE-ENDP-001", "path-params-missing",
                 f"path declares {sorted(placeholder_set)!r}; path_params missing",
             )
         if not placeholder_set and self.path_params is not None:
-            raise violation("RULE-ENDP-001", "path_params present; path declares none")
+            raise violation(
+                "RULE-ENDP-001", "path-params-with-no-placeholders",
+                "path_params present; path declares none",
+            )
         if self.path_params is not None:
             extra = set(self.path_params) - placeholder_set
             missing = placeholder_set - set(self.path_params)
             if extra or missing:
                 raise violation(
-                    "RULE-ENDP-001",
+                    "RULE-ENDP-001", "path-params-mismatch",
                     f"extra={sorted(extra)!r}; missing={sorted(missing)!r}",
                 )
         return self
@@ -1811,19 +1824,22 @@ class ResponseExtraction(_EndpointModel):
     def _validate(self) -> "ResponseExtraction":
         ref = self.records.ref
         if not isinstance(ref, str) or not (ref == "response.body" or ref.startswith("response.body.")):
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-073", "records-ref-not-response-body",
                 "response.records must be `{ref: response.body[.<path>]}` "
                 "(spec: §API Response Extraction)"
             )
         if self.metadata is not None:
             for key in self.metadata:
                 if not METADATA_KEY_RE.match(key):
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-065", "metadata-key-pattern-mismatch",
                         f"response.metadata key {key!r} must match {METADATA_KEY_PATTERN!r} "
                         "(spec: §API Response Extraction)"
                     )
                 if key in RESERVED_RESPONSE_SCOPES:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-065", "metadata-key-reserved-collision",
                         f"response.metadata key {key!r} collides with reserved response-scope name "
                         f"{sorted(RESERVED_RESPONSE_SCOPES)!r} (spec: §API Response Extraction)"
                     )
@@ -1939,12 +1955,14 @@ class WriteResponse(_EndpointModel):
             return self
         for key in self.metadata:
             if not METADATA_KEY_RE.match(key):
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-029", "metadata-key-pattern-mismatch",
                     f"response.metadata key {key!r} must match {METADATA_KEY_PATTERN!r} "
                     "(spec: §API Write Response Contract — follows §API Response Extraction)"
                 )
             if key in RESERVED_RESPONSE_SCOPES:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-029", "metadata-key-reserved-collision",
                     f"response.metadata key {key!r} collides with reserved response-scope name "
                     "(spec: §API Write Response Contract — follows §API Response Extraction)"
                 )
@@ -1966,7 +1984,8 @@ class WriteResponse(_EndpointModel):
         for kind, s in iter_expression_strings(self.model_dump(by_alias=True)):
             hits = [s] if kind == "ref" else template_placeholders(s)
             if any(_is_record_count(h) for h in hits):
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-030", "write-response-references-record-count",
                     "write-response expressions must not reference "
                     "`response.record_count` (read-only response scope; spec: "
                     "§API Write Response Contract)"
@@ -2049,7 +2068,8 @@ class ReadOperation(_EndpointModel):
         if self.request.method == "GET":
             for name, param in self.params.items():
                 if param.location == "body":
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-007", "get-operation-declares-body-param",
                         f"read GET operation must not declare params with in='body' "
                         f"(found {name!r}; spec: §Request Bodies)"
                     )
@@ -2092,10 +2112,15 @@ class ReadOperation(_EndpointModel):
             # `updated_at` lands nowhere — the wrong-rows failure this map
             # exists to close, relocated from the operator to the field name.
             for field in self.filters:
-                _validate_record_field_path(
-                    field, records_array_node, self.response.schema_,
-                    where="filters",
-                )
+                try:
+                    _validate_record_field_path(
+                        field, records_array_node, self.response.schema_,
+                        where="filters",
+                    )
+                except ValueError as detail:
+                    raise violation(
+                        "RULE-ENDP-068", "filters-key-unresolved-record-field", str(detail)
+                    ) from None
 
         # `keyset.order_by_field` is a RECORD path, not a `response.body` ref, so
         # the sweep below never sees it — `_response_body_segments` returns None
@@ -2106,12 +2131,17 @@ class ReadOperation(_EndpointModel):
         # guarded by nothing but `RECORD_FIELD_PATH_PATTERN` — a shape check,
         # not an existence one.
         if isinstance(self.pagination, KeysetPagination):
-            _validate_record_field_path(
-                self.pagination.keyset.order_by_field,
-                records_array_node,
-                self.response.schema_,
-                where="pagination.keyset.order_by_field",
-            )
+            try:
+                _validate_record_field_path(
+                    self.pagination.keyset.order_by_field,
+                    records_array_node,
+                    self.response.schema_,
+                    where="pagination.keyset.order_by_field",
+                )
+            except ValueError as detail:
+                raise violation(
+                    "RULE-ENDP-023", "keyset-order-by-field-unresolved", str(detail)
+                ) from None
 
         # Last: the records anchor and the cursor fields are the paths an author
         # is most likely to have got right, so reporting them first keeps the
@@ -2360,7 +2390,8 @@ class WriteOperation(_EndpointModel):
 
         path_from_inputs = _collect_singleton_values(self.request.path_params, "from_input")
         if path_from_inputs and self.batching is not None:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-025", "path-params-from-input-with-batching",
                 "from_input in request.path_params cannot be combined with batching — "
                 "a path segment takes one record's value and a multi-record request "
                 "has no single record to take it from (spec: §Write Modes)"
@@ -2376,14 +2407,16 @@ class WriteOperation(_EndpointModel):
             if known is not None:
                 unknown = sorted(set(self.conflict_keys) - known)
                 if unknown:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-014", "conflict-key-not-in-input-schema",
                         f"conflict_keys reference unknown input.schema fields {unknown!r} "
                         "(spec: §Cross-Field Validation)"
                     )
 
         if self.idempotency is not None:
             if self.batching is not None:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-015", "idempotency-with-batching",
                     "idempotency cannot be combined with batching — the key value is "
                     "per-record and a multi-record request cannot carry one "
                     "(spec: §Write Modes)"
@@ -2393,7 +2426,8 @@ class WriteOperation(_EndpointModel):
                     header_name_key(h) for h in (self.request.headers or {})
                 }
                 if header_name_key(self.idempotency.name) in declared:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-016", "idempotency-key-collides-with-header",
                         f"idempotency header {self.idempotency.name!r} is also declared "
                         "in request.headers — the key value is engine-owned, so the "
                         "header must not carry an authored value "
@@ -2427,14 +2461,16 @@ class WriteOperation(_EndpointModel):
                         )
                     fields = _json_schema_top_level_fields(node) if node is not None else None
                     if fields is not None and self.idempotency.name in fields:
-                        raise ValueError(
+                        raise violation(
+                            "RULE-ENDP-016", "idempotency-key-collides-with-resolved-body-field",
                             f"idempotency body field {self.idempotency.name!r} is also a "
                             "declared field of the record the body resolves to — the key "
                             "value is engine-owned, so the field must not carry an "
                             "authored value (spec: §Cross-Field Validation)"
                         )
                 elif self.idempotency.name in body:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-016", "idempotency-key-collides-with-literal-body-key",
                         f"idempotency body field {self.idempotency.name!r} is also a "
                         "top-level key of the request body template — the key value "
                         "is engine-owned, so the field must not carry an authored "
@@ -2444,25 +2480,29 @@ class WriteOperation(_EndpointModel):
         from_inputs = _collect_singleton_values(self.request.body, "from_input")
         if self.batching is None:
             if not from_inputs:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-017", "non-batched-write-missing-from-input",
                     "non-batched write request body must reference `from_input: 'record'` "
                     "or `record.<field>` (spec: §Cross-Field Validation)"
                 )
             for fi in from_inputs:
                 if fi == "records":
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-017", "non-batched-write-uses-records-scope",
                         "non-batched write must not use `from_input: 'records'` "
                         "(spec: §Cross-Field Validation)"
                     )
         else:
             if not from_inputs:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-017", "batched-write-missing-from-input",
                     "batched write request body must reference `from_input: 'records'` "
                     "(spec: §Cross-Field Validation)"
                 )
             for fi in from_inputs:
                 if fi == "record" or fi.startswith("record."):
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-017", "batched-write-uses-record-scope",
                         "batched write must not use `from_input: 'record'` or `record.<field>` "
                         "(spec: §Cross-Field Validation)"
                     )
@@ -2475,7 +2515,8 @@ class WriteOperation(_EndpointModel):
         for fi in from_inputs:
             missing = _undeclared_from_input_field(self.input.schema_, fi)
             if missing is not None:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-017", "from-input-undeclared-body-field",
                     f"from_input {fi!r} references undeclared input.schema field "
                     f"{missing!r} (spec: §Cross-Field Validation)"
                 )
@@ -2486,7 +2527,8 @@ class WriteOperation(_EndpointModel):
         for fi in path_from_inputs:
             missing = _undeclared_from_input_field(self.input.schema_, fi)
             if missing is not None:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-024", "path-params-from-input-undeclared-field",
                     f"request.path_params from_input {fi!r} references undeclared "
                     f"input.schema field {missing!r} (spec: §Cross-Field Validation)"
                 )
@@ -2514,12 +2556,14 @@ class Operations(_EndpointModel):
     @model_validator(mode="after")
     def _at_least_one(self) -> "Operations":
         if self.read is None and not self.write:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-018", "no-read-or-write-declared",
                 "operations must declare at least one of `read` or `write` "
                 "(spec: §API Endpoint Shape)"
             )
         if self.write is not None and len(self.write) == 0:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-018", "write-map-empty",
                 "operations.write must contain at least one mode when present "
                 "(spec: §API Endpoint Shape)"
             )
@@ -2535,13 +2579,15 @@ class Operations(_EndpointModel):
         for mode, op in (self.write or {}).items():
             if mode == "upsert":
                 if not op.conflict_keys:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-019", "upsert-missing-conflict-keys",
                         "operations.write.upsert.conflict_keys is required — an "
                         "upsert must declare the provider's conflict target(s) "
                         "(spec: §Write Modes)"
                     )
             elif op.conflict_keys:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-019", "non-upsert-mode-declares-conflict-keys",
                     f"operations.write.{mode}.conflict_keys is not allowed — "
                     "conflict_keys applies only to the upsert write mode "
                     "(spec: §Write Modes)"
@@ -2588,12 +2634,18 @@ class _EndpointBase(_EndpointModel):
     @field_validator("display_name")
     @classmethod
     def _validate_display_name_field(cls, v: str | None) -> str | None:
-        return validate_display_name(v)
+        try:
+            return validate_display_name(v)
+        except ValueError as detail:
+            raise violation("RULE-SHRD-011", "display-name-has-whitespace", str(detail)) from None
 
     @field_validator("tags")
     @classmethod
     def _validate_tags_field(cls, v: list[str] | None) -> list[str] | None:
-        return validate_tags(v)
+        try:
+            return validate_tags(v)
+        except ValueError as detail:
+            raise violation("RULE-SHRD-012", "tag-invalid", str(detail)) from None
 
 
 class ApiEndpointDoc(_EndpointBase):
@@ -2634,7 +2686,8 @@ class DatabaseObject(_EndpointModel):
         if isinstance(data, dict):
             for key in ("catalog", "schema"):
                 if key in data and data[key] is None:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-031", "explicit-null-namespace",
                         f"database_object.{key} must be omitted when not applicable; "
                         "explicit null is invalid (spec: §Database Endpoint Shape)"
                     )
@@ -2671,7 +2724,10 @@ class ColumnFieldSpec(_EndpointModel):
 
     @model_validator(mode="after")
     def _validate_container_shape(self) -> "ColumnFieldSpec":
-        enforce_container_shape(self.arrow_type, self.properties, self.items)
+        try:
+            enforce_container_shape(self.arrow_type, self.properties, self.items)
+        except ValueError as detail:
+            raise violation("RULE-ENDP-020", "column-field-spec-container-shape-mismatch", str(detail)) from None
         return self
 
 
@@ -2713,7 +2769,10 @@ class Column(_EndpointModel):
 
     @model_validator(mode="after")
     def _validate_container_shape(self) -> "Column":
-        enforce_container_shape(self.arrow_type, self.properties, self.items)
+        try:
+            enforce_container_shape(self.arrow_type, self.properties, self.items)
+        except ValueError as detail:
+            raise violation("RULE-ENDP-021", "database-column-container-shape-mismatch", str(detail)) from None
         return self
 
 
@@ -2737,7 +2796,7 @@ class DatabaseEndpointDoc(_EndpointBase):
         """RULE-DBEP-001: the name every downstream lookup addresses is one column."""
         dups = find_duplicates(self.columns, key=lambda c: c.name)
         if dups:
-            raise violation("RULE-DBEP-001", f"duplicates={dups!r}")
+            raise violation("RULE-DBEP-001", "duplicate-column-name", f"duplicates={dups!r}")
         return self
 
     @model_validator(mode="after")
@@ -2750,7 +2809,7 @@ class DatabaseEndpointDoc(_EndpointBase):
         declared = [c.ordinal_position for c in self.columns if c.ordinal_position is not None]
         dups = find_duplicates(declared)
         if dups:
-            raise violation("RULE-DBEP-002", f"duplicates={dups!r}")
+            raise violation("RULE-DBEP-002", "duplicate-ordinal-position", f"duplicates={dups!r}")
         return self
 
     @model_validator(mode="after")
@@ -2761,7 +2820,7 @@ class DatabaseEndpointDoc(_EndpointBase):
         declared = {c.name for c in self.columns}
         extra = sorted(set(self.primary_keys) - declared)
         if extra:
-            raise violation("RULE-DBEP-003", f"not declared: {extra!r}")
+            raise violation("RULE-DBEP-003", "primary-key-not-a-column", f"not declared: {extra!r}")
         return self
 
 
@@ -3041,7 +3100,12 @@ def _validate_param_wiring(
     ]
     for where, value in banned_from_input_sites:
         if _collect_singleton_values(value, "from_input"):
-            raise ValueError(
+            # RULE-ENDP-034: this site is built before a record is in hand, so
+            # from_input — which draws from the record being written — has
+            # nothing to draw from here.
+            raise violation(
+                "RULE-ENDP-034",
+                "from-input-at-pre-record-site",
                 f"from_input is invalid in {where}; on a write it is allowed in "
                 "operations.write.<mode>.request.body and, as "
                 "`record.<field>`, in operations.write.<mode>.request.path_params "
@@ -3060,7 +3124,9 @@ def _validate_param_wiring(
         # produce it.
         for function_name in _collect_function_names(expr):
             if function_name in _WIRE_ENCODING_FUNCTIONS:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-027",
+                    "path-param-wire-encoding-function",
                     f"request.path_params[{placeholder!r}] must not apply "
                     f"{function_name!r}: the engine percent-encodes each "
                     "substituted path segment, so encoding it here sends the "
@@ -3077,14 +3143,18 @@ def _validate_param_wiring(
             # structure. Each is rejected with the reason it cannot work, so the
             # author is not left guessing which spelling was meant.
             if from_input == "record":
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-024",
+                    "path-param-from-input-whole-record",
                     f"request.path_params[{placeholder!r}] cannot bind "
                     "`from_input: 'record'` — a whole record is not a single path "
                     "segment; address one field as `record.<dotted>` "
                     "(spec: §Request Parameter Binding)"
                 )
             if from_input == "records" or from_input.startswith("records."):
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-024",
+                    "path-param-from-input-batch",
                     f"request.path_params[{placeholder!r}] cannot bind `from_input: "
                     f"{from_input!r}` — a batch has no single value for a path "
                     "segment (spec: §Request Parameter Binding)"
@@ -3101,7 +3171,9 @@ def _validate_param_wiring(
                 # prevent, re-entering through the door this rule opened. Same
                 # regex the contract already uses for every other dotted
                 # record path.
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-024",
+                    "path-param-from-input-not-dotted-record-field",
                     f"request.path_params[{placeholder!r}] from_input value "
                     f"{from_input!r} must be `record.<dotted>` "
                     "(spec: §Request Parameter Binding)"
@@ -3118,12 +3190,16 @@ def _validate_param_wiring(
         for name in names:
             param = params.get(name)
             if param is None:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-008",
+                    "path-param-binding-unknown-param",
                     f"request.path_params[{placeholder!r}] references unknown param {name!r} "
                     "(spec: §Cross-Field Validation)"
                 )
             if param.location != "path":
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-008",
+                    "path-param-binding-wrong-location",
                     f"request.path_params[{placeholder!r}] binds to param {name!r} which has "
                     f"in={param.location!r}; expected in='path' (spec: §Parameter Validation and Operators)"
                 )
@@ -3140,6 +3216,7 @@ def _validate_param_wiring(
             if allow_from_input and param.default is None:
                 raise violation(
                     "RULE-ENDP-028",
+                    "write-path-param-no-default",
                     f"request.path_params[{placeholder!r}] binds to param {name!r}, "
                     "which declares no `default` — on a write operation a param "
                     "has no other source, so the placeholder can never be "
@@ -3152,22 +3229,30 @@ def _validate_param_wiring(
         for name in _collect_singleton_values(value, "from_param"):
             param = params.get(name)
             if param is None:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-008",
+                    "header-binding-unknown-param",
                     f"request.headers[{header_name!r}] references unknown param {name!r}"
                 )
             if param.location != "header":
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-008",
+                    "header-binding-wrong-location",
                     f"request.headers[{header_name!r}] binds to param {name!r} with "
                     f"in={param.location!r}; expected in='header'"
                 )
         if _has_disallowed_dynamic_refs(value) is not None:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-032",
+                "header-direct-per-run-ref",
                 f"request.headers[{header_name!r}] uses a direct stream/state/runtime ref; "
                 "route dynamic values through declared params (spec: §Request Parameter Binding)"
             )
         bad_scope = _first_unscoped_expression(value)
         if bad_scope is not None:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-033",
+                "header-unscoped-expression",
                 f"request.headers[{header_name!r}] uses {bad_scope!r} (a ref or template placeholder) whose leading token is "
                 f"not a known resolution scope ({', '.join(RESOLUTION_SCOPES)}) (spec: §Value Expressions)"
             )
@@ -3176,22 +3261,30 @@ def _validate_param_wiring(
         for name in _collect_singleton_values(value, "from_param"):
             param = params.get(name)
             if param is None:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-008",
+                    "query-binding-unknown-param",
                     f"request.query[{q_name!r}] references unknown param {name!r}"
                 )
             if param.location != "query":
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-008",
+                    "query-binding-wrong-location",
                     f"request.query[{q_name!r}] binds to param {name!r} with "
                     f"in={param.location!r}; expected in='query'"
                 )
         if _has_disallowed_dynamic_refs(value) is not None:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-032",
+                "query-direct-per-run-ref",
                 f"request.query[{q_name!r}] uses a direct stream/state/runtime ref; "
                 "route dynamic values through declared params"
             )
         bad_scope = _first_unscoped_expression(value)
         if bad_scope is not None:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-033",
+                "query-unscoped-expression",
                 f"request.query[{q_name!r}] uses {bad_scope!r} (a ref or template placeholder) whose leading token is "
                 f"not a known resolution scope ({', '.join(RESOLUTION_SCOPES)}) (spec: §Value Expressions)"
             )
@@ -3201,16 +3294,22 @@ def _validate_param_wiring(
         for name in _collect_singleton_values(body, "from_param"):
             param = params.get(name)
             if param is None:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-008",
+                    "body-binding-unknown-param",
                     f"request.body references unknown param {name!r}"
                 )
             if param.location != "body":
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-008",
+                    "body-binding-wrong-location",
                     f"request.body binds to param {name!r} with in={param.location!r}; expected in='body'"
                 )
         from_inputs = _collect_singleton_values(body, "from_input")
         if not allow_from_input and from_inputs:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-034",
+                "from-input-in-body-on-read",
                 "from_input is allowed only on write operations — in the request "
                 "body, or as `record.<field>` in request.path_params "
                 "(spec: §Cross-Field Validation)"
@@ -3224,7 +3323,8 @@ def _validate_param_wiring(
             if fi.startswith("record.") and not fi.startswith("records."):
                 continue
             if fi.startswith("records."):
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-035", "from-input-dotted-path-through-batch-array",
                     f"from_input value {fi!r} is invalid; dotted paths through batch arrays "
                     "are unsupported in v1 (spec: §Cross-Field Validation)"
                 )
@@ -3233,13 +3333,17 @@ def _validate_param_wiring(
                 "(spec: §Cross-Field Validation)"
             )
         if _has_disallowed_dynamic_refs(body) is not None:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-032",
+                "body-direct-per-run-ref",
                 "request.body uses a direct stream/state/runtime ref; "
                 "route dynamic values through declared params"
             )
         bad_scope = _first_unscoped_expression(body)
         if bad_scope is not None:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-033",
+                "body-unscoped-expression",
                 f"request.body uses {bad_scope!r} (a ref or template placeholder) whose leading token is not a known "
                 f"resolution scope ({', '.join(RESOLUTION_SCOPES)}) (spec: §Value Expressions)"
             )
@@ -3329,11 +3433,15 @@ def _validate_pagination_wiring(
     for name in referenced:
         param = params.get(name)
         if param is None:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-010",
+                "pagination-references-unknown-param",
                 f"pagination references unknown param {name!r} (spec: §Cross-Field Validation)"
             )
         if param.controlled_by != "pagination":
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-010",
+                "pagination-param-missing-controlled-by",
                 f"param {name!r} is referenced by pagination but does not declare "
                 "controlled_by='pagination' (spec: §Cross-Field Validation)"
             )
@@ -3473,11 +3581,15 @@ def _validate_replication_wiring(
     for name in referenced:
         param = params.get(name)
         if param is None:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-011",
+                "replication-references-unknown-param",
                 f"replication references unknown param {name!r} (spec: §Cross-Field Validation)"
             )
         if param.controlled_by != "replication":
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-011",
+                "replication-param-missing-controlled-by",
                 f"param {name!r} is referenced by replication but does not declare "
                 "controlled_by='replication' (spec: §Cross-Field Validation)"
             )
@@ -3605,6 +3717,7 @@ def _validate_required_params_have_a_source(
     if findings:
         raise violation(
             "RULE-ENDP-066",
+            "required-param-no-source",
             "required and given no source, so the value each binds resolves "
             "to nothing on every run — "
             + "; ".join(f"params[{n!r}]: {w}" for n, w in findings)
@@ -3648,11 +3761,13 @@ def _validate_filters_wiring(
             if param is None:
                 raise violation(
                     "RULE-ENDP-070",
+                    "filter-lands-on-undeclared-param",
                     f"filters.{field}.{operator} names undeclared param {name!r}",
                 )
             if param.controlled_by is not None:
                 raise violation(
                     "RULE-ENDP-002",
+                    "filter-lands-on-controlled-param",
                     f"filters.{field}.{operator} names param {name!r}, which "
                     f"declares controlled_by={param.controlled_by!r}",
                 )
@@ -3660,6 +3775,7 @@ def _validate_filters_wiring(
                 other_field, other_operator = seen[name]
                 raise violation(
                     "RULE-ENDP-071",
+                    "two-filter-landings-same-param",
                     f"filters.{other_field}.{other_operator} and "
                     f"filters.{field}.{operator} both land on param {name!r}",
                 )
@@ -3670,6 +3786,7 @@ def _validate_filters_wiring(
                 if current_value not in placeholders:
                     raise violation(
                         "RULE-ENDP-072",
+                        "template-missing-own-filter-value",
                         f"filters.{field}.{operator}.template {landing.template!r} "
                         f"does not interpolate ${{{current_value}}} — every value "
                         "for this field/operator renders the identical request",
@@ -3681,6 +3798,7 @@ def _validate_filters_wiring(
                 if extra:
                     raise violation(
                         "RULE-ENDP-072",
+                        "template-interpolates-other-filter-value",
                         f"filters.{field}.{operator}.template {landing.template!r} "
                         f"also interpolates {extra!r} — a filters template's only "
                         "dependency is the field/operator entry it is declared on",
@@ -3707,13 +3825,15 @@ def _validate_param_binding_uniqueness(
     for name in params:
         n = counts.get(name, 0)
         if n == 0:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-009", "param-not-referenced-by-any-binding",
                 f"declared param {name!r} is not referenced by any request binding "
                 "(spec: §Cross-Field Validation — every declared param must be "
                 "referenced by exactly one request binding)"
             )
         if n > 1:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-009", "param-referenced-by-multiple-bindings",
                 f"declared param {name!r} is referenced by {n} request bindings; "
                 "every declared param must be referenced exactly once "
                 "(spec: §Cross-Field Validation — declare two params if the "
@@ -4084,7 +4204,8 @@ def _validate_records_in_response_schema(
     try:
         node = resolve_declared_path(response.schema_, segments)
     except DeclaredPathError as exc:
-        raise ValueError(
+        raise violation(
+            "RULE-ENDP-012", "records-ref-traversal-failed",
             f"response.records ref {ref!r} traversal failed at segment "
             f"{exc.segment!r}: {exc.reason} "
             "(spec: §API Response Extraction — declared-path resolution)"
@@ -4093,7 +4214,8 @@ def _validate_records_in_response_schema(
     # there means the declaration itself is not a schema (e.g. `properties.x`
     # holding a string), which no later check would catch.
     if not isinstance(node, dict):
-        raise ValueError(
+        raise violation(
+            "RULE-ENDP-012", "records-ref-resolves-to-non-object",
             f"response.records ref {ref!r} resolved to a non-object schema location "
             "(spec: §API Response Extraction — declared-path resolution)"
         )
@@ -4105,13 +4227,15 @@ def _validate_records_in_response_schema(
     try:
         node = materialize_node(node, response.schema_)
     except SchemaResolutionError as exc:
-        raise ValueError(
+        raise violation(
+            "RULE-ENDP-012", "records-ref-self-contradictory-node",
             f"response.records ref {ref!r} resolves to a self-contradictory node "
             f"in response.schema: {exc.reason} "
             "(spec: §API Response Extraction — declared-path resolution)"
         ) from None
     if node.get("type") != "array":
-        raise ValueError(
+        raise violation(
+            "RULE-ENDP-012", "records-ref-not-an-array",
             f"response.records ref {ref!r} resolves to a non-array node in "
             f"response.schema (got type={node.get('type')!r}); spec requires "
             "the schema location to be an array (spec: §Cross-Field Validation)"
@@ -4127,7 +4251,8 @@ def _validate_records_in_response_schema(
     # dictionary-valued `items`, so it could not even see the record's
     # fields for downstream mapping/type derivation.
     if isinstance(node.get("items"), list) or node.get("prefixItems") is not None:
-        raise ValueError(
+        raise violation(
+            "RULE-ENDP-012", "records-array-positional-items",
             f"response.records ref {ref!r} resolves to an array declaring a "
             "positional/tuple shape (`items: [...]` or `prefixItems`) — a "
             "records array is a page of rows and every row must be the same "
@@ -4146,7 +4271,8 @@ def _validate_records_in_response_schema(
         try:
             materialized_items = materialize_node(items, response.schema_)
         except SchemaResolutionError as exc:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-012", "records-item-shape-self-contradictory",
                 f"response.records ref {ref!r} resolves to an array whose record "
                 f"shape is self-contradictory: {exc.reason} "
                 "(spec: §API Response Extraction — declared-path resolution)"
@@ -4164,7 +4290,8 @@ def _validate_records_in_response_schema(
         # is what separates "I am not telling you the fields" from "I am not
         # telling you anything", and only the latter is unauthorable.
         if not materialized_items:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-012", "records-item-shape-declares-nothing",
                 f"response.records ref {ref!r} resolves to an array whose record "
                 "shape declares nothing at all, so nothing downstream can tell "
                 "what a record is. Declare at least the record's `type` (a "
@@ -4228,7 +4355,10 @@ def _validate_cursor_fields_in_record_shape(
     the subtree it starts at. Rooting at the subtree would find no `$defs` and
     report a field that IS declared as undeclared.
     """
-    items = _require_record_shape_items(array_node, subject="replication")
+    try:
+        items = _require_record_shape_items(array_node, subject="replication")
+    except ValueError as detail:
+        raise violation("RULE-ENDP-013", "cursor-record-shape-unusable", str(detail)) from None
     for cm in replication.cursor_mappings:
         _check_cursor_field_in_node(_cursor_field_of(cm), items, where="items", root=root)
 
@@ -4314,7 +4444,8 @@ def _check_cursor_field_in_node(
         # Name the prefix that WAS walked, up to and including the failing
         # segment: for a dotted path, "which hop broke" is the whole diagnosis.
         walked = ".".join(segments[: exc.index + 1])
-        raise ValueError(
+        raise violation(
+            "RULE-ENDP-013", "cursor-field-not-declared",
             f"replication cursor_field {cursor_field!r} not declared in "
             f"response.schema record-shape branch at {walked!r} (under {where!r}): "
             f"{exc.reason} (spec: §Cross-Field Validation)"
@@ -4322,13 +4453,15 @@ def _check_cursor_field_in_node(
     try:
         materialized = materialize_node(node, root)
     except SchemaResolutionError as exc:
-        raise ValueError(
+        raise violation(
+            "RULE-ENDP-013", "cursor-field-self-contradictory-node",
             f"replication cursor_field {cursor_field!r} resolves in the "
             f"response.schema record-shape branch (under {where!r}) to a "
             f"self-contradictory node: {exc.reason} (spec: §Cross-Field Validation)"
         ) from None
     if not _declares_a_type(materialized, root):
-        raise ValueError(
+        raise violation(
+            "RULE-ENDP-013", "cursor-field-untyped-node",
             f"replication cursor_field {cursor_field!r} resolves in the "
             f"response.schema record-shape branch (under {where!r}) to a node "
             "that declares no `type` (and no `native_type`/`arrow_type` pair). "

@@ -4629,6 +4629,50 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-PIPE-018",
+   "statement": "A pipeline bundle's pipeline document MUST declare a non-empty `pipeline_id`.\n",
+   "tier": "reference",
+   "severity": "error",
+   "scopes": [
+    "pipeline"
+   ],
+   "validator": "analitiq.validator.pipelines::_check_pipeline_id",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "Every bundled stream's own parent reference, and the bundle's own identity, resolve against this id — nothing else in the bundle stands in for it. A pipeline document present but missing this field bundles without complaint and fails only when something tries to resolve against the id that never arrived, which is after the bundle has already been assembled and handed to a run.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PIPE-019",
+   "statement": "When a bundle is checked for runnability, its pipeline document's `status` MUST be `active`.\n",
+   "tier": "reference",
+   "severity": "error",
+   "scopes": [
+    "pipeline"
+   ],
+   "validator": "analitiq.validator.pipelines::_check_pipeline_active",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "RULE-PIPE-014 checks that an active pipeline references at least one runnable stream; this is the other half of the same runnability question — that the pipeline itself claims the status a run requires. An authoring tool validating a draft bundle skips both checks (`require_runnable=False`), since a draft is expected not to be active.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-PKG-001",
    "statement": "A connector's dialect MUST override a structural default only where the CDK's portable form is genuinely invalid on the target system, and MUST override type rendering only for logic the write map's rules cannot express.\n",
    "tier": "choice",
@@ -6578,6 +6622,28 @@
    "symbol": null,
    "fixture_model": null,
    "rationale": "An API-scope source's `filters` land through its endpoint's `filters` map, which RULE-ENDP-071 holds to exactly one landing site per `field`/operator pair — a fact the endpoint contract guarantees regardless of which endpoint is referenced, so it is checkable here without reading the endpoint document at all. Two stream-side entries sharing a pair (two `status != \"red\"`/`status != \"blue\"` predicates, say) both resolve to that one landing: whichever value the request-building step applies last wins, and the run reports success having silently dropped a predicate. A database-scope source compiles each filter into its own predicate independently and has no such landing to collide on, so the check is scoped to the API side the same way RULE-STRM-012 already is.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-STRM-042",
+   "statement": "Every stream source and destination slot in a pipeline bundle MUST carry an `endpoint_ref`.\n",
+   "tier": "reference",
+   "severity": "error",
+   "scopes": [
+    "stream"
+   ],
+   "validator": "analitiq.validator.pipelines::_check_stream_endpoint_targets",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "A source or destination slot with no `endpoint_ref` names no read or write target the engine can resolve at load — not a smaller obligation than naming the wrong one, since nothing here even attempts a target. A malformed slot is reported here rather than read as not applicable: the slot exists and is required to name one.\n",
    "status": "active",
    "superseded_by": null
   },

@@ -389,7 +389,7 @@ class TestStandaloneEndpointValidation:
         return _validate_api_endpoint(doc, doc_path, None)
 
     def _ids(self, findings):
-        return {(f["validator"], f["severity"]) for f in findings}
+        return {(f["validator"], f.get("severity")) for f in findings}
 
     def test_declared_transport_resolves_clean(self, tmp_path):
         findings = self._run(tmp_path, '{"kind":"api","transports":{"api":{}}}')
@@ -399,20 +399,26 @@ class TestStandaloneEndpointValidation:
         findings = self._run(tmp_path, '{"kind":"api","transports":{"other":{}}}')
         assert ("endpoint-transport-ref", "error") in self._ids(findings)
 
+    def _not_applicable(self, findings):
+        return {
+            f["validator"] for f in findings
+            if f["validator"] == "endpoint-transport-ref" and f["kind"] == "notApplicable"
+        }
+
     def test_connector_without_transports_warns_rather_than_passing_clean(self, tmp_path):
         # The silent-clean-pass case. `_endpoint_transport_ref_findings` returns
         # [] here, which is right when the CONNECTOR is under validation (its own
         # model error stands) and wrong here, where that model never runs.
         findings = self._run(tmp_path, '{"kind":"api"}')
-        assert ("endpoint-transport-ref", "warning") in self._ids(findings)
+        assert "endpoint-transport-ref" in self._not_applicable(findings)
 
     def test_connector_with_non_dict_transports_warns(self, tmp_path):
         findings = self._run(tmp_path, '{"kind":"api","transports":[]}')
-        assert ("endpoint-transport-ref", "warning") in self._ids(findings)
+        assert "endpoint-transport-ref" in self._not_applicable(findings)
 
     def test_absent_connector_warns(self, tmp_path):
         findings = self._run(tmp_path, None)
-        assert ("endpoint-transport-ref", "warning") in self._ids(findings)
+        assert "endpoint-transport-ref" in self._not_applicable(findings)
 
     def test_unparseable_connector_is_reported_under_this_checks_own_id(self, tmp_path):
         findings = self._run(tmp_path, "{not json")
@@ -431,11 +437,31 @@ class TestStandaloneEndpointValidation:
         findings = self._run(tmp_path, "{not json")
         warnings = [
             f for f in findings
-            if f["validator"] == "endpoint-transport-ref" and f["severity"] == "warning"
+            if f["validator"] == "endpoint-transport-ref" and f["kind"] == "notApplicable"
         ]
         assert warnings, "expected a not-checked warning"
         assert not any("was reachable" in f["message"] for f in warnings)
         assert any("could not be parsed" in f["message"] for f in warnings)
+
+    def test_unparseable_connector_does_not_also_fail_the_rule_it_skips(self, tmp_path):
+        """The read/parse failure is a framework-level `fail` (no `rule`
+        named — nothing has evaluated RULE-ENDP-047 either way), so it must
+        not ALSO report a `fail` under that rule alongside the
+        `notApplicable` this same path reports for it — a consumer branching
+        on `rule` would otherwise see two contradictory verdicts for one
+        check that never ran."""
+        findings = self._run(tmp_path, "{not json")
+        endpoint_transport_ref = [
+            f for f in findings if f["validator"] == "endpoint-transport-ref"
+        ]
+        assert not any(
+            f["kind"] == "fail" and f.get("rule") == "RULE-ENDP-047"
+            for f in endpoint_transport_ref
+        )
+        assert any(
+            f["kind"] == "notApplicable" and f.get("rule") == "RULE-ENDP-047"
+            for f in endpoint_transport_ref
+        )
 
     @pytest.mark.parametrize("shape", ["relative", "dotdot"])
     def test_a_non_absolute_document_path_still_finds_the_sibling(

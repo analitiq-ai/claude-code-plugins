@@ -26,6 +26,7 @@ from pydantic import (
     model_validator,
 )
 
+from analitiq.contracts.shared.rules import violation
 from analitiq.contracts.shared.types import StrictInt, StrictNonNegativeInt
 
 # --- Schema URL base --------------------------------------------------------
@@ -374,7 +375,8 @@ class RetryErrorHandlingBase(StrictModel):
     @model_validator(mode="after")
     def _validate_retry_fields(self) -> "RetryErrorHandlingBase":
         if self.max_retries == 0 and self.retry_delay_seconds not in (None, 0):
-            raise ValueError(
+            raise violation(
+                "RULE-RETRY-001", "nonzero-retry-delay-with-zero-retries",
                 "retry_delay_seconds must be omitted or 0 when max_retries is 0"
             )
         return self

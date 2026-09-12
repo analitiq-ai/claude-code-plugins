@@ -1,0 +1,17 @@
+id: RULE-STRM-042
+statement: >
+  Every stream source and destination slot in a pipeline bundle MUST carry an
+  `endpoint_ref`.
+tier: reference
+severity: error
+scopes: [stream]
+validator: "analitiq.validator.pipelines::_check_stream_endpoint_targets"
+owners: [pipeline-plugin, engine]
+rationale: >
+  A source or destination slot with no `endpoint_ref` names no read or write
+  target the engine can resolve at load — not a smaller obligation than
+  naming the wrong one, since nothing here even attempts a target. A
+  malformed slot is reported here rather than read as not applicable: the
+  slot exists and is required to name one.
+status: active
+superseded_by: null

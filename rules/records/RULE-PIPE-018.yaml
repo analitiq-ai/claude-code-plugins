@@ -1,0 +1,18 @@
+id: RULE-PIPE-018
+statement: >
+  A pipeline bundle's pipeline document MUST declare a non-empty
+  `pipeline_id`.
+tier: reference
+severity: error
+scopes: [pipeline]
+validator: "analitiq.validator.pipelines::_check_pipeline_id"
+owners: [pipeline-plugin, engine]
+rationale: >
+  Every bundled stream's own parent reference, and the bundle's own identity,
+  resolve against this id — nothing else in the bundle stands in for it. A
+  pipeline document present but missing this field bundles without complaint
+  and fails only when something tries to resolve against the id that never
+  arrived, which is after the bundle has already been assembled and handed
+  to a run.
+status: active
+superseded_by: null
