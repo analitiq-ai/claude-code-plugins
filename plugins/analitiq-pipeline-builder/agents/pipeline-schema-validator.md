@@ -10,7 +10,7 @@ A `skills/…` or `scripts/…` path below means `${CLAUDE_PLUGIN_ROOT}/…` —
 working directory holds the user's artifacts, not the plugin's.
 
 **Read:** `skills/pipeline-builder/references/io-contracts.md` § `Diagnostics` —
-for the envelope this agent forwards and every finding id it can carry.
+for the envelope this agent forwards and the finding shape it can carry.
 
 See also `skills/pipeline-builder/references/pipeline.md` § "Fix-and-revalidate
 loop (phase 9)" — the loop the orchestrator owns; this agent runs once and does
