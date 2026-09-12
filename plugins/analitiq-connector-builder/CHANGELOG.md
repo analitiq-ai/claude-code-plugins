@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.4.0](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-connector-builder-v0.3.0...analitiq-connector-builder-v0.4.0) (2026-09-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* ErrorMap gains key_attrs/codes, retires the fixed family taxonomy
+
+### Features
+
+* **contracts:** give a filter operator a landing site on the request ([4b3c544](https://github.com/analitiq-ai/claude-code-plugins/commit/4b3c54470a792fcd588b739f8a7610363f599780))
+* **contracts:** register RULE-ENDP-073 for ResponseExtraction.records.ref ([7a1afe3](https://github.com/analitiq-ai/claude-code-plugins/commit/7a1afe339d6835bfb04420a781318787fae0248c))
+* ErrorMap gains key_attrs/codes, retires the fixed family taxonomy ([a496777](https://github.com/analitiq-ai/claude-code-plugins/commit/a4967773b189de7b083b32f5e489986b86cb9304))
+* teach error_map, the connector-level error classification block ([2b952ae](https://github.com/analitiq-ai/claude-code-plugins/commit/2b952aebb452d039de4ac1e1f745038c6b0639e1))
+* teach error_map, the connector-level error classification block ([#97](https://github.com/analitiq-ai/claude-code-plugins/issues/97)) ([8194c61](https://github.com/analitiq-ai/claude-code-plugins/commit/8194c61ab02c1b30aa60e4e0fb03a7bf08ff4412))
+
+
+### Bug Fixes
+
+* a filter operator gets a landing site on the read operation's request ([b620722](https://github.com/analitiq-ai/claude-code-plugins/commit/b62072214ad41e0ec0ebd54745b958e0312e714c))
+* address Codex review — drop ambiguous HTTP 400 mapping, ground both error_signals paths, pin the precedence claim ([fa0fc58](https://github.com/analitiq-ai/claude-code-plugins/commit/fa0fc58c979051b1b39b52bd3daeb0772f368863))
+* address internal PR review findings on the category removal ([6f57408](https://github.com/analitiq-ai/claude-code-plugins/commit/6f5740868fd7edc47419ae2cb7f776abd9056817))
+* address internal review findings from re-running the review loop ([9d0c209](https://github.com/analitiq-ai/claude-code-plugins/commit/9d0c2094fa061533973b9d4d3a5d4cc3dd9ce031))
+* **analitiq-connector-builder:** RULE-CTOR-014 states the cost its enforcer imposes ([#272](https://github.com/analitiq-ai/claude-code-plugins/issues/272)) ([2d00030](https://github.com/analitiq-ai/claude-code-plugins/commit/2d0003074269bb13767564aa6be4c3b6fd0de113))
+* clean up remaining stale category-name references post-rebase ([fab01cd](https://github.com/analitiq-ai/claude-code-plugins/commit/fab01cdf0f06b067e96d49f1e7653b33621c3ade))
+* **contracts:** let RULE-ENDP-066 recognize a filters landing, not operators ([75208e8](https://github.com/analitiq-ai/claude-code-plugins/commit/75208e86c2ea5323e14d7a69990783007b956f7b))
+* **contracts:** require a template landing to consume its own filter value ([e82acec](https://github.com/analitiq-ai/claude-code-plugins/commit/e82acece4bedf06fe8f743459f70f16bff9c4fda))
+* guard ErrorCategory against engine drift with a pinned analitiq-cdk import ([3df4932](https://github.com/analitiq-ai/claude-code-plugins/commit/3df4932870b853790cfb92c80e068f8b4f3184dd))
+* internal review — schema-version hygiene, rule-record accuracy, stale prose ([fab45ec](https://github.com/analitiq-ai/claude-code-plugins/commit/fab45ec2e504112243b26a6675dadcd2e1ff756c))
+* limit the generated validator-ids block to what the adapter reaches ([d2e5d2a](https://github.com/analitiq-ai/claude-code-plugins/commit/d2e5d2a3e6a92c29721ed5d30270d6ec66b6b3af))
+* preserve rule on single-rule crashes, fix two stale agent/skill claims ([e9088b4](https://github.com/analitiq-ai/claude-code-plugins/commit/e9088b4ee92489a97c75d08283ebd0f25d6cb854))
+* **prose:** remove the remaining stale operators guidance ([9b66246](https://github.com/analitiq-ai/claude-code-plugins/commit/9b66246b0a221d5558f9a37324c73d889e834909))
+* redesign HTTP classification as a researched decision procedure, not a lookup table ([523d65c](https://github.com/analitiq-ai/claude-code-plugins/commit/523d65c4a22335c319c5b43754870ca7f11c47c0))
+* refuse the legacy tuple form outright; handle prefixItems properly; close RULE-ENDP-072's dependency ([ccd470c](https://github.com/analitiq-ai/claude-code-plugins/commit/ccd470cebff21a84da61ed87fa01a473d658ce6b))
+* register RULE-ENDP-073 for ResponseExtraction.records.ref anchor check ([75565ed](https://github.com/analitiq-ai/claude-code-plugins/commit/75565ed1da854d7be4f731fedcdef9c2b731c837))
+* resolve $ref/allOf inside an anyOf/oneOf branch; document the compound landing exception ([538f27d](https://github.com/analitiq-ai/claude-code-plugins/commit/538f27d10c271ff75232e7bc69675e4e81c40d20))
+* review round 2 — drop ambiguous HTTP 422, allow mixed error signals, couple the HTTP pin to its own schema branch ([5e0f95a](https://github.com/analitiq-ai/claude-code-plugins/commit/5e0f95a0021f28a0a86d4026f47d1c43b4c52bb6))
+* review round 2 — non-vacuous eval assertions, resolve the exemption entry ([9a1d8dd](https://github.com/analitiq-ai/claude-code-plugins/commit/9a1d8dd26345dbd350338d73f1bbb6db654c24a4))
+* review round 4 -- fix a stale citation, a cross-branch guard hole, and a wrong SQLSTATE mapping ([8299e21](https://github.com/analitiq-ai/claude-code-plugins/commit/8299e21bea497587229b9ef753ac49c970768ee9))
+* review round 5 -- add the missing driver-error category table, fix leftover wording, refuse ambiguous HTTP statuses ([7c4effa](https://github.com/analitiq-ai/claude-code-plugins/commit/7c4effab50445a299db18b05259c3f96bd2de3a0))
+* review round 6 -- narrow the HTTP call-site claim to what the engine actually classifies ([b267c43](https://github.com/analitiq-ai/claude-code-plugins/commit/b267c43e30eac03500ddc6db2ab18910c607fe9a))
+* review round 8 -- narrow rate_limited to resettable quotas, scope conflict-refusal to read/write, refuse cross-driver class-name collisions ([40a7afb](https://github.com/analitiq-ai/claude-code-plugins/commit/40a7afba79b4623c2f374d8279cec9ea24ea8a08))
+* review round 9 -- correct the auth-exchange claim, fix a stale exemption count ([decdc9b](https://github.com/analitiq-ai/claude-code-plugins/commit/decdc9be6349e50f7662c0767fdc8339299b0d3c))
+* **rules:** say which direction RULE-SHRD-002's sample must be observed on ([2aefc6c](https://github.com/analitiq-ai/claude-code-plugins/commit/2aefc6c36e8dc507136548e62436fa7bb0ec3a6a))
+* **rules:** say which direction RULE-SHRD-002's sample must be observed on ([4c4f23c](https://github.com/analitiq-ai/claude-code-plugins/commit/4c4f23c5b1e1291b3c36ad8e46a22e87399783f9))
+* **rules:** scope RULE-SHRD-002's direction clause to directional resources ([ec16742](https://github.com/analitiq-ai/claude-code-plugins/commit/ec1674279cdf09852e6f8edefcf4050fe6ed778e))
+* self-review -- fix a stray line wrap and a leftover driver-only description ([41e8d68](https://github.com/analitiq-ai/claude-code-plugins/commit/41e8d6825e61e2dae82535c86b4e0f8b3779bb63))
+
 ## [0.3.0](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-connector-builder-v0.2.1...analitiq-connector-builder-v0.3.0) (2026-09-08)
 
 
