@@ -239,6 +239,36 @@ def test_a_value_outside_its_closed_vocabulary_is_refused(registry, field):
     assert "no_such_value" in _refusal(registry)
 
 
+def test_a_record_naming_no_validator_and_no_enforcement_location_is_refused(registry):
+    """The exact mistake a contributor makes: an unenforced record that never
+    says where the obligation is actually checked. The baseline's `validator`
+    is already `null`; dropping `enforcement_location` too is what makes this
+    refused rather than accepted."""
+    _write(registry, enforcement_location=None)
+    assert "enforcement_location" in _refusal(registry)
+
+
+def test_a_draft_record_needs_no_enforcement_location(registry):
+    """A `draft` names no obligation yet, so the field the requirement above
+    exists for has nothing to answer."""
+    _write(registry, enforcement_location=None, status="draft")
+    assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
+
+
+def test_a_deprecated_record_still_needs_an_enforcement_location(registry):
+    """`deprecated` still binds an author while they move off it — the same
+    requirement as `active`, not the `draft` exemption."""
+    _write(registry, enforcement_location=None, status="deprecated")
+    assert "enforcement_location" in _refusal(registry)
+
+
+def test_enforcement_location_may_be_set_on_a_draft_record(registry):
+    """The requirement is a floor, not a ceiling: pre-declaring the answer on
+    a not-yet-active record is permitted, only never required."""
+    _write(registry, status="draft")
+    assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
+
+
 def test_a_validator_that_is_not_a_binding_is_refused(registry):
     _write(registry, validator='"ConnectorBase._validate"')
     assert "validator" in _refusal(registry)

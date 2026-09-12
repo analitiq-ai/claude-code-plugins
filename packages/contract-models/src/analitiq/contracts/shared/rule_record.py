@@ -72,6 +72,13 @@ SEVERITIES = ("error", "warning", "info")
 #: record survives only to keep the id from being reused.
 STATUSES = ("draft", "active", "deprecated", "retired")
 
+#: The statuses under which a record binds an author — `active` and
+#: `deprecated` are both currently in force, `draft` is not yet and `retired`
+#: no longer is. `census/consumption/records.py`'s `_BINDING_STATUSES` derives
+#: from this rather than repeating it: the same lifecycle question asked from
+#: the reachability-census side of the registry.
+IN_FORCE_STATUSES = ("active", "deprecated")
+
 #: Who applies the rule and decides a change to it. A list — plenty of rules
 #: bind more than one component, and a type map is authored by both plugins.
 #: These are this repo's actual parts, not teams: `engine` covers the engine
@@ -134,9 +141,10 @@ SYMBOL_MECHANISMS = ("pattern", "reserved_names")
 
 #: Where a `validator: null` record's obligation is actually checked, once
 #: `validator` itself has answered "not here" (`rules/SCHEMA.md`,
-#: "`enforcement_location`"). `engine` and `platform-save` are behaviour claims
-#: this repo cannot verify from its own tree — `.claude/rules/
-#: engine-behaviour-claims.md` governs how a record's `rationale` may state one.
+#: "`enforcement_location`"). `engine` and `platform-save` are behaviour
+#: claims this repo cannot verify from its own tree —
+#: `.claude/rules/engine-behaviour-claims.md` governs how a record's
+#: `rationale` may state one.
 ENGINE_LOCATION = "engine"
 EXTERNAL_CI_LOCATION = "external-ci"
 PLATFORM_SAVE_LOCATION = "platform-save"
@@ -382,7 +390,7 @@ class RuleRecord:
         if (
             not self.validator
             and self.enforcement_location is None
-            and self.status in ("active", "deprecated")
+            and self.status in IN_FORCE_STATUSES
         ):
             self._fail(
                 "no validator and no enforcement_location, on a record that "

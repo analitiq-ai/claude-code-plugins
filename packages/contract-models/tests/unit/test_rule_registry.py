@@ -24,6 +24,7 @@ from analitiq.contracts.shared.rules import all_rules
 from analitiq.contracts.shared.rule_record import (
     DESCRIPTIVE_TIER,
     ENFORCEMENT_LOCATIONS,
+    IN_FORCE_STATUSES,
     MECHANISMS,
     OWNERS,
     RETIRED_BEFORE_THE_REGISTRY,
@@ -142,7 +143,7 @@ def test_every_active_unenforced_rule_names_an_enforcement_location():
     missing = [
         r.id for r in all_rules()
         if not r.validator and r.enforcement_location is None
-        and r.status in ("active", "deprecated")
+        and r.status in IN_FORCE_STATUSES
     ]
     assert not missing, f"unenforced, in-force rules with no enforcement_location: {missing}"
 
