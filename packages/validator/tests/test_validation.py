@@ -139,7 +139,7 @@ def test_embedded_schema_must_be_valid_draft_2020_12(validator):
     contract model checks the arrow_type pairing, not meta-schema validity."""
     ep = _endpoint("STRING", "Utf8")
     # `minItems` must be a non-negative integer; a string is meta-invalid, and the
-    # contract model doesn't inspect it, so only the embedded-json-schema check fires.
+    # contract model doesn't inspect it, so only RULE-ENDP-048 fires.
     ep["operations"]["read"]["response"]["schema"]["minItems"] = "notanumber"
     errors = _errors(validator.validate_document(ep))
     assert any(e.get("rule") == "RULE-ENDP-048" for e in errors), errors
@@ -982,7 +982,7 @@ def test_endpoint_filename_findings_public_helper(validator):
     # reimplementing the ~4-line check, keeping the invariant define-once.
     eid = derive_db_endpoint_id(None, "public", "orders")
     db = _db_endpoint(eid)
-    # Mismatched stem -> exactly one endpoint-filename error.
+    # Mismatched stem -> exactly one RULE-PKG-031 error.
     mismatch = _errors(validator.endpoint_filename_findings(db, "orders.json"))
     assert [e.get("rule") for e in mismatch] == ["RULE-PKG-031"]
     # Correct {endpoint_id}.json -> no findings.

@@ -106,7 +106,7 @@ reformat.
 - If the command exits non-zero and stdout is not a valid `Diagnostics` JSON
   object (the self-install failed — no network or `pip` unavailable — or the
   validator crashed before emitting its report), report a single finding
-  describing the failure: `validator: "contract-model"`,
-  `message_id: "self-install-failed"`, `kind: "notApplicable"` (nothing here
-  decided whether the document holds, so no `severity`). Never forward
-  partial or non-JSON stdout as the verdict.
+  describing the failure: `message_id: "self-install-failed"`,
+  `kind: "notApplicable"` (nothing here decided whether the document holds,
+  so no `rule` and no `severity`). Never forward partial or non-JSON stdout
+  as the verdict.

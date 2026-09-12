@@ -162,7 +162,7 @@ def test_valid_draft_bundle(tmp_path):
     # a draft pipeline is not yet runnable by design; require_runnable=False suppresses
     # the runnability findings entirely — no /pipeline/status finding is emitted
     assert not any(f["path"] == "/pipeline/status" for f in diag["findings"]), diag["findings"]
-    # a correctly-named endpoint yields no endpoint-filename finding (error or warning)
+    # a correctly-named endpoint yields no RULE-PKG-031 finding (error or notApplicable)
     assert not any(f.get("rule") == "RULE-PKG-031" for f in diag["findings"]), diag["findings"]
 
 
@@ -195,9 +195,9 @@ def test_bundle_endpoint_filename_mismatch(tmp_path):
 
 
 def test_bundle_endpoint_missing_id_warns(tmp_path):
-    # a missing/unusable endpoint_id yields an endpoint-filename *warning* (the shared
-    # gate can't verify the name), not an error; the malformed state is still caught as
-    # an error referentially, never silently passed
+    # a missing/unusable endpoint_id yields a RULE-PKG-031 *notApplicable* (the
+    # shared gate can't verify the name), not an error; the malformed state is
+    # still caught as an error referentially, never silently passed
     doc = _build_bundle(tmp_path)
     ep_dir = tmp_path / "connections/postgresql/definition/endpoints"
     data = json.loads((ep_dir / f"{EID}.json").read_text())
@@ -221,7 +221,7 @@ def test_diagnostics_fails_closed_on_a_published_notapplicable_finding():
     absence as "fine" instead of as "unchecked, and error-tier rules don't get
     that benefit of the doubt."""
     published = {
-        "validator": "endpoint-transport-ref", "rule": "RULE-ENDP-047",
+        "rule": "RULE-ENDP-047",
         "message_id": "transport-ref-check-skipped-no-sibling",
         "kind": "notApplicable", "path": "/", "message": "not checked",
     }
@@ -561,7 +561,7 @@ def test_type_map_entity_rejects_non_array(tmp_path):
 
 
 def test_connection_write_map_filters_connector_vocabulary_warning(tmp_path):
-    # the published type-map-write-coverage warning presumes a connector's
+    # the published RULE-TMAP-017 warning presumes a connector's
     # full-vocabulary write map; a gap-only connection map never satisfies it by
     # design, so the adapter filters it — for the entity run and the bundle alike
     diag = V.diagnostics_for("type_map_write", _write(tmp_path, "type-map-write.json", TYPE_MAP_WRITE))

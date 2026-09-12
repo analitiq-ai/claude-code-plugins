@@ -189,6 +189,13 @@ structurally cannot make:
 - `connection-type-map` — **error**: file-level gates on the connection-scoped
   type maps the engine loads beside `connection.json`. See
   `endpoint-spec/spec-type-map-gaps.md`.
+- `contract-model` — **error**: a `connection`/`stream`/`pipeline` entity's
+  own contract-model rejection, mapped locally rather than through
+  `analitiq.validator` (that entity's model is validated directly; only
+  `database_endpoint`/`type_map_read`/`type_map_write` and the bundle path
+  route through the published package).
+- `document` — **error**: a sibling bundle member could not be read, parsed,
+  or was not a JSON object.
 
 One further id names not a check but a failure mode: `adapter-crash` —
 **error**: the run could not be evaluated normally. Either a containment guard

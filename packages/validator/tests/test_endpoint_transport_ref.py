@@ -349,8 +349,8 @@ class TestStandaloneEndpointValidation:
     That is why two defects shipped here unnoticed: a connector whose
     `transports` was unusable produced NO finding at all (a clean pass on an
     endpoint whose `transport_ref` resolves to nothing), and a connector that
-    would not parse was reported as a `type-map-coverage` ERROR against an
-    otherwise-valid endpoint, under an id the fix loop does not filter on.
+    would not parse was reported as an unattributed error against an
+    otherwise-valid endpoint, naming no rule a fix loop could filter on.
     """
 
     def _endpoint(self, ref="api"):
