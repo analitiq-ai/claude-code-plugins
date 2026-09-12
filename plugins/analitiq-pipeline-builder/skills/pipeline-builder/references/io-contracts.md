@@ -171,9 +171,9 @@ reachable that way, catalogued in full in
 rather than restated here.
 
 <!-- BEGIN GENERATED: validator-ids -->
-Rule ids this adapter's own cross-document checks in `analitiq.validator` can emit (the checks a single-document contract model cannot make on its own — sibling coverage, filename↔id, referential integrity across a bundle):
+Rule ids this adapter's own `analitiq.validator` entry points can actually emit, whether the check needs a second document in hand (referential integrity across a bundle, filename↔id) or grades one document as a plain function rather than a `@model_validator` (a database endpoint's id, a type-map's own rule warnings) — never what a contract model rejects on its own, which is catalogued per model in `references/rules/` instead of restated here:
 
-`RULE-CONN-011`, `RULE-DBEP-011`, `RULE-PIPE-011`, `RULE-PIPE-012`, `RULE-PIPE-013`, `RULE-PIPE-014`, `RULE-PIPE-018`, `RULE-PIPE-019`, `RULE-PKG-031`, `RULE-STRM-032`, `RULE-STRM-033`, `RULE-STRM-034`, `RULE-STRM-042`, `RULE-TMAP-014`, `RULE-TMAP-017`, `RULE-TMAP-022`
+`RULE-CONN-011`, `RULE-DBEP-011`, `RULE-PIPE-011`, `RULE-PIPE-012`, `RULE-PIPE-013`, `RULE-PIPE-014`, `RULE-PIPE-018`, `RULE-PIPE-019`, `RULE-PKG-031`, `RULE-STRM-032`, `RULE-STRM-033`, `RULE-STRM-034`, `RULE-STRM-042`, `RULE-TMAP-014`, `RULE-TMAP-022`
 <!-- END GENERATED: validator-ids -->
 
 Pass `--bundle-root` when validating the stitched pipeline; that is what runs

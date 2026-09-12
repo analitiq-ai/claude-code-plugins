@@ -288,31 +288,40 @@ def render_filter_operators() -> str:
 # directly during bundle assembly, and runs `validate_pipeline_bundle` over the
 # stitched bundle — see that module's own docstring for the full routing
 # table. It never hands a raw api-endpoint or connector.json document to
-# `validate_document`, so a rule whose only cross-document emitter lives on
-# that path (an api-endpoint check, or the connector-package `check_coverage`)
-# can never actually surface here, and citing it would send an author looking
-# for a finding this plugin cannot produce.
+# `validate_document`, so a rule whose only emitter lives on that path (an
+# api-endpoint check, or the connector-package `check_coverage`) can never
+# actually surface here, and citing it would send an author looking for a
+# finding this plugin cannot produce. `_write_vocabulary_findings`
+# (RULE-TMAP-017) is deliberately excluded even though `type_map_write`
+# reaches it: `validate.py`'s own write-coverage filter strips every
+# RULE-TMAP-017 finding before this adapter's caller ever sees one (a
+# connection's write map is gap-only by design, so the connector-oriented
+# full-vocabulary warning would fire on every authored one).
 _REACHABLE_CONNECTORS_SYMBOLS = {
     "analitiq.validator.connectors::_database_endpoint_locator_findings",
     "analitiq.validator.connectors::_type_map_rule_warnings",
-    "analitiq.validator.connectors::_write_vocabulary_findings",
     "analitiq.validator.connectors::endpoint_filename_findings",
 }
 
 
 def render_validator_ids() -> str:
-    """Every rule id this adapter's own CROSS-DOCUMENT checks in
-    `analitiq.validator` can emit — the reachable subset of what
+    """Every rule id this adapter's own `analitiq.validator` entry points can
+    actually emit — the reachable subset of what
     `packages/validator/tests/test_check_registry_census.py` polices
     package-wide, deliberately excluding every rule reachable only through a
     contract model's own `@model_validator`s: those are already catalogued in
     full, per model, in `references/rules/database-endpoint.md` and
     `references/rules/type-map.md` — restating their ids here would be the
     same rule twice, one copy free to drift from the registry that renders
-    the other. A single-document contract-model rejection with no
-    `rules.violation` behind it carries a rule id too, when the model raised
-    one, but that half is open-ended by construction: it is whichever rule
-    the model names, not a set this function could enumerate."""
+    the other. (Not every id below comes from a check that needs a second
+    document in hand — `_database_endpoint_locator_findings` and
+    `_type_map_rule_warnings` grade one document alone, just as a function in
+    `analitiq.validator` rather than a `@model_validator`; what unifies this
+    set is reachability through THIS adapter's entry points, not whether the
+    check is cross-document.) A single-document contract-model rejection with
+    no `rules.violation` behind it carries a rule id too, when the model
+    raised one, but that half is open-ended by construction: it is whichever
+    rule the model names, not a set this function could enumerate."""
     from analitiq.contracts.shared.rules import all_rules
 
     ids = sorted(
@@ -323,10 +332,13 @@ def render_validator_ids() -> str:
     if not ids:
         raise RuntimeError("no rule is bound to a validator function this adapter reaches")
     out = [
-        "Rule ids this adapter's own cross-document checks in `analitiq.validator` "
-        "can emit (the checks a single-document contract model cannot make on its "
-        "own — sibling coverage, filename↔id, referential integrity across a "
-        "bundle):",
+        "Rule ids this adapter's own `analitiq.validator` entry points can "
+        "actually emit, whether the check needs a second document in hand "
+        "(referential integrity across a bundle, filename↔id) or grades one "
+        "document as a plain function rather than a `@model_validator` "
+        "(a database endpoint's id, a type-map's own rule warnings) — never "
+        "what a contract model rejects on its own, which is catalogued per "
+        "model in `references/rules/` instead of restated here:",
         "",
         ", ".join(f"`{v}`" for v in ids),
     ]

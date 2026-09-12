@@ -1069,7 +1069,7 @@ def test_bundle_stream_read_crash_preserves_sibling_stream_and_continues_assembl
     # re-authored to drop the reference) — the bundle is short that very
     # document, so the referential pass that would call this ref unresolved
     # is skipped rather than blame a reference that was never actually broken
-    assert "bundle-stream-ref" not in validators, diag["findings"]
+    assert "RULE-PIPE-011" not in validators, diag["findings"]
     assert sum(1 for v in validators if v == "adapter-crash") == 2, diag["findings"]
 
 
@@ -1140,7 +1140,7 @@ def test_bundle_unrelated_malformed_stream_skips_referential_pass_without_crash_
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
     assert "document" in validators, diag["findings"]  # the orphaned malformed stream
-    assert "bundle-connection-ref" not in validators, diag["findings"]  # referential pass skipped
+    assert not _BUNDLE_CONNECTION_REF_RULES & set(validators), diag["findings"]  # referential pass skipped
     assert "adapter-crash" not in validators, diag["findings"]  # nothing actually crashed
 
 
