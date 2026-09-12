@@ -14,10 +14,16 @@ from analitiq.validator._core import _passed, finding
 
 def _rule(severity: str, *, bound: bool = True):
     """Any rule of the given severity, bound to a real validator when asked."""
-    return next(
+    matches = (
         r for r in all_rules()
         if r.severity == severity and (bool(r.validator) if bound else True)
     )
+    rule = next(matches, None)
+    assert rule is not None, (
+        f"no registry rule is severity={severity!r} (bound={bound}) — the "
+        "fixture this test needs no longer exists in rules/records/*.yaml"
+    )
+    return rule
 
 
 def test_fail_finding_derives_severity_from_its_rule():

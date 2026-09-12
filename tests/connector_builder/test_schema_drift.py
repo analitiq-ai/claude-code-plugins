@@ -1797,7 +1797,11 @@ def test_diagnostics_severities_are_the_ones_finding_accepts() -> None:
     )
     produced = set()
     for severity in documented:
-        rule = next(r for r in all_rules() if r.severity == severity and r.validator)
+        rule = next((r for r in all_rules() if r.severity == severity and r.validator), None)
+        assert rule is not None, (
+            f"no registry rule is bound to a validator at severity={severity!r} "
+            "— pick a different fixture; the enum this test grades still names it"
+        )
         produced.add(finding(
             "document", rule=rule.id, message_id="probe", kind="fail",
             path="/", message="probe")["severity"])
@@ -1840,7 +1844,8 @@ def test_diagnostics_properties_match_the_finding_constructor() -> None:
     from analitiq.contracts.shared.rules import all_rules
     from analitiq.validator._core import finding
 
-    rule = next(r for r in all_rules() if r.severity == "error" and r.validator)
+    rule = next((r for r in all_rules() if r.severity == "error" and r.validator), None)
+    assert rule is not None, "no registry rule is bound to a validator at severity=error"
     fail_finding = finding(
         "document", rule=rule.id, message_id="probe", kind="fail",
         path="/", message="probe")
