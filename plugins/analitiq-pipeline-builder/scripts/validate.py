@@ -33,9 +33,10 @@ entry point. This adapter routes each entity as follows:
     exactly those names (and the published validator derives rule direction from
     them, defaulting an unknown name to read), so a misnamed file gets the rename
     finding alone rather than findings that could be graded in the wrong direction.
-    The published ``type-map-write-coverage`` warning is filtered out here: it
-    presumes a connector's full-vocabulary write map, which a gap-only connection
-    map deliberately is not (see ``_type_map_findings``).
+    The published write-vocabulary-coverage warning (``RULE-TMAP-017``) is
+    filtered out here: it presumes a connector's full-vocabulary write map,
+    which a gap-only connection map deliberately is not (see
+    ``_type_map_findings``).
   * ``pipeline`` with ``--bundle-root`` -> additionally
     ``analitiq.validator.validate_pipeline_bundle`` over the on-disk bundle, for the
     cross-document referential integrity no single document can verify. A draft

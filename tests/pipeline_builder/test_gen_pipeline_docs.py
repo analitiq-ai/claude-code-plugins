@@ -178,8 +178,8 @@ def test_renderer_emits_nonempty_block(block_id):
 
 
 def test_reachable_connectors_symbols_are_live():
-    """`render_validator_ids`'s allowlist names four `connectors.py` functions
-    by their dotted `validator` symbol. `test_renderer_emits_nonempty_block`
+    """`render_validator_ids`'s allowlist names each reachable `connectors.py`
+    function by its dotted `validator` symbol. `test_renderer_emits_nonempty_block`
     only catches every symbol going stale at once — impossible while any
     `analitiq.validator.pipelines`-bound rule exists — so a single renamed
     symbol would silently drop that rule's id from the generated block with

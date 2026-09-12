@@ -277,8 +277,8 @@ def test_example_write_maps_render_bare_container_markers(
 def test_example_endpoints_validate(example_dir: Path, tmp_path: Path) -> None:
     """Endpoints must also hold up standalone.
 
-    Validating from the connector walks siblings, but `endpoint-filename` and
-    `endpoint-id-locator` are most direct here — and an endpoint is authored and
+    Validating from the connector walks siblings, but `RULE-PKG-031` and
+    `RULE-ENDP-046` are most direct here — and an endpoint is authored and
     validated on its own during the fan-out.
     """
     definition = _stage(example_dir, tmp_path).parent

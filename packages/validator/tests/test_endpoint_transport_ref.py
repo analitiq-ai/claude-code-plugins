@@ -1,4 +1,4 @@
-"""`endpoint-transport-ref` — an endpoint's `request.transport_ref` must name a
+"""RULE-ENDP-047 — an endpoint's `request.transport_ref` must name a
 transport the sibling connector.json declares.
 
 The connector model's `_transport_refs_resolvable` already gates every
@@ -258,7 +258,7 @@ class TestOriginContainmentGapIsRecorded:
     request, a write request, and a next-page URL the document takes from the
     response body.
 
-    Each asserts on EVERY error the walk emits, not on `endpoint-transport-ref`
+    Each asserts on EVERY error the walk emits, not on `RULE-ENDP-047`
     alone: the NAME half already owns that id, so an origin rule arriving under
     an id of its own — the likelier shape, since each check registers one —
     would pass a scoped assertion unnoticed.

@@ -259,8 +259,8 @@ class TestFourWalkerRulesAreAttributed:
         # on the same api-endpoint doc — RULE-ENDP-046/047/048/063 — that
         # would otherwise leak into these exact-list assertions): a finding
         # no longer names which pass produced it, so this is now the only
-        # way to isolate what a `MultiRuleViolation` from these four walker
-        # rules expands into.
+        # way to isolate what a `MultiRuleViolation` from the walker rules
+        # this class exercises expands into.
         from analitiq.validator._core import _model_findings
         from analitiq.validator.connectors import _API_ENDPOINT_ADAPTER
         return _errors(_model_findings(doc, _API_ENDPOINT_ADAPTER))

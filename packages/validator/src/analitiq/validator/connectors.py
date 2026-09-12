@@ -8,30 +8,33 @@ validate_python`, which enforces structure *and* every cross-field rule the
 contract defines — offline, no schema fetch, no drift. On top of the models this
 module adds only what a single-document model cannot express:
 
-- **cross-file coverage** (`type-map-coverage`): a connector must ship the right
-  sibling type-map files for its kind, and an API connector's read map must
-  cover every `(native_type, arrow_type)` its endpoint files declare;
-- **filename ↔ id** (`endpoint-filename`): an endpoint file must be named
+- **cross-file coverage** (`RULE-PKG-030`/`RULE-PKG-033`/`RULE-PKG-035`): a
+  connector must ship the right sibling type-map files for its kind, and an API
+  connector's read map must cover every `(native_type, arrow_type)` its
+  endpoint files declare;
+- **filename ↔ id** (`RULE-PKG-031`): an endpoint file must be named
   `{endpoint_id}.json`;
-- **endpoint id uniqueness** (`endpoint-id-unique`): each `endpoint_id` is unique
+- **endpoint id uniqueness** (`RULE-PKG-032`): each `endpoint_id` is unique
   within the connector release;
-- **endpoint id ↔ locator** (`endpoint-id-locator`): an `endpoint_id` equals the
-  handle derived from its locator — an API id from its `operations.*.request.path`
-  (lowercase, `__` between path levels, path-params dropped) so `/v1/x` and `/v2/x`
-  cannot collide (`RULE-ENDP-046` requires it; the algorithm is
+- **endpoint id ↔ locator** (`RULE-ENDP-046`/`RULE-DBEP-011`): an `endpoint_id`
+  equals the handle derived from its locator — an API id from its
+  `operations.*.request.path` (lowercase, `__` between path levels, path-params
+  dropped) so `/v1/x` and `/v2/x` cannot collide (`RULE-ENDP-046` requires it;
+  the algorithm is
   `plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md`'s
   `resources[].key` description);
   a database id from its verbatim
   `database_object` (`slug(schema)__slug(table)[__slug(catalog)]__hash8`, via the
   shared `analitiq.contracts.endpoint_identity`);
-- **endpoint → transport** (`endpoint-transport-ref`): an endpoint's
+- **endpoint → transport** (`RULE-ENDP-047`): an endpoint's
   `request.transport_ref` must name a transport the sibling connector.json
   declares. `ConnectorBase._transport_refs_resolvable` enforces the same rule for
   every connector-internal ref site, but an endpoint document is a separate file
   and structurally invisible to that model validator — so the cross-file half of
   the rule lives here;
 - **advisory quality warnings** the contract tolerates: duplicate type-map
-  rules, dead uppercase-only read patterns, and write-map vocabulary gaps.
+  rules, dead uppercase-only read patterns, and write-map vocabulary gaps
+  (`RULE-TMAP-014`/`RULE-TMAP-022`/`RULE-TMAP-017`).
 
 At import this module registers its detector→validator pairs with the core
 dispatch registry, so `_core` never hard-codes connector branches.
@@ -829,7 +832,7 @@ def _database_endpoint_locator_findings(ep_doc: Any) -> list[dict]:
 def endpoint_filename_findings(ep_doc: Any, filename: str) -> list[dict]:
     """Public gate: an endpoint file must be named `{endpoint_id}.json`.
 
-    Returns `endpoint-filename` findings citing RULE-PKG-031: `kind: "fail"`
+    Returns findings citing RULE-PKG-031: `kind: "fail"`
     (carrying `severity: "error"`) when `filename` disagrees with the doc's
     `endpoint_id`, `kind: "notApplicable"` (no `severity`) when the id is
     missing/unusable, empty when they agree. Exported so a filesystem-walking
@@ -1138,12 +1141,12 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
         findings += _run_guarded(_embedded_schema_example_findings, doc,
                                  crash_label="embedded schema example grading",
                                  rule="RULE-ENDP-063")
-        # `endpoint-transport-ref` is cross-document: it needs the sibling
-        # connector.json's `transports`, which only `check_coverage` has. Say so
-        # rather than returning a silent clean pass — an author validating a
-        # single endpoint file would otherwise read `passed: true` as "the
+        # RULE-ENDP-047 is cross-document: it needs the sibling connector.json's
+        # `transports`, which only `check_coverage` has. Say so rather than
+        # returning a silent clean pass — an author validating a single
+        # endpoint file would otherwise read `passed: true` as "the
         # transport_ref is fine", which is reassurance the check never earned.
-        # Warning, not error, matching `endpoint-filename`'s
+        # notApplicable, not fail, matching `endpoint_filename_findings`'s
         # convention for a check it cannot perform from the given path.
         declared_refs = sorted({
             ref for _, ref in _api_operation_transport_refs(doc) if isinstance(ref, str)

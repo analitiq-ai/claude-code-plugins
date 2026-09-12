@@ -1,4 +1,4 @@
-"""`embedded-schema-example` — a recorded sample must satisfy the node declaring it.
+"""RULE-ENDP-063 — a recorded sample must satisfy the node declaring it.
 
 Every other check over an endpoint compares one declaration with another, so a
 node whose declared type contradicts what the provider actually sends passes all
@@ -543,7 +543,7 @@ _RUNAWAY_NODE = {"type": "string", "pattern": _RUNAWAY_PATTERN,
                  "examples": [_NEAR_MISS]}
 
 def _sample_findings_via_cli(validator_cli, doc, filename="doc.json"):
-    """This document's `embedded-schema-example` findings, from a child process.
+    """This document's RULE-ENDP-063 findings, from a child process.
 
     A regression in the bound does not make this check answer wrongly, it makes it
     not answer, so a direct call would hang the suite where the CLI fixture fails

@@ -47,7 +47,7 @@ pagination strategy needs its own declared params), the host is a fixture under
 `fixtures/prose-hosts/`: a frame the prose is graded in, never an archetype,
 which is why it lives here and not in the plugin tree. A graded endpoint is
 staged under the filename its own `endpoint_id` names — a fragment cannot state
-a filename, so pinning one would grade the host — leaving `endpoint-id-locator`
+a filename, so pinning one would grade the host — leaving `RULE-ENDP-046`
 to hold the id against the path the fragment declares.
 
 An empty object in a fragment is CONTENT here, graded as written — the sibling
@@ -787,7 +787,7 @@ def test_invalid_disposition_requires_the_failure(tmp_path):
     the resource and the merge places its keys in the host."""
     marker = _parse_marker(f"<!-- invalid: {_endpoint_rule()} -->")
     assert marker.kind == "invalid" and marker.target == _endpoint_rule()
-    # An id no path derives is what `endpoint-id-locator` refuses...
+    # An id no path derives is what `RULE-ENDP-046` refuses...
     _assert_block_upholds_marker(
         marker, '{"endpoint_id": "not__the__derived__handle"}',
         "synthetic", _ENDPOINT_HOST, tmp_path)

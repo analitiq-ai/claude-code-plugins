@@ -502,7 +502,7 @@ def test_type_map_entity_direction_mismatch_is_caught(tmp_path):
 def test_invalid_type_map_content(tmp_path, doc):
     diag = V.diagnostics_for("type_map_read", _write(tmp_path, "type-map-read.json", doc))
     assert not diag["passed"]
-    assert any(f.get("rule") is None and f["kind"] == "fail" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("rule") is None and f.get("kind") == "fail" for f in diag["findings"]), diag["findings"]
 
 
 def test_bundle_with_valid_connection_type_maps(tmp_path):
@@ -532,7 +532,7 @@ def test_bundle_flags_invalid_connection_type_map(tmp_path):
                 [{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}])
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    bad = [f for f in diag["findings"] if f.get("rule") is None and f["kind"] == "fail"]
+    bad = [f for f in diag["findings"] if f.get("rule") is None and f.get("kind") == "fail"]
     assert bad, diag["findings"]
     # findings are anchored to the owning file so a multi-connection bundle stays legible
     assert all(f["path"].startswith("connections/postgresql/definition/type-map-read.json")
@@ -584,7 +584,7 @@ def test_bundle_flags_invalid_connection_write_type_map(tmp_path):
            [{"match": "exact", "arrow_type": "utf8", "native_type": "TEXT"}])
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    bad = [f for f in diag["findings"] if f.get("rule") is None and f["kind"] == "fail"]
+    bad = [f for f in diag["findings"] if f.get("rule") is None and f.get("kind") == "fail"]
     assert bad and all(
         f["path"].startswith("connections/postgresql/definition/type-map-write.json")
         for f in bad), diag["findings"]

@@ -224,10 +224,11 @@ emits one.
   and by no other constraint.
 - `packages/validator/tests/test_check_registry_census.py` — the same
   enforcer→registry direction over the other enforcement home: every rule id a
-  `finding()` call in `analitiq.validator` names resolves to a record whose
-  `validator` binds that exact function, and every ruleless `finding()` call
-  is one of the framework cases this document's Findings section names. The
-  census above walks contract classes, so it cannot see a cross-document
+  `finding()` call in `analitiq.validator` names resolves to a live record,
+  every record whose `validator` names a function in this package is actually
+  emitted by that function, and every ruleless `finding()` call is one of the
+  framework cases this document's Findings section names. The census above
+  walks contract classes, so it cannot see a cross-document
   check.
 - `tests/registry/test_rule_reachability.py` — every id a plugin's
   prose cites is readable inside that plugin.
