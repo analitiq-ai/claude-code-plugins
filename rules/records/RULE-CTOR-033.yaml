@@ -8,6 +8,7 @@ tier: process
 severity: error
 scopes: [connector]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin]
 rationale: >
   The contract ships fully-shaped models for the document-store kinds, so an

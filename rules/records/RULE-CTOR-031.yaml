@@ -8,6 +8,7 @@ tier: choice
 severity: error
 scopes: [connector]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   Depth is the intuitive reading and the wrong one: a system with a database

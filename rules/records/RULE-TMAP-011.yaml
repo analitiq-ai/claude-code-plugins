@@ -6,6 +6,7 @@ tier: shape
 severity: error
 scopes: [type-map]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   An unmapped native_type or arrow_type is meant to stop the stream loudly, so the

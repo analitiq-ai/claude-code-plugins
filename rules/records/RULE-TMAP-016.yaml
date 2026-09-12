@@ -6,6 +6,7 @@ tier: coherence
 severity: error
 scopes: [type-map]
 validator: null
+enforcement_location: engine
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapWriteRegexRule]
 rationale: >

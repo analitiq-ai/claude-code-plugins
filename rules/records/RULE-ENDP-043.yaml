@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [api-endpoint, database-endpoint]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin]
 rationale: >
   Streams pin endpoints by id, so a rename detaches every stream that referenced

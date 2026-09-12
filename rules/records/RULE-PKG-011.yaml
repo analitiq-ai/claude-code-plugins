@@ -8,6 +8,7 @@ tier: shape
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: external-ci
 owners: [connector-plugin, engine]
 rationale: >
   Depending only on the CDK is what keeps connectors independently

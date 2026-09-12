@@ -7,6 +7,7 @@ tier: shape
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: external-ci
 owners: [connector-plugin, engine]
 rationale: >
   An empty update clause is a syntax error in every merge grammar, so the

@@ -6,6 +6,7 @@ tier: shape
 severity: error
 scopes: [connector]
 validator: null
+enforcement_location: engine
 owners: [connector-plugin, engine]
 targets: [DsnBinding]
 rationale: >

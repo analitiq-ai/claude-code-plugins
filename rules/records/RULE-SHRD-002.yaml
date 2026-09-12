@@ -10,6 +10,7 @@ tier: choice
 severity: error
 scopes: [any]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin]
 rationale: >
   Both the bare and the zoned spelling are canonical Arrow types the engine

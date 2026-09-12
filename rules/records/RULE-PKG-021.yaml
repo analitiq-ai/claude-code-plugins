@@ -8,6 +8,7 @@ tier: reference
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: engine
 owners: [connector-plugin, engine]
 rationale: >
   The engine has no built-in TLS interpretation for any driver — the CDK

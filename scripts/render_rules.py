@@ -205,6 +205,7 @@ def compile_registry(records: list[RuleRecord]) -> str:
                 # order somebody happened to type into the YAML.
                 "scopes": [s for s in SCOPES if s in r.scopes],
                 "validator": r.validator,
+                "enforcement_location": r.enforcement_location,
                 "owners": [o for o in OWNERS if o in r.owners],
                 "targets": list(r.targets),
                 "fields": list(r.fields),

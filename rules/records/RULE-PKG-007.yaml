@@ -9,6 +9,7 @@ tier: reference
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   `connector_id` is the connector's identity, and the engine reaches the

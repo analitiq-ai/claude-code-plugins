@@ -7,6 +7,7 @@ tier: reference
 severity: error
 scopes: [any]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   What a scope actually holds is the engine's resolution context at run time,

@@ -8,6 +8,7 @@ tier: choice
 severity: warning
 scopes: [stream]
 validator: null
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [Validation]
 fields: [error_handling]

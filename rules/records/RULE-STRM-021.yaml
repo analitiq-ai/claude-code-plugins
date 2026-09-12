@@ -5,17 +5,22 @@ tier: coherence
 severity: error
 scopes: [stream]
 validator: null
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [ValidationRule]
 rationale: >
   The value field is deliberately typed open so each rule type can carry its
   own payload — a bound, a regex, a range object, a list of admitted values
   — and that openness is what leaves the shape unchecked: a rule whose
-  payload is the wrong kind validates here and fails only when the rule runs
-  against a record, mid-transfer, on data the author is not looking at. The
-  presence check `RULE-STRM-009` settles only whether a payload is present, so
-  an author who reads a clean validation as confirmation of the payload has
-  read too much into it. Catching a violation means reading each rule's value
-  against the meaning of its type in the stream spec.
+  payload is the wrong kind validates here, and what happens when the rule
+  runs against a record, mid-transfer, depends on which kind it is. A
+  `range` payload of the wrong shape raises there, reliably; the others do
+  not: a wrong-shaped `pattern` payload can still interpolate into a
+  syntactically valid, silently-wrong regex, and a wrong-shaped `in_list`
+  payload can iterate into a value set with no error rather than raising.
+  The presence check `RULE-STRM-009` settles only whether a payload is
+  present, so an author who reads a clean validation as confirmation of the
+  payload has read too much into it. Catching a violation means reading
+  each rule's value against the meaning of its type in the stream spec.
 status: active
 superseded_by: null

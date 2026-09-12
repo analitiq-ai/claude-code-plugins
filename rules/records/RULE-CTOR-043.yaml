@@ -5,6 +5,7 @@ tier: reference
 severity: warning
 scopes: [connector]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   An API connector runs on the engine's generic class for its kind, so

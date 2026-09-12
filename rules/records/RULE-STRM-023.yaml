@@ -7,6 +7,7 @@ tier: reference
 severity: error
 scopes: [stream]
 validator: null
+enforcement_location: engine
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]
 rationale: >

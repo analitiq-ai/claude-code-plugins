@@ -6,6 +6,7 @@ tier: shape
 severity: error
 scopes: [any]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   A leaked secret and a benign literal default are the same string to any

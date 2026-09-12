@@ -8,6 +8,7 @@ tier: shape
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: external-ci
 owners: [connector-plugin, engine]
 rationale: >
   The engine calls hooks through the base's signature and passes the

@@ -6,6 +6,7 @@ tier: process
 severity: error
 scopes: [any]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [ConnectorBase]
 rationale: >

@@ -6,6 +6,7 @@ tier: shape
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: external-ci
 owners: [connector-plugin, engine]
 rationale: >
   Every SQL write is stage-then-merge, on either transport and in every
