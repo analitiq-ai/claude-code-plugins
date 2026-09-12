@@ -1,0 +1,900 @@
+diff --git a/evals/scenarios/connector-api-oauth2.json b/evals/scenarios/connector-api-oauth2.json
+index e7e4327..819eaeb 100644
+--- a/evals/scenarios/connector-api-oauth2.json
++++ b/evals/scenarios/connector-api-oauth2.json
+@@ -66,6 +66,13 @@
+       "path": "connection_contract.inputs.client_id.storage",
+       "equals": "connection.parameters",
+       "rule": "RULE-CONN-006"
++    },
++    {
++      "doc": "connector",
++      "path": "error_map.http.429",
++      "equals": "rate_limited",
++      "rule": "intent",
++      "note": "Xero's own API docs document 429 as rate limiting, so a grounded pass should classify it correctly; a specific correct entry (not just block presence) proves the new authoring step actually applied error-classification.md's procedure to researched facts rather than declaring an empty or null block"
+     }
+   ],
+   "artifacts": [
+diff --git a/evals/scenarios/connector-database-package.json b/evals/scenarios/connector-database-package.json
+index 784d13a..05196d9 100644
+--- a/evals/scenarios/connector-database-package.json
++++ b/evals/scenarios/connector-database-package.json
+@@ -60,6 +60,13 @@
+       "present": true,
+       "rule": "RULE-CTOR-040",
+       "note": "the contract leaves it optional and the engine requires it before running any write mode"
++    },
++    {
++      "doc": "connector",
++      "path": "error_map.key_attrs",
++      "min_length": 1,
++      "rule": "intent",
++      "note": "MySQL's DBAPI exception hierarchy always grounds at least an __exception_class__-keyed classification, so a grounded pass should declare error_map — a non-empty key_attrs proves the new authoring step actually declared a classification, not merely an empty or null block"
+     }
+   ],
+   "artifacts": [
+diff --git a/plugins/analitiq-connector-builder/agents/api-connector-creator.md b/plugins/analitiq-connector-builder/agents/api-connector-creator.md
+index e6e208a..f5bcc98 100644
+--- a/plugins/analitiq-connector-builder/agents/api-connector-creator.md
++++ b/plugins/analitiq-connector-builder/agents/api-connector-creator.md
+@@ -64,6 +64,7 @@ artifacts, not the plugin's.
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/connection-contract.md`
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
++- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/error-classification.md`
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector.md`
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/api-endpoint.md`
+@@ -117,6 +118,11 @@ artifacts, not the plugin's.
+    read-side regex `native_type` literals uppercase (`RULE-TMAP-014`). API
+    connectors ship no write map and no package files (`RULE-CTOR-043`):
+    return `type_map_write: null` and `package_files: null`.
++7. **Error classification (optional)** — declare the top-level `error_map.http`
++   block by applying `error-classification.md` §Classifying an HTTP status'
++   procedure to `provider_facts.documented_http_errors`. Every entry must
++   trace to a status the researcher grounded there; omit a status nothing
++   grounds, and record any gap in `notes` — never fabricate an entry.
+ 
+ ## Definition of Done
+ 
+diff --git a/plugins/analitiq-connector-builder/agents/connector-provider-researcher.md b/plugins/analitiq-connector-builder/agents/connector-provider-researcher.md
+index 0f478f3..5619a9a 100644
+--- a/plugins/analitiq-connector-builder/agents/connector-provider-researcher.md
++++ b/plugins/analitiq-connector-builder/agents/connector-provider-researcher.md
+@@ -102,8 +102,8 @@ the fact the creator needs.
+ 
+ ## Hard rules
+ 
+-<!-- Maintainers: in the `- For databases:` bullets below, backticked
+-     snake_case tokens (dotted or not, e.g. `sqlalchemy_driver`,
++<!-- Maintainers: in the `- For APIs:` and `- For databases:` bullets below,
++     backticked snake_case tokens (dotted or not, e.g. `sqlalchemy_driver`,
+      `tls.supported_modes`) are pinned to the ProviderFacts fragment in
+      references/io-contracts.md by
+      tests/connector_builder/test_provider_facts_guard.py — renaming a
+@@ -111,6 +111,18 @@ the fact the creator needs.
+ 
+ - Do not return prose summaries. The orchestrator expects the JSON block only,
+   optionally followed by a short list of doc URLs.
++- For APIs: ground every status the provider's own docs describe into
++  `documented_http_errors` — the documented meaning, verbatim, one entry per
++  status (an errors/status-codes reference page, or per-endpoint error
++  notes). When the docs document DIFFERENT meanings for the same status
++  depending on the call (an operation, an endpoint), record every meaning
++  and which call(s) each applies to — never collapse them into one, since
++  the connector-wide classification carries no per-endpoint scoping and the
++  creator needs to see the conflict to refuse classifying that status. Never
++  infer a status's meaning from general HTTP knowledge or another
++  provider's docs; the creator applies `references/error-classification.md`'s
++  procedure to these facts to produce its error classification. Omit a
++  status the docs don't describe (`RULE-CTOR-026`).
+ - For databases: ground the driver's TLS surface from its official docs —
+   the documented mode values, verbatim, into `tls.supported_modes`, and
+   which connect parameter(s) the driver takes TLS through (a single mode
+@@ -136,6 +148,27 @@ the fact the creator needs.
+   the docs do not establish and report it as a gap (`RULE-CTOR-041`); the
+   fragment's own descriptions say which fields admit a null value and what it
+   means there.
++- For databases: ground the **error-signal** facts the creator needs to
++  declare its error classification (`references/error-classification.md`)
++  into `error_signals` — `error_signals.native_code_attrs` (the exception
++  attribute(s) the driver documents as carrying its native error code, or
++  null when the docs establish the exception carries none) and
++  `error_signals.documented_codes` (the documented meaning, verbatim, one
++  entry per signal value grounded — a native-code value for each attribute
++  named above, and/or a documented exception class name when the docs
++  establish a meaningful class hierarchy too, since a connector may ground
++  its classification on both at once — never a category. Ground a code
++  VALUE's meaning from whichever source actually defines it: the driver's
++  own docs, or, when the database/server itself owns that catalog rather
++  than the driver, the server's own published documentation. When the
++  connector ships more than one driver and their docs establish DIFFERENT
++  meanings for what would resolve to the same key — most often a shared
++  exception class name — record every meaning and which driver each applies
++  to, never collapse them into one, since the connector-wide classification
++  carries no per-driver scoping and the creator needs to see the conflict to
++  refuse that entry.)
++  Leave the whole block unset when nothing above is grounded, and report a gap for
++  anything the docs don't establish (`RULE-CTOR-026`).
+ - WebSearch is for locating the official docs only (when the user did not
+   supply a URL) — never a source of facts. Every extracted fact must come from
+   a first-party documentation page fetched with WebFetch; never cite blogs,
+diff --git a/plugins/analitiq-connector-builder/agents/db-connector-creator.md b/plugins/analitiq-connector-builder/agents/db-connector-creator.md
+index 4b28a0c..68921e5 100644
+--- a/plugins/analitiq-connector-builder/agents/db-connector-creator.md
++++ b/plugins/analitiq-connector-builder/agents/db-connector-creator.md
+@@ -75,6 +75,7 @@ artifacts, not the plugin's.
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/connection-contract.md`
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
++- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/error-classification.md`
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector.md`
+ - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector-package.md`
+@@ -229,6 +230,11 @@ artifacts, not the plugin's.
+      (`RULE-PKG-007`), source dependencies dynamically from
+      `requirements.txt` (`RULE-PKG-006`), and register the entry-point
+      groups `RULE-PKG-008` names.
++10. **Error classification (optional)** — declare the top-level `error_map`
++    block per `error-classification.md` §Classifying a driver exception
++    (`key_attrs` / `codes`) when `provider_facts.error_signals` grounds it.
++    Omit the block entirely when the researcher reported no error signals —
++    never fabricate a code the docs don't establish.
+ 
+ ## Definition of Done
+ 
+diff --git a/plugins/analitiq-connector-builder/skills/connector-builder/references/definition-of-done.md b/plugins/analitiq-connector-builder/skills/connector-builder/references/definition-of-done.md
+index fa8e186..3ee5779 100644
+--- a/plugins/analitiq-connector-builder/skills/connector-builder/references/definition-of-done.md
++++ b/plugins/analitiq-connector-builder/skills/connector-builder/references/definition-of-done.md
+@@ -61,3 +61,8 @@ shared core.
+   entry-point registrations (`RULE-PKG-008`).
+ - [ ] **Version is consistent**: first release → `RULE-CTOR-032`; otherwise
+   the drift verdict the orchestrator computed was applied.
++- [ ] **`error_map` is declared wherever grounded facts support it**
++  (`references/error-classification.md`) — `provider_facts.documented_http_errors`
++  for `http`, or `provider_facts.error_signals` for `key_attrs`/`codes` — and
++  left entirely
++  unset otherwise. Additive: never fabricated to fill the block.
+diff --git a/plugins/analitiq-connector-builder/skills/connector-builder/references/error-classification.md b/plugins/analitiq-connector-builder/skills/connector-builder/references/error-classification.md
+new file mode 100644
+index 0000000..7477623
+--- /dev/null
++++ b/plugins/analitiq-connector-builder/skills/connector-builder/references/error-classification.md
+@@ -0,0 +1,158 @@
++# Error classification
++
++`error_map` (`RULE-CTOR-058`) is connector-level and additive: absence means
++"no declared mapping," and current engine behavior applies. It has independent
++mechanisms — `http` for a status read at the API call site, and
++`key_attrs`/`codes` for a native code read off the connector's own caught
++exception (database connectors today; the contract types the mechanism
++kind-agnostic). Declare only from grounded facts; an ungrounded category is a
++config error the moment it turns out wrong, not a harmless guess
++(`RULE-CTOR-026`).
++
++## Contents
++
++- Classifying an HTTP status
++- Classifying a driver exception (`key_attrs` / `codes`)
++- Operational consequence
++
++## Classifying an HTTP status
++
++No status code is classified from general HTTP knowledge, however familiar
++its number looks — the same status means different things across providers
++(a `409` is a stale read on one API and a rejected duplicate write on
++another), and `error_map.http` is read at the HTTP call site, independent of
++`key_attrs`/`codes` (the contract's own `ErrorMap.http` description). In
++`analitiq-core`'s engine, that call site is every read and write HTTP
++request — the same classification path serves both. A discovery/health-check
++probe bypasses `error_map` entirely. An OAuth2 `token_exchange` back-channel
++request (`spec-auth-flows.md`) is declared in the contract, but the engine
++has no executor for it at all today — no code path performs that call, so
++there is nothing for `error_map.http` to classify there either; a status
++documented for that operation stays ungrounded until the engine implements
++it. This is a reading of the engine as it stands, not a contract
++guarantee — re-verify against the engine before relying on the exact scope.
++So a status's meaning is never separable from what a specific provider's
++docs say it means on the call where it actually occurs. Ground every entry
++in `provider_facts.documented_http_errors` — never fabricate one the docs
++don't establish, and never carry an entry over from another connector.
++
++Apply this procedure to what the docs say about each status, not to the
++status number itself:
++
++| What the provider's docs establish about this status | Category |
++|---|---|
++| Credentials or permissions are invalid or insufficient | `auth` |
++| The client is being throttled, or has exceeded a quota the docs document as resetting or lifting during normal operation | `rate_limited` |
++| The request the connector itself constructed is malformed or misconfigured | `config` |
++| A specific write was rejected on its own content (failed validation, conflicts with existing data) — and the docs establish this outcome as write-specific, never shared with a read call (a discovery-only conflict doesn't apply — `error_map.http` never fires for a discovery/health-check probe, above) | `write_rejected` |
++| A transient, provider-side condition a retry can resolve | `transient` |
++| The provider or an upstream dependency is unreachable | `unreachable` |
++
++A status whose documented meaning doesn't clearly fit one row is left
++unclassified — this includes a quota the docs describe as terminal within a
++run (no documented reset short of a plan change or a billing-cycle
++rollover), since `rate_limited` is read by the engine as retryable (below)
++and a terminal quota is not. So is a status the docs document *differently*
++across the calls `error_map.http` actually classifies — a read and a write
++(above); a conflict involving *only* a discovery/health-check probe doesn't
++apply, since that call never reaches `error_map`. `error_map.http` carries
++no per-endpoint scoping, so a status with conflicting documented meanings
++across read and write cannot be classified without silently applying the
++wrong one at whichever call site the other meaning belonged to. In every
++case, record the gap — or the conflicting meanings — in `notes` on the
++returned `CreatorOutput` rather than guessing or picking one arbitrarily.
++
++`connector-spec-api/examples/api-key/api-key.example.json`'s `error_map.http`
++block illustrates the shape for a fictional provider, not a set of universal
++meanings. Ground every entry of an actual connector's `error_map.http` in
++that connector's own provider's documented behavior (via
++`provider_facts.documented_http_errors`), never by copying this or any other
++connector's values.
++
++## Classifying a driver exception (`key_attrs` / `codes`)
++
++Ground this half in whichever source actually documents each fact —
++the driver's own docs for how it exposes a signal, and, for what a
++documented code VALUE means, the driver's docs or the database/server's own
++published catalog (a SQLSTATE table, a vendor error-code reference) when the
++server, not the driver, owns that meaning — via `provider_facts.error_signals`.
++Never fabricate a code the docs don't establish. `key_attrs` and `codes` are
++declared together or not at all (`RULE-CTOR-067`).
++
++1. **Does the driver's exception expose its native code as a plain
++   attribute** (a SQLSTATE, an `errno`, a vendor code)? Name that attribute in
++   `key_attrs`.
++2. **Does classification instead depend on the exception's own type**, not a
++   value it carries? Use the reserved name `__exception_class__` in
++   `key_attrs` — it matches the exception's class name up its MRO instead of
++   reading an attribute.
++3. **Declaring more than one signal** — an attribute read together with the
++   class-name fallback, say — means `key_attrs`'s own declared order decides
++   which wins: the entries are tried most-specific first, and the first one
++   whose resolved value has a matching `codes` entry wins. An attribute that
++   is present but whose value has no `codes` entry falls through to the next
++   `key_attrs` entry exactly as if it had been absent, so an attribute ahead
++   of the class-name fallback never makes that fallback unreachable — it
++   only takes precedence when it actually classifies something. Choose and
++   justify the order; there is no separate precedence field.
++4. **Choosing each entry's category** applies the same procedure the HTTP
++   table above teaches, against `error_signals.documented_codes`' recorded
++   meaning instead of a status — see the table below.
++
++| What the recorded meaning establishes | Category |
++|---|---|
++| Credentials or permissions are invalid or insufficient | `auth` |
++| The client is being throttled, or has exceeded a quota the docs document as resetting or lifting during normal operation | `rate_limited` |
++| The statement or connection the connector itself constructed is malformed, or the connector lacks a required setting | `config` |
++| The write's own content was rejected (a constraint violation, a failed validation) | `write_rejected` |
++| A transient condition a retry can resolve (a serialization failure, a deadlock) | `transient` |
++| The server, or a dependency it needs, is unreachable | `unreachable` |
++
++A meaning that doesn't clearly fit one row is left unclassified — this
++includes a quota the docs describe as terminal within a run (no documented
++reset short of a plan change or a billing-cycle rollover), for the same
++reason as the HTTP table above. Omit that entry from `codes` and record the
++gap in `notes`, never guess.
++
++A connector may ship more than one driver across its transports
++(`connector-spec-db/spec-driver-selection.md`); when two drivers document
++*different* meanings for what would resolve to the same `codes` key — most
++often a shared exception class name under `__exception_class__`, since
++drivers from different vendors can happen to name a class `OperationalError`
++— `error_map` carries no per-driver scoping, so installing one entry
++silently misclassifies whichever driver's exception the entry wasn't
++grounded from. Omit that entry and record the conflicting per-driver
++meanings in `notes`, exactly as a per-call HTTP conflict is refused above,
++rather than picking one driver's meaning arbitrarily.
++
++`codes` keys are compared as literal strings — the contract defines no prefix
++or class-level wildcard, so a family of related codes (every value a class of
++SQL exception can take, say) is enumerated one key per value, never
++represented by a shared prefix. `io-contracts.md`'s `ProviderFacts` fragment
++owns the omit-vs-null discipline `error_signals` carries.
++
++`connector-spec-db/examples/postgresql-adbc/postgresql-adbc.example.json`'s
++`error_map` block illustrates the shape — real, PostgreSQL-documented
++SQLSTATE meanings, mapped to categories directly in this reference rather
++than produced by a research pass. It is illustrative, not authoritative:
++ground every entry of an actual connector's `error_map` in that connector's
++own driver's and server's documented facts (via `provider_facts.error_signals`),
++never by copying this or any other connector's values.
++
++## Operational consequence
++
++No engine cookbook classifies a given native code into a category — that
++judgment is left entirely to whoever authors the connector. The verdict below
++is a reading of `analitiq-core`'s engine (its capability-declaration module,
++`DECLARED_WRITE_VERDICTS` / `DECLARED_READ_DETERMINISTIC`) — neither side pins
++this fact to the other, so re-verify against the engine before relying on the
++exact wording:
++
++| Verdict | Category |
++|---|---|
++| Retryable, read and write | `transient` |
++| Retryable, read and write | `unreachable` |
++| Retryable, read and write | `rate_limited` |
++| Fatal, config-defect | `auth` |
++| Fatal, config-defect | `config` |
++| Fatal, write-rejected | `write_rejected` |
+diff --git a/plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md b/plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md
+index 95f11fb..f650901 100644
+--- a/plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md
++++ b/plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md
+@@ -131,6 +131,11 @@ fan-out and returned as `EndpointFacts` (below).
+             "max_requests": { "type": "integer" },
+             "time_window_seconds": { "type": "integer" }
+           }
++        },
++        "documented_http_errors": {
++          "type": "object",
++          "description": "Per-status documented meaning, verbatim, from the provider's own API docs (an errors/status-codes reference page, or per-endpoint error notes) — the creator's grounding for `error_map.http` (`references/error-classification.md`). One entry per status the docs describe; never a failure category — that judgment is the creator's, per `references/error-classification.md`'s procedure. No status may be classified in `error_map.http` without a corresponding entry here. `error_map.http` carries no per-endpoint scoping, so when the docs establish DIFFERENT meanings for the same status depending on the call (an operation, an endpoint), the entry must say so rather than picking one — record every documented meaning and which call(s) each applies to, verbatim, so the creator can see the conflict and refuse to classify that status generically instead of silently applying whichever meaning happened to be recorded.",
++          "additionalProperties": { "type": "string" }
+         }
+       },
+       "required": ["auth_model"]
+@@ -189,6 +194,22 @@ fan-out and returned as `EndpointFacts` (below).
+             }
+           }
+         },
++        "error_signals": {
++          "type": ["object", "null"],
++          "description": "Documented facts about how the driver's exception(s) expose a native error signal, and what each signal value means — the creator's grounding for `error_map.key_attrs`/`codes` (`references/error-classification.md`). The researcher reports only what the docs establish exists, verbatim, never a failure category — that judgment is the creator's; a signal's meaning is grounded from whichever source actually defines it (the driver's own docs, or the database/server's own published catalog when the server owns that meaning, per `documented_codes` below). Same omit-vs-null discipline as `sql_write_path`: OMIT a fact the docs do not establish (a research gap), and use NULL only where a field admits it to record a documented ABSENCE.",
++          "properties": {
++            "native_code_attrs": {
++              "type": ["array", "null"],
++              "items": { "type": "string" },
++              "description": "Attribute name(s) the driver's exception class documents as carrying its native error code (e.g. `sqlstate`, `pgcode`, `errno`), most-specific first when the docs establish more than one. NULL when the docs establish the exception carries no such attribute at all — the fact that routes the creator to the `__exception_class__` sentinel instead."
++            },
++            "documented_codes": {
++              "type": "object",
++              "description": "The documented meaning, verbatim, from whichever source actually defines it — the driver's own docs for how it exposes a signal, or, for what a given code VALUE means, the database/server's own published documentation when the server (not the driver) owns that catalog (e.g. a SQLSTATE class). One entry per signal value grounded above: a native-code value (e.g. `\"23505\": \"unique_violation\"`) for anything `native_code_attrs` names, and/or a documented exception class name (e.g. `\"IntegrityError\": \"constraint violation\"`) for anything worth classifying by the exception's type instead. Both kinds of key may appear in the same map: a driver whose docs ground an attribute AND a meaningful class hierarchy reports both, grounding the creator's mixed `key_attrs` (an attribute plus the `__exception_class__` fallback, `references/error-classification.md`). `error_map` carries no per-driver scoping, so when a connector ships more than one driver (`skills/connector-spec-db/spec-driver-selection.md`) and their docs establish DIFFERENT meanings for what would resolve to the same key — most often a shared exception class name under `__exception_class__` — the entry must say so rather than picking one: record every documented meaning and which driver each applies to, verbatim, so the creator can see the conflict and refuse that entry instead of silently applying whichever meaning happened to be recorded. Never a failure category either way; the creator applies `references/error-classification.md`'s procedure to produce `error_map.codes`.",
++              "additionalProperties": { "type": "string" }
++            }
++          }
++        },
+         "sqlalchemy_driver": {
+           "type": "string",
+           "description": "The SQLAlchemy 'dialect+driver' for the SQLAlchemy transport, sync or async (e.g. 'postgresql+asyncpg', 'mysql+aiomysql', 'redshift+redshift_connector'); connector-spec-db/spec-driver-selection.md owns which forms are authorable and the sync/async dispatch constraints."
+diff --git a/plugins/analitiq-connector-builder/skills/connector-spec-api/examples/api-key/api-key.example.json b/plugins/analitiq-connector-builder/skills/connector-spec-api/examples/api-key/api-key.example.json
+index d3a4882..b16b65a 100644
+--- a/plugins/analitiq-connector-builder/skills/connector-spec-api/examples/api-key/api-key.example.json
++++ b/plugins/analitiq-connector-builder/skills/connector-spec-api/examples/api-key/api-key.example.json
+@@ -42,5 +42,17 @@
+         "secret": true
+       }
+     }
++  },
++  "error_map": {
++    "http": {
++      "401": "auth",
++      "403": "auth",
++      "429": "rate_limited",
++      "409": "write_rejected",
++      "500": "transient",
++      "502": "unreachable",
++      "503": "unreachable",
++      "504": "unreachable"
++    }
+   }
+ }
+diff --git a/plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql-adbc/postgresql-adbc.example.json b/plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql-adbc/postgresql-adbc.example.json
+index e02c0c6..5aea226 100644
+--- a/plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql-adbc/postgresql-adbc.example.json
++++ b/plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql-adbc/postgresql-adbc.example.json
+@@ -147,5 +147,20 @@
+     "bulk_load": { "adbc": "adbc_ingest" },
+     "stage": { "scope": "temp", "schema": "target", "transactional_ddl": true },
+     "limits": { "max_identifier_len": 63 }
++  },
++  "error_map": {
++    "key_attrs": ["sqlstate"],
++    "codes": {
++      "08006": "unreachable",
++      "08001": "unreachable",
++      "28000": "auth",
++      "28P01": "auth",
++      "23505": "write_rejected",
++      "23503": "write_rejected",
++      "40001": "transient",
++      "53300": "rate_limited",
++      "42501": "auth",
++      "42601": "config"
++    }
+   }
+ }
+diff --git a/tests/connector_builder/test_provider_facts_guard.py b/tests/connector_builder/test_provider_facts_guard.py
+index 8de1f70..0d5fb20 100644
+--- a/tests/connector_builder/test_provider_facts_guard.py
++++ b/tests/connector_builder/test_provider_facts_guard.py
+@@ -1,21 +1,22 @@
+ """Pin the researcher's grounding instructions to the ProviderFacts fragment.
+ 
+ `io-contracts.md` owns the ProviderFacts JSON Schema fragment;
+-`connector-provider-researcher.md` restates several of its database-branch
+-field names as grounding instructions ("report ... `sqlalchemy_driver` ...").
+-Nothing else ties their field names together, so a partial rename would leave
+-the researcher grounding fields the fragment no longer names — the
+-`async_sqlalchemy_driver` → `sqlalchemy_driver` rename happened to land in both
+-files consistently, but only by care, not by any check.
+-
+-Convention this guard enforces: inside the researcher's `- For databases:`
+-hard-rule bullets, a backticked snake_case token (`` `like_this` ``) or dotted
+-path (`` `tls.supported_modes` ``) is a ProviderFacts field reference and must
+-resolve in the fragment (dotted paths resolve through nested object
+-`properties`). Backticked text that is not a bare snake_case identifier or
+-dotted path (`dialect+driver`, `COPY FROM stdin`, `mysql+aiomysql`) is prose,
+-not a field reference, and is ignored. The researcher prose carries a
+-maintainer comment pointing back here.
++`connector-provider-researcher.md` restates several of its api-branch and
++database-branch field names as grounding instructions ("report ...
++`sqlalchemy_driver` ..."). Nothing else ties their field names together, so a
++partial rename would leave the researcher grounding fields the fragment no
++longer names — the `async_sqlalchemy_driver` → `sqlalchemy_driver` rename
++happened to land in both files consistently, but only by care, not by any
++check.
++
++Convention this guard enforces: inside the researcher's `- For APIs:` and
++`- For databases:` hard-rule bullets, a backticked snake_case token
++(`` `like_this` ``) or dotted path (`` `tls.supported_modes` ``) is a
++ProviderFacts field reference and must resolve in the fragment (dotted paths
++resolve through nested object `properties`). Backticked text that is not a
++bare snake_case identifier or dotted path (`dialect+driver`, `COPY FROM
++stdin`, `mysql+aiomysql`) is prose, not a field reference, and is ignored. The
++researcher prose carries a maintainer comment pointing back here.
+ 
+ Pure text-vs-text: no contract packages involved, so no `_pins` skip guard —
+ this always runs.
+@@ -54,8 +55,8 @@ def _provider_facts_schema() -> dict:
+     return json.loads(fence.group(1))
+ 
+ 
+-def _known_fields(schema: dict) -> set[str]:
+-    """Dotted property paths from the top level plus the database branch.
++def _walk_fields(props: dict) -> set[str]:
++    """Dotted property paths for one `properties` object.
+ 
+     Nested object `properties` contribute dotted paths (`tls` and
+     `tls.supported_modes` are both known), so a rename inside a sub-object is
+@@ -63,23 +64,42 @@ def _known_fields(schema: dict) -> set[str]:
+     """
+     fields: set[str] = set()
+ 
+-    def walk(props: dict, prefix: str) -> None:
+-        for name, sub in props.items():
++    def walk(node: dict, prefix: str) -> None:
++        for name, sub in node.items():
+             fields.add(prefix + name)
+             if isinstance(sub, dict):
+                 walk(sub.get("properties", {}), f"{prefix}{name}.")
+ 
+-    walk(schema.get("properties", {}), "")
++    walk(props, "")
++    return fields
++
++
++def _branch_fields(schema: dict, kind: str) -> set[str]:
++    """Dotted property paths from the top level plus one kind branch only.
++
++    Per-branch, not merged: a field genuinely on the `api` branch (like
++    `documented_http_errors`) must not validate a `- For databases:` bullet
++    referencing it, and vice versa — merging would let prose ground a field
++    on the wrong `ProviderFacts` variant and still pass.
++    """
++    fields = _walk_fields(schema.get("properties", {}))
+     for branch in schema.get("oneOf", []):
+         props = branch.get("properties", {})
+-        if props.get("kind", {}).get("const") == "database":
+-            walk(props, "")
+-            return fields
+-    pytest.fail(f"{IO_CONTRACTS}: ProviderFacts has no kind=database oneOf branch")
++        if props.get("kind", {}).get("const") == kind:
++            return fields | _walk_fields(props)
++    pytest.fail(f"{IO_CONTRACTS}: ProviderFacts has no kind={kind!r} oneOf branch")
+ 
+ 
+-def _database_bullets() -> list[str]:
+-    """Each `- For databases:` bullet in ## Hard rules, continuations joined."""
++def _known_fields(schema: dict) -> set[str]:
++    """Dotted property paths from the top level plus both kind branches,
++    merged. Used only where a field's presence anywhere is what matters
++    (the reverse-anchor test) — see `_branch_fields` for the per-kind check
++    that actually validates the researcher's grounding bullets."""
++    return _branch_fields(schema, "api") | _branch_fields(schema, "database")
++
++
++def _grounding_bullets(prefix: str) -> list[str]:
++    """Each `<prefix>` bullet in ## Hard rules, continuations joined."""
+     text = RESEARCHER.read_text(encoding="utf-8")
+     section = re.search(r"^## Hard rules$(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
+     assert section, f"{RESEARCHER}: no '## Hard rules' section"
+@@ -99,53 +119,72 @@ def _database_bullets() -> list[str]:
+             current = None
+     if current:
+         bullets.append("\n".join(current))
+-    return [b for b in bullets if b.startswith("- For databases:")]
++    return [b for b in bullets if b.startswith(prefix)]
++
++
++def _api_bullets() -> list[str]:
++    return _grounding_bullets("- For APIs:")
++
++
++def _database_bullets() -> list[str]:
++    return _grounding_bullets("- For databases:")
+ 
+ 
+ def test_extraction_finds_the_grounding_bullets() -> None:
+     """Guard the extraction itself: if the researcher prose restructures its
+-    database bullets, this fails loudly instead of the field check passing
+-    vacuously on an empty or shrunken token set."""
+-    bullets = _database_bullets()
++    api or database bullets, this fails loudly instead of the field check
++    passing vacuously on an empty or shrunken token set."""
++    api_bullets = _api_bullets()
++    db_bullets = _database_bullets()
+     # Exact count, not a floor: with a floor, one of N>2 bullets could be
+     # reworded away and its tokens would silently leave the guard. Adding or
+-    # removing a `- For databases:` bullet is a recorded decision — update
+-    # this count with it.
+-    assert len(bullets) == 3, (
+-        f"expected exactly 3 '- For databases:' bullets under '## Hard rules' "
+-        f"in {RESEARCHER.relative_to(REPO_ROOT)}, found {len(bullets)} — if the "
+-        "prose restructured deliberately, update this count."
++    # removing a `- For APIs:` / `- For databases:` bullet is a recorded
++    # decision — update the matching count with it.
++    assert len(api_bullets) == 1, (
++        f"expected exactly 1 '- For APIs:' bullet under '## Hard rules' "
++        f"in {RESEARCHER.relative_to(REPO_ROOT)}, found {len(api_bullets)} — if "
++        "the prose restructured deliberately, update this count."
+     )
+-    tokens = {t for b in bullets for t in _FIELD_TOKEN.findall(b)}
++    assert len(db_bullets) == 4, (
++        f"expected exactly 4 '- For databases:' bullets under '## Hard rules' "
++        f"in {RESEARCHER.relative_to(REPO_ROOT)}, found {len(db_bullets)} — if "
++        "the prose restructured deliberately, update this count."
++    )
++    tokens = {t for b in api_bullets + db_bullets for t in _FIELD_TOKEN.findall(b)}
+     assert tokens, "no backticked field tokens extracted from the bullets"
+-    # Canaries: the field renamed from `async_sqlalchemy_driver`, and a dotted
+-    # nested path (proves dotted extraction works). If either renames again,
+-    # all three sites (fragment, prose, these literals) move together as a
+-    # recorded decision.
++    # Canaries: one per branch, plus a dotted nested path (proves dotted
++    # extraction works). If any renames again, all sites (fragment, prose,
++    # these literals) move together as a recorded decision.
++    assert "documented_http_errors" in tokens
+     assert "sqlalchemy_driver" in tokens
+     assert "tls.supported_modes" in tokens
+ 
+ 
+-def test_prose_grounded_fields_exist_in_provider_facts() -> None:
+-    """Every field the researcher prose instructs grounding must exist in the
+-    ProviderFacts fragment — a rename landing in only one file fails here in
+-    both directions (prose keeps the old name, or prose moves ahead of the
+-    fragment)."""
+-    known = _known_fields(_provider_facts_schema())
+-    tokens = {t for b in _database_bullets() for t in _FIELD_TOKEN.findall(b)}
++@pytest.mark.parametrize(
++    "kind, bullets_fn", [("api", _api_bullets), ("database", _database_bullets)]
++)
++def test_prose_grounded_fields_exist_in_provider_facts(kind: str, bullets_fn) -> None:
++    """Every field a kind's researcher bullets instruct grounding must exist
++    on THAT kind's ProviderFacts branch — a rename landing in only one file
++    fails here in both directions (prose keeps the old name, or prose moves
++    ahead of the fragment), and a field genuinely valid on the other branch
++    does not silently validate a bullet naming it on the wrong one."""
++    known = _branch_fields(_provider_facts_schema(), kind)
++    tokens = {t for b in bullets_fn() for t in _FIELD_TOKEN.findall(b)}
+     unknown = sorted(tokens - known)
+     assert not unknown, (
+-        f"researcher prose grounds field(s) {unknown} that the ProviderFacts "
+-        f"fragment in {IO_CONTRACTS.name} does not define. Either the fragment "
+-        "renamed a field without the prose following, or the prose references "
+-        "a field that was never added — fix whichever file is stale."
++        f"researcher bullets for kind={kind!r} ground field(s) {unknown} that "
++        f"ProviderFacts's {kind!r} branch in {IO_CONTRACTS.name} does not "
++        "define. Either the fragment renamed a field without the prose "
++        "following, the prose references a field that was never added, or "
++        "the field belongs to the other kind branch — fix whichever is stale."
+     )
+ 
+ 
+-def test_provider_facts_database_branch_still_names_the_driver_fields() -> None:
+-    """The reverse anchor: the fragment's database branch keeps the fields the
+-    pipeline depends on by name — including the nested TLS mode carrier, which
+-    three prose files reference (`spec-tls.md`, `db-connector-creator.md`,
++def test_provider_facts_still_names_the_grounded_fields() -> None:
++    """The reverse anchor: the fragment keeps the fields the pipeline depends
++    on by name, across both branches — including the nested TLS mode carrier,
++    which three prose files reference (`spec-tls.md`, `db-connector-creator.md`,
+     `connector-provider-researcher.md`). Removing one from the fragment
+     without touching the prose would otherwise only fail once the prose is
+     next edited."""
+@@ -162,13 +201,21 @@ def test_provider_facts_database_branch_still_names_the_driver_fields() -> None:
+                 "sql_write_path.qualified_statement_targeting",
+                 "sql_write_path.temp_table_support",
+                 "sql_write_path.transactional_ddl",
+-                "sql_write_path.identifier_limits"}
++                "sql_write_path.identifier_limits",
++                # The RESEARCHED subset of error_map's inputs — the category
++                # mapping itself is the creator's decision, never the
++                # researcher's, so it carries no field here. database-branch
++                # (error_signals) and api-branch (documented_http_errors).
++                "error_signals", "error_signals.native_code_attrs",
++                "error_signals.documented_codes",
++                "documented_http_errors"}
+     missing = sorted(expected - known)
+     assert not missing, (
+-        f"ProviderFacts database branch lost field(s) {missing} — if the "
+-        "rename/removal is intentional, update the fragment in "
+-        f"{IO_CONTRACTS.relative_to(REPO_ROOT)}, the grounding bullets in "
+-        f"{RESEARCHER.relative_to(REPO_ROOT)}, the per-fact sources in "
+-        "plugins/analitiq-connector-builder/agents/db-connector-creator.md, "
++        f"ProviderFacts lost field(s) {missing} — if the rename/removal is "
++        f"intentional, update the fragment in {IO_CONTRACTS.relative_to(REPO_ROOT)}, "
++        f"the grounding bullets in {RESEARCHER.relative_to(REPO_ROOT)}, the "
++        "per-fact sources in "
++        "plugins/analitiq-connector-builder/agents/db-connector-creator.md and "
++        "plugins/analitiq-connector-builder/agents/api-connector-creator.md, "
+         "and this expectation together."
+     )
+diff --git a/tests/connector_builder/test_schema_drift.py b/tests/connector_builder/test_schema_drift.py
+index c6f214a..91334d8 100644
+--- a/tests/connector_builder/test_schema_drift.py
++++ b/tests/connector_builder/test_schema_drift.py
+@@ -134,6 +134,50 @@ EXPECTED_SQL_BULK_MECHANISMS = {
+     "sqlalchemy": {"copy_from", "load_data_local_infile", "load_job"},
+     "adbc": {"adbc_ingest", "copy_from", "load_data_local_infile", "load_job"},
+ }
++# The closed failure-category vocabulary `ErrorMap.codes`/`.http` values are
++# drawn from (capability block v2, `RULE-CTOR-058`). Restated as decision
++# logic in error-classification.md's classification tables — the "mapping
++# logic" exemption, same as enum-mappers.md — so pin it here too.
++EXPECTED_ERROR_CATEGORIES = {
++    "transient", "config", "auth", "unreachable", "rate_limited", "write_rejected",
++}
++# plugin-prose.md rung-5 exemption: the sections named below in
++# error-classification.md restate analitiq-core engine runtime behavior with
++# no model in this repo and no published/vendored artifact to pin against
++# (unlike ErrorCategory itself,
++# which this file does pin, above). Declared here per plugin-prose.md's
++# allowlist-entry rung, each stated in the prose as a reading of the engine,
++# not a permanent guarantee (`.claude/rules/engine-behaviour-claims.md`); each
++# resolved (file + heading exist) by test_engine_restatement_exemptions_resolve
++# below.
++ENGINE_RESTATEMENT_EXEMPTIONS = {
++    "skills/connector-builder/references/error-classification.md#Classifying an HTTP status":
++        "restates analitiq-core's error_map.http call-site coverage — read "
++        "and write HTTP requests both classify through the same path "
++        "(cdk/cdk/api/verdicts.py's classify_status/failure_facts, called "
++        "from cdk/cdk/api/generic.py's read and write paths), while the "
++        "health-check probe (cdk/cdk/api/http.py's HttpSender.probe()) "
++        "bypasses error_map entirely and the engine has no executor at all "
++        "for the contract's OAuth2 token_exchange operation, so there is no "
++        "call for error_map.http to classify there either; none of this is "
++        "enforced by the contract model, which types http as a plain "
++        "status-keyed map with no call-site semantics of its own",
++    "skills/connector-builder/references/error-classification.md#Operational consequence":
++        "restates analitiq-core's ErrorCategory write/read verdict tables "
++        "(DECLARED_WRITE_VERDICTS / DECLARED_READ_DETERMINISTIC); the category "
++        "*names* are pinned by test_mapper_target_columns_match_the_contract "
++        "above, the verdict semantics beside them are not mechanically "
++        "checkable from this repo",
++    "skills/connector-builder/references/error-classification.md#Classifying a driver exception (`key_attrs` / `codes`)":
++        "restates analitiq-core's key_attrs match order (the first entry "
++        "whose resolved value has a matching codes entry wins; a resolved "
++        "value with no codes entry falls through to the next entry exactly "
++        "as if it had been absent) and codes' exact-string lookup (no prefix "
++        "or class-level wildcard); neither is enforced by the contract "
++        "model, which types key_attrs as a plain ordered tuple and codes as "
++        "a plain string-keyed map with no order or matching semantics of "
++        "its own",
++}
+ EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
+ # WriteOperation.idempotency `in` targets. No prose site restates them: the
+ # plugin's documents cite `RULE-ENDP-039`, whose `literal_enum` mechanism prints
+@@ -279,6 +323,67 @@ def _pattern_at(schema: dict, *path: str) -> str | None:
+     return None
+ 
+ 
++def _error_category_values(schema: dict) -> set[str] | None:
++    """Return the closed `ErrorCategory` vocabulary via `ErrorMap.codes`'s value enum.
++
++    `ErrorCategory` is a bare `Literal` alias, not a named `$def` — pydantic
++    inlines it at every usage site instead of giving it one, so there is no
++    `$defs.ErrorCategory` to walk to. `codes` is a `dict[str, ErrorCategory]`;
++    its value enum renders under the non-null `anyOf` branch's
++    `additionalProperties`. Same restructure tolerance as `_enum_at`: any
++    missing key, a non-dict node, or a non-list `enum` yields None.
++    """
++    node = schema.get("$defs", {}).get("ErrorMap")
++    if not isinstance(node, dict):
++        return None
++    codes = node.get("properties", {}).get("codes")
++    if not isinstance(codes, dict):
++        return None
++    branches = codes.get("anyOf")
++    if not isinstance(branches, list):
++        return None
++    for branch in branches:
++        if not isinstance(branch, dict):
++            continue
++        additional = branch.get("additionalProperties")
++        if isinstance(additional, dict) and isinstance(additional.get("enum"), list):
++            return set(additional["enum"])
++    return None
++
++
++def _http_category_values(schema: dict) -> set[str] | None:
++    """Return the closed `ErrorCategory` vocabulary via `ErrorMap.http`'s value enum.
++
++    `http` is `dict[str, ErrorCategory]` too, but renders under
++    `patternProperties` (a status-code key pattern) rather than `codes`'s
++    `additionalProperties` — a differently-shaped node `_error_category_values`
++    does not walk. `codes` and `http` share the same `ErrorCategory` Literal
++    today, so the two extractors return the same set now; reading `http`'s own
++    branch here, rather than reusing `_error_category_values`, is what catches
++    the day a future contract change gives them different vocabularies. Same
++    restructure tolerance as `_enum_at`.
++    """
++    node = schema.get("$defs", {}).get("ErrorMap")
++    if not isinstance(node, dict):
++        return None
++    http = node.get("properties", {}).get("http")
++    if not isinstance(http, dict):
++        return None
++    branches = http.get("anyOf")
++    if not isinstance(branches, list):
++        return None
++    for branch in branches:
++        if not isinstance(branch, dict):
++            continue
++        pattern_props = branch.get("patternProperties")
++        if not isinstance(pattern_props, dict):
++            continue
++        for value_schema in pattern_props.values():
++            if isinstance(value_schema, dict) and isinstance(value_schema.get("enum"), list):
++                return set(value_schema["enum"])
++    return None
++
++
+ def _property_names_enum(schema: dict, *path: str) -> set[str] | None:
+     """Return the `propertyNames.enum` at `$defs/.../<path>`, looking through `anyOf`.
+ 
+@@ -441,6 +546,17 @@ def test_auth_types_match_schema(connector_schema: dict) -> None:
+     )
+ 
+ 
++def test_error_categories_match_schema(connector_schema: dict) -> None:
++    schema_set = _error_category_values(connector_schema)
++    assert schema_set == EXPECTED_ERROR_CATEGORIES, _diff_msg(
++        "ErrorMap.codes value (ErrorCategory)",
++        schema_set,
++        EXPECTED_ERROR_CATEGORIES,
++        "update the classification tables in "
++        "plugins/analitiq-connector-builder/skills/connector-builder/references/error-classification.md.",
++    )
++
++
+ def test_adbc_drivers_match_schema(connector_schema: dict) -> None:
+     schema_set = _enum_at(
+         connector_schema, "$defs", "AdbcTransport", "properties", "driver"
+@@ -1882,6 +1998,9 @@ def test_slug_pattern_governs_the_restated_fields(
+ ENUM_MAPPERS = (
+     PLUGIN_ROOT / "skills" / "connector-builder" / "references" / "enum-mappers.md"
+ )
++ERROR_CLASSIFICATION = (
++    PLUGIN_ROOT / "skills" / "connector-builder" / "references" / "error-classification.md"
++)
+ DSN_BINDINGS = (
+     PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-dsn-bindings.md"
+ )
+@@ -1910,6 +2029,24 @@ def _section(doc: Path, heading: str) -> str:
+     return match.group(1)
+ 
+ 
++def test_engine_restatement_exemptions_resolve() -> None:
++    """Every `ENGINE_RESTATEMENT_EXEMPTIONS` key must locate a real section.
++
++    Locating only, per `.claude/rules/guards.md`: this does not decide whether
++    the prose still reads as a reading rather than a guarantee — that is a
++    reader's job — it only keeps the declaration from rotting silently. A
++    section renamed or removed while an exemption still claims it would
++    otherwise leave the allowlist entry pointing at nothing, with nothing here
++    to notice.
++    """
++    for key in ENGINE_RESTATEMENT_EXEMPTIONS:
++        relpath, _, heading = key.partition("#")
++        assert heading, f"{key!r}: exemption key carries no '#<heading>' fragment"
++        doc = PLUGIN_ROOT / relpath
++        assert doc.is_file(), f"{key!r}: {relpath} does not exist under {PLUGIN_ROOT}"
++        _section(doc, heading)  # asserts the heading exists
++
++
+ _SEPARATOR_ROW = re.compile(r"^\|[\s:|-]+\|$")
+ 
+ 
+@@ -1952,6 +2089,29 @@ def _target_column(section: str) -> set[str]:
+         ("enum-mappers", "KindMapper", EXPECTED_KINDS, {"nosql", "document"}),
+         ("enum-mappers", "AuthTypeMapper", EXPECTED_AUTH_TYPES, set()),
+         ("enum-mappers", "TransportTypeMapper", EXPECTED_TRANSPORT_TYPES, set()),
++        # The operational-consequence table is an exhaustive per-category
++        # verdict listing (every ErrorCategory has an engine verdict) —
++        # exact-match is the right assertion here. The driver-exception
++        # section's category table is the same shape (one row per category,
++        # decision logic rather than a literal-code lookup) and pins the same
++        # way. The HTTP classification table (also exhaustive, by the same
++        # design) gets its own dedicated test below instead of joining this
++        # list: its expected set must come from ErrorMap.http's own schema
++        # branch, not the codes-derived EXPECTED_ERROR_CATEGORIES this list's
++        # other entries share, and this parametrize mechanism only takes
++        # plain values, not a schema fixture.
++        (
++            "error-classification",
++            "Operational consequence",
++            EXPECTED_ERROR_CATEGORIES,
++            set(),
++        ),
++        (
++            "error-classification",
++            "Classifying a driver exception (`key_attrs` / `codes`)",
++            EXPECTED_ERROR_CATEGORIES,
++            set(),
++        ),
+     ],
+ )
+ def test_mapper_target_columns_match_the_contract(
+@@ -1964,7 +2124,7 @@ def test_mapper_target_columns_match_the_contract(
+     left stale in the table an orchestrator classifies against — which is the
+     one copy that decides what gets authored.
+     """
+-    doc = {"enum-mappers": ENUM_MAPPERS}[doc_name]
++    doc = {"enum-mappers": ENUM_MAPPERS, "error-classification": ERROR_CLASSIFICATION}[doc_name]
+     section = _section(doc, heading)
+     documented = _target_column(section)
+     if extra:
+@@ -1978,6 +2138,39 @@ def test_mapper_target_columns_match_the_contract(
+     )
+ 
+ 
++def test_http_classification_table_matches_the_contract(connector_schema: dict) -> None:
++    """The HTTP table's Category column must be exactly `ErrorMap.http`'s vocabulary.
++
++    Compared against `http`'s own value enum, not the `codes`-derived
++    `EXPECTED_ERROR_CATEGORIES` constant: `codes` and `http` share one
++    `ErrorCategory` Literal today, but coupling this check to `codes` instead
++    of `http` would miss the day a future contract change gives them
++    different vocabularies (`test_error_categories_match_schema` above already
++    pins `codes`; this pins `http` independently rather than assuming the two
++    stay identical).
++
++    Exact match, not subset: this table is a decision procedure ("what the
++    docs establish about this status" -> category), one row per category, not
++    a lookup keyed by literal status codes — so, like the operational-
++    consequence table, it is exhaustive by design and a missing or invented
++    row is equally wrong. A non-empty check on both sides guards against a
++    deleted or reformatted table passing vacuously.
++    """
++    schema_set = _http_category_values(connector_schema)
++    assert schema_set, _diff_msg(
++        "ErrorMap.http value (ErrorCategory)", schema_set, EXPECTED_ERROR_CATEGORIES,
++        "the contract was restructured; re-point _http_category_values at the new shape.",
++    )
++    section = _section(ERROR_CLASSIFICATION, "Classifying an HTTP status")
++    documented = _target_column(section)
++    assert documented == schema_set, (
++        f"{ERROR_CLASSIFICATION.relative_to(REPO_ROOT)} §Classifying an HTTP "
++        f"status maps onto different members than ErrorMap.http — "
++        f"prose-only={sorted(documented - schema_set)} "
++        f"contract-only={sorted(schema_set - documented)}."
++    )
++
++
+ def test_dsn_encoding_table_matches_the_contract() -> None:
+     """The DSN table's Encoding column must be exactly the contract's set.
+ 

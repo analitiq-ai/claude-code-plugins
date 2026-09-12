@@ -1,0 +1,32 @@
+name: Model bench (throwaway)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: [258, 248, 256, 270, 260]
+        model: [moonshotai/kimi-k2.6, z-ai/glm-5.3-flash, moonshotai/kimi-k3]
+    runs-on: ubuntu-latest
+    env:
+      OR_KEY: ${{ secrets.OPEN_ROUTER_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run one (pr=${{ matrix.pr }}, model=${{ matrix.model }})
+        run: |
+          SAFE_MODEL=$(echo "${{ matrix.model }}" | tr '/.:' '_')
+          bash .bench/scripts/run-one.sh ".bench/diffs/pr${{ matrix.pr }}.diff" "${{ matrix.model }}" "/tmp/result_pr${{ matrix.pr }}_${SAFE_MODEL}.json"
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr${{ matrix.pr }}-${{ strategy.job-index }}
+          path: /tmp/result_*.json
+          retention-days: 3

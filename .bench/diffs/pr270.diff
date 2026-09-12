@@ -1,0 +1,204 @@
+diff --git a/.claude/rules/validator-verdict-stability.md b/.claude/rules/validator-verdict-stability.md
+new file mode 100644
+index 0000000..cf259f2
+--- /dev/null
++++ b/.claude/rules/validator-verdict-stability.md
+@@ -0,0 +1,108 @@
++---
++paths:
++  - "packages/*/src/**/*"
++  - "packages/*/scripts/**/*"
++  - "packages/*/pyproject.toml"
++  - "rules/records/*.yaml"
++---
++
++# Rule: within a major, a passing document keeps passing
++
++Governs every change that can alter what an installed `analitiq-validator` or
++`analitiq-contract-models` accepts: an enforcer under `packages/*/src`, the
++data shipped beside it that an enforcer derives from — the vendored Arrow type
++grammar the accepted `arrow_type` spellings come from, the compiled rule
++registry — a record's `severity` under `rules/records/`, the packaging under
++`packages/*/scripts` that decides what the built wheel enforces, and the
++`version` each `pyproject.toml` carries. What puts a change here is that it can
++reach a released wheel's verdict, not which directory it sits in and not what
++kind of file it is.
++
++**The invariant:** the major version is a promise about verdicts. From the
++first stable release onward, no release within a major rejects a document the
++last stable release accepted.
++
++## The question every change answers
++
++> Does this change make the validator reject a document the last stable
++> release accepted?
++
++Yes is a major bump of both packages. No is not. Nothing else decides it: not
++what the change is called, not which package it lands in, not whether the
++verdict it replaces was right.
++
++The question carries the whole rule, so each term in it is defined here rather
++than left to the reader.
++
++- **Reject.** The validator answers with a finding at severity `error`, or,
++  for the contract models used on their own, the model refuses the document.
++  A pydantic `ValidationError` reaches the validator as an `error` finding
++  under the `contract-model` id, so a model that refuses and a check that
++  reports `error` are one event here. A finding carries `error` or `warning`
++  and nothing else, while a record may also declare `info` — so what answers
++  the question is whether a document is rejected, never the label a record
++  declares. A record reaching any severity is a bump only when an enforcer
++  rejects a document with it.
++- **The last stable release.** The newest release of the packages carrying no
++  pre-release suffix. A pre-release is never the reference point: before the
++  first stable release there is nothing to preserve, and a pre-release
++  prepared after one is measured against that stable release like any other
++  change. Asking the question of a release candidate therefore needs no
++  special case — one preparing a later version within the major answers it
++  the same way that version's release must, and one preparing the next major
++  answers yes, which is the bump it is already carrying.
++- **A document that release accepted.** One it could have been handed and did
++  not reject. The validator answers a document it cannot identify with an
++  `error`, so nothing of a kind no detector claimed was ever accepted.
++
++## Why the major carries it
++
++A consumer that addresses the validator by major version, not by exact
++version, takes every compatible release without a release of its own. That is
++what a major is for, and it holds only while "compatible" means the verdict
++holds: a release that turns a passing document into a failing one under the
++same major is a document broken in the field by a release nobody chose.
++
++## The packages move together
++
++`analitiq-validator` pins `analitiq-contract-models` exactly and carries the
++same version (`packages/validator/tests/test_contract_models_pin.py` holds
++both), so a major bump in one is a major bump in both, and which side a change
++falls on is decided once, for the pair.
++
++## Worked examples
++
++These apply the question; they are not a list to check a change against. A
++change absent here is decided by the question, not by its absence.
++
++- **A check promoted to `error`.** Ask which documents the check fires on. It
++  is the arrival that is free and the promotion that costs, where the check
++  reports on a document the release accepts; where it can only fire on a
++  document already rejected for another reason, promoting it changes no
++  verdict. A rule whose violation breaks a run still arrives as a warning —
++  the promise forbids the rejection, not the finding — and the record's
++  `rationale` says what the run does with the violation.
++- **A record gaining a rejecting enforcer.** A record one document settles
++  alone is applied by a `@model_validator`, which can only refuse, so the
++  record's declared severity does not soften what the enforcer does
++  (`rules/SCHEMA.md` owns that placement); ask which documents it refuses. A
++  record edited with no enforcer behind it refuses nothing.
++- **A model tightened.** A field made required, a `Literal` narrowed, a bound
++  or pattern added. Ask the question of a document the last stable release
++  accepted. `render_schemas.py write` classifies the rendered schema's diff
++  and errs toward `major`; that is evidence, not the verdict — it grades the
++  schema alone, and a `@model_validator` renders into no keyword it can see.
++- **A hole closed.** A fix after which the validator rejects what it wrongly
++  accepted still answers yes. The question keys on the verdict, not the
++  intent: a wrong pass is a pass a consumer relied on.
++- **What the wheel pins.** The generated `analitiq/contracts/__init__.py` fixes
++  the host the `$schema` `Literal` fields are built for. Changing it makes the
++  installed models reject documents naming the old host, which answers yes
++  from a file outside `packages/*/src`.
++- **A new finding id.** An id arrives with the check that emits it: a
++  registered id with no call site is refused by
++  `packages/validator/tests/test_check_registry_census.py`. So the question is
++  asked of that check and the documents it fires on. The id carries no verdict
++  of its own.
++- **A loosening, a reworded message, a moved `path`.** Accepting more, or
++  saying the same verdict differently, answers no.
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 4f847a3..a971833 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -243,11 +243,14 @@ matches what you are editing:
+   does at run time, and before resting a check on one.
+ - `reachability-dispositions.md` — before writing or re-affirming a `FieldDisposition`
+   under `census/consumption/`.
+-
+-The first four and the last are keyed to the surface you are editing;
+-`resolvable-referents.md`, `engine-behaviour-claims.md` and
+-`no-cardinality-restatements.md` to a class of sentence that rots on any surface;
+-`guards.md` to the mechanism that reads them.
++- `validator-verdict-stability.md` — before any change that can alter what an
++  installed validator accepts.
++
++`plugin-prose.md`, `contract-prose.md`, `reachability-dispositions.md` and
++`validator-verdict-stability.md` are keyed to the surface you are editing;
++`no-drift-surfaces.md`, `resolvable-referents.md`, `engine-behaviour-claims.md`
++and `no-cardinality-restatements.md` to a class of sentence that rots on any
++surface; `guards.md` to the mechanism that reads them.
+ 
+ ## Conventions
+ 
+diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md
+index 7c49c26..6c0d1d6 100644
+--- a/CONTRIBUTING.md
++++ b/CONTRIBUTING.md
+@@ -11,7 +11,9 @@ Read first, in this order:
+   directory ships verbatim to every user who installs the plugin.
+ 
+ This document carries only what those do not: **how a class of defect gets
+-closed.** Two rules — one for filing, one for closing.
++closed**, and **what a PR owes the release when it narrows a verdict.** Two
++rules for the first — one for filing, one for closing — and one section for
++the second.
+ 
+ ## The consolidation rule
+ 
+@@ -126,6 +128,25 @@ quietly, that gap shipped with a test recording it
+ (`test_literal_expression_bypasses_the_bound`) and an issue that stayed open on
+ purpose. The narrowing was deliberate, so the residue was written down.
+ 
++## A PR that narrows a verdict says so
++
++*Applies at PR-authoring time — when a change touches what the validator
++rejects.*
++
++`.claude/rules/validator-verdict-stability.md` asks one question of a change
++to the validator packages: does it make the validator reject a document the
++last stable release accepted? The rule defines every term in that question and
++decides which release carries the change. What it needs from the PR is the
++answer, because the diff shows the constraint and not whether a document the
++last stable release accepts now fails.
++
++So a PR touching an enforcer, a record's `severity`, the packaging or a package
++version answers that question in its description. "Fix" is not an answer: a
++narrowing is a narrowing whatever it is called.
++
++The third clause above already binds a narrowing PR to record what it left
++wide. This binds it to say what it took.
++
+ ## Where these bind in the PR loop
+ 
+ `CLAUDE.md` → **PR Review Process** is the loop.
+@@ -137,6 +158,8 @@ purpose. The narrowing was deliberate, so the residue was written down.
+ - **Closing** — the PR body. Any PR that claims to close an issue states which
+   clause above it satisfies, and any PR that narrows a rule records what it left
+   wide, per the third clause.
++- **Narrowing** — the PR body. A PR touching the validator packages answers
++  the verdict question in its description, per the section above.
+ 
+ Issue references above are cited as of 2026-08 and describe the state at the
+ time each case was written down; open issues named here may since have closed.
+diff --git a/rules/SCHEMA.md b/rules/SCHEMA.md
+index ba65f32..a6dd958 100644
+--- a/rules/SCHEMA.md
++++ b/rules/SCHEMA.md
+@@ -30,9 +30,9 @@ this registry exists to remove (`.claude/rules/no-drift-surfaces.md`).
+ | `id` | yes | `RULE-<AREA>-NNN`. Immutable, never reused — it appears in validator findings and archived diagnostics, so reissuing one silently re-points every stored occurrence. The filename must match it. |
+ | `statement` | yes | The normative sentence, RFC 2119 keywords in caps. Self-contained: someone reading only this understands the obligation. Never restates a value the contract owns — `targets` and `fields` point at what does. |
+ | `tier` | yes | What *kind* of rule it is. See below. |
+-| `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it, except that a rule a pydantic validator applies is always `error`: that enforcer can only reject the document, so a lower cost on the record is one no document ever pays. `test_a_rule_bound_to_a_pydantic_validator_costs_an_error` in `packages/contract-models/tests/unit/test_rule_registry.py` pins it. |
++| `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it, except that a rule a pydantic validator applies is always `error`: that enforcer can only reject the document, so a lower cost on the record is one no document ever pays. `test_a_rule_bound_to_a_pydantic_validator_costs_an_error` in `packages/contract-models/tests/unit/test_rule_registry.py` pins it. Whether a change to this field moves the packages' major version is decided by `.claude/rules/validator-verdict-stability.md`. |
+ | `scopes` | yes | The artifact kinds it binds, as a list from the vocabulary `SCOPES` declares in `analitiq.contracts.shared.rule_record` — each member names the kind of document whose author the rule binds, plus `any` for the rules that bind every authored document. A list because a rule can grade more than one kind, and the generated reference is split by scope: a scalar scope makes it decide, silently, which of two authors never meets the rule. `any` may not appear beside a named kind — it already covers every document — and an entry may not repeat. It is not derived from the published resources and does not track them: `connector-package` is a repository an author lays out and no resource renders, `type-map` covers both a read map and a write map, and several published resources have no member because no rule has needed one. A member is added when a rule does. Scopes decide which FILE of a plugin's generated reference set the rule lands in; who the rule is rendered *to* is `owners`. |
+-| `validator` | no | What applies it: `dotted.module::Symbol.attr`. It names the module that is **imported**, under `analitiq.`, never a path to a file standing in for one — the record ships in `rules.json`, where a repo path resolves for nobody, and a path is checked by slicing rather than by importing, so one that never existed passes. The module half must be a dotted identifier chain, which is how a path is refused whatever it ends in. It lands in one of two packages, decided by how much the check must see: a rule one document settles alone is a `@model_validator` in `contract-models`, and a rule needing a second document in hand is a check in `validator`, bound to the function that emits the finding. Lint-resolved by import, so a renamed validator fails the build instead of leaving a record claiming an enforcement it lost. `null` when nothing does. |
++| `validator` | no | What applies it: `dotted.module::Symbol.attr`. It names the module that is **imported**, under `analitiq.`, never a path to a file standing in for one — the record ships in `rules.json`, where a repo path resolves for nobody, and a path is checked by slicing rather than by importing, so one that never existed passes. The module half must be a dotted identifier chain, which is how a path is refused whatever it ends in. It lands in one of two packages, decided by how much the check must see: a rule one document settles alone is a `@model_validator` in `contract-models`, and a rule needing a second document in hand is a check in `validator`, bound to the function that emits the finding. An enforcer that reports `warning` is a check in `validator` whatever it needs to see: a `@model_validator` can only reject, so it cannot carry a severity below `error` (`.claude/rules/validator-verdict-stability.md`). Lint-resolved by import, so a renamed validator fails the build instead of leaving a record claiming an enforcement it lost. `null` when nothing does. |
+ | `owners` | yes | Who applies the rule and decides a change to it, as a list of `engine`, `connector-plugin`, `pipeline-plugin`. More than one is normal: a type map is authored by both plugins and executed by the engine. |
+ | `targets` | no | Every model class the rule binds, matched against the whole MRO. Wider than `validator`, which names one representative symbol: a rule over a discriminated union lists every branch, and a rule with no validator still names the models it governs. Read by the enforcer census and the reachability tests, which require every one to carry the member `validator` names. |
+ | `fields` | no | The model fields a structural rule's `mechanism` rides on, so the rendered reference can print the members off the live model instead of restating them. Resolved against the target, so a renamed field fails the build. |

@@ -1,0 +1,1685 @@
+diff --git a/.github/workflows/tests.yml b/.github/workflows/tests.yml
+index c347e21..a1cb040 100644
+--- a/.github/workflows/tests.yml
++++ b/.github/workflows/tests.yml
+@@ -103,6 +103,31 @@ jobs:
+           python3 packages/contract-models/scripts/build.py --check
+           python3 packages/validator/scripts/build.py --check
+ 
++  sample-budget-portability:
++    name: sample grading is bounded on ${{ matrix.os }}
++    # The bound on grading a recorded sample is a worker process the parent
++    # kills, rather than an interval timer, BECAUSE the plugins are run on
++    # Windows as well as Linux and macOS: `SIGALRM` does not exist there, so a
++    # timer-based bound would be absent on a platform users are on. That reason
++    # is only worth anything if the claim is exercised, so these are the runners
++    # it is exercised on. Just the file that grades the mechanism — the rest of
++    # the suite is gated on ubuntu above, and widening this job would make it a
++    # port of the whole repo rather than a check of this one property.
++    runs-on: ${{ matrix.os }}
++    strategy:
++      fail-fast: false
++      matrix:
++        os: [windows-latest, macos-latest]
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-python@v5
++        with:
++          python-version: '3.13'
++      - name: Install dev/test dependencies
++        run: pip install -r requirements-dev.txt
++      - name: Grade a pathological sample
++        run: pytest -v -rs packages/validator/tests/test_embedded_schema_examples.py
++
+   engine-grammar-pin-guard:
+     # The canonical Arrow type vocabulary derives from a VENDORED copy of the
+     # engine-published arrow-type-grammar manifest. pytest pins
+diff --git a/packages/validator/src/analitiq/validator/_core.py b/packages/validator/src/analitiq/validator/_core.py
+index 14acde6..1395cd1 100644
+--- a/packages/validator/src/analitiq/validator/_core.py
++++ b/packages/validator/src/analitiq/validator/_core.py
+@@ -13,6 +13,8 @@ This module owns the parts that are independent of any particular artifact kind:
+   pair plus its own validator ids; `_dispatch` consults the registry rather than
+   hard-coding any kind's branches, so a new kind is *register, done*. A kind whose
+   entire validity is its contract model registers via `register_model_kind()`;
++- `_bounded()` — the one width every borrowed diagnostic is clipped to, so a
++  finding is bounded the same way whichever route the text arrived by;
+ - `_run_guarded()` — a crash in one check becomes a single error finding so the
+   others survive;
+ - the `main()` CLI: read the document, validate, print `{"passed", "findings"}`,
+@@ -97,6 +99,20 @@ def contract_model_domain() -> Iterator[None]:
+             os.environ["DOMAIN"] = ambient
+ 
+ 
++def _bounded(text: str, limit: int = 200) -> str:
++    """A diagnostic sentence borrowed from another library, bounded.
++
++    `jsonschema` renders the failing instance AND the failing keyword's own value
++    into `ValidationError.message`, so an oversized sample or a long `enum` comes
++    back whole — and it is emitted once per recorded entry. Bounding the sample
++    alone leaves the same unbounded text arriving by the other route.
++
++    Plain slicing rather than `textwrap.shorten`, which drops the text entirely
++    when it holds no whitespace to break on — a provider record is exactly that
++    shape."""
++    return text if len(text) <= limit else f"{text[:limit]}…"
++
++
+ def finding(validator: str, severity: str, path: str, message: str) -> dict:
+     if validator not in VALIDATOR_IDS:
+         raise ValueError(f"unknown validator id: {validator!r}")
+diff --git a/packages/validator/src/analitiq/validator/_sample_budget.py b/packages/validator/src/analitiq/validator/_sample_budget.py
+new file mode 100644
+index 0000000..db684f1
+--- /dev/null
++++ b/packages/validator/src/analitiq/validator/_sample_budget.py
+@@ -0,0 +1,454 @@
++"""A wall-clock budget over the evaluation of one recorded sample.
++
++Grading a recorded sample runs the author's own JSON Schema keywords over the
++author's own value. Every other guard in this package is an `except` clause, so
++between them they contain every way that evaluation *raises* and none of the ways
++it simply does not come back: `pattern` is evaluated by Python's `re`, which
++backtracks exponentially on an ambiguous pattern paired with a subject that nearly
++matches, and no `except` clause can interrupt an evaluation that never finishes.
++The stall reaches whatever runs the validator — a CI job until its own timeout, an
++authoring agent until it gives up with no diagnostics at all, which is the "no
++answer under a failing exit code" shape the guards exist to eliminate.
++
++So the evaluation happens somewhere it can be abandoned. Python offers no way to
++interrupt a running `re` match from the thread executing it, and none at all from
++another thread — a match holds the interpreter so completely that a `join` with a
++timeout does not itself return. An interval timer does interrupt one, but
++`SIGALRM` does not exist on Windows and arming a timer off the main thread raises,
++so a package other programs import in-process would silently lose the bound on
++platforms and threads it cannot see. A separate process can always be killed.
++
++The boundary is one worker per *document*, started on the first sample there is to
++grade, so a document recording nothing starts nothing. A sample that outlasts its
++budget costs its budget plus one restart, and the samples around it still get their
++verdicts. A second budget caps the document, since the sample count is bounded only
++by the document's size; it charges everything a sample costs the caller except the
++first worker start, which is setup rather than evaluation and has its own deadline.
++
++**Every outcome that is not a verdict is reported as one.** A breach, a spent
++document budget, a worker that cannot start, a worker that dies, a reply that is not
++a verdict, a value that cannot be encoded — each returns a kind the caller renders
++as a finding naming the sample and saying nothing was decided about it. None is ever
++a pass, and none costs another sample its answer.
++
++The invariant that makes the last part true: **nothing is recorded as delivered
++until it has been.** The worker holds the current schema and node between jobs so a
++document crosses the pipe once rather than once per sample, and the parent's record
++of what it holds is updated only after a send that succeeded. A send that failed and
++was remembered anyway would have the worker grade the next sample against a node it
++no longer holds, and answer cleanly — a pass for a sample nothing graded.
++
++Samples cross the pipe as JSON. That is what a recorded sample is: `examples`
++entries are read out of a JSON document, so re-encoding one is lossless. A value
++`json.loads` could not have produced reached this check from a caller that built
++the document in Python, and every sample under it is reported ungraded rather than
++guessed at — a sample sits inside the schema that records it, so a value neither
++can carry is one defect, not two. Encoding SUCCEEDING is not that test: `json.dumps`
++normalises, turning a tuple into an array and a non-string key into a string, and a
++value the node would have rejected would come back graded clean.
++
++The worker also carries its own end. The parent kills one that overruns, but only
++while the parent is alive: killed itself mid-evaluation, it would leave a child
++inside a match that never returns, burning a core for as long as the machine is up.
++An idle worker sees its stdin close and exits; a busy one is past reading it, so it
++watches its own deadline instead.
++
++What comes back carries only what a finding renders: an unresolved reference's
++`ref` is sent already `repr`'d and never the resource it was searched for in, so a
++message stays a finding rather than a copy of the document that produced it.
++"""
++from __future__ import annotations
++
++import contextlib
++import json
++import os
++import queue
++import subprocess
++import sys
++import tempfile
++import threading
++import time
++from pathlib import Path
++from typing import Any
++
++from ._core import _bounded
++
++#: Wall clock for one sample. A sample the node can grade at all grades in well
++#: under a millisecond, so this is orders of magnitude of headroom and will not
++#: fire on slow hardware — what it has to separate is a bounded evaluation from an
++#: unbounded one, and between those the gap is astronomical.
++SAMPLE_BUDGET_SECONDS = 2.0
++
++#: Wall clock for every sample in one document together. Without it a document
++#: could hold as many pathological samples as it has room for and spend the
++#: per-sample budget on each, which is a bound on no useful quantity.
++DOCUMENT_BUDGET_SECONDS = 10.0
++
++#: How long a worker gets to start and answer a handshake. Not evaluation time and
++#: so not charged to the document budget for the first start: it covers an
++#: interpreter start on a cold or contended machine, which is unrelated to what any
++#: sample costs. A restart IS charged — it is a cost the samples caused.
++_START_DEADLINE_SECONDS = 30.0
++
++#: Started by path rather than as `-m analitiq.validator…`: importing the package
++#: would pull the contract models and pydantic into a child that uses neither, and
++#: `runpy` warns about the double import on every start — into the same stderr a
++#: failure reason is read from.
++_WORKER_SCRIPT = str(Path(__file__).resolve().parent / "_sample_worker.py")
++
++#: The kinds a worker may answer with. This module refuses anything else rather
++#: than reading it as a verdict.
++_WORKER_KINDS = frozenset({"pong", "graded", "unresolvable", "recursion", "crash"})
++
++
++#: The types `json.loads` produces. Membership is by exact type, not `isinstance`:
++#: the point is to catch what an encoder would silently convert, and every such
++#: value is a subclass or a look-alike of one of these.
++_JSON_TYPES = frozenset({dict, list, str, bool, int, float, type(None)})
++
++
++# ---------------------------------------------------------------------------
++# The parent
++# ---------------------------------------------------------------------------
++
++#: Distinguishes "never sent" from a node or schema that is legitimately `None`,
++#: which a comparison against `None` could not.
++_UNSENT = object()
++
++
++class _Reply:
++    """What came back, or why nothing did."""
++
++    def __init__(self, verdict: dict | None = None, timed_out: bool = False,
++                 gone: str | None = None) -> None:
++        self.verdict = verdict
++        self.timed_out = timed_out
++        self.gone = gone
++
++
++def _json_native(value: Any) -> bool:
++    """Whether this is a value `json.loads` could have produced.
++
++    Walked iteratively: a sample is author data, and recursion deep enough to
++    exhaust the stack is a thing an author can write.
++    """
++    pending = [value]
++    while pending:
++        item = pending.pop()
++        if type(item) not in _JSON_TYPES:
++            return False
++        if isinstance(item, dict):
++            if any(type(key) is not str for key in item):
++                return False
++            pending.extend(item.values())
++        elif isinstance(item, list):
++            pending.extend(item)
++    return True
++
++
++def _encoded(message: dict) -> str | None:
++    """The message as a wire line, or `None` when its value is not JSON.
++
++    Encoding succeeding is not the test, which is why the check is separate.
++    `json.dumps` NORMALISES: a tuple is written as an array and a non-string
++    mapping key as a string, so a value the node would have rejected crosses the
++    pipe as one it accepts and comes back graded clean. Encoding first is what
++    makes the walk safe — it is the step that refuses a structure containing
++    itself, which the walk would otherwise follow forever.
++    """
++    try:
++        line = json.dumps(message)
++    except (TypeError, ValueError, RecursionError):
++        # RecursionError belongs with the other two: nesting deep enough to
++        # exhaust the stack is a shape no JSON document this check was handed
++        # could have, and it is the document's defect rather than a lost worker.
++        return None
++    return line + "\n" if _json_native(message.get("value")) else None
++
++
++def _drain(stream, replies: queue.Queue) -> None:
++    """Move the worker's lines onto a queue the parent can wait on with a
++    deadline. Reading a pipe is the one wait Python can time out portably, and
++    only from a thread that is not the one holding the deadline."""
++    try:
++        for line in stream:
++            replies.put(line)
++    finally:
++        replies.put(None)
++
++
++class BudgetedGrader:
++    """Grades samples in a worker process that a breached budget can kill.
++
++    Started lazily, so a document with nothing to grade starts nothing. Killed and
++    replaced when a sample outlasts its budget or kills the worker, because in
++    both cases there is no other way to get a usable worker back.
++
++    An environment that cannot host a worker is a different thing from a sample
++    that cannot be graded, and only the first is permanent: the handshake is what
++    tells them apart, so a failed START gives up for the document while a worker
++    lost mid-grade is simply replaced. Latching on the second would report, for
++    every sample after the one that killed the worker, a failure they never had.
++
++    Not reusable across documents: the document budget is spent, not reset.
++    """
++
++    def __init__(self, sample_budget: float | None = None,
++                 document_budget: float | None = None) -> None:
++        # Read at call time rather than bound as defaults at import, so the
++        # budgets are reachable by the tests that grade what happens once they
++        # run out.
++        self._sample_budget = SAMPLE_BUDGET_SECONDS if sample_budget is None else sample_budget
++        self._remaining = DOCUMENT_BUDGET_SECONDS if document_budget is None else document_budget
++        self._proc: subprocess.Popen | None = None
++        self._replies: queue.Queue | None = None
++        self._stderr = None
++        self._started_once = False
++        self._unhostable: str | None = None
++        # Identity, not equality: the caller hands the same objects down its own
++        # walk, and comparing whole documents per sample would cost more than
++        # resending them.
++        self._schema: Any = _UNSENT
++        self._node: Any = _UNSENT
++
++    def __enter__(self) -> "BudgetedGrader":
++        return self
++
++    def __exit__(self, *_exc) -> None:
++        self.close()
++
++    @property
++    def _short_of_a_sample(self) -> bool:
++        """Whether what is left will not cover a whole sample.
++
++        A partial budget is not a per-sample budget: spending it would report a
++        breach the sample did not commit, under a number naming no rule. Asked
++        both when a sample arrives and again after a restart it had to pay for.
++        """
++        return self._remaining < self._sample_budget
++
++    def grade(self, schema: Any, node: dict, sample: Any) -> dict:
++        """This sample's verdict — one of the worker's, or the budget's own.
++
++        Every kind other than `graded` says nothing was decided about the sample.
++        None of them is a pass, and the caller renders each as a finding naming it.
++        """
++        if self._short_of_a_sample:
++            return {"v": "exhausted"}
++        begin = time.monotonic()
++        try:
++            if self._proc is None:
++                started = time.monotonic()
++                first = not self._started_once
++                # The first start is setup and has its own deadline. A RESTART is
++                # a cost the samples caused, so it is bounded by what is left of
++                # their budget — otherwise a stalled one overshoots the document
++                # cap by the whole start deadline before anything notices.
++                usable = self._start(_START_DEADLINE_SECONDS if first
++                                     else min(_START_DEADLINE_SECONDS, self._remaining))
++                if first:
++                    self._started_once = True
++                else:
++                    self._remaining -= time.monotonic() - started
++                # Whatever the start cost is settled, so grading is timed from
++                # here and the charge below covers grading alone.
++                begin = time.monotonic()
++                if not usable:
++                    return {"v": "unavailable", "reason": self._unhostable}
++                # A charged restart can leave less behind than a sample costs, and
++                # the test that let this sample in ran before the restart.
++                if self._short_of_a_sample:
++                    return {"v": "exhausted"}
++            return self._graded(schema, node, sample)
++        except Exception as exc:  # noqa: BLE001 - last-resort guard, see below
++            # Grading reaches a pipe, an encoder and a reply, and the caller runs
++            # under a guard that keeps no findings — so anything unanticipated
++            # escaping here would cost the endpoint every verdict it had earned
++            # and report a validator bug in their place. Whatever went wrong, the
++            # sample needs the same answer: nothing was decided about it.
++            #
++            # Not latched, unlike a failed start: a worker lost while grading says
++            # nothing about the samples after it, and this arm cannot tell a host
++            # that refused a resource from a defect in this module.
++            self._kill()
++            return {"v": "unavailable",
++                    "reason": f"grading it failed unexpectedly "
++                              f"({type(exc).__name__}: {_bounded(str(exc))})"}
++        finally:
++            self._remaining -= time.monotonic() - begin
++
++    def close(self) -> None:
++        self._kill()
++        if self._stderr is not None:
++            self._stderr.close()
++            self._stderr = None
++
++    # -- one sample ---------------------------------------------------------
++
++    def _graded(self, schema: Any, node: dict, sample: Any) -> dict:
++        """Bring the worker up to date, then ask it. A worker that could not be
++        brought up to date is never asked, because its answer would be about a
++        node it does not hold."""
++        for op, value, held in (("schema", schema, self._schema),
++                                ("node", node, self._node)):
++            if value is held:
++                continue
++            payload = _encoded({"op": op, "value": value})
++            if payload is None:
++                return {"v": "unserializable"}
++            if not self._write(payload):
++                return self._lost("it stopped accepting work")
++            # Only now. A send that failed and was remembered anyway would have
++            # the worker grade this sample against a node it does not hold.
++            if op == "schema":
++                self._schema, self._node = schema, _UNSENT
++            else:
++                self._node = node
++
++        payload = _encoded({"op": "grade", "value": sample,
++                            "deadline": self._sample_budget})
++        if payload is None:
++            return {"v": "unserializable"}
++        reply = self._exchange(payload, self._sample_budget)
++        if reply.timed_out:
++            # The worker is inside the evaluation and will not come back to be
++            # asked anything else. Killing it IS the interrupt.
++            self._kill()
++            return {"v": "budget", "seconds": self._sample_budget}
++        if reply.gone is not None:
++            return self._lost(reply.gone)
++        return reply.verdict
++
++    def _lost(self, what_happened: str) -> dict:
++        """The worker is unusable. Report it against THIS sample and replace it:
++        a worker one sample killed says nothing about the samples after it."""
++        diagnostic = self._worker_stderr()
++        self._kill()
++        detail = f"{what_happened}; {diagnostic}" if diagnostic else what_happened
++        return {"v": "unavailable", "reason": f"the grading worker was lost — {detail}"}
++
++    # -- worker lifecycle ---------------------------------------------------
++
++    def _start(self, deadline: float) -> bool:
++        """Start a worker and prove it answers. False leaves a stated reason.
++
++        The handshake is what separates an environment that cannot host a worker
++        from a sample that cannot be graded, so only a failure HERE is permanent —
++        and permanent for the document, meaning the host is asked once rather than
++        once per sample.
++
++        One guard covers the whole of it rather than one per acquisition. A
++        temporary file, a process, a queue, a thread and the first pipe write can
++        each be refused by the host; enumerating them has repeatedly missed one,
++        and every miss escapes to the caller's guard, which keeps no findings — so
++        the endpoint loses every verdict it had earned and reports a validator bug
++        in their place. Whichever was refused, the answer is the same: this
++        environment cannot host a worker.
++        """
++        if self._unhostable is not None:
++            return False
++        try:
++            if not sys.executable:
++                self._unhostable = "this interpreter does not report its own path"
++                return False
++            if not os.path.isfile(_WORKER_SCRIPT):
++                self._unhostable = f"the grading worker {_WORKER_SCRIPT!r} is not on disk"
++                return False
++            # The worker must import what this process imported. Passing the path
++            # explicitly covers a run from a source checkout, where the package is
++            # importable only because something put it on the path.
++            env = {**os.environ,
++                   "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
++            if self._stderr is None:
++                # A real file, not a pipe: the parent reads it only after a
++                # failure, and a pipe nobody drains is a way for the worker to
++                # block forever on a diagnostic.
++                self._stderr = tempfile.TemporaryFile(mode="w+")
++            else:
++                # Emptied per worker, so a reason quotes the worker it is about.
++                self._stderr.seek(0)
++                self._stderr.truncate()
++            self._proc = subprocess.Popen(  # noqa: S603 - argv is this interpreter and this file
++                [sys.executable, _WORKER_SCRIPT],
++                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
++                stderr=self._stderr, text=True, env=env)
++            self._replies = queue.Queue()
++            # Daemon: if the worker outlives an abandoned parent, this thread
++            # must not keep the interpreter alive waiting on its pipe.
++            threading.Thread(target=_drain, args=(self._proc.stdout, self._replies),
++                             daemon=True).start()
++            handshake = self._exchange(_encoded({"op": "ping"}), deadline)
++        except Exception as exc:  # noqa: BLE001 - see the docstring
++            # Unconditional: whatever was refused, a child that did start must not
++            # be left behind by the attempt that abandoned it.
++            self._kill()
++            self._unhostable = (f"the grading worker could not be started "
++                                f"({type(exc).__name__}: {_bounded(str(exc))})")
++            return False
++        if handshake.verdict != {"v": "pong"}:
++            why = handshake.gone or "it did not answer"
++            diagnostic = self._worker_stderr()
++            self._kill()
++            self._unhostable = (f"the grading worker did not start — {why}"
++                                + (f"; {diagnostic}" if diagnostic else ""))
++            return False
++        return True
++
++    def _kill(self) -> None:
++        if self._proc is not None:
++            self._proc.kill()
++            self._proc.wait()
++            # Closing is not tidiness. A buffered pipe left to finalization
++            # raises BrokenPipeError, and the interpreter prints that traceback
++            # on the validator's own stderr — which is where a caller looks when
++            # the JSON report is missing.
++            for pipe in (self._proc.stdin, self._proc.stdout):
++                if pipe is not None:
++                    with contextlib.suppress(OSError):
++                        pipe.close()
++        self._proc = None
++        self._replies = None
++        # A replacement worker holds nothing, so neither may the record of what
++        # it was sent.
++        self._schema = _UNSENT
++        self._node = _UNSENT
++
++    def _worker_stderr(self) -> str:
++        """The last line the worker wrote, or nothing. It is what says WHY."""
++        if self._stderr is None:
++            return ""
++        with contextlib.suppress(OSError, ValueError):
++            self._stderr.seek(0)
++            text = self._stderr.read().strip()
++            if text:
++                return _bounded(text.splitlines()[-1])
++        return ""
++
++    # -- the pipe -----------------------------------------------------------
++
++    def _write(self, payload: str) -> bool:
++        try:
++            self._proc.stdin.write(payload)
++            self._proc.stdin.flush()
++        except (OSError, ValueError):
++            return False
++        return True
++
++    def _exchange(self, payload: str, budget: float) -> _Reply:
++        if not self._write(payload):
++            return _Reply(gone="it stopped accepting work")
++        try:
++            line = self._replies.get(timeout=budget)
++        except queue.Empty:
++            return _Reply(timed_out=True)
++        if line is None:
++            return _Reply(gone="it exited without answering")
++        try:
++            verdict = json.loads(line)
++        except json.JSONDecodeError:
++            return _Reply(gone=f"it wrote {_bounded(line.strip())!r} where a verdict belonged")
++        if not isinstance(verdict, dict) or verdict.get("v") not in _WORKER_KINDS:
++            # Refused rather than passed on. An unrecognised shape reaching the
++            # caller's dispatch would take the whole document's findings with it.
++            return _Reply(gone=f"it answered {_bounded(str(verdict))!r}, which is not a verdict")
++        return _Reply(verdict=verdict)
+diff --git a/packages/validator/src/analitiq/validator/_sample_worker.py b/packages/validator/src/analitiq/validator/_sample_worker.py
+new file mode 100644
+index 0000000..34f8911
+--- /dev/null
++++ b/packages/validator/src/analitiq/validator/_sample_worker.py
+@@ -0,0 +1,143 @@
++"""The process a budgeted grading job runs in.
++
++Its own module, and one that imports nothing from this package. It is executed as
++a SCRIPT — the parent starts it by path, because `-m analitiq.validator…` would
++import the contract models and pydantic into a child that uses neither, and a
++script has no package to resolve a relative import against. Keeping this half in
++the parent's module would make any import that half grows a start-up failure for
++every worker.
++
++Its stdout is the protocol and nothing else may write there, so the channel is a
++private duplicate of the original descriptor and the inherited one is pointed at
++stderr. What it answers carries only what a finding renders: an unresolved
++reference is sent already `repr`'d and never the resource it was searched for in.
++"""
++from __future__ import annotations
++
++import faulthandler
++import json
++import os
++import sys
++from pathlib import Path
++from typing import Any
++
++#: How far past its deadline a worker lets a job run before ending its own
++#: process. Wide enough that the parent, which reports the overrun, gets there
++#: first while it is alive; narrow enough that an orphan does not outlive the run
++#: by much. Racing is harmless either way — a parent that timed out kills a
++#: process that has already gone, and reports the same breach.
++_SELF_DESTRUCT_MARGIN = 2.0
++
++def _offline_registry():
++    """An empty reference registry — one with no way to retrieve anything.
++
++    Validation here is offline by contract, and `jsonschema`'s default registry
++    is not: a `$ref` naming an `http(s)` URL is FETCHED, so an authored endpoint
++    could make the validator issue a request to any address its author chose and
++    block on the answer. Retrieval is a `retrieve` callable a registry either has
++    or does not, so an empty one refuses instead, and the per-entry guard turns
++    the refusal into a finding.
++
++    Empty is all it has to be, and this is the fact that makes the whole scheme
++    work: a validator roots its OWN schema as a resource, and that root is what
++    every in-document reference resolves against — a pointer, an `$anchor`, a
++    nested `$id`. So the document needs no registry entry, and a registry with
++    nothing in it can still resolve every reference the contract allows while
++    refusing every one it does not.
++
++    That the contract models separately refuse a non-local `$ref` does not cover
++    this: grading runs on documents the models have already rejected, and an
++    offline guarantee that holds only while another check keeps its rule is not
++    one."""
++    from referencing import Registry
++
++    return Registry()
++
++
++# ---------------------------------------------------------------------------
++# The worker
++# ---------------------------------------------------------------------------
++
++def _grade(document, node: dict, sample: Any) -> dict:
++    """One sample's verdict, as the data a finding needs rather than as objects.
++
++    The arms are the ones the caller already tells apart, kept apart here because
++    each has a different fix: a reference naming nothing is the node's defect, a
++    value no keyword can evaluate is the sample's, and a verdict is neither.
++    """
++    from jsonschema.exceptions import best_match
++    from referencing.exceptions import Unresolvable
++
++    try:
++        # `evolve` swaps the schema and keeps the resolver, so a node written as
++        # `{"$ref": "#/$defs/..."}` is graded against what it points at rather
++        # than against a node with no assertions in it.
++        error = best_match(document.evolve(schema=node).iter_errors(sample))
++    except (Unresolvable, RecursionError) as exc:
++        ref = getattr(exc, "ref", None)
++        # `repr` here rather than in the parent: an unresolved-reference error
++        # renders the whole resource it searched, and `ref` is the part of it
++        # that names the defect. Sending anything else would put the embedded
++        # schema on the wire once per recorded sample.
++        return {"v": "unresolvable", "ref": repr(ref)} if ref is not None else {"v": "recursion"}
++    except Exception as exc:  # noqa: BLE001 - author input, no total gate
++        return {"v": "crash", "type": type(exc).__name__, "detail": str(exc)}
++    if error is None:
++        return {"v": "graded", "error": None}
++    return {"v": "graded", "error": {"message": error.message, "path": error.json_path}}
++
++
++def _serve() -> int:
++    """Read jobs from stdin, write one verdict line per graded sample."""
++    from jsonschema import Draft202012Validator
++
++    # The protocol channel is this process's original stdout, taken privately.
++    # Anything else here that writes to fd 1 — a library banner, a `print` in a
++    # dependency, a warning routed to stdout — would otherwise land mid-verdict
++    # and desynchronise the parent for every remaining sample. Pointing fd 1 at
++    # stderr keeps such writes visible as diagnostics instead of destroying the
++    # channel.
++    channel = os.fdopen(os.dup(1), "w", encoding="utf-8")
++    os.dup2(2, 1)
++    sys.stdout = sys.stderr
++
++    document = None
++    node: dict = {}
++    for line in sys.stdin:
++        job = json.loads(line)
++        op = job["op"]
++        if op == "schema":
++            document = Draft202012Validator(job["value"], registry=_offline_registry())
++            continue
++        if op == "node":
++            node = job["value"]
++            continue
++        if op == "ping":
++            verdict = {"v": "pong"}
++        else:
++            # A Python-level watchdog cannot do this: a runaway match holds the
++            # interpreter outright, so no other thread in this process runs at
++            # all while one is going — measured, not assumed. `faulthandler`'s
++            # is a native thread that needs neither the interpreter nor the
++            # evaluating thread to yield, which makes it the only thing here
++            # that can still act. It writes its traceback to stderr, never to
++            # the channel fd this worker took for itself.
++            faulthandler.dump_traceback_later(
++                job["deadline"] + _SELF_DESTRUCT_MARGIN, exit=True)
++            try:
++                verdict = _grade(document, node, job["value"])
++            finally:
++                faulthandler.cancel_dump_traceback_later()
++        channel.write(json.dumps(verdict) + "\n")
++        channel.flush()
++    return 0
++
++
++
++if __name__ == "__main__":
++    # Run by path, so Python prepended this file's own directory to `sys.path`,
++    # where a sibling module could shadow a name the grader's own imports need.
++    # The worker takes nothing from that directory.
++    if sys.path and os.path.realpath(sys.path[0]) == str(Path(__file__).resolve().parent):
++        del sys.path[0]
++    sys.exit(_serve())
+diff --git a/packages/validator/src/analitiq/validator/connectors.py b/packages/validator/src/analitiq/validator/connectors.py
+index 8c55d63..c9e54b5 100644
+--- a/packages/validator/src/analitiq/validator/connectors.py
++++ b/packages/validator/src/analitiq/validator/connectors.py
+@@ -51,9 +51,11 @@ from ._core import (
+     finding,
+     register_kind,
+     register_validator_ids,
++    _bounded,
+     _model_findings,
+     _run_guarded,
+ )
++from ._sample_budget import BudgetedGrader
+ 
+ # The contract models resolve from the `analitiq-contract-models` dependency —
+ # the same import path here and for an installed consumer, so there is nothing to
+@@ -381,46 +383,6 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
+     return findings
+ 
+ 
+-def _bounded(text: str, limit: int = 200) -> str:
+-    """A diagnostic sentence borrowed from another library, bounded.
+-
+-    `jsonschema` renders the failing instance AND the failing keyword's own value
+-    into `ValidationError.message`, so an oversized sample or a long `enum` comes
+-    back whole — and it is emitted once per recorded entry. Bounding the sample
+-    alone leaves the same unbounded text arriving by the other route.
+-
+-    Plain slicing rather than `textwrap.shorten`, which drops the text entirely
+-    when it holds no whitespace to break on — a provider record is exactly that
+-    shape."""
+-    return text if len(text) <= limit else f"{text[:limit]}…"
+-
+-
+-def _offline_registry():
+-    """An empty reference registry — one with no way to retrieve anything.
+-
+-    Validation here is offline by contract, and `jsonschema`'s default registry
+-    is not: a `$ref` naming an `http(s)` URL is FETCHED, so an authored endpoint
+-    could make the validator issue a request to any address its author chose and
+-    block on the answer. Retrieval is a `retrieve` callable a registry either has
+-    or does not, so an empty one refuses instead, and the per-entry guard turns
+-    the refusal into a finding.
+-
+-    Empty is all it has to be, and this is the fact that makes the whole scheme
+-    work: a validator roots its OWN schema as a resource, and that root is what
+-    every in-document reference resolves against — a pointer, an `$anchor`, a
+-    nested `$id`. So the document needs no registry entry, and a registry with
+-    nothing in it can still resolve every reference the contract allows while
+-    refusing every one it does not.
+-
+-    That the contract models separately refuse a non-local `$ref` does not cover
+-    this: grading runs on documents the models have already rejected, and an
+-    offline guarantee that holds only while another check keeps its rule is not
+-    one."""
+-    from referencing import Registry
+-
+-    return Registry()
+-
+-
+ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dict]:
+     """Every `examples` entry on an embedded schema node must satisfy the node
+     declaring it.
+@@ -452,76 +414,100 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
+     - **the node's** — a reference naming nothing, or one leading back to itself;
+     - **the sample's** — a value no keyword on the node can evaluate, such as a
+       number too large for `multipleOf`;
++    - **undecided** — an evaluation that did not finish inside its budget. Every
++      other arm here contains a way the evaluation RAISES, and a keyword whose
++      cost grows with the recorded value rather than with its size does not
++      raise, it does not come back; `_sample_budget` owns why that cannot be
++      waited on and where the bound is enforced;
+     - **neither**, which is the contradiction this check exists to report.
+ 
+-    The three have different fixes, so they are worth telling apart, and none of
+-    them may cost the remaining entries their verdict."""
+-    from jsonschema import Draft202012Validator
+-    from jsonschema.exceptions import best_match
+-    from referencing.exceptions import Unresolvable
+-
++    Each has a different fix, so they are worth telling apart, and none of them
++    may cost the remaining entries their verdict."""
+     findings: list[dict] = []
+-    for pointer, schema in _embedded_json_schemas(ep_doc):
+-        if not isinstance(schema, dict):
+-            continue
+-        if _unreadable_as_2020_12(schema) is not None:
+-            continue
+-        document = Draft202012Validator(schema, registry=_offline_registry())
+-        for node_ptr, node in _walk_schema_nodes(schema, pointer):
+-            examples = node.get("examples")
+-            if not isinstance(examples, list):
++    with BudgetedGrader() as grader:
++        for pointer, schema in _embedded_json_schemas(ep_doc):
++            if not isinstance(schema, dict):
+                 continue
+-            # `evolve` swaps the schema and keeps the resolver, so a node written
+-            # as `{"$ref": "#/$defs/..."}` is graded against what it points at
+-            # rather than against a node with no assertions in it.
+-            node_validator = document.evolve(schema=node)
+-            for index, sample in enumerate(examples):
+-                entry = f"{node_ptr}/examples/{index}"
+-                # `entry` is the finding's machine-readable `path` and stays
+-                # exact. Everything the MESSAGE interpolates is bounded, pointers
+-                # included: a property name is authored, so it can be as long as
+-                # the author likes and it appears in the pointer twice.
+-                where = _bounded(f"{label}{entry}" if label else entry)
+-                at_node = _bounded(node_ptr)
+-                try:
+-                    error = best_match(node_validator.iter_errors(sample))
+-                except (Unresolvable, RecursionError) as exc:
+-                    # Never interpolate `exc`: an unresolved-reference error
+-                    # renders the whole resource it searched, so the embedded
+-                    # schema would land in the message once per recorded sample.
+-                    # `ref` is the part of it that names the defect.
+-                    ref = getattr(exc, "ref", None)
+-                    why = (f"the reference {_bounded(repr(ref))} names nothing this "
+-                           f"schema defines"
+-                           if ref is not None else
+-                           "resolving it ran out of stack — either a reference leading "
+-                           "back to itself, or a sample nested deeper than the resolver "
+-                           "follows")
+-                    findings.append(finding(
+-                        "embedded-schema-example", "error", entry,
+-                        f"the node at {at_node} could not be resolved, so the sample "
+-                        f"at {where} was not graded: {why}. The defect is in the "
+-                        f"schema, not in the sample."))
+-                    continue
+-                except Exception as exc:  # noqa: BLE001 - author input, no total gate
+-                    findings.append(finding(
+-                        "embedded-schema-example", "error", entry,
+-                        f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the "
+-                        f"node declaring it could not grade ({type(exc).__name__}: "
+-                        f"{_bounded(str(exc))}). "
+-                        f"The recorded value is outside what a keyword on this node can "
+-                        f"evaluate."))
+-                    continue
+-                if error is None:
++            if _unreadable_as_2020_12(schema) is not None:
++                continue
++            for node_ptr, node in _walk_schema_nodes(schema, pointer):
++                examples = node.get("examples")
++                if not isinstance(examples, list):
+                     continue
+-                inside = ("" if error.json_path == "$"
+-                          else f" at {_bounded(error.json_path)} within the sample")
+-                findings.append(finding(
+-                    "embedded-schema-example", "error", entry,
+-                    f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the node "
+-                    f"declaring it rejects{inside}: {_bounded(error.message)}. A sample is a "
+-                    f"value the provider sends, so either the declared shape is wrong for "
+-                    f"this field or the recorded sample never came off the wire."))
++                for index, sample in enumerate(examples):
++                    entry = f"{node_ptr}/examples/{index}"
++                    # `entry` is the finding's machine-readable `path` and stays
++                    # exact. Everything the MESSAGE interpolates is bounded,
++                    # pointers included: a property name is authored, so it can
++                    # be as long as the author likes and it appears in the
++                    # pointer twice.
++                    where = _bounded(f"{label}{entry}" if label else entry)
++                    at_node = _bounded(node_ptr)
++                    verdict = grader.grade(schema, node, sample)
++                    kind = verdict["v"]
++                    if kind == "graded":
++                        error = verdict["error"]
++                        if error is None:
++                            continue
++                        inside = ("" if error["path"] == "$"
++                                  else f" at {_bounded(error['path'])} within the sample")
++                        message = (
++                            f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the node "
++                            f"declaring it rejects{inside}: {_bounded(error['message'])}. A sample is a "
++                            f"value the provider sends, so either the declared shape is wrong for "
++                            f"this field or the recorded sample never came off the wire.")
++                    elif kind in ("unresolvable", "recursion"):
++                        # The reference alone, never the resource it was searched
++                        # for in: that renders the whole embedded schema, and it
++                        # would land in the message once per recorded sample.
++                        why = (f"the reference {_bounded(verdict['ref'])} names nothing this "
++                               f"schema defines"
++                               if kind == "unresolvable" else
++                               "resolving it ran out of stack — either a reference leading "
++                               "back to itself, or a sample nested deeper than the resolver "
++                               "follows")
++                        message = (
++                            f"the node at {at_node} could not be resolved, so the sample "
++                            f"at {where} was not graded: {why}. The defect is in the "
++                            f"schema, not in the sample.")
++                    elif kind == "crash":
++                        message = (
++                            f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the "
++                            f"node declaring it could not grade ({verdict['type']}: "
++                            f"{_bounded(verdict['detail'])}). "
++                            f"The recorded value is outside what a keyword on this node can "
++                            f"evaluate.")
++                    elif kind == "budget":
++                        message = (
++                            f"the sample at {where} was not graded: evaluating it against the "
++                            f"node at {at_node} exceeded the {verdict['seconds']:g}s budget for "
++                            f"one sample. A keyword whose cost grows with the recorded value "
++                            f"rather than with its size cannot be interrupted, so nothing was "
++                            f"decided about this sample.")
++                    elif kind == "exhausted":
++                        message = (
++                            f"the sample at {where} was not graded: this document's grading "
++                            f"budget was already spent by earlier samples, so this entry was "
++                            f"never attempted and nothing was decided about it.")
++                    elif kind == "unserializable":
++                        message = (
++                            f"the sample at {where} was not graded: the schema recording it "
++                            f"holds a value that is not JSON data, so it could not be handed to "
++                            f"the grader. A recorded sample is a value read out of a JSON "
++                            f"document, so a value that cannot be encoded as JSON reached this "
++                            f"document from a caller that built it rather than parsed it.")
++                    else:
++                        # `unavailable`, and anything a future kind might be. Never
++                        # raised: this runs inside the per-endpoint guard, which
++                        # would replace every finding the document had earned with
++                        # one generic "validator bug".
++                        why = verdict.get("reason") or f"the grader answered {kind!r}"
++                        message = (
++                            f"the sample at {where} was not graded: {why}. Samples are graded in "
++                            f"a worker process so an evaluation that does not return can be "
++                            f"abandoned; with no worker, nothing was decided about this sample.")
++                    findings.append(
++                        finding("embedded-schema-example", "error", entry, message))
+     return findings
+ 
+ 
+diff --git a/packages/validator/tests/conftest.py b/packages/validator/tests/conftest.py
+index c7727b8..e8e48ba 100644
+--- a/packages/validator/tests/conftest.py
++++ b/packages/validator/tests/conftest.py
+@@ -7,9 +7,12 @@ contribute to the `analitiq` PEP 420 namespace from their own source trees:
+ only on the public contract, so the tests exercise exactly what an installed
+ consumer gets. Run explicitly: `python -m pytest validator/tests`.
+ """
++import json
+ import os
++import subprocess
+ import sys
+ from pathlib import Path
++from types import SimpleNamespace
+ 
+ import pytest
+ 
+@@ -38,3 +41,54 @@ def validator():
+     import analitiq.validator
+ 
+     return analitiq.validator
++
++
++#: A CLI run that has not returned is a defect, not a slow machine: the checks
++#: driven this way are bounded, so exceeding this means something stopped coming
++#: back. Generous by orders of magnitude, because what it separates is a bounded
++#: run from an unbounded one.
++CLI_DEADLINE_SECONDS = 60.0
++
++_CLI_PROGRAM = "import sys; from analitiq.validator import main; sys.exit(main())"
++
++
++@pytest.fixture
++def validator_cli(tmp_path):
++    """Drive `analitiq-validate` in a child process.
++
++    The CLI is the integration surface consumers depend on, and a child process
++    is the only place some of its behaviour is observable at all: an exit code, a
++    stream that has to stay clean, and a check whose regression is a run that does
++    not come back rather than one that answers wrongly. A direct call would hang
++    the suite where this fails it.
++
++    Only the two public source trees reach the child — the validator and the
++    contract models it depends on — which is exactly what an installed consumer
++    has, so nothing private can hold a test up.
++    """
++    env = {
++        **os.environ,
++        "PYTHONPATH": os.pathsep.join([str(VALIDATOR_SRC_ROOT), str(CONTRACTS_SRC_ROOT)]),
++        "DOMAIN": "analitiq.ai",
++    }
++
++    def run(*argv, timeout=CLI_DEADLINE_SECONDS):
++        try:
++            return subprocess.run(
++                [sys.executable, "-c", _CLI_PROGRAM, *argv],
++                capture_output=True, text=True, env=env, check=False, timeout=timeout)
++        except subprocess.TimeoutExpired:
++            pytest.fail(f"the validator did not return within {timeout}s: {argv}")
++
++    def on_document(doc, filename="doc.json", timeout=CLI_DEADLINE_SECONDS):
++        """The same, over a document staged into this test's `tmp_path`.
++
++        Staged rather than passed in memory because the CLI resolves a bundle's
++        siblings from the document's own path, which is what the connector-walk
++        entry point needs.
++        """
++        path = tmp_path / filename
++        path.write_text(json.dumps(doc))
++        return run("--document", str(path), timeout=timeout)
++
++    return SimpleNamespace(run=run, on_document=on_document)
+diff --git a/packages/validator/tests/test_embedded_schema_examples.py b/packages/validator/tests/test_embedded_schema_examples.py
+index d90e43b..34ca11c 100644
+--- a/packages/validator/tests/test_embedded_schema_examples.py
++++ b/packages/validator/tests/test_embedded_schema_examples.py
+@@ -8,9 +8,15 @@ grading through both entry points — a single endpoint document, and the
+ connector-anchored walk that labels findings with the endpoint's filename.
+ """
+ import json
++import os
++import subprocess
++import sys
++import time
+ 
+ import pytest
+ 
++from conftest import CLI_DEADLINE_SECONDS
++
+ from analitiq.contracts.endpoints import (
+     JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+     JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+@@ -347,19 +353,18 @@ def test_a_remote_ref_is_refused_without_reaching_the_network(validator):
+     Left to its default reference registry, the grader FETCHES an `http(s)`
+     `$ref` — an authored endpoint would make the validator issue a request to
+     an address its author chose and wait for the answer. The host here is
+-    TEST-NET-1, which is unroutable: a fetch stalls until it times out, so the
+-    elapsed time is the assertion. It is generous by orders of magnitude, since
+-    what it must separate is a refusal from a network timeout.
+-    """
+-    import time
++    TEST-NET-1, which is unroutable, so a fetch would stall until it timed out.
+ 
++    The VERDICT is what separates the two, not the elapsed time: a refusal names
++    the reference, while a fetch that stalled would be abandoned by the sample
++    budget and say so. Time cannot separate them, because the budget bounds both.
++    """
+     doc = _read_endpoint({"x": {"$ref": "http://192.0.2.1/nothing.json",
+                                 "examples": [1]}})
+-    started = time.monotonic()
+     errors = _sample_findings(validator.validate_document(doc))
+-    assert time.monotonic() - started < 5.0, "grading attempted a network fetch"
+     assert len(errors) == 1, errors
+     assert "could not be resolved" in errors[0]["message"]
++    assert "budget" not in errors[0]["message"], "grading stalled instead of refusing"
+ 
+ 
+ # Every way 2020-12 lets a reference name something inside its own document.
+@@ -502,3 +507,530 @@ def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path,
+     errors = _sample_findings(findings)
+     assert len(errors) == 2, findings
+     assert all("widgets.json/operations/read/" in e["message"] for e in errors)
++
++
++# ---------------------------------------------------------------------------
++# The evaluation budget
++# ---------------------------------------------------------------------------
++#
++# Every guard around grading is an `except` clause, so between them they contain
++# every way an evaluation raises and none of the ways it does not come back.
++# `pattern` is evaluated by Python's `re`, which backtracks exponentially on an
++# ambiguous pattern paired with a subject that nearly matches; the pair below
++# does not finish in any time a caller will wait for.
++#
++# So what these tests assert is that grading RETURNS, and they obtain the
++# findings from a child process to do it: a regression here does not produce a
++# wrong answer, it produces no answer, and a direct call would hang the suite
++# instead of failing it.
++
++_RUNAWAY_PATTERN = "^(a+)+$"
++_NEAR_MISS = "a" * 32 + "X"
++_RUNAWAY_NODE = {"type": "string", "pattern": _RUNAWAY_PATTERN,
++                 "examples": [_NEAR_MISS]}
++
++def _sample_findings_via_cli(validator_cli, doc, filename="doc.json"):
++    """This document's `embedded-schema-example` findings, from a child process.
++
++    A regression in the bound does not make this check answer wrongly, it makes it
++    not answer, so a direct call would hang the suite where the CLI fixture fails
++    it. The deadline and the child's import path are the fixture's.
++    """
++    result = validator_cli.on_document(doc, filename)
++    assert result.returncode in (0, 1), result.stderr
++    return _sample_findings(json.loads(result.stdout)["findings"])
++
++
++def test_a_sample_past_the_budget_is_reported_and_costs_only_itself(validator_cli):
++    """The shape every other ungradeable entry already has: the sample is named,
++    the verdict says nothing was decided, and the entries beside it still get
++    theirs."""
++    doc = _read_endpoint({"before": {"type": "integer", "examples": ["one"]},
++                          "code": dict(_RUNAWAY_NODE),
++                          "paid": {"type": "boolean", "examples": ["0"]}})
++    errors = _sample_findings_via_cli(validator_cli, doc)
++    by_field = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
++    assert set(by_field) == {"before/examples/0", "code/examples/0", "paid/examples/0"}
++    # Graded on the worker generation the breach then killed.
++    assert "is not of type 'integer'" in by_field["before/examples/0"]
++    assert "was not graded" in by_field["code/examples/0"]
++    assert "budget" in by_field["code/examples/0"]
++    assert "is not of type 'boolean'" in by_field["paid/examples/0"]
++    assert all(e["severity"] == "error" for e in errors), errors
++
++
++@pytest.mark.parametrize("node", [
++    {"patternProperties": {_RUNAWAY_PATTERN: {"type": "integer"}},
++     "examples": [{_NEAR_MISS: 1}]},
++    {"propertyNames": {"pattern": _RUNAWAY_PATTERN}, "examples": [{_NEAR_MISS: 1}]},
++], ids=["patternProperties", "propertyNames"])
++def test_the_budget_bounds_every_keyword_not_only_pattern(node, validator_cli):
++    """`pattern` is the reachable instance, not the class. Both keywords below
++    apply the author's regex to the sample's KEYS, and a bound that reached only
++    the keyword named in the report would leave them running."""
++    errors = _sample_findings_via_cli(validator_cli, _read_endpoint({"bag": node}))
++    assert len(errors) == 1, errors
++    assert "was not graded" in errors[0]["message"]
++
++
++def test_the_connector_walk_bounds_a_pathological_sample(tmp_path, validator_cli):
++    """The second entry point. It reaches the same grading through a different
++    caller, so a bound applied at the single-document call site would leave a
++    connector package unprotected."""
++    from pathlib import Path
++
++    corpus = Path(__file__).resolve().parent / "corpus" / CORPUS_CONNECTOR
++    connector = json.loads(corpus.read_text())
++    (tmp_path / "endpoints").mkdir(parents=True)
++    (tmp_path / "connector.json").write_text(json.dumps(connector))
++    (tmp_path / "type-map-read.json").write_text(json.dumps(
++        [{"match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean"}]))
++    (tmp_path / "endpoints" / "widgets.json").write_text(
++        json.dumps(_read_endpoint({"code": dict(_RUNAWAY_NODE)})))
++
++    errors = _sample_findings_via_cli(validator_cli, connector, "connector.json")
++    assert len(errors) == 1, errors
++    assert "widgets.json/operations/read/" in errors[0]["message"]
++    assert "was not graded" in errors[0]["message"]
++
++
++def test_a_document_with_no_samples_starts_no_worker(validator, monkeypatch):
++    """The cost of the bound is paid where the risk is. A document recording
++    nothing has no value to grade, so it must not pay for a grading process."""
++    from analitiq.validator import _sample_budget
++
++    def refuse(*_args, **_kwargs):
++        raise AssertionError("a document with no samples started a grading worker")
++
++    monkeypatch.setattr(_sample_budget.subprocess, "Popen", refuse)
++    doc = _read_endpoint({"paid": {"type": "boolean"}})
++    assert not _sample_findings(validator.validate_document(doc))
++
++
++# ---------------------------------------------------------------------------
++# Everything that is not a verdict
++# ---------------------------------------------------------------------------
++#
++# Grading in another process adds ways for a sample to come back ungraded that
++# an in-process call did not have: a budget spent, a worker that cannot start,
++# one that dies, one that answers something that is not a verdict, a value that
++# cannot be encoded. Each is a way for the check to decide nothing, and the
++# whole point of bounding the evaluation was that deciding nothing must never
++# read as a pass. So each is graded here for the same three properties — the
++# sample is named, the severity is `error`, and the samples around it keep their
++# verdicts.
++
++#: A worker whose behaviour the test chooses, so the parent's handling of a
++#: worker that misbehaves can be graded without waiting for one that does.
++_FAKE_WORKER = '''\
++import json, os, sys
++
++mode = os.environ["FAKE_GRADING_WORKER"]
++if mode == "nostart":
++    sys.stderr.write("the fake worker refused to start\\n")
++    raise SystemExit(1)
++marker = os.environ["FAKE_GRADING_WORKER_MARKER"]
++with open(marker + ".gen", "a") as fh:
++    fh.write("x")
++generation = os.path.getsize(marker + ".gen")
++if generation > 1:
++    import time
++    if mode == "stall-on-restart":
++        time.sleep(3600)
++    if mode == "slow-restart":
++        time.sleep(1.2)
++for line in sys.stdin:
++    job = json.loads(line)
++    if job["op"] == "ping":
++        sys.stdout.write('{"v": "pong"}\\n')
++        sys.stdout.flush()
++        continue
++    if job["op"] != "grade":
++        continue
++    if mode == "die-once" and not os.path.exists(marker):
++        open(marker, "w").close()
++        raise SystemExit(1)
++    if mode in ("stall-on-restart", "slow-restart"):
++        raise SystemExit(1)
++    if mode == "garbage":
++        sys.stdout.write("this is not a verdict\\n")
++    elif mode == "alien":
++        sys.stdout.write('{"v": "a kind from the future"}\\n')
++    else:
++        sys.stdout.write('{"v": "graded", "error": null}\\n')
++    sys.stdout.flush()
++'''
++
++
++@pytest.fixture
++def fake_worker(monkeypatch, tmp_path):
++    """Point the grader at `_FAKE_WORKER`, in the mode the test asks for."""
++    from analitiq.validator import _sample_budget
++
++    script = tmp_path / "fake_grading_worker.py"
++    script.write_text(_FAKE_WORKER)
++    monkeypatch.setattr(_sample_budget, "_WORKER_SCRIPT", str(script))
++    monkeypatch.setenv("FAKE_GRADING_WORKER_MARKER", str(tmp_path / "died"))
++
++    def use(mode):
++        monkeypatch.setenv("FAKE_GRADING_WORKER", mode)
++
++    return use
++
++
++def test_a_spent_document_budget_reports_rather_than_passes(validator, monkeypatch):
++    """A spent budget is not a verdict.
++
++    Once the document's budget is gone the remaining samples are never attempted,
++    and each must still be an error naming itself. Reporting nothing would let a
++    document whose samples were never graded through the gate that grading exists
++    to be — which is worse than the stall, because it is silent."""
++    from analitiq.validator import connectors
++    from analitiq.validator._sample_budget import BudgetedGrader
++
++    monkeypatch.setattr(connectors, "BudgetedGrader",
++                        lambda: BudgetedGrader(document_budget=0.0))
++    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]},
++                          "n": {"type": "integer", "examples": ["two"]}})
++    errors = _sample_findings(validator.validate_document(doc))
++    assert {e["path"].split("/properties/")[1] for e in errors} == {
++        "paid/examples/0", "n/examples/0"}
++    assert all(e["severity"] == "error" for e in errors), errors
++    assert all("was not graded" in e["message"] for e in errors), errors
++    assert all("budget was already spent" in e["message"] for e in errors), errors
++
++
++def test_a_worker_that_cannot_start_is_reported_per_sample_and_attempted_once(
++        validator, monkeypatch):
++    """An environment that cannot host a worker is stated, once.
++
++    Every sample still earns a finding — nothing was decided about any of them —
++    but the environment is asked once per document rather than once per sample,
++    because the answer cannot change between two samples."""
++    from analitiq.validator import _sample_budget
++
++    attempts = []
++
++    def refuse(*args, **_kwargs):
++        attempts.append(args)
++        raise OSError("cannot allocate memory")
++
++    monkeypatch.setattr(_sample_budget.subprocess, "Popen", refuse)
++    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
++    errors = _sample_findings(validator.validate_document(doc))
++    assert len(errors) == 2, errors
++    assert all(e["severity"] == "error" for e in errors), errors
++    assert all("cannot allocate memory" in e["message"] for e in errors), errors
++    assert len(attempts) == 1, attempts
++
++
++def test_a_worker_lost_mid_document_costs_only_the_sample_that_lost_it(
++        validator, fake_worker):
++    """A worker one sample killed says nothing about the samples after it.
++
++    Giving up for the document would report, for every later sample, a failure it
++    never had — the coarse-grained version of the stall this check was bounded to
++    prevent. Only a worker that cannot START is a verdict about the environment."""
++    fake_worker("die-once")
++    doc = _read_endpoint({"first": {"type": "boolean", "examples": ["0"]},
++                          "second": {"type": "boolean", "examples": ["1"]},
++                          "third": {"type": "boolean", "examples": ["2"]}})
++    errors = _sample_findings(validator.validate_document(doc))
++    assert len(errors) == 1, errors
++    assert errors[0]["path"].endswith("/first/examples/0"), errors
++    assert "was not graded" in errors[0]["message"]
++    assert "the grading worker was lost" in errors[0]["message"]
++
++
++@pytest.mark.parametrize("mode,expected", [
++    ("garbage", "'this is not a verdict'"),
++    ("alien", "a kind from the future"),
++    ("nostart", "the fake worker refused to start"),
++], ids=["a line that is not JSON", "a kind this build does not know",
++        "a worker that never starts"])
++def test_a_reply_that_is_not_a_verdict_is_refused_and_quoted(
++        mode, expected, validator, fake_worker):
++    """What came back is quoted, because it is the only evidence of what happened.
++
++    None of these may be read as a verdict, and none may escape as an exception:
++    this check runs inside the per-endpoint guard, so a raise here would replace
++    every finding the document had earned with one generic validator-bug notice."""
++    fake_worker(mode)
++    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]}})
++    findings = validator.validate_document(doc)
++    errors = _sample_findings(findings)
++    assert len(errors) == 1, findings
++    assert errors[0]["severity"] == "error"
++    assert "was not graded" in errors[0]["message"]
++    assert expected in errors[0]["message"], errors[0]["message"]
++    assert "crashed unexpectedly" not in errors[0]["message"]
++
++
++def test_a_document_that_is_not_json_reports_every_sample_rather_than_crashing(validator):
++    """A recorded sample is a value read out of a JSON document, so handing it to
++    another process costs nothing — but a caller that built the document in Python
++    can hold a value no JSON document could.
++
++    A sample sits inside the schema that records it, so such a value stops every
++    sample under that schema, not just its own. What matters is that each says so:
++    before the samples were named, this raised, and the guard around the check
++    replaced every finding the endpoint had earned with one generic validator-bug
++    notice."""
++    from decimal import Decimal
++
++    doc = _read_endpoint({"amount": {"type": "integer", "examples": [Decimal("1.5")]},
++                          "paid": {"type": "boolean", "examples": ["0"]}})
++    findings = validator.validate_document(doc)
++    by_field = {e["path"].split("/properties/")[1]: e["message"]
++                for e in _sample_findings(findings)}
++    assert set(by_field) == {"amount/examples/0", "paid/examples/0"}
++    assert all("was not graded" in m for m in by_field.values()), by_field
++    assert all("not JSON data" in m for m in by_field.values()), by_field
++    assert not [f for f in findings if "crashed unexpectedly" in f["message"]], findings
++
++
++def test_the_worker_writes_only_verdicts_to_its_stdout():
++    """The worker's stdout IS the protocol.
++
++    Anything else in its process that writes there lands mid-verdict, and the
++    parent then reads a reply that is not one for every remaining sample — the
++    check turning itself off, one finding at a time, everywhere at once."""
++    from analitiq.validator import _sample_budget
++
++    proc = subprocess.run(
++        [sys.executable, _sample_budget._WORKER_SCRIPT],
++        input='{"op": "ping"}\n', capture_output=True, text=True, timeout=120,
++        env={**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)},
++        check=False)
++    assert proc.stdout == '{"v": "pong"}\n', proc.stdout
++
++
++def test_a_budget_breach_leaves_no_traceback_on_stderr(validator_cli):
++    """A breach is an ordinary outcome, so it must not look like a crash.
++
++    The worker is killed with its pipes still buffered; left to finalization those
++    raise, and the interpreter prints the traceback on the validator's own stderr
++    — which is exactly where a caller looks when the JSON report is missing."""
++    proc = validator_cli.on_document(_read_endpoint({"code": dict(_RUNAWAY_NODE)}))
++    assert proc.returncode in (0, 1), proc.stderr
++    assert "Traceback" not in proc.stderr, proc.stderr
++    assert "BrokenPipeError" not in proc.stderr, proc.stderr
++
++
++@pytest.mark.parametrize("node,sample", [
++    ({"type": "array", "items": {"type": "integer"}}, (1, 2)),
++    ({"type": "object", "required": ["1"]}, {1: "x"}),
++], ids=["a tuple written as an array", "a key written as a string"])
++def test_a_value_json_would_normalise_is_reported_rather_than_converted(
++        node, sample, validator):
++    """Encoding succeeding is not proof the round trip was lossless.
++
++    `json.dumps` normalises: a tuple is written as an array, a non-string mapping
++    key as a string. Both samples below are rejected by the node that records them
++    and are accepted once normalised, so trusting the encoder would turn a
++    rejection into a silent pass — the one outcome bounding the evaluation exists
++    to make impossible."""
++    doc = _read_endpoint({"a": dict(node, examples=[sample])})
++    errors = _sample_findings(validator.validate_document(doc))
++    assert len(errors) == 1, errors
++    assert "was not graded" in errors[0]["message"]
++    assert "not JSON data" in errors[0]["message"], errors[0]["message"]
++
++
++def test_a_worker_whose_diagnostic_file_cannot_be_opened_is_reported(
++        validator, monkeypatch):
++    """Opening the file the worker's stderr goes to is part of starting one.
++
++    An exhausted descriptor table or an unwritable temp directory is a reason the
++    environment cannot host a worker, and it arrives before the spawn does. Left
++    outside, it costs the endpoint every finding it had earned and reports a
++    validator bug instead of the samples it could not grade."""
++    from analitiq.validator import _sample_budget
++
++    def refuse(*_args, **_kwargs):
++        raise OSError("no space left on device")
++
++    monkeypatch.setattr(_sample_budget.tempfile, "TemporaryFile", refuse)
++    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
++    findings = validator.validate_document(doc)
++    errors = _sample_findings(findings)
++    assert len(errors) == 2, findings
++    assert all("no space left on device" in e["message"] for e in errors), errors
++    assert not [f for f in findings if "crashed unexpectedly" in f["message"]], findings
++
++
++def test_a_worker_ends_itself_when_its_deadline_passes():
++    """The parent kills a worker that overruns, but only while the parent is alive.
++
++    Killed itself mid-evaluation — an outer timeout, a cancelled request — it would
++    leave a child inside a match that never returns, holding a core for as long as
++    the machine is up. So the worker watches its own deadline: driven here with no
++    parent to kill it, it must end rather than run on.
++
++    Nothing written in Python could do this. A runaway match holds the interpreter
++    outright, so no other thread in that process runs while one is going, which is
++    why the watchdog is a native one."""
++    from analitiq.validator import _sample_budget
++
++    node = {"type": "string", "pattern": _RUNAWAY_PATTERN}
++    jobs = "".join(json.dumps(job) + "\n" for job in (
++        {"op": "schema", "value": node},
++        {"op": "node", "value": node},
++        {"op": "grade", "value": _NEAR_MISS, "deadline": 0.1},
++    ))
++    proc = subprocess.run(
++        [sys.executable, _sample_budget._WORKER_SCRIPT], input=jobs,
++        capture_output=True, text=True, timeout=CLI_DEADLINE_SECONDS,
++        env={**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)},
++        check=False)
++    assert proc.returncode != 0, "the worker outlived its deadline"
++    assert "Timeout" in proc.stderr, proc.stderr
++    # The channel stays clean even as the process ends: a half-verdict would be
++    # read as one.
++    assert proc.stdout == "", proc.stdout
++
++
++def test_a_restart_cannot_outlast_what_is_left_of_the_document_budget(
++        validator, monkeypatch, fake_worker):
++    """A replacement worker is started for the samples that are left, so it is
++    bounded by the budget they have left.
++
++    The FIRST start is setup and carries its own deadline, which is generous
++    because a cold interpreter is. A restart is a cost the samples caused, and one
++    that stalls under the same generous deadline overshoots the document cap by
++    that whole deadline before any sample is told it ran out."""
++    from analitiq.validator import connectors
++    from analitiq.validator._sample_budget import BudgetedGrader
++
++    fake_worker("stall-on-restart")
++    monkeypatch.setattr(connectors, "BudgetedGrader",
++                        lambda: BudgetedGrader(sample_budget=0.5, document_budget=3.0))
++    doc = _read_endpoint({"one": {"type": "boolean", "examples": ["0"]},
++                          "two": {"type": "boolean", "examples": ["1"]}})
++    started = time.monotonic()
++    errors = _sample_findings(validator.validate_document(doc))
++    elapsed = time.monotonic() - started
++    assert elapsed < 15.0, f"the stalled restart was not bounded ({elapsed:.1f}s)"
++    assert len(errors) == 2, errors
++    assert all("was not graded" in e["message"] for e in errors), errors
++
++
++def test_a_value_too_deep_to_encode_is_the_documents_defect():
++    """Nesting deep enough to exhaust the encoder's stack is a shape no JSON
++    document could hold, so it is the document's defect rather than a lost worker.
++
++    Graded here rather than through a document, because a document this deep
++    cannot be written as JSON either — it reaches the check only from a caller
++    that built it in Python, which is the same route the other unencodable values
++    take. What matters is that the encoder's `RecursionError` is treated as they
++    are: an answer about the value, not an exception escaping the protocol."""
++    from analitiq.validator._sample_budget import _encoded
++
++    deep = current = []
++    for _ in range(12_000):
++        nested = []
++        current.append(nested)
++        current = nested
++    assert _encoded({"op": "grade", "value": deep}) is None
++    assert _encoded({"op": "grade", "value": [1, 2]}) is not None
++
++
++@pytest.mark.parametrize("holder,target,blowup", [
++    ("subprocess", "Popen", ValueError("argv is not what Popen wanted")),
++    ("queue", "Queue", MemoryError("out of memory")),
++    ("threading", "Thread", RuntimeError("can't start new thread")),
++], ids=["the spawn refuses", "a queue cannot be allocated", "a thread cannot be started"])
++def test_a_host_that_cannot_host_a_worker_is_asked_once_and_said_once(
++        holder, target, blowup, validator, monkeypatch):
++    """Starting a worker touches a temporary file, a process, a queue, a thread
++    and a pipe, and the host can refuse any of them.
++
++    Enumerating them has repeatedly missed one, and every miss escapes to the
++    endpoint's guard, which keeps no findings — so the endpoint loses every
++    verdict it earned and reports a validator bug in their place. Each refusal
++    must instead name the samples it could not grade, and be asked once for the
++    document: the answer cannot change between two samples of it."""
++    from analitiq.validator import _sample_budget
++
++    attempts = []
++    real_popen = _sample_budget.subprocess.Popen
++
++    def refuse(*_args, **_kwargs):
++        raise blowup
++
++    def counted(*args, **kwargs):
++        attempts.append(args)
++        return real_popen(*args, **kwargs)
++
++    monkeypatch.setattr(_sample_budget.subprocess, "Popen", counted)
++    monkeypatch.setattr(getattr(_sample_budget, holder), target, refuse)
++    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
++    findings = validator.validate_document(doc)
++    errors = _sample_findings(findings)
++    assert len(errors) == 2, findings
++    assert all(e["severity"] == "error" for e in errors), errors
++    assert all("was not graded" in e["message"] for e in errors), errors
++    assert all(str(blowup) in e["message"] for e in errors), errors
++    assert not [f for f in findings if "crashed unexpectedly" in f["message"]], findings
++    # Asked once for the document, not once per sample. A refusal that lands
++    # before the spawn counts none, which is the same claim.
++    assert len(attempts) <= 1, attempts
++
++
++def test_a_failure_while_grading_is_not_held_against_the_next_sample(
++        validator, monkeypatch):
++    """The other half, and the reason the two guards are not one.
++
++    A failure while GRADING cannot tell a host that refused something from a
++    defect in this module, and either way it says nothing about the samples after
++    it — so it is reported against its own sample and the next one still gets a
++    worker. Latching here would turn one bad sample into a failed connector."""
++    from analitiq.validator import _sample_budget
++
++    attempts = []
++    real_popen = _sample_budget.subprocess.Popen
++    real_encoded = _sample_budget._encoded
++
++    def counted(*args, **kwargs):
++        attempts.append(args)
++        return real_popen(*args, **kwargs)
++
++    def refuse_to_encode_a_grade(message):
++        if message.get("op") == "grade":
++            raise ValueError("the grade message could not be built")
++        return real_encoded(message)
++
++    monkeypatch.setattr(_sample_budget.subprocess, "Popen", counted)
++    monkeypatch.setattr(_sample_budget, "_encoded", refuse_to_encode_a_grade)
++    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
++    findings = validator.validate_document(doc)
++    errors = _sample_findings(findings)
++    assert len(errors) == 2, findings
++    assert all("failed unexpectedly" in e["message"] for e in errors), errors
++    assert all("could not be built" in e["message"] for e in errors), errors
++    assert not [f for f in findings if "crashed unexpectedly" in f["message"]], findings
++    # Not latched: the second sample was given a worker of its own.
++    assert len(attempts) == 2, attempts
++
++
++def test_a_restart_that_spends_the_budget_leaves_none_for_the_sample(
++        validator, monkeypatch, fake_worker):
++    """The budget is checked when a sample arrives, and a restart happens after
++    that check and is charged to it.
++
++    So a replacement worker slow enough to spend what was left would otherwise be
++    followed by a full sample budget the document no longer has. Once the restart
++    is paid for there may be nothing left, and that is the spent-budget outcome,
++    not a licence to overrun."""
++    from analitiq.validator import connectors
++    from analitiq.validator._sample_budget import BudgetedGrader
++
++    fake_worker("slow-restart")
++    monkeypatch.setattr(connectors, "BudgetedGrader",
++                        lambda: BudgetedGrader(sample_budget=0.5, document_budget=1.5))
++    doc = _read_endpoint({"one": {"type": "boolean", "examples": ["0"]},
++                          "two": {"type": "boolean", "examples": ["1"]}})
++    errors = _sample_findings(validator.validate_document(doc))
++    assert len(errors) == 2, errors
++    assert "the grading worker was lost" in errors[0]["message"], errors[0]["message"]
++    assert "budget was already spent" in errors[1]["message"], errors[1]["message"]
+diff --git a/packages/validator/tests/test_single_documents.py b/packages/validator/tests/test_single_documents.py
+index 1979e24..359d8a8 100644
+--- a/packages/validator/tests/test_single_documents.py
++++ b/packages/validator/tests/test_single_documents.py
+@@ -8,9 +8,6 @@ document passes and an invalid one fails. Detection is also checked to be mutual
+ exclusive: no authored kind claims another's shape.
+ """
+ import json
+-import os
+-import subprocess
+-import sys
+ from pathlib import Path
+ 
+ _REPO_ROOT = Path(__file__).resolve().parents[2]
+@@ -179,37 +176,16 @@ def test_active_pipeline_with_stream_passes(validator):
+ 
+ # --- CLI end to end (the one-stop-validator ask) -----------------------------
+ 
+-def _run_cli(tmp_path, doc, filename="doc.json"):
+-    """Drive `analitiq-validate --document` on a single authored document.
+-
+-    Only the two public source trees are on the path — the validator and the
+-    contract models it depends on. Nothing private, matching an installed
+-    consumer exactly.
+-    """
+-    p = tmp_path / filename
+-    p.write_text(json.dumps(doc))
+-    code = "from analitiq.validator import main; import sys; sys.exit(main())"
+-    env = {
+-        **os.environ,
+-        "PYTHONPATH": os.pathsep.join([str(SRC_ROOT), str(CONTRACTS_SRC_ROOT)]),
+-        "DOMAIN": "analitiq.ai",
+-    }
+-    return subprocess.run(
+-        [sys.executable, "-c", code, "--document", str(p)],
+-        capture_output=True, text=True, env=env, check=False,
+-    )
+-
+-
+-def test_cli_validates_connection_exit0(tmp_path):
+-    r = _run_cli(tmp_path, _valid_connection())
++def test_cli_validates_connection_exit0(validator_cli):
++    r = validator_cli.on_document(_valid_connection())
+     assert r.returncode == 0, r.stdout + r.stderr
+     out = json.loads(r.stdout)
+     assert out["passed"] is True
+ 
+ 
+-def test_cli_invalid_stream_exit1(tmp_path):
++def test_cli_invalid_stream_exit1(validator_cli):
+     bad = _valid_stream()
+     bad["status"] = "bogus"
+-    r = _run_cli(tmp_path, bad)
++    r = validator_cli.on_document(bad)
+     assert r.returncode == 1
+     assert json.loads(r.stdout)["passed"] is False
+diff --git a/packages/validator/tests/test_validation.py b/packages/validator/tests/test_validation.py
+index 711838a..0d959de 100644
+--- a/packages/validator/tests/test_validation.py
++++ b/packages/validator/tests/test_validation.py
+@@ -7,10 +7,7 @@ instead of the record. The model rejects it, so the validator now catches it —
+ the gap the old validator missed.
+ """
+ import json
+-import os
+ import re
+-import subprocess
+-import sys
+ from pathlib import Path
+ 
+ import pytest
+@@ -32,8 +29,6 @@ SRC_ROOT = _REPO_ROOT / "validator" / "src"
+ # parses the flags exactly as the `analitiq-validate` console script would. Only
+ # the two public source trees ride PYTHONPATH — the validator and the contract
+ # models — so this exercises precisely what an installed consumer gets.
+-_CLI_CODE = "from analitiq.validator import main; import sys; sys.exit(main())"
+-_CLI_PYTHONPATH = os.pathsep.join([str(SRC_ROOT), str(CONTRACTS_SRC_ROOT)])
+ 
+ # (corpus file, expected pass?) — single-document verdicts.
+ DOC_CASES = [
+@@ -999,39 +994,28 @@ def test_storage_kinds_need_no_read_map(tmp_path, kind, validator):
+ 
+ # --- CLI / exit-code contract (the integration surface consumers depend on) ---
+ 
+-def _run_cli(tmp_path, doc, filename="doc.json"):
+-    p = tmp_path / filename
+-    p.write_text(json.dumps(doc))
+-    env = {**os.environ, "PYTHONPATH": _CLI_PYTHONPATH, "DOMAIN": "analitiq.ai"}
+-    return subprocess.run([sys.executable, "-c", _CLI_CODE, "--document", str(p)],
+-                          capture_output=True, text=True, env=env, check=False)
+-
+-
+-def test_cli_valid_doc_exit0(tmp_path):
++def test_cli_valid_doc_exit0(validator_cli):
+     # Name the file after its endpoint_id so the filename↔id check is satisfied.
+     doc = json.loads((CORPUS / "valid_read.json").read_text())
+-    r = _run_cli(tmp_path, doc, filename=f"{doc['endpoint_id']}.json")
++    r = validator_cli.on_document(doc, filename=f"{doc['endpoint_id']}.json")
+     assert r.returncode == 0, r.stdout
+     out = json.loads(r.stdout)
+     assert out["passed"] is True and isinstance(out["findings"], list)
+ 
+ 
+-def test_cli_invalid_doc_exit1(tmp_path):
+-    r = _run_cli(tmp_path, json.loads((CORPUS / "invalid_write_from_input.json").read_text()))
++def test_cli_invalid_doc_exit1(validator_cli):
++    r = validator_cli.on_document(json.loads((CORPUS / "invalid_write_from_input.json").read_text()))
+     assert r.returncode == 1
+     assert json.loads(r.stdout)["passed"] is False
+ 
+ 
+-def test_cli_unreadable_document_exit1(tmp_path):
+-    env = {**os.environ, "PYTHONPATH": _CLI_PYTHONPATH, "DOMAIN": "analitiq.ai"}
++def test_cli_unreadable_document_exit1(tmp_path, validator_cli):
+     # A directory path: read raises IsADirectoryError → must still emit JSON + exit 1.
+-    r = subprocess.run([sys.executable, "-c", _CLI_CODE, "--document", str(tmp_path)],
+-                       capture_output=True, text=True, env=env, check=False)
++    r = validator_cli.run("--document", str(tmp_path))
+     assert r.returncode == 1
+     assert json.loads(r.stdout)["passed"] is False
+ 
+ 
+-def test_cli_missing_arg_exit2(tmp_path):
+-    env = {**os.environ, "PYTHONPATH": _CLI_PYTHONPATH, "DOMAIN": "analitiq.ai"}
+-    r = subprocess.run([sys.executable, "-c", _CLI_CODE], capture_output=True, text=True, env=env, check=False)
++def test_cli_missing_arg_exit2(validator_cli):
++    r = validator_cli.run()
+     assert r.returncode == 2

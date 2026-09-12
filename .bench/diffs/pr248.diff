@@ -1,0 +1,76 @@
+diff --git a/plugins/analitiq-pipeline-builder/agents/pipeline-schema-validator.md b/plugins/analitiq-pipeline-builder/agents/pipeline-schema-validator.md
+index 7b28da6..98e62b0 100644
+--- a/plugins/analitiq-pipeline-builder/agents/pipeline-schema-validator.md
++++ b/plugins/analitiq-pipeline-builder/agents/pipeline-schema-validator.md
+@@ -64,11 +64,15 @@ published contract structurally cannot make (see its module docstring).
+ - If the command prints valid `Diagnostics` JSON on stdout, return it as-is even
+   when it exits non-zero (`passed: false`). The orchestrator interprets the
+   verdict.
+-- If the command prints no JSON on stdout (the adapter crashed before it could
+-  emit diagnostics), return the stderr excerpt as a single error finding; never
+-  forward partial or non-JSON stdout:
++- The adapter contains every crash it can reach into an `adapter-crash` finding
++  on stdout — see `skills/pipeline-builder/references/io-contracts.md` §
++  `Diagnostics`. If the command still
++  prints no JSON on stdout (a `SystemExit` or another fatal interpreter failure
++  before any guard runs — not something Python exception handling can contain),
++  return the stderr excerpt as a single error finding; never forward partial or
++  non-JSON stdout:
+ 
+   <!-- illustrative -->
+   ```jsonc
+-  {"passed": false, "findings": [{"validator": "contract-model", "severity": "error", "path": "", "message": "<stderr excerpt>"}]}
++  {"passed": false, "findings": [{"validator": "adapter-crash", "severity": "error", "path": "", "message": "<stderr excerpt>"}]}
+   ```
+diff --git a/plugins/analitiq-pipeline-builder/skills/pipeline-builder/references/io-contracts.md b/plugins/analitiq-pipeline-builder/skills/pipeline-builder/references/io-contracts.md
+index 161e777..36f24d8 100644
+--- a/plugins/analitiq-pipeline-builder/skills/pipeline-builder/references/io-contracts.md
++++ b/plugins/analitiq-pipeline-builder/skills/pipeline-builder/references/io-contracts.md
+@@ -161,6 +161,20 @@ structurally cannot make:
+   type maps the engine loads beside `connection.json`. See
+   `endpoint-spec/spec-type-map-gaps.md`.
+ 
++One further id names not a check but a failure mode: `adapter-crash` —
++**error**: the run could not be evaluated normally. Either a containment guard
++inside `scripts/validate.py` fired — the document was not evaluated for that
++stage, and `path`/`message` name which stage crashed and why — or the process
++printed no `Diagnostics` JSON at all and the driving agent reconstructed this
++finding from a stderr excerpt, carried in `message` with `path` empty.
++
++This id names only a crash reaching a guard in this adapter. A crash inside
++the published validator's own single-document dispatch (the `database_endpoint`
++/ `type_map_read` / `type_map_write` routes, which call it directly) is already
++caught there and returned as an ordinary `contract-model` finding whose
++`message` says the check itself crashed — that finding never reaches this
++adapter as an exception, so no guard here fires and it is not relabeled.
++
+ Some findings name the rule they apply, as a leading `[RULE-<AREA>-NNN]` in
+ `message`. Quote the id verbatim whenever one is present — `pipeline-spec` and
+ `stream-spec` list the rules by id.
+diff --git a/plugins/analitiq-pipeline-builder/skills/pipeline-builder/references/pipeline.md b/plugins/analitiq-pipeline-builder/skills/pipeline-builder/references/pipeline.md
+index 3055859..2b88444 100644
+--- a/plugins/analitiq-pipeline-builder/skills/pipeline-builder/references/pipeline.md
++++ b/plugins/analitiq-pipeline-builder/skills/pipeline-builder/references/pipeline.md
+@@ -26,11 +26,16 @@ For each artifact:
+ 
+ 1. Run the validator.
+ 2. If `passed: true`, accept and move on.
+-3. If `passed: false`, collect the findings and re-invoke the matching
+-   creator with the findings attached, asking it to fix exactly the
+-   reported errors — and only those, no opportunistic edits.
+-4. Re-validate. Increment the pass counter.
+-5. Stop after **5 passes** regardless of state. If still failing, halt and
++3. If any finding's `validator` is `adapter-crash`, halt immediately and
++   surface it instead of entering the fix loop below: it names a validator or
++   runtime failure, not an authored-document defect, so the creator has no
++   correction to make — feeding it in would re-invoke the creator against an
++   artifact that may already be valid.
++4. Otherwise, collect the findings and re-invoke the matching creator with the
++   findings attached, asking it to fix exactly the reported errors — and only
++   those, no opportunistic edits.
++5. Re-validate. Increment the pass counter.
++6. Stop after **5 passes** regardless of state. If still failing, halt and
+    surface the diagnostics.
+ 
+ The validator is stateless — the pass cap and the discipline live here, not in
+SKIPPED_FILES: plugins/analitiq-pipeline-builder/scripts/validate.py tests/pipeline_builder/test_validate.py
