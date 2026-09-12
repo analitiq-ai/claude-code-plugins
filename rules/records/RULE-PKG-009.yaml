@@ -6,6 +6,7 @@ tier: shape
 severity: info
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin]
 rationale: >
   Nothing at run time depends on it — the engine resolves the class through

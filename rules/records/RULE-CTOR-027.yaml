@@ -7,6 +7,7 @@ tier: choice
 severity: warning
 scopes: [connector]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin]
 rationale: >
   The order ranks write paths, not connectivity: every tier yields a

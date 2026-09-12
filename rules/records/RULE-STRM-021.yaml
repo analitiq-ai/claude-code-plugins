@@ -5,6 +5,7 @@ tier: coherence
 severity: error
 scopes: [stream]
 validator: null
+enforcement_location: engine
 owners: [pipeline-plugin, engine]
 targets: [ValidationRule]
 rationale: >

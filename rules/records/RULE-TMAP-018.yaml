@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [type-map]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   The engine composes the connection map as primary over the connector map by

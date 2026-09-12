@@ -132,6 +132,25 @@ MECHANISMS = (
 #: `symbol` no longer resolves against what the renderer actually reads.
 SYMBOL_MECHANISMS = ("pattern", "reserved_names")
 
+#: Where a `validator: null` record's obligation is actually checked, once
+#: `validator` itself has answered "not here" (`rules/SCHEMA.md`,
+#: "`enforcement_location`"). `engine` and `platform-save` are behaviour claims
+#: this repo cannot verify from its own tree — `.claude/rules/
+#: engine-behaviour-claims.md` governs how a record's `rationale` may state one.
+ENGINE_LOCATION = "engine"
+EXTERNAL_CI_LOCATION = "external-ci"
+PLATFORM_SAVE_LOCATION = "platform-save"
+AUTHORING_PRACTICE_LOCATION = "authoring-practice"
+UNENFORCED_LOCATION = "unenforced"
+
+ENFORCEMENT_LOCATIONS = (
+    ENGINE_LOCATION,
+    EXTERNAL_CI_LOCATION,
+    PLATFORM_SAVE_LOCATION,
+    AUTHORING_PRACTICE_LOCATION,
+    UNENFORCED_LOCATION,
+)
+
 #: Ids retired before the registry had files, so no record on disk remembers
 #: them. A live record normally carries `status: retired` and guards its own id;
 #: these have nothing to carry it, and an id is never reissued — it appears in
@@ -193,6 +212,13 @@ class RuleRecord:
     #: record is read. Lint-resolved, so a renamed validator fails the build
     #: instead of leaving a record claiming an enforcement it lost.
     validator: str | None = None
+    #: Where a `validator: null` record's obligation is actually checked —
+    #: required whenever `validator` is absent and `status` is `active` or
+    #: `deprecated`, and refused whenever `validator` is present (which already
+    #: answers the question this field exists to answer). `rules/SCHEMA.md`
+    #: owns the vocabulary; `rationale` stays the prose that justifies the
+    #: answer, not a second place the answer itself lives.
+    enforcement_location: str | None = None
     owners: tuple[str, ...] = ()
     status: str = "active"
     #: Every model class the rule binds, matched against the whole MRO. Wider
@@ -339,6 +365,30 @@ class RuleRecord:
             self._fail(
                 "symbol names the constant a `pattern` or `reserved_names` "
                 f"rule is about; this record's mechanism is {self.mechanism!r}"
+            )
+        if self.enforcement_location is not None and self.enforcement_location not in ENFORCEMENT_LOCATIONS:
+            self._fail(
+                f"unknown enforcement_location {self.enforcement_location!r}; "
+                f"expected one of {ENFORCEMENT_LOCATIONS}"
+            )
+        if self.validator and self.enforcement_location is not None:
+            # A non-null validator already answers where the rule is enforced
+            # — a second answer here is a second place the two could disagree.
+            self._fail(
+                "enforcement_location is set beside a validator — validator "
+                "already answers where this rule is enforced; drop one or "
+                "the other"
+            )
+        if (
+            not self.validator
+            and self.enforcement_location is None
+            and self.status in ("active", "deprecated")
+        ):
+            self._fail(
+                "no validator and no enforcement_location, on a record that "
+                f"currently binds an author (status: {self.status!r}) — name "
+                "where the obligation is actually checked, from "
+                f"{ENFORCEMENT_LOCATIONS}"
             )
         if self.status == "retired" and not self.superseded_by:
             self._fail(

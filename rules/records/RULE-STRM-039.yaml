@@ -8,6 +8,7 @@ tier: choice
 severity: warning
 scopes: [stream]
 validator: null
+enforcement_location: authoring-practice
 owners: [pipeline-plugin, engine]
 targets: [IncrementalReplication]
 fields: [safety_window_seconds]

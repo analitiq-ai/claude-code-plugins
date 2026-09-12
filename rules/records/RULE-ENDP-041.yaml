@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [api-endpoint]
 validator: null
+enforcement_location: engine
 owners: [connector-plugin, engine]
 targets: [_RequestBase]
 rationale: >

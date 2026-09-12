@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [any]
 validator: null
+enforcement_location: engine
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   The registry belongs to the engine and is consulted at connect time. A slot

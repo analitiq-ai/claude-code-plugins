@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [database-endpoint]
 validator: null
+enforcement_location: engine
 owners: [pipeline-plugin, engine]
 targets: [DatabaseObject, DatabaseEndpointDoc]
 rationale: >

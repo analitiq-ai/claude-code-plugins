@@ -6,6 +6,7 @@ tier: process
 severity: error
 scopes: [type-map]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   Resolution stops at the first matching rule in both directions, and for a

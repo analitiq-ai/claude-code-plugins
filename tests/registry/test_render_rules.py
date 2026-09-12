@@ -54,6 +54,7 @@ BASELINE = {
     "severity": "error",
     "scopes": "[connector]",
     "validator": "null",
+    "enforcement_location": "unenforced",
     "owners": "[connector-plugin]",
     "rationale": "Stated here because the corpus needs a record to mutate.",
     "status": "active",
@@ -335,22 +336,26 @@ def test_a_validator_outside_the_published_namespace_is_refused(registry):
     here, so the namespace is what keeps a binding pointing at code this repo
     owns.
     """
-    _write(registry, validator='"os.path::join"')
+    _write(registry, validator='"os.path::join"', enforcement_location=None)
     assert "outside" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_module_is_refused(registry):
-    _write(registry, validator=f'"{CONTRACTS}.no_such_module::Thing"')
+    _write(registry, validator=f'"{CONTRACTS}.no_such_module::Thing"', enforcement_location=None)
     assert "no_such_module" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_class_is_refused(registry):
-    _write(registry, validator=f'"{CONTRACTS}.connector::NoSuchModel"')
+    _write(registry, validator=f'"{CONTRACTS}.connector::NoSuchModel"', enforcement_location=None)
     assert "NoSuchModel" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_member_is_refused(registry):
-    _write(registry, validator=f'"{CONTRACTS}.connector::ConnectorBase._no_such_method"')
+    _write(
+        registry,
+        validator=f'"{CONTRACTS}.connector::ConnectorBase._no_such_method"',
+        enforcement_location=None,
+    )
     assert "_no_such_method" in _refusal(registry)
 
 
@@ -361,7 +366,11 @@ def test_a_validator_naming_an_inherited_member_is_refused(registry):
     an enforcer it certainly does not, so the lint would report a live rule for
     one nothing applies.
     """
-    _write(registry, validator=f'"{CONTRACTS}.connector::ConnectorBase.dict"')
+    _write(
+        registry,
+        validator=f'"{CONTRACTS}.connector::ConnectorBase.dict"',
+        enforcement_location=None,
+    )
     assert "dict" in _refusal(registry)
 
 
@@ -374,13 +383,18 @@ def test_a_validator_naming_a_real_enforcer_is_accepted(registry):
     _write(
         registry,
         validator=f'"{CONTRACTS}.connector::ConnectorBase._default_transport_declared"',
+        enforcement_location=None,
     )
     assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
 
 
 def test_a_validator_naming_a_model_field_is_accepted(registry):
     """A shape rule binds the field carrying its `Literal` or pattern."""
-    _write(registry, validator=f'"{CONTRACTS}.connector::SqlBulkLoad.sqlalchemy"')
+    _write(
+        registry,
+        validator=f'"{CONTRACTS}.connector::SqlBulkLoad.sqlalchemy"',
+        enforcement_location=None,
+    )
     assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
 
 

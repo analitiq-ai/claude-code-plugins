@@ -6,6 +6,7 @@ tier: shape
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   The mode promises the server certificate is checked against a CA; with no

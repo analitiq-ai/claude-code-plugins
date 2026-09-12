@@ -8,6 +8,7 @@ tier: process
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: external-ci
 owners: [connector-plugin, engine]
 rationale: >
   The engine imports a connector through a package name mapped onto that

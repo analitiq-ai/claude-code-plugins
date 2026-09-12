@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [stream]
 validator: null
+enforcement_location: platform-save
 owners: [pipeline-plugin, engine]
 targets: [StreamSource, Filter, AssignmentTarget, DatabaseConflictKeyedWrite]
 rationale: >

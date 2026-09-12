@@ -8,6 +8,7 @@ tier: shape
 severity: warning
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   Every transport renders column types through that one hook, whose default

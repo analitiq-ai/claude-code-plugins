@@ -7,6 +7,7 @@ tier: reference
 severity: warning
 scopes: [connector]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   Discovery output is connection-scoped, so a hand-authored endpoint in the

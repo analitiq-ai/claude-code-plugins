@@ -7,6 +7,7 @@ tier: process
 severity: error
 scopes: [database-endpoint, stream]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [DatabaseObject, ConnectionEndpointRef, DatabaseEndpointDoc]
 rationale: >

@@ -6,6 +6,7 @@ tier: coherence
 severity: error
 scopes: [connector]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin, engine]
 targets: [PostAuthOutput, ConnectorBase]
 rationale: >

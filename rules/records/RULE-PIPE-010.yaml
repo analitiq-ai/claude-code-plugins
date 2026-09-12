@@ -6,6 +6,7 @@ tier: process
 severity: error
 scopes: [pipeline]
 validator: null
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [PipelineAuthored]
 rationale: >

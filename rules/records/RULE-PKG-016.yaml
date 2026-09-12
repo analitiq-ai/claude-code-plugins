@@ -7,6 +7,7 @@ tier: reference
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: external-ci
 owners: [connector-plugin, engine]
 rationale: >
   The engine refuses rather than guesses: it reads the declaration instead

@@ -8,6 +8,7 @@ tier: reference
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   The vocabulary is the system's own, researched from the driver's docs and

@@ -6,6 +6,7 @@ tier: shape
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   On most engines `TRUNCATE` commits the open transaction, so the

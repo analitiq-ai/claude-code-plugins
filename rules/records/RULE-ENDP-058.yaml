@@ -8,6 +8,7 @@ tier: choice
 severity: error
 scopes: [api-endpoint]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin]
 targets: [OffsetCursor]
 rationale: >

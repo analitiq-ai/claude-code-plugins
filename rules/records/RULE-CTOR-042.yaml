@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [connector]
 validator: null
+enforcement_location: external-ci
 owners: [connector-plugin, engine]
 rationale: >
   That slug is the connector's identity in three places at once — the

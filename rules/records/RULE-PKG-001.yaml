@@ -8,6 +8,7 @@ tier: choice
 severity: warning
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   An override freezes a copy of behaviour the CDK base owns, so an

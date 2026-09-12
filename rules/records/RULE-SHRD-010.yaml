@@ -6,6 +6,7 @@ tier: shape
 severity: error
 scopes: [any]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [HttpTransport, TransportDefaults, _RequestBase]
 rationale: >

@@ -6,6 +6,7 @@ tier: shape
 severity: error
 scopes: [pipeline]
 validator: null
+enforcement_location: engine
 owners: [pipeline-plugin, engine]
 targets: [Schedule]
 rationale: >

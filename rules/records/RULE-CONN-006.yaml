@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [connection]
 validator: null
+enforcement_location: engine
 owners: [pipeline-plugin, engine]
 targets: [ConnectionAuthored, ConnectionInput]
 rationale: >
