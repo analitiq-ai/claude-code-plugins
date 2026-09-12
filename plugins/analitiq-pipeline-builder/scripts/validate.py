@@ -7,8 +7,8 @@ the Analitiq services validate against) and reduces every backend into one
 Diagnostics envelope: ``{"passed": bool, "findings": [...]}``, `passed` fails
 closed over every finding — a locally minted one (`validator`, `severity`,
 `path`, `message`) or one forwarded unchanged from `analitiq.validator`
-(`validator`, `rule`, `message_id`, `kind`, `path`, `message`, `severity` only
-for `kind: "fail"`) — through `_finding_costs_a_pass` (`skills/pipeline-builder/references/io-contracts.md`'s
+(`rule`, `message_id`, `kind`, `path`, `message`, `severity` only for
+`kind: "fail"`) — through `_finding_costs_a_pass` (`skills/pipeline-builder/references/io-contracts.md`'s
 `Diagnostics` section owns the shape and the predicate in full).
 
 The published package exposes one single-document entry point plus one bundle
@@ -33,9 +33,10 @@ entry point. This adapter routes each entity as follows:
     exactly those names (and the published validator derives rule direction from
     them, defaulting an unknown name to read), so a misnamed file gets the rename
     finding alone rather than findings that could be graded in the wrong direction.
-    The published ``type-map-write-coverage`` warning is filtered out here: it
-    presumes a connector's full-vocabulary write map, which a gap-only connection
-    map deliberately is not (see ``_type_map_findings``).
+    The published write-vocabulary-coverage warning (``RULE-TMAP-017``) is
+    filtered out here: it presumes a connector's full-vocabulary write map,
+    which a gap-only connection map deliberately is not (see
+    ``_type_map_findings``).
   * ``pipeline`` with ``--bundle-root`` -> additionally
     ``analitiq.validator.validate_pipeline_bundle`` over the on-disk bundle, for the
     cross-document referential integrity no single document can verify. A draft
@@ -249,7 +250,15 @@ def _type_map_findings(entity: str, doc, document_path: Path) -> list[dict]:
         # on every authored connection write map forever, and its remedy ("add
         # rules") is exactly the shadowing the gap-only rule forbids. Filtering it
         # is the same adapter-adapts-published-behavior move as require_runnable.
-        findings = [f for f in findings if f.get("validator") != "type-map-write-coverage"]
+        # Checked both ways: the currently-pinned release predates the `rule`
+        # axis and still names this check `validator="type-map-write-coverage"`;
+        # a release carrying the `rule` axis names it `rule="RULE-TMAP-017"`
+        # instead and drops `validator` entirely.
+        findings = [
+            f for f in findings
+            if f.get("validator") != "type-map-write-coverage"
+            and f.get("rule") != "RULE-TMAP-017"
+        ]
     return findings
 
 
@@ -556,7 +565,7 @@ def _check_connector_endpoint_refs(streams, connections,
                 continue
             cid, eid = ref.get("connection_id"), ref.get("endpoint_id")
             if not (isinstance(cid, str) and cid and isinstance(eid, str) and eid):
-                continue  # missing ids are contract-model / bundle-connection-ref concerns
+                continue  # missing ids are the contract model's concern, or RULE-STRM-033/034's
             connector = conn_to_connector.get(_base_id(cid))
             if connector is None:
                 continue  # unresolved connection — already flagged by the connection check
@@ -578,18 +587,27 @@ def _check_connector_endpoint_refs(streams, connections,
             ))
 
 
+def is_runnable_required(pipeline_doc: object) -> bool:
+    """This plugin authors draft bundles by design: a draft pipeline is not yet
+    runnable, so its runnability verdicts are an author-time expectation, not a
+    defect. Ask the bundle validator for referential integrity only
+    (require_runnable=False) while the pipeline is a draft, and enforce runnability
+    once it is authored 'active'. A non-dict pipeline_doc already earned its own
+    contract-model finding at the single-document stage (see diagnostics_for) —
+    treat it as not-yet-active here rather than raising.
+
+    Public (no leading underscore): `scripts/gen_pipeline_docs.py` calls this
+    directly to measure which `require_runnable`-gated rules this adapter can
+    actually surface, rather than reasoning about the gate from outside it."""
+    return isinstance(pipeline_doc, dict) and pipeline_doc.get("status") == "active"
+
+
 def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> list[dict]:
     from analitiq.validator import validate_pipeline_bundle
     bundle, findings, complete, crashed = _assemble_bundle(pipeline_doc, document_path, root)
-    # This plugin authors draft bundles by design: a draft pipeline is not yet
-    # runnable, so its runnability verdicts are an author-time expectation, not a
-    # defect. Ask the bundle validator for referential integrity only
-    # (require_runnable=False) while the pipeline is a draft, and enforce runnability
-    # once it is authored 'active'. Every referential finding stays blocking either
-    # way. A non-dict pipeline_doc already earned its own contract-model finding at
-    # the single-document stage (see diagnostics_for) — treat it as not-yet-active
-    # here rather than raising and discarding what _assemble_bundle just decided.
-    require_runnable = isinstance(pipeline_doc, dict) and pipeline_doc.get("status") == "active"
+    # Every referential finding stays blocking whether or not runnability is
+    # enforced too — see is_runnable_required for what the flag itself decides.
+    require_runnable = is_runnable_required(pipeline_doc)
     if complete:
         # Each of these two is its own unit: a crash in one must not discard the
         # per-connection findings _assemble_bundle already decided above, nor the

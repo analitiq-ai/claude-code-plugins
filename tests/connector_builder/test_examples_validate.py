@@ -162,7 +162,7 @@ def test_prose_type_map_rules_validate(tmp_path: Path) -> None:
         )
         failures += [
             f"{path.relative_to(REPO_ROOT)}:{lineno} ({direction}) "
-            f"{f['validator']}: {f['message']}"
+            f"{f.get('rule')}: {f['message']}"
             for f in _errors(findings)
         ]
     assert not failures, "type-map rules taught in prose that the contract refuses:\n" + "\n".join(
@@ -199,7 +199,7 @@ def test_example_connector_validates(example_dir: Path, tmp_path: Path) -> None:
     )
     errors = _errors(findings)
     assert not errors, "\n".join(
-        f"{f['validator']} {f['path']}: {f['message']}" for f in errors
+        f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors
     )
 
 
@@ -230,7 +230,7 @@ def test_example_type_maps_validate(example_dir: Path, tmp_path: Path) -> None:
         )
         errors = _errors(findings)
         assert not errors, f"{map_path.name}\n" + "\n".join(
-            f"{f['validator']} {f['path']}: {f['message']}" for f in errors
+            f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors
         )
 
 
@@ -263,7 +263,7 @@ def test_example_write_maps_render_bare_container_markers(
     named = [
         f["message"]
         for f in findings
-        if f["validator"] == "type-map-write-coverage"
+        if f.get("rule") == "RULE-TMAP-017"
         and ("'Object'" in f["message"] or "'List'" in f["message"])
     ]
     assert not named, (
@@ -277,8 +277,8 @@ def test_example_write_maps_render_bare_container_markers(
 def test_example_endpoints_validate(example_dir: Path, tmp_path: Path) -> None:
     """Endpoints must also hold up standalone.
 
-    Validating from the connector walks siblings, but `endpoint-filename` and
-    `endpoint-id-locator` are most direct here — and an endpoint is authored and
+    Validating from the connector walks siblings, but `RULE-PKG-031` and
+    `RULE-ENDP-046` are most direct here — and an endpoint is authored and
     validated on its own during the fan-out.
     """
     definition = _stage(example_dir, tmp_path).parent
@@ -293,5 +293,5 @@ def test_example_endpoints_validate(example_dir: Path, tmp_path: Path) -> None:
         )
         errors = _errors(findings)
         assert not errors, f"{endpoint_path.name}\n" + "\n".join(
-            f"{f['validator']} {f['path']}: {f['message']}" for f in errors
+            f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors
         )

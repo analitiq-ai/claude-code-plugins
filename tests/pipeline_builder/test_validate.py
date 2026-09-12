@@ -34,6 +34,19 @@ EID = derive_db_endpoint_id(None, "public", "orders")
 DBOBJ = build_database_object(None, "public", "orders")
 H = "https://schemas.analitiq.ai"
 
+# Every finding's identity, local or forwarded: this adapter's own `validator`
+# category for a locally-minted finding (no `kind` key at all), or the `rule`
+# a forwarded (published) finding names — absent for the framework's own
+# ruleless cases, which carry no id here.
+def _ids(findings) -> list:
+    return [f.get("validator") if "kind" not in f else f.get("rule") for f in findings]
+
+
+# The rule ids the deleted `bundle-connection-ref` / `bundle-endpoint-ref`
+# categories dissolved into (packages/validator/src/analitiq/validator/pipelines.py).
+_BUNDLE_CONNECTION_REF_RULES = {"RULE-PIPE-012", "RULE-PIPE-013", "RULE-STRM-033"}
+_BUNDLE_ENDPOINT_REF_RULES = {"RULE-STRM-034", "RULE-STRM-042"}
+
 CONN_WISE = {
     "$schema": f"{H}/connection/latest.json", "connection_id": SRC, "connector_id": "wise",
     "display_name": "Wise", "parameters": {"environment": "live"},
@@ -106,12 +119,19 @@ def test_valid_single_document(tmp_path, entity, doc):
     ("database_endpoint",
      {"$schema": f"{H}/database-endpoint/latest.json", "endpoint_id": "public_orders",
       "database_object": DBOBJ, "columns": [{"name": "id", "native_type": "bigint", "arrow_type": "Int64"}]},
-     "endpoint-id-locator"),
+     "RULE-DBEP-011"),
 ])
 def test_invalid_single_document(tmp_path, entity, doc, validator_id):
+    # `connection`/`stream` route through this adapter's own local model check
+    # (a `validator` category); `database_endpoint` is forwarded unchanged from
+    # the published `analitiq.validator` (a `rule` id) — one assertion covers
+    # both without the test needing to know which.
     diag = V.diagnostics_for(entity, _write(tmp_path, f"{entity}.json", doc))
     assert not diag["passed"]
-    assert any(f["validator"] == validator_id for f in diag["findings"]), diag["findings"]
+    assert any(
+        f.get("validator") == validator_id or f.get("rule") == validator_id
+        for f in diag["findings"]
+    ), diag["findings"]
 
 
 def test_active_pipeline_requires_stream_single_document(tmp_path):
@@ -121,7 +141,7 @@ def test_active_pipeline_requires_stream_single_document(tmp_path):
     doc = {**PIPELINE, "status": "active", "streams": []}
     diag = V.diagnostics_for("pipeline", _write(tmp_path, "pipeline.json", doc))
     assert not diag["passed"]
-    assert any(f["validator"] == "contract-model" and "stream" in f["message"].lower()
+    assert any(f.get("validator") == "contract-model" and "stream" in f["message"].lower()
                for f in diag["findings"]), diag["findings"]
 
 
@@ -142,8 +162,8 @@ def test_valid_draft_bundle(tmp_path):
     # a draft pipeline is not yet runnable by design; require_runnable=False suppresses
     # the runnability findings entirely — no /pipeline/status finding is emitted
     assert not any(f["path"] == "/pipeline/status" for f in diag["findings"]), diag["findings"]
-    # a correctly-named endpoint yields no endpoint-filename finding (error or warning)
-    assert not any(f["validator"] == "endpoint-filename" for f in diag["findings"]), diag["findings"]
+    # a correctly-named endpoint yields no RULE-PKG-031 finding (error or notApplicable)
+    assert not any(f.get("rule") == "RULE-PKG-031" for f in diag["findings"]), diag["findings"]
 
 
 def test_bundle_referential_error(tmp_path):
@@ -154,7 +174,7 @@ def test_bundle_referential_error(tmp_path):
     stream_path.write_text(json.dumps(stream))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    assert any(f["validator"] == "bundle-connection-ref" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("rule") == "RULE-STRM-033" for f in diag["findings"]), diag["findings"]
 
 
 def test_bundle_endpoint_filename_mismatch(tmp_path):
@@ -167,17 +187,17 @@ def test_bundle_endpoint_filename_mismatch(tmp_path):
     (ep_dir / f"{EID}.json").rename(ep_dir / "orders.json")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    assert any(f["validator"] == "endpoint-filename" and f["severity"] == "error"
+    assert any(f.get("rule") == "RULE-PKG-031" and f.get("severity") == "error"
                for f in diag["findings"]), diag["findings"]
     # the filename guard is the *sole* error — a rename must not also break referential
     # resolution, which would mask a guard regression
-    assert {f["validator"] for f in diag["findings"] if f["severity"] == "error"} == {"endpoint-filename"}
+    assert {f.get("rule") for f in diag["findings"] if f.get("severity") == "error"} == {"RULE-PKG-031"}
 
 
 def test_bundle_endpoint_missing_id_warns(tmp_path):
-    # a missing/unusable endpoint_id yields an endpoint-filename *warning* (the shared
-    # gate can't verify the name), not an error; the malformed state is still caught as
-    # an error referentially, never silently passed
+    # a missing/unusable endpoint_id yields a RULE-PKG-031 *notApplicable* (the
+    # shared gate can't verify the name), not an error; the malformed state is
+    # still caught as an error referentially, never silently passed
     doc = _build_bundle(tmp_path)
     ep_dir = tmp_path / "connections/postgresql/definition/endpoints"
     data = json.loads((ep_dir / f"{EID}.json").read_text())
@@ -185,9 +205,9 @@ def test_bundle_endpoint_missing_id_warns(tmp_path):
     (ep_dir / f"{EID}.json").unlink()
     (ep_dir / "whatever.json").write_text(json.dumps(data))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert any(f["validator"] == "endpoint-filename" and f["kind"] == "notApplicable"
+    assert any(f.get("rule") == "RULE-PKG-031" and f["kind"] == "notApplicable"
                for f in diag["findings"]), diag["findings"]
-    assert not any(f["validator"] == "endpoint-filename" and f.get("severity") == "error"
+    assert not any(f.get("rule") == "RULE-PKG-031" and f.get("severity") == "error"
                    for f in diag["findings"]), diag["findings"]
     assert not diag["passed"]
 
@@ -201,7 +221,7 @@ def test_diagnostics_fails_closed_on_a_published_notapplicable_finding():
     absence as "fine" instead of as "unchecked, and error-tier rules don't get
     that benefit of the doubt."""
     published = {
-        "validator": "endpoint-transport-ref", "rule": "RULE-ENDP-047",
+        "rule": "RULE-ENDP-047",
         "message_id": "transport-ref-check-skipped-no-sibling",
         "kind": "notApplicable", "path": "/", "message": "not checked",
     }
@@ -260,7 +280,7 @@ def test_bundle_connector_endpoint_ref_ok(tmp_path):
     _add_wise_endpoint(tmp_path, "transfers")  # matches STREAM's source endpoint_id
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert diag["passed"], diag["findings"]
-    assert not any(f["validator"] == "connector-endpoint-ref" for f in diag["findings"]), diag["findings"]
+    assert not any(f.get("validator") == "connector-endpoint-ref" for f in diag["findings"]), diag["findings"]
 
 
 def test_bundle_connector_endpoint_ref_missing_warns(tmp_path):
@@ -274,7 +294,7 @@ def test_bundle_connector_endpoint_ref_missing_warns(tmp_path):
     stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # typo
     stream_path.write_text(json.dumps(stream))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    warn = [f for f in diag["findings"] if f["validator"] == "connector-endpoint-ref"]
+    warn = [f for f in diag["findings"] if f.get("validator") == "connector-endpoint-ref"]
     assert len(warn) == 1, diag["findings"]
     assert warn[0]["severity"] == "warning"
     assert warn[0]["path"] == "/streams/0/source/endpoint_ref"
@@ -292,7 +312,7 @@ def test_bundle_connector_endpoint_case_mismatch_suggests(tmp_path):
     stream["source"]["endpoint_ref"]["endpoint_id"] = "Transfers"
     stream_path.write_text(json.dumps(stream))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    warn = [f for f in diag["findings"] if f["validator"] == "connector-endpoint-ref"]
+    warn = [f for f in diag["findings"] if f.get("validator") == "connector-endpoint-ref"]
     assert len(warn) == 1 and "'transfers'" in warn[0]["message"], diag["findings"]
 
 
@@ -308,7 +328,7 @@ def test_bundle_connector_endpoint_no_close_match_still_warns(tmp_path):
     stream["source"]["endpoint_ref"]["endpoint_id"] = "zzz"  # no close match to 'transfers'
     stream_path.write_text(json.dumps(stream))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    warn = [f for f in diag["findings"] if f["validator"] == "connector-endpoint-ref"]
+    warn = [f for f in diag["findings"] if f.get("validator") == "connector-endpoint-ref"]
     assert len(warn) == 1 and warn[0]["severity"] == "warning", diag["findings"]
     assert "Did you mean" not in warn[0]["message"], warn[0]["message"]
     assert diag["passed"]
@@ -328,7 +348,7 @@ def test_bundle_connector_endpoint_resolves_by_connector_id_not_dir_slug(tmp_pat
     stream["source"]["endpoint_ref"]["endpoint_id"] = "nope"
     stream_path.write_text(json.dumps(stream))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert any(f["validator"] == "connector-endpoint-ref" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("validator") == "connector-endpoint-ref" for f in diag["findings"]), diag["findings"]
 
 
 def test_bundle_connector_endpoint_unknown_set_skips(tmp_path):
@@ -340,7 +360,7 @@ def test_bundle_connector_endpoint_unknown_set_skips(tmp_path):
     stream["source"]["endpoint_ref"]["endpoint_id"] = "does_not_exist"
     stream_path.write_text(json.dumps(stream))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert not any(f["validator"] == "connector-endpoint-ref" for f in diag["findings"]), diag["findings"]
+    assert not any(f.get("validator") == "connector-endpoint-ref" for f in diag["findings"]), diag["findings"]
 
 
 def test_unreadable_document(tmp_path):
@@ -389,7 +409,7 @@ def test_active_pipeline_not_runnable_stays_error(tmp_path):
     # an active pipeline with no runnable stream is a real error — require_runnable is
     # True for an 'active' pipeline, so the runnability gate stays blocking
     assert not diag["passed"]
-    assert any(f["validator"] == "bundle-pipeline" and f["severity"] == "error"
+    assert any(f.get("rule") == "RULE-PIPE-014" and f.get("severity") == "error"
                for f in diag["findings"]), diag["findings"]
 
 
@@ -413,7 +433,7 @@ def test_bundle_malformed_sibling(tmp_path):
     (tmp_path / "pipelines/p/streams/orders.json").write_text("{ not valid json")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    assert any(f["validator"] == "document" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("validator") == "document" for f in diag["findings"]), diag["findings"]
 
 
 def test_bundle_non_dict_sibling(tmp_path):
@@ -422,7 +442,7 @@ def test_bundle_non_dict_sibling(tmp_path):
     (tmp_path / "connections/postgresql/connection.json").write_text("[]")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    assert any(f["validator"] == "document" and "not a JSON object" in f["message"]
+    assert any(f.get("validator") == "document" and "not a JSON object" in f["message"]
                for f in diag["findings"]), diag["findings"]
 
 
@@ -464,7 +484,7 @@ def test_type_map_entity_rejects_wrong_filename(tmp_path):
     # misnamed file's content would otherwise be graded in the wrong direction
     diag = V.diagnostics_for("type_map_read", _write(tmp_path, "type-map.json", TYPE_MAP_READ))
     assert not diag["passed"]
-    assert [f["validator"] for f in diag["findings"]] == ["connection-type-map"], diag["findings"]
+    assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
     assert "type-map-read.json" in diag["findings"][0]["message"]
 
 
@@ -472,7 +492,7 @@ def test_type_map_entity_direction_mismatch_is_caught(tmp_path):
     # a write-shaped map under the read entity fails the filename gate, not the model
     diag = V.diagnostics_for("type_map_write", _write(tmp_path, "type-map-read.json", TYPE_MAP_WRITE))
     assert not diag["passed"]
-    assert any(f["validator"] == "connection-type-map" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("validator") == "connection-type-map" for f in diag["findings"]), diag["findings"]
 
 
 @pytest.mark.parametrize("doc", [
@@ -482,7 +502,7 @@ def test_type_map_entity_direction_mismatch_is_caught(tmp_path):
 def test_invalid_type_map_content(tmp_path, doc):
     diag = V.diagnostics_for("type_map_read", _write(tmp_path, "type-map-read.json", doc))
     assert not diag["passed"]
-    assert any(f["validator"] == "contract-model" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("rule") is None and f.get("kind") == "fail" for f in diag["findings"]), diag["findings"]
 
 
 def test_bundle_with_valid_connection_type_maps(tmp_path):
@@ -500,7 +520,7 @@ def test_bundle_rejects_dead_type_map_filename(tmp_path):
     _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    migration = [f for f in diag["findings"] if f["validator"] == "connection-type-map"]
+    migration = [f for f in diag["findings"] if f.get("validator") == "connection-type-map"]
     assert migration, diag["findings"]
     assert migration[0]["severity"] == "error"
     assert "type-map-read.json" in migration[0]["message"]  # the migration direction
@@ -512,7 +532,7 @@ def test_bundle_flags_invalid_connection_type_map(tmp_path):
                 [{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}])
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    bad = [f for f in diag["findings"] if f["validator"] == "contract-model"]
+    bad = [f for f in diag["findings"] if f.get("rule") is None and f.get("kind") == "fail"]
     assert bad, diag["findings"]
     # findings are anchored to the owning file so a multi-connection bundle stays legible
     assert all(f["path"].startswith("connections/postgresql/definition/type-map-read.json")
@@ -526,7 +546,7 @@ def test_bundle_unreadable_connection_type_map(tmp_path):
     p.write_text("[ not valid json")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    assert any(f["validator"] == "connection-type-map" and "Cannot read" in f["message"]
+    assert any(f.get("validator") == "connection-type-map" and "Cannot read" in f["message"]
                for f in diag["findings"]), diag["findings"]
 
 
@@ -536,24 +556,24 @@ def test_type_map_entity_rejects_non_array(tmp_path):
     # graded as a connection and pass clean while the engine's loader chokes
     diag = V.diagnostics_for("type_map_read", _write(tmp_path, "type-map-read.json", CONN_PG))
     assert not diag["passed"]
-    assert [f["validator"] for f in diag["findings"]] == ["connection-type-map"], diag["findings"]
+    assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
     assert "JSON array" in diag["findings"][0]["message"]
 
 
 def test_connection_write_map_filters_connector_vocabulary_warning(tmp_path):
-    # the published type-map-write-coverage warning presumes a connector's
+    # the published RULE-TMAP-017 warning presumes a connector's
     # full-vocabulary write map; a gap-only connection map never satisfies it by
     # design, so the adapter filters it — for the entity run and the bundle alike
     diag = V.diagnostics_for("type_map_write", _write(tmp_path, "type-map-write.json", TYPE_MAP_WRITE))
     assert diag["passed"], diag["findings"]
-    assert not any(f["validator"] == "type-map-write-coverage" for f in diag["findings"])
+    assert not any(f.get("rule") == "RULE-TMAP-017" for f in diag["findings"])
 
     root = tmp_path / "bundle"
     doc = _build_bundle(root)
     _write(root, "connections/postgresql/definition/type-map-write.json", TYPE_MAP_WRITE)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=root)
     assert diag["passed"], diag["findings"]
-    assert not any(f["validator"] == "type-map-write-coverage" for f in diag["findings"])
+    assert not any(f.get("rule") == "RULE-TMAP-017" for f in diag["findings"])
 
 
 def test_bundle_flags_invalid_connection_write_type_map(tmp_path):
@@ -564,7 +584,7 @@ def test_bundle_flags_invalid_connection_write_type_map(tmp_path):
            [{"match": "exact", "arrow_type": "utf8", "native_type": "TEXT"}])
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    bad = [f for f in diag["findings"] if f["validator"] == "contract-model"]
+    bad = [f for f in diag["findings"] if f.get("rule") is None and f.get("kind") == "fail"]
     assert bad and all(
         f["path"].startswith("connections/postgresql/definition/type-map-write.json")
         for f in bad), diag["findings"]
@@ -577,7 +597,7 @@ def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
     (tmp_path / "connections/postgresql/definition/type-map-read.json").mkdir(parents=True)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    assert any(f["validator"] == "connection-type-map" and "not a readable file" in f["message"]
+    assert any(f.get("validator") == "connection-type-map" and "not a readable file" in f["message"]
                for f in diag["findings"]), diag["findings"]
 
 
@@ -602,7 +622,7 @@ def test_model_findings_crash_becomes_adapter_crash_finding(tmp_path, monkeypatc
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
     assert out["passed"] is False
-    assert any(f["validator"] == "adapter-crash" and f["severity"] == "error"
+    assert any(f.get("validator") == "adapter-crash" and f["severity"] == "error"
                for f in out["findings"]), out["findings"]
 
 
@@ -624,9 +644,9 @@ def test_bundle_per_connection_crash_preserves_earlier_findings(tmp_path, monkey
     monkeypatch.setattr(V, "_connection_type_map_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "connection-type-map" in validators, diag["findings"]  # postgresql's, decided first
-    crash = [f for f in diag["findings"] if f["validator"] == "adapter-crash"]
+    crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"]
     assert len(crash) == 1, diag["findings"]
     assert crash[0]["path"] == "connections/wise"
     assert "TypeError" in crash[0]["message"] and "simulated crash" in crash[0]["message"]
@@ -648,8 +668,8 @@ def test_bundle_connector_endpoint_refs_crash_contained(tmp_path, monkeypatch):
     monkeypatch.setattr(V, "_check_connector_endpoint_refs", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    validators = [f["validator"] for f in diag["findings"]]
-    assert "bundle-connection-ref" in validators, diag["findings"]  # the other unit's result
+    validators = _ids(diag["findings"])
+    assert _BUNDLE_CONNECTION_REF_RULES & set(validators), diag["findings"]  # the other unit's result
     assert "adapter-crash" in validators, diag["findings"]
 
 
@@ -686,10 +706,10 @@ def test_connector_endpoint_ref_crash_preserves_earlier_ref_warning(tmp_path, mo
 
     monkeypatch.setattr(difflib, "get_close_matches", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
     # the first ref's warning, decided before the crashing second ref, survives
-    warnings = [f for f in diag["findings"] if f["validator"] == "connector-endpoint-ref"]
+    warnings = [f for f in diag["findings"] if f.get("validator") == "connector-endpoint-ref"]
     assert any("transfers" in w["message"] for w in warnings), diag["findings"]
 
 
@@ -707,7 +727,7 @@ def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, m
     rc = V.main(["--entity", "pipeline", "--document", str(doc), "--bundle-root", str(tmp_path)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
-    crash = [f for f in out["findings"] if f["validator"] == "adapter-crash"]
+    crash = [f for f in out["findings"] if f.get("validator") == "adapter-crash"]
     assert len(crash) == 1, out["findings"]
     assert crash[0]["message"] == "MemoryError"
     assert not crash[0]["message"].endswith(": ")
@@ -729,7 +749,7 @@ def test_endpoint_route_crash_before_validate_document_contained(tmp_path, monke
     rc = V.main(["--entity", "database_endpoint", "--document", str(p)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
-    assert any(f["validator"] == "adapter-crash" for f in out["findings"]), out["findings"]
+    assert any(f.get("validator") == "adapter-crash" for f in out["findings"]), out["findings"]
 
 
 def test_bundle_type_map_crash_does_not_orphan_connection_from_referential_check(tmp_path, monkeypatch):
@@ -746,10 +766,10 @@ def test_bundle_type_map_crash_does_not_orphan_connection_from_referential_check
 
     monkeypatch.setattr(V, "_connection_type_map_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
-    assert "bundle-connection-ref" not in validators, diag["findings"]
-    assert "bundle-endpoint-ref" not in validators, diag["findings"]
+    assert not _BUNDLE_CONNECTION_REF_RULES & set(validators), diag["findings"]
+    assert not _BUNDLE_ENDPOINT_REF_RULES & set(validators), diag["findings"]
 
 
 def test_type_map_entity_crash_preserves_legacy_finding_and_sibling_direction(tmp_path, monkeypatch):
@@ -772,15 +792,15 @@ def test_type_map_entity_crash_preserves_legacy_finding_and_sibling_direction(tm
 
     monkeypatch.setattr(V, "_type_map_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
-    crash = [f for f in diag["findings"] if f["validator"] == "adapter-crash"
+    crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"
              and f["path"].endswith("type-map-read.json")]
     assert crash, diag["findings"]
-    migration = [f for f in diag["findings"] if f["validator"] == "connection-type-map"
+    migration = [f for f in diag["findings"] if f.get("validator") == "connection-type-map"
                  and "pre-split filename" in f["message"]]
     assert migration, diag["findings"]  # decided before the crashing entity, still present
-    bad_write = [f for f in diag["findings"] if f["validator"] == "contract-model"
+    bad_write = [f for f in diag["findings"] if f.get("rule") is None and f.get("kind") == "fail"
                  and f["path"].startswith("connections/postgresql/definition/type-map-write.json")]
     assert bad_write, diag["findings"]  # processed after the crash, still got its turn
 
@@ -806,13 +826,13 @@ def test_type_map_read_crash_preserves_legacy_finding_and_sibling_direction(tmp_
 
     monkeypatch.setattr(V, "_read_json", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    crash = [f for f in diag["findings"] if f["validator"] == "adapter-crash"
+    crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"
              and f["path"].endswith("type-map-read.json")]
     assert crash, diag["findings"]
-    migration = [f for f in diag["findings"] if f["validator"] == "connection-type-map"
+    migration = [f for f in diag["findings"] if f.get("validator") == "connection-type-map"
                  and "pre-split filename" in f["message"]]
     assert migration, diag["findings"]  # decided before the crashing entity, still present
-    bad_write = [f for f in diag["findings"] if f["validator"] == "contract-model"
+    bad_write = [f for f in diag["findings"] if f.get("rule") is None and f.get("kind") == "fail"
                  and f["path"].startswith("connections/postgresql/definition/type-map-write.json")]
     assert bad_write, diag["findings"]  # processed after the crash, still got its turn
 
@@ -834,11 +854,11 @@ def test_bundle_findings_crash_unrelated_to_exclusion_does_not_mislabel_it(tmp_p
 
     monkeypatch.setattr(V, "_type_map_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "document" in validators, diag["findings"]  # the orphaned malformed stream
     assert "adapter-crash" in validators, diag["findings"]  # the unrelated type-map crash
     assert not any(
-        f["validator"] == "adapter-crash"
+        f.get("validator") == "adapter-crash"
         and "containment guard excluded" in f["message"]
         for f in diag["findings"]
     ), diag["findings"]  # the exclusion was an ordinary error, not caused by that crash
@@ -866,11 +886,11 @@ def test_bundle_endpoint_filename_crash_preserves_endpoint_and_siblings(tmp_path
 
     monkeypatch.setattr(validator_module, "endpoint_filename_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
     # the crashed endpoint still holds its place in the bundle -> no false
     # bundle-endpoint-ref for the stream's legitimate reference to it
-    assert "bundle-endpoint-ref" not in validators, diag["findings"]
+    assert not _BUNDLE_ENDPOINT_REF_RULES & set(validators), diag["findings"]
     # the connection's trailing type-map check still ran despite the earlier
     # crash in this same per-connection unit
     assert "connection-type-map" in validators, diag["findings"]
@@ -899,9 +919,9 @@ def test_bundle_connector_loop_crash_preserves_other_connector_identity(tmp_path
     # slug, so assembly is marked incomplete out of caution
     assert not complete
     assert crashed
-    validators = [f["validator"] for f in findings]
+    validators = _ids(findings)
     assert "adapter-crash" in validators, findings
-    crash = [f for f in findings if f["validator"] == "adapter-crash"][0]
+    crash = [f for f in findings if f.get("validator") == "adapter-crash"][0]
     assert crash["path"] == "connectors/postgresql"
     # postgresql's directory slug is recorded unconditionally, before the crash
     assert "postgresql" in bundle["connectors"], bundle["connectors"]
@@ -934,10 +954,10 @@ def test_connector_endpoint_sets_directory_probe_crash_isolated_to_one_connector
 
     monkeypatch.setattr(Path, "is_dir", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
     # wise, sorted after postgresql, still gets its endpoint set built and warns
-    assert any(f["validator"] == "connector-endpoint-ref" and "transfers" in f["message"]
+    assert any(f.get("validator") == "connector-endpoint-ref" and "transfers" in f["message"]
                for f in diag["findings"]), diag["findings"]
 
 
@@ -960,13 +980,13 @@ def test_connector_endpoint_sets_enumeration_crash_returns_partial_result(tmp_pa
     findings: list = []
     sets = V._connector_endpoint_sets(tmp_path, findings)
     assert sets == {}
-    crash = [f for f in findings if f["validator"] == "adapter-crash" and f["path"] == "connectors"]
+    crash = [f for f in findings if f.get("validator") == "adapter-crash" and f["path"] == "connectors"]
     assert crash, findings
 
     # confirmed the same way through the full pipeline: the crash is contained,
     # not left to propagate out of _bundle_findings
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
 
 
@@ -989,7 +1009,7 @@ def test_bundle_connections_section_crash_preserves_streams_and_reaches_connecto
     bundle, findings, complete, crashed = V._assemble_bundle(pipeline_doc, doc, tmp_path)
     assert not complete
     assert crashed
-    crash = [f for f in findings if f["validator"] == "adapter-crash" and f["path"] == "connections"]
+    crash = [f for f in findings if f.get("validator") == "adapter-crash" and f["path"] == "connections"]
     assert crash, findings
     assert bundle["streams"], bundle["streams"]  # the earlier section's result survived
     assert bundle["connectors"], bundle["connectors"]  # the later section still ran
@@ -1014,7 +1034,7 @@ def test_bundle_pipeline_validator_crash_preserves_other_unit_result(tmp_path, m
     monkeypatch.setattr(validator_module, "validate_pipeline_bundle", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
     assert "connector-endpoint-ref" in validators, diag["findings"]  # the other unit's result
 
@@ -1038,9 +1058,9 @@ def test_bundle_stream_read_crash_preserves_sibling_stream_and_continues_assembl
 
     monkeypatch.setattr(V, "_read_json", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
-    crash = [f for f in diag["findings"] if f["validator"] == "adapter-crash"][0]
+    crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"][0]
     assert crash["path"] == "streams/orders.json"
     # the connections loop, which runs after the crashed streams loop, still
     # ran and decided its own finding
@@ -1049,7 +1069,7 @@ def test_bundle_stream_read_crash_preserves_sibling_stream_and_continues_assembl
     # re-authored to drop the reference) — the bundle is short that very
     # document, so the referential pass that would call this ref unresolved
     # is skipped rather than blame a reference that was never actually broken
-    assert "bundle-stream-ref" not in validators, diag["findings"]
+    assert "RULE-PIPE-011" not in validators, diag["findings"]
     assert sum(1 for v in validators if v == "adapter-crash") == 2, diag["findings"]
 
 
@@ -1078,7 +1098,7 @@ def test_bundle_endpoint_read_crash_preserves_sibling_endpoint(tmp_path, monkeyp
     endpoint_ids = {e["endpoint_id"] for e in bundle["endpoints"]}
     assert second_eid in endpoint_ids, bundle["endpoints"]  # sibling survived the crash
     assert EID not in endpoint_ids, bundle["endpoints"]  # the crashed one did not
-    crash = [f for f in findings if f["validator"] == "adapter-crash"]
+    crash = [f for f in findings if f.get("validator") == "adapter-crash"]
     assert len(crash) == 1, findings
     assert crash[0]["path"] == f"connections/postgresql/definition/endpoints/{EID}.json"
 
@@ -1091,7 +1111,7 @@ def test_bundle_type_map_validated_when_connection_json_unreadable(tmp_path):
     _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
     (tmp_path / "connections/postgresql/connection.json").write_text("{not valid json")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "document" in validators, diag["findings"]  # connection.json itself unreadable
     assert "connection-type-map" in validators, diag["findings"]  # legacy filename, still checked
 
@@ -1118,9 +1138,9 @@ def test_bundle_unrelated_malformed_stream_skips_referential_pass_without_crash_
     doc.write_text(json.dumps(pipeline_doc))
 
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "document" in validators, diag["findings"]  # the orphaned malformed stream
-    assert "bundle-connection-ref" not in validators, diag["findings"]  # referential pass skipped
+    assert not _BUNDLE_CONNECTION_REF_RULES & set(validators), diag["findings"]  # referential pass skipped
     assert "adapter-crash" not in validators, diag["findings"]  # nothing actually crashed
 
 
@@ -1146,10 +1166,10 @@ def test_connector_endpoint_sets_crash_isolated_to_one_connector(tmp_path, monke
     stream_path.write_text(json.dumps(stream))
 
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
     # wise's connector-endpoint-ref check still ran despite postgresql's crash
-    warn = [f for f in diag["findings"] if f["validator"] == "connector-endpoint-ref"]
+    warn = [f for f in diag["findings"] if f.get("validator") == "connector-endpoint-ref"]
     assert len(warn) == 1 and "transfers" in warn[0]["message"], diag["findings"]
 
 
@@ -1163,7 +1183,7 @@ def test_pipeline_document_error_survives_non_dict_bundle_enrichment(tmp_path):
     # opaque adapter-crash
     doc = _write(tmp_path, "pipelines/p/pipeline.json", [1, 2, 3])
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "contract-model" in validators, diag["findings"]
     assert "adapter-crash" not in validators, diag["findings"]
 
@@ -1179,7 +1199,7 @@ def test_pipeline_document_error_preserved_when_bundle_enrichment_crashes(tmp_pa
 
     monkeypatch.setattr(V, "_assemble_bundle", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = [f["validator"] for f in diag["findings"]]
+    validators = _ids(diag["findings"])
     assert "contract-model" in validators, diag["findings"]
     assert "adapter-crash" in validators, diag["findings"]
 
@@ -1193,7 +1213,7 @@ def test_crash_finding_handles_broken_exception_str():
             raise RuntimeError("broken __str__")
 
     finding = V._crash_finding("", Broken())
-    assert finding["validator"] == "adapter-crash"
+    assert finding.get("validator") == "adapter-crash"
     assert finding["message"] == "Broken"
 
 
@@ -1212,7 +1232,7 @@ def test_main_serializes_within_the_outer_guard(tmp_path, monkeypatch, capsys):
     rc = V.main(["--entity", "connection", "--document", str(p)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
-    assert any(f["validator"] == "adapter-crash" for f in out["findings"]), out["findings"]
+    assert any(f.get("validator") == "adapter-crash" for f in out["findings"]), out["findings"]
 
 
 # ---------------------------------------------------------------------------

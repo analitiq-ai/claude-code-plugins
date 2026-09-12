@@ -282,15 +282,202 @@ def render_filter_operators() -> str:
     return "\n".join(out) + "\n"
 
 
-def render_validator_ids() -> str:
-    from analitiq.validator import VALIDATOR_IDS
+def _pipeline_validate_adapter():
+    """Import `plugins/analitiq-pipeline-builder/scripts/validate.py` by path —
+    the same technique `render_validator_claims.py`'s own `_pipeline_adapter()`
+    uses, and for the same reason: this adapter's own downstream behavior (its
+    write-coverage filter, below) is part of what a probe run through it
+    measures, so the probe has to call the adapter, not the bare validator
+    package. Import is side-effect-free — `_bootstrap`'s venv build and
+    re-exec only fire from the adapter's own `main()`, never at import time."""
+    import importlib.util
 
-    if not VALIDATOR_IDS:
-        raise RuntimeError("the validator exposed no finding ids")
+    scripts_dir = str(DOCS_ROOT / "scripts")
+    spec = importlib.util.spec_from_file_location(
+        "_gen_pipeline_docs_validate_adapter", DOCS_ROOT / "scripts" / "validate.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    sys.path.insert(0, scripts_dir)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(scripts_dir)
+    return module
+
+
+def measured_reachable_connectors_ids() -> set[str]:
+    """RULE-* ids from `analitiq.validator.connectors` this adapter's own
+    entry points actually surface in its output — MEASURED by running
+    documents engineered to trip each connectors.py-bound check through the
+    same functions `plugins/analitiq-pipeline-builder/scripts/validate.py`
+    calls, and reading back which ids appear in the returned findings, rather
+    than reasoned about from a hand-typed allowlist of "reachable" function
+    names. That allowlist previously went stale in ways nothing caught: by
+    naming a function this adapter's entities never route to at all (an
+    api-endpoint/connector-package check — this function never constructs
+    such a document, so those checks are never even probed), and separately
+    by naming one whose finding the adapter's own write-vocabulary filter
+    (`_type_map_findings` in `validate.py`) discards before it ever reaches
+    output — probing `type_map_write` through the adapter's own
+    `diagnostics_for`, filter included, is what proves that exclusion instead
+    of asserting it.
+
+    `endpoint_filename_findings` is never reached via dispatch at all —
+    `validate.py` calls it directly during bundle assembly (see that module's
+    own docstring) — so it is measured directly rather than through
+    `diagnostics_for`.
+    """
+    import json
+    import tempfile
+
+    adapter = _pipeline_validate_adapter()
+    observed: set[str | None] = set()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+
+        # RULE-DBEP-011: an endpoint_id disagreeing with the handle derived
+        # from database_object.
+        endpoint = {
+            "endpoint_id": "public__orders__wronghash",
+            "database_object": {"schema": "public", "name": "orders", "object_type": "table"},
+        }
+        path = root / "endpoint.json"
+        path.write_text(json.dumps(endpoint))
+        observed |= {f.get("rule") for f in adapter.diagnostics_for(
+            "database_endpoint", path)["findings"]}
+
+        # RULE-TMAP-022 (a duplicate rule) and RULE-TMAP-014 (a regex read
+        # matcher containing a lowercase literal, which an UPPERCASED native
+        # can never match) both fire on one read map.
+        read_rules = [
+            {"match": "exact", "native_type": "INT", "arrow_type": "Int32"},
+            {"match": "exact", "native_type": "INT", "arrow_type": "Int32"},
+            {"match": "regex", "native_type": "^duplicate_probe$", "arrow_type": "Utf8"},
+        ]
+        path = root / "type-map-read.json"
+        path.write_text(json.dumps(read_rules))
+        observed |= {f.get("rule") for f in adapter.diagnostics_for(
+            "type_map_read", path)["findings"]}
+
+        # RULE-TMAP-017 (write-vocabulary coverage) fires in the published
+        # validator on an empty write map — reachable at that layer — but
+        # going through the adapter's own diagnostics_for exercises its
+        # write-coverage filter too, so this measures whether the id survives
+        # to the adapter's own output. It does not: excluded below by what
+        # this probe observes, not by name.
+        path = root / "type-map-write.json"
+        path.write_text(json.dumps([]))
+        observed |= {f.get("rule") for f in adapter.diagnostics_for(
+            "type_map_write", path)["findings"]}
+
+    from analitiq.validator import endpoint_filename_findings
+    observed |= {
+        f.get("rule") for f in
+        endpoint_filename_findings({"endpoint_id": "probe"}, "wrong-name.json")
+    }
+
+    return {rule_id for rule_id in observed if rule_id is not None}
+
+
+def _require_runnable_gated_pipelines_ids() -> set[str]:
+    """Rule ids from `analitiq.validator.pipelines` whose only emitter runs
+    inside `validate_pipeline_bundle`'s `if require_runnable:` block — found
+    by parsing that function's own AST for calls under that condition, not by
+    naming the functions. `validate_pipeline_bundle` always runs when this
+    adapter validates a stitched pipeline, so every rule it can emit is
+    reachable UNLESS gating on `require_runnable` makes it structurally
+    impossible — which is exactly the failure `measured_reachable_connectors_ids`
+    already fixed on the connectors.py side of this same function, found here
+    too: RULE-PIPE-019 fires only when a pipeline's status is not 'active', but
+    this adapter's own `is_runnable_required` (`validate.py`) is true only when
+    status IS 'active' — a rule and its own gate that can never both hold.
+    """
+    import ast
+
+    tree = ast.parse((REPO_ROOT / "packages" / "validator" / "src" / "analitiq"
+                       / "validator" / "pipelines.py").read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "validate_pipeline_bundle":
+            target = node
+            break
+    else:
+        raise RuntimeError(
+            "analitiq.validator.pipelines no longer defines validate_pipeline_bundle "
+            "— this measurement has nothing to walk"
+        )
+    gated_functions = {
+        call.func.id
+        for stmt in ast.walk(target)
+        if isinstance(stmt, ast.If)
+        and isinstance(stmt.test, ast.Name) and stmt.test.id == "require_runnable"
+        for call in ast.walk(stmt)
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+    }
+
+    from analitiq.contracts.shared.rules import all_rules
+
+    gated_symbols = {f"analitiq.validator.pipelines::{fn}" for fn in gated_functions}
+    return {rule.id for rule in all_rules() if rule.validator in gated_symbols}
+
+
+def _measured_reachable_pipelines_ids() -> set[str]:
+    """Which of `_require_runnable_gated_pipelines_ids()` actually survive —
+    measured the same way as the connectors.py half: run the adapter's real
+    `is_runnable_required` and the published `validate_pipeline_bundle` on a
+    minimal ACTIVE pipeline (status='active', no streams), which is the only
+    state `is_runnable_required` ever answers True for, so it exercises the
+    full space that gate can put this adapter's calls into."""
+    from analitiq.validator import validate_pipeline_bundle
+
+    adapter = _pipeline_validate_adapter()
+    pipeline = {"pipeline_id": "probe", "status": "active"}
+    bundle = {"pipeline": pipeline, "streams": [], "connections": [],
+              "connectors": [], "endpoints": []}
+    findings = validate_pipeline_bundle(
+        bundle, require_runnable=adapter.is_runnable_required(pipeline))
+    return {f.get("rule") for f in findings if f.get("rule") is not None}
+
+
+def render_validator_ids() -> str:
+    """Every rule id this adapter's own `analitiq.validator` entry points can
+    actually emit, whether the check needs a second document in hand
+    (referential integrity across a bundle, filename↔id) or grades one
+    document as a plain function rather than a `@model_validator` (a database
+    endpoint's id, a type-map's own rule warnings) — never what a contract
+    model rejects on its own, which is catalogued per model in
+    `references/rules/` instead of restated here. Both halves are MEASURED,
+    not enumerated by hand — see `measured_reachable_connectors_ids` and
+    `_measured_reachable_pipelines_ids` for why. A single-document
+    contract-model rejection with no `rules.violation` behind it carries a
+    rule id too, when the model raised one, but that half is open-ended by
+    construction: it is whichever rule the model names, not a set this
+    function could enumerate."""
+    from analitiq.contracts.shared.rules import all_rules
+
+    reachable_connectors_ids = measured_reachable_connectors_ids()
+    gated_pipelines_ids = _require_runnable_gated_pipelines_ids()
+    reachable_gated_pipelines_ids = _measured_reachable_pipelines_ids() & gated_pipelines_ids
+    ids = sorted(
+        rule.id for rule in all_rules()
+        if (
+            rule.validator_module == "analitiq.validator.pipelines"
+            and (rule.id not in gated_pipelines_ids or rule.id in reachable_gated_pipelines_ids)
+        )
+        or rule.id in reachable_connectors_ids
+    )
+    if not ids:
+        raise RuntimeError("no rule is bound to a validator function this adapter reaches")
     out = [
-        "Finding ids the validator can emit:",
+        "Rule ids this adapter's own `analitiq.validator` entry points can "
+        "actually emit, whether the check needs a second document in hand "
+        "(referential integrity across a bundle, filename↔id) or grades one "
+        "document as a plain function rather than a `@model_validator` "
+        "(a database endpoint's id, a type-map's own rule warnings) — never "
+        "what a contract model rejects on its own, which is catalogued per "
+        "model in `references/rules/` instead of restated here:",
         "",
-        ", ".join(f"`{v}`" for v in sorted(VALIDATOR_IDS)),
+        ", ".join(f"`{v}`" for v in ids),
     ]
     return "\n".join(out) + "\n"
 

@@ -125,14 +125,21 @@ For unsupported cases (e.g., a connector kind the engine can't run —
 ## `Diagnostics` (output of `scripts/validate.py`)
 
 A finding may arrive in either of two shapes: locally minted by this adapter
-(`validator`, `severity`, `path`, `message`), or forwarded unchanged from
-`analitiq.validator` (`validator`, `rule`, `message_id`, `kind`, `path`,
-`message`, with `severity` present only for `kind: "fail"`). `passed` is
+(`validator`, `severity`, `path`, `message`), or forwarded from
+`analitiq.validator` (`rule`, `message_id`, `kind`, `path`, `message`, with
+`severity` present only for `kind: "fail"`). `passed` is
 computed by the same fail-closed predicate over either shape: `false` when a
 `fail` finding is `severity: "error"`, or when a `notApplicable` finding names
 a rule that is `error`-tier (or names none at all) — a check that could not
 run does not get the benefit of the doubt. A `warning` and a `notApplicable`
 naming a lesser-tier rule do not fail validation.
+
+This is the shape a release of `analitiq-validator` carrying the `rule` axis
+forwards; `VALIDATOR_PIN` (`scripts/_bootstrap.py`) predates that release and
+still self-installs one that returns the older `validator`/`severity`/`path`/
+`message` shape with no `rule`/`message_id`/`kind` at all — a forwarded
+finding missing those three keys is that older shape, not a malformed one.
+Treat both until the pin catches up.
 
 <!-- illustrative -->
 ```jsonc
@@ -146,7 +153,6 @@ naming a lesser-tier rule do not fail validation.
       "message": "Field required"
     },
     {
-      "validator": "type-map-coverage",
       "message_id": "coverage-check-skipped-no-path",
       "kind": "notApplicable",
       "path": "/",
@@ -156,14 +162,23 @@ naming a lesser-tier rule do not fail validation.
 }
 ```
 
-<!-- BEGIN GENERATED: validator-ids -->
-Finding ids the validator can emit:
+This adapter's `database_endpoint` and `type_map_read`/`type_map_write`
+entities also run the document against its contract model, whose own
+`@model_validator`s can reject it citing a rule of their own — every rule
+bound to `DatabaseEndpointDoc`, `TypeMapReadDoc` or `TypeMapWriteDoc` is
+reachable that way, catalogued in full in
+`references/rules/database-endpoint.md` and `references/rules/type-map.md`
+rather than restated here.
 
-`bundle-connection-ref`, `bundle-connector-ref`, `bundle-endpoint-ref`, `bundle-pipeline`, `bundle-stream-ref`, `contract-model`, `document`, `embedded-json-schema`, `embedded-schema-example`, `endpoint-filename`, `endpoint-id-locator`, `endpoint-id-unique`, `endpoint-transport-ref`, `type-map-coverage`, `type-map-rule`, `type-map-write-coverage`
+<!-- BEGIN GENERATED: validator-ids -->
+Rule ids this adapter's own `analitiq.validator` entry points can actually emit, whether the check needs a second document in hand (referential integrity across a bundle, filename↔id) or grades one document as a plain function rather than a `@model_validator` (a database endpoint's id, a type-map's own rule warnings) — never what a contract model rejects on its own, which is catalogued per model in `references/rules/` instead of restated here:
+
+`RULE-CONN-011`, `RULE-DBEP-011`, `RULE-PIPE-011`, `RULE-PIPE-012`, `RULE-PIPE-013`, `RULE-PIPE-014`, `RULE-PIPE-018`, `RULE-PKG-031`, `RULE-STRM-032`, `RULE-STRM-033`, `RULE-STRM-034`, `RULE-STRM-042`, `RULE-TMAP-014`, `RULE-TMAP-022`
 <!-- END GENERATED: validator-ids -->
 
 Pass `--bundle-root` when validating the stitched pipeline; that is what runs
-the cross-document checks and what makes the `bundle-*` ids reachable.
+the cross-document checks (the `RULE-PIPE-*`/`RULE-STRM-*`/`RULE-CONN-011`
+referential rules above) and makes their findings reachable.
 
 The adapter adds ids of its own, for checks the published bundle validator
 structurally cannot make:
@@ -174,6 +189,13 @@ structurally cannot make:
 - `connection-type-map` — **error**: file-level gates on the connection-scoped
   type maps the engine loads beside `connection.json`. See
   `endpoint-spec/spec-type-map-gaps.md`.
+- `contract-model` — **error**: a `connection`/`stream`/`pipeline` entity's
+  own contract-model rejection, mapped locally rather than through
+  `analitiq.validator` (that entity's model is validated directly; only
+  `database_endpoint`/`type_map_read`/`type_map_write` and the bundle path
+  route through the published package).
+- `document` — **error**: a sibling bundle member could not be read, parsed,
+  or was not a JSON object.
 
 One further id names not a check but a failure mode: `adapter-crash` —
 **error**: the run could not be evaluated normally. Either a containment guard
@@ -185,9 +207,10 @@ finding from a stderr excerpt, carried in `message` with `path` empty.
 This id names only a crash reaching a guard in this adapter. A crash inside
 the published validator's own single-document dispatch (the `database_endpoint`
 / `type_map_read` / `type_map_write` routes, which call it directly) is already
-caught there and returned as an ordinary `contract-model` finding whose
-`message` says the check itself crashed — that finding never reaches this
-adapter as an exception, so no guard here fires and it is not relabeled.
+caught there and returned as a forwarded `kind: "notApplicable"`,
+`message_id: "check-crashed"` finding whose `message` says the check itself
+crashed — that finding never reaches this adapter as an exception, so no
+guard here fires and it is not relabeled.
 
 Some findings name the rule they apply, as a leading `[RULE-<AREA>-NNN]` in
 `message`. Quote the id verbatim whenever one is present — `pipeline-spec` and

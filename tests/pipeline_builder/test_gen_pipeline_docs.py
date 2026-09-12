@@ -177,6 +177,59 @@ def test_renderer_emits_nonempty_block(block_id):
         f"{block_id} must end with exactly one newline")
 
 
+def test_measured_reachable_connectors_ids_matches_expectation():
+    """`measured_reachable_connectors_ids` derives its answer by running probe
+    documents through the real adapter rather than naming functions by hand —
+    this pins the resulting *ids*, which is a legitimate test assertion target
+    (unlike a hand-typed allowlist of function names, which is what this
+    replaced). A rename inside `connectors.py` cannot break this test: the
+    measurement calls through the live dispatch, not by name, so there is
+    nothing here for a rename to go stale against."""
+    assert G.measured_reachable_connectors_ids() == {
+        "RULE-DBEP-011", "RULE-PKG-031", "RULE-TMAP-014", "RULE-TMAP-022",
+    }
+
+
+def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
+    """RULE-TMAP-017 is bound to `connectors.py` and genuinely fires in the
+    published validator, but `measured_reachable_connectors_ids` must not
+    include it: `validate.py`'s own write-coverage filter strips it before it
+    ever reaches this adapter's output. This is the case a hand-typed
+    allowlist got wrong once (excluded by name, correctly, but with nothing
+    checking the exclusion stayed correct) — asserting both halves here means
+    a future change that stops filtering it, or starts filtering something
+    else the same way, has to update this test consciously rather than drift
+    past it."""
+    from analitiq.validator import validate_document
+
+    raw = validate_document([], doc_path=Path("type-map-write.json"))
+    assert "RULE-TMAP-017" in {f.get("rule") for f in raw}, (
+        "probe stopped triggering the write-vocabulary check at the package "
+        "level — this test no longer measures the filter it claims to"
+    )
+    assert "RULE-TMAP-017" not in G.measured_reachable_connectors_ids()
+
+
+def test_pipeline_active_gate_is_excluded_but_active_stream_gate_is_not():
+    """RULE-PIPE-019 (`_check_pipeline_active`) and RULE-PIPE-014
+    (`_check_pipeline_active_gate`) are both computed as `require_runnable`-gated
+    by `_require_runnable_gated_pipelines_ids`'s AST walk. Only one of them
+    actually survives this adapter's own gate: `_require_runnable` is true only
+    when a pipeline's status is 'active', but RULE-PIPE-019 fires only when it
+    is NOT — a rule and its own gate that can never both hold — while
+    RULE-PIPE-014 fires exactly when status IS 'active' with no streams, which
+    is what the gate lets through. This is the same reachability-vs-gating
+    mismatch `measured_reachable_connectors_ids` fixed on the connectors.py
+    side, found again here rather than hand-excluded."""
+    gated = G._require_runnable_gated_pipelines_ids()
+    assert gated == {"RULE-PIPE-014", "RULE-PIPE-019"}, (
+        "the AST walk over validate_pipeline_bundle's require_runnable-gated "
+        "calls no longer finds the two ids this test expects"
+    )
+    survived = G._measured_reachable_pipelines_ids()
+    assert survived & gated == {"RULE-PIPE-014"}
+
+
 def test_filter_operator_scopes_are_disjoint_and_complete():
     """The empirically probed operator vocabulary matches the published Literal."""
     from typing import get_args

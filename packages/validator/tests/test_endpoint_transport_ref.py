@@ -1,4 +1,4 @@
-"""`endpoint-transport-ref` — an endpoint's `request.transport_ref` must name a
+"""RULE-ENDP-047 — an endpoint's `request.transport_ref` must name a
 transport the sibling connector.json declares.
 
 The connector model's `_transport_refs_resolvable` already gates every
@@ -124,7 +124,7 @@ def _run(tmp_path, connector, endpoints, validator):
 
 def _ref_errors(findings):
     return [f for f in findings
-            if f["validator"] == "endpoint-transport-ref" and f["severity"] == "error"]
+            if f.get("rule") == "RULE-ENDP-047" and f.get("severity") == "error"]
 
 
 def _errors(findings):
@@ -258,7 +258,7 @@ class TestOriginContainmentGapIsRecorded:
     request, a write request, and a next-page URL the document takes from the
     response body.
 
-    Each asserts on EVERY error the walk emits, not on `endpoint-transport-ref`
+    Each asserts on EVERY error the walk emits, not on `RULE-ENDP-047`
     alone: the NAME half already owns that id, so an origin rule arriving under
     an id of its own — the likelier shape, since each check registers one —
     would pass a scoped assertion unnoticed.
@@ -349,8 +349,8 @@ class TestStandaloneEndpointValidation:
     That is why two defects shipped here unnoticed: a connector whose
     `transports` was unusable produced NO finding at all (a clean pass on an
     endpoint whose `transport_ref` resolves to nothing), and a connector that
-    would not parse was reported as a `type-map-coverage` ERROR against an
-    otherwise-valid endpoint, under an id the fix loop does not filter on.
+    would not parse was reported as an unattributed error against an
+    otherwise-valid endpoint, naming no rule a fix loop could filter on.
     """
 
     def _endpoint(self, ref="api"):
@@ -389,20 +389,20 @@ class TestStandaloneEndpointValidation:
         return _validate_api_endpoint(doc, doc_path, None)
 
     def _ids(self, findings):
-        return {(f["validator"], f.get("severity")) for f in findings}
+        return {(f.get("rule"), f.get("severity")) for f in findings}
 
     def test_declared_transport_resolves_clean(self, tmp_path):
         findings = self._run(tmp_path, '{"kind":"api","transports":{"api":{}}}')
-        assert not [f for f in findings if f["validator"] == "endpoint-transport-ref"]
+        assert not [f for f in findings if f.get("rule") == "RULE-ENDP-047"]
 
     def test_undeclared_transport_is_an_error(self, tmp_path):
         findings = self._run(tmp_path, '{"kind":"api","transports":{"other":{}}}')
-        assert ("endpoint-transport-ref", "error") in self._ids(findings)
+        assert ("RULE-ENDP-047", "error") in self._ids(findings)
 
     def _not_applicable(self, findings):
         return {
-            f["validator"] for f in findings
-            if f["validator"] == "endpoint-transport-ref" and f["kind"] == "notApplicable"
+            f.get("rule") for f in findings
+            if f.get("rule") == "RULE-ENDP-047" and f["kind"] == "notApplicable"
         }
 
     def test_connector_without_transports_warns_rather_than_passing_clean(self, tmp_path):
@@ -410,23 +410,22 @@ class TestStandaloneEndpointValidation:
         # [] here, which is right when the CONNECTOR is under validation (its own
         # model error stands) and wrong here, where that model never runs.
         findings = self._run(tmp_path, '{"kind":"api"}')
-        assert "endpoint-transport-ref" in self._not_applicable(findings)
+        assert "RULE-ENDP-047" in self._not_applicable(findings)
 
     def test_connector_with_non_dict_transports_warns(self, tmp_path):
         findings = self._run(tmp_path, '{"kind":"api","transports":[]}')
-        assert "endpoint-transport-ref" in self._not_applicable(findings)
+        assert "RULE-ENDP-047" in self._not_applicable(findings)
 
     def test_absent_connector_warns(self, tmp_path):
         findings = self._run(tmp_path, None)
-        assert "endpoint-transport-ref" in self._not_applicable(findings)
+        assert "RULE-ENDP-047" in self._not_applicable(findings)
 
     def test_unparseable_connector_is_reported_under_this_checks_own_id(self, tmp_path):
         findings = self._run(tmp_path, "{not json")
-        reported = {f["validator"] for f in findings}
-        assert "endpoint-transport-ref" in reported
-        assert "type-map-coverage" not in reported, (
-            "a connector-read failure surfaced under the type-map id; a fix loop "
-            "filtering on endpoint-transport-ref would never see it"
+        assert any(f.get("message_id") == "sibling-connector-unreadable" for f in findings)
+        assert not any(f.get("rule") == "RULE-PKG-030" for f in findings), (
+            "a connector-read failure surfaced under the type-map rule; a fix loop "
+            "filtering on RULE-ENDP-047 would never see it"
         )
 
     def test_unparseable_connector_is_not_described_as_unreachable(self, tmp_path):
@@ -437,7 +436,7 @@ class TestStandaloneEndpointValidation:
         findings = self._run(tmp_path, "{not json")
         warnings = [
             f for f in findings
-            if f["validator"] == "endpoint-transport-ref" and f["kind"] == "notApplicable"
+            if f.get("rule") == "RULE-ENDP-047" and f["kind"] == "notApplicable"
         ]
         assert warnings, "expected a not-checked warning"
         assert not any("was reachable" in f["message"] for f in warnings)
@@ -451,16 +450,13 @@ class TestStandaloneEndpointValidation:
         on `rule` would otherwise see two contradictory verdicts for one
         check that never ran."""
         findings = self._run(tmp_path, "{not json")
-        endpoint_transport_ref = [
-            f for f in findings if f["validator"] == "endpoint-transport-ref"
-        ]
         assert not any(
             f["kind"] == "fail" and f.get("rule") == "RULE-ENDP-047"
-            for f in endpoint_transport_ref
+            for f in findings
         )
         assert any(
             f["kind"] == "notApplicable" and f.get("rule") == "RULE-ENDP-047"
-            for f in endpoint_transport_ref
+            for f in findings
         )
 
     @pytest.mark.parametrize("shape", ["relative", "dotdot"])
@@ -485,7 +481,7 @@ class TestStandaloneEndpointValidation:
             else Path("..") / "endpoints" / "thing.json"
         )
         findings = _validate_api_endpoint(doc, doc_path, None)
-        assert ("endpoint-transport-ref", "error") in self._ids(findings), (
+        assert ("RULE-ENDP-047", "error") in self._ids(findings), (
             "the undeclared transport_ref was downgraded to a warning because "
             "the sibling lookup missed"
         )

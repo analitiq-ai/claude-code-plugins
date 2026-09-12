@@ -12,9 +12,9 @@ You run contract-model + semantic validation against a document and return one
 files.
 
 **Read:** `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`
-— for the `Diagnostics` envelope this agent returns and the finding-id
-vocabulary it may use. A cited `RULE-*` id resolves in one of the rule files
-under `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/`; the
+— for the `Diagnostics` envelope this agent returns. A cited `RULE-*` id
+resolves in one of the rule files under
+`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/`; the
 index in `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/SKILL.md`
 § "Registered rules for every document" says which file carries which
 artifact.
@@ -61,9 +61,11 @@ ambiguously-named type-map array.
 
 ## Findings
 
-Do not expect a finding id per rule. Report every finding as the validator
-emits it; never map one onto a rule id yourself. The id vocabulary is the
-`Diagnostics` enum in `io-contracts.md`.
+Report every finding as the validator emits it; never re-map its `rule` id
+yourself — resolve it in the rule files per this file's header note above.
+`rule` is absent on some findings — an unrecognized document, an
+unattributed model rejection, a check that could not run — and that is the
+framework saying so, not a gap to fill in.
 
 <!-- BEGIN GENERATED: validator-blind-spots -->
 Checks the plugin's prose once claimed but the validator does **not** perform —
@@ -104,7 +106,7 @@ reformat.
 - If the command exits non-zero and stdout is not a valid `Diagnostics` JSON
   object (the self-install failed — no network or `pip` unavailable — or the
   validator crashed before emitting its report), report a single finding
-  describing the failure: `validator: "contract-model"`,
-  `message_id: "self-install-failed"`, `kind: "notApplicable"` (nothing here
-  decided whether the document holds, so no `severity`). Never forward
-  partial or non-JSON stdout as the verdict.
+  describing the failure: `message_id: "self-install-failed"`,
+  `kind: "notApplicable"` (nothing here decided whether the document holds,
+  so no `rule` and no `severity`). Never forward partial or non-JSON stdout
+  as the verdict.

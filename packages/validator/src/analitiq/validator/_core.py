@@ -2,7 +2,7 @@
 
 This module owns the parts that are independent of any particular artifact kind:
 
-- `finding()` and the `VALIDATOR_IDS` registry every check emits through;
+- `finding()`, the one construction point for every finding this package emits;
 - `_model_findings()` — validate a document against a Pydantic contract model and
   map each error to a finding (the single source of single-document validity,
   reused by every kind);
@@ -10,8 +10,8 @@ This module owns the parts that are independent of any particular artifact kind:
   under, defined once so the DOMAIN dance is not reimplemented per kind;
 - the KIND-VALIDATOR REGISTRY and `_dispatch()`/`validate_document()` driver — a
   per-kind module (e.g. `connectors`) contributes a `(detector, validator_fn)`
-  pair plus its own validator ids; `_dispatch` consults the registry rather than
-  hard-coding any kind's branches, so a new kind is *register, done*. A kind whose
+  pair; `_dispatch` consults the registry rather than hard-coding any kind's
+  branches, so a new kind is *register, done*. A kind whose
   entire validity is its contract model registers via `register_model_kind()`;
 - `_bounded()` — the one width every borrowed diagnostic is clipped to, so a
   finding is bounded the same way whichever route the text arrived by;
@@ -46,24 +46,9 @@ from pydantic import TypeAdapter, ValidationError
 # turning a missing `analitiq-contract-models` into a raw traceback instead of
 # the structured "Missing dependency" diagnostic the guard exists to produce.
 
-# The set of legal validator ids. The framework owns `contract-model` (emitted by
-# `_model_findings`) and `document` (the unrecognized-artifact verdict); each
-# per-kind module contributes its own ids via `register_validator_ids`.
-#
-# Transitional: `validator` still names a finding's category, the way it always
-# has, while `finding()` also carries the `rule`/`message_id`/`kind` shape
-# `rules/SCHEMA.md` documents. The category is not yet gone — a later change
-# retires `VALIDATOR_IDS` and this field together, once nothing reads them.
-VALIDATOR_IDS: set[str] = {"contract-model", "document"}
-
 #: The finding shape's `kind` axis (`rules/SCHEMA.md`, "Findings — what a check
 #: reports"): whether a check found a violation at all, not which check ran.
 _KINDS = ("fail", "notApplicable", "informational")
-
-
-def register_validator_ids(ids: set[str]) -> None:
-    """A per-kind module declares the validator ids its findings may carry."""
-    VALIDATOR_IDS.update(ids)
 
 
 # The kind registry: ordered `(detector, validator_fn)` pairs. `_dispatch` runs
@@ -137,7 +122,6 @@ def _bounded(text: str, limit: int = 200) -> str:
 
 
 def finding(
-    validator: str,
     *,
     rule: str | None = None,
     message_id: str,
@@ -147,7 +131,6 @@ def finding(
 ) -> dict:
     """One thing a check said about one document (`rules/SCHEMA.md`, "Findings").
 
-    `validator` is the transitional category (see `VALIDATOR_IDS` above);
     `rule`, when given, is the id of the record the finding concerns, resolved
     through the same `rule_by_id` a rejection raised via `rules.violation`
     resolves through, so the two never disagree about what an id names. A
@@ -156,8 +139,6 @@ def finding(
     no rule to name (`rule=None`). A `notApplicable` or `informational`
     finding carries no `severity` at all.
     """
-    if validator not in VALIDATOR_IDS:
-        raise ValueError(f"unknown validator id: {validator!r}")
     if kind not in _KINDS:
         raise ValueError(f"unknown kind: {kind!r}")
     record = None
@@ -167,7 +148,7 @@ def finding(
             record = rule_by_id(rule)
         except KeyError:
             raise ValueError(f"unknown rule id: {rule!r}") from None
-    result: dict = {"validator": validator}
+    result: dict = {}
     if rule is not None:
         result["rule"] = rule
     result["message_id"] = message_id
@@ -262,7 +243,6 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
             if isinstance(original, MultiRuleViolation):
                 for v in original.violations:
                     findings.append(finding(
-                        "contract-model",
                         rule=v.rule_id,
                         message_id=v.message_id,
                         kind="fail",
@@ -275,7 +255,6 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
             else:
                 rule, message_id = None, err["type"]
             findings.append(finding(
-                "contract-model",
                 rule=rule,
                 message_id=message_id,
                 kind="fail",
@@ -297,7 +276,7 @@ def validate_document(doc: Any, doc_path: Path | None = None,
     ambiguous (a caller passing `--schema-url .../type-map-write/latest.json`
     from a temp file): it disambiguates read vs write when the filename can't.
     """
-    return _run_guarded(_dispatch, doc, doc_path, schema_url, vid="contract-model")
+    return _run_guarded(_dispatch, doc, doc_path, schema_url, crash_label="document validation")
 
 
 def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:
@@ -307,7 +286,7 @@ def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) ->
     # Anything no registered kind claims is a document we were asked to validate
     # but cannot identify — that is a validation failure, not a pass.
     return [finding(
-        "document", message_id="unrecognized-document", kind="fail", path="/",
+        message_id="unrecognized-document", kind="fail", path="/",
         message=(
             "document does not match any known artifact (connector / api-endpoint / "
             "database-endpoint / type-map / connection / stream / pipeline); a connector "
@@ -316,23 +295,33 @@ def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) ->
             "a pipeline 'connections'."))]
 
 
-def _run_guarded(fn: Callable, *args, vid: str) -> list[dict]:
+def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None) -> list[dict]:
     """Run a check; a crash becomes one finding so other checks survive.
+
+    `crash_label` is keyword-only and named apart from any parameter a
+    wrapped `fn` might itself take (`_embedded_schema_example_findings`'s own
+    `label`, say) — a same-named keyword here would be consumed by this
+    function instead of reaching `fn`, silently dropping the caller's intent.
 
     `notApplicable`, not `fail`: the crash means nothing here decided whether
     any rule the check would have graded holds, which is exactly what that
-    kind reports. Naming no `rule` (the crash is not attributable to one
-    check's obligation) keeps it inside the framework's own no-rule case and
-    off the "clears the bar" list `passed` reduces over, so it always costs —
-    matching what an unconditional `severity: error` finding always did here.
+    kind reports. `rule`, when the caller names one, is the obligation a
+    crash mid-check leaves unevaluated — a caller wrapping a check bound to
+    exactly one rule (`_embedded_schema_example_findings` and RULE-ENDP-063,
+    say) passes it so the crash stays routable to it; a caller wrapping
+    dispatch over an unidentified document (`validate_document`, which could
+    crash on behalf of any rule or none) leaves it `None`, which keeps the
+    finding inside the framework's own no-rule case and off the "clears the
+    bar" list `passed` reduces over, so it always costs — matching what an
+    unconditional `severity: error` finding always did here.
     """
     try:
         return fn(*args)
     except Exception as exc:  # noqa: BLE001 - last-resort guard
         return [finding(
-            vid, message_id="check-crashed", kind="notApplicable", path="",
+            rule=rule, message_id="check-crashed", kind="notApplicable", path="",
             message=(
-                f"check {vid!r} crashed unexpectedly ({type(exc).__name__}: {exc}); "
+                f"{crash_label} crashed unexpectedly ({type(exc).__name__}: {exc}); "
                 "this is a validator bug — please report."))]
 
 
@@ -360,7 +349,7 @@ def main() -> int:
         # so an unreadable document always yields the finding + exit 1 (never a
         # bare traceback), matching _load_type_map and the documented contract.
         print(json.dumps({"passed": False, "findings": [finding(
-            "document", message_id="unreadable-document", kind="fail", path="",
+            message_id="unreadable-document", kind="fail", path="",
             message=f"Cannot read document: {exc}")]}))
         return 1
 

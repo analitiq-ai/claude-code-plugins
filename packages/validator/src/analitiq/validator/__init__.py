@@ -12,11 +12,10 @@ at `severity: "error"`.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which self-registers its detector→validator
-pairs (and its validator ids) with the core dispatch registry — a new kind is a
-new module registering the same way, without touching `_core`. The public surface
-is re-exported here.
+pairs with the core dispatch registry — a new kind is a new module registering
+the same way, without touching `_core`. The public surface is re-exported here.
 """
-from ._core import finding, finding_costs_a_pass, main, validate_document, VALIDATOR_IDS
+from ._core import finding, finding_costs_a_pass, main, validate_document
 from . import connectors  # noqa: F401  — imported for its self-registration side effect
 from . import pipelines  # noqa: F401  — imported for its self-registration side effect
 from . import connections  # noqa: F401  — imported for its self-registration side effect
@@ -47,7 +46,6 @@ __all__ = [
     "finding_costs_a_pass",
     "main",
     "validate_document",
-    "VALIDATOR_IDS",
     "check_coverage",
     "endpoint_filename_findings",
     "is_stem_addressed_endpoint_path",

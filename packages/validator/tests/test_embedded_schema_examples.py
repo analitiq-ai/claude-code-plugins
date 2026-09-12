@@ -1,4 +1,4 @@
-"""`embedded-schema-example` — a recorded sample must satisfy the node declaring it.
+"""RULE-ENDP-063 — a recorded sample must satisfy the node declaring it.
 
 Every other check over an endpoint compares one declaration with another, so a
 node whose declared type contradicts what the provider actually sends passes all
@@ -62,13 +62,22 @@ def _write_endpoint(properties, modes=("insert",), endpoint_id="widgets"):
         }}}
 
 
-def _model_errors(validator, doc):
-    return [f for f in validator.validate_document(doc)
-            if f["validator"] == "contract-model"]
+def _model_errors(doc):
+    """Whether the api-endpoint contract model itself rejects `doc` — checked
+    directly against the model rather than by filtering `validate_document`'s
+    findings, since a model rejection carries no category of its own to filter
+    on and a rule id only when a `rules.violation` raised it."""
+    from pydantic import TypeAdapter, ValidationError
+    from analitiq.contracts.endpoints import ApiEndpointDoc
+    try:
+        TypeAdapter(ApiEndpointDoc).validate_python(doc)
+        return []
+    except ValidationError as exc:
+        return exc.errors()
 
 
 def _sample_findings(findings):
-    return [f for f in findings if f["validator"] == "embedded-schema-example"]
+    return [f for f in findings if f.get("rule") == "RULE-ENDP-063"]
 
 
 def _errors(findings):
@@ -106,9 +115,9 @@ def test_a_write_input_node_is_graded_in_every_mode(mode, validator):
     contract already refused.
     """
     doc = _write_endpoint({"paid": STRING_FLAG}, modes=(mode,))
-    if _model_errors(validator, doc):
+    if _model_errors(doc):
         doc["operations"]["write"][mode]["conflict_keys"] = ["paid"]
-    assert not _model_errors(validator, doc), _model_errors(validator, doc)
+    assert not _model_errors(doc), _model_errors(doc)
     errors = _sample_findings(validator.validate_document(doc))
     assert len(errors) == 2, errors
     assert all(e["path"].startswith(f"/operations/write/{mode}/input/schema") for e in errors)
@@ -250,7 +259,7 @@ def test_a_schema_the_meta_check_rejects_is_not_graded(validator):
     doc["operations"]["read"]["response"]["schema"]["items"]["required"] = "paid"
     findings = validator.validate_document(doc)
     assert not _sample_findings(findings)
-    assert [f["validator"] for f in _errors(findings)] == ["embedded-json-schema"]
+    assert [f.get("rule") for f in _errors(findings)] == ["RULE-ENDP-048"]
 
 
 def test_an_ungradeable_sample_is_reported_and_costs_only_itself(validator):
@@ -278,7 +287,7 @@ def test_an_ungradeable_sample_is_reported_and_costs_only_itself(validator):
     # An oversized sample is bounded into the message rather than pasted whole.
     assert "0" * 200 not in by_path["big/examples/0"]
     assert "..." in by_path["big/examples/0"]
-    assert [f for f in findings if f["validator"] == "contract-model"], findings
+    assert [f for f in findings if f.get("rule") is None and f["kind"] == "fail"], findings
 
 
 def test_a_crash_in_the_check_costs_no_other_check(validator, monkeypatch):
@@ -301,9 +310,12 @@ def test_a_crash_in_the_check_costs_no_other_check(validator, monkeypatch):
         "input": {"schema": {"$schema": JS, "type": "object", "required": "paid"}},
     }}
     findings = validator.validate_document(doc)
-    assert "embedded-json-schema" in {f["validator"] for f in findings}
-    crashes = _sample_findings(findings)
+    assert "RULE-ENDP-048" in {f.get("rule") for f in findings}
+    crashes = [f for f in findings if f.get("message_id") == "check-crashed"]
     assert len(crashes) == 1 and "crashed unexpectedly" in crashes[0]["message"]
+    # The crashed check is bound to exactly one rule — the crash finding
+    # stays routable to it rather than losing attribution to the crash.
+    assert crashes[0]["rule"] == "RULE-ENDP-063"
 
 
 def test_a_node_asserting_nothing_is_graded_against_nothing(validator):
@@ -345,7 +357,7 @@ def test_a_schema_declaring_another_draft_is_not_graded(validator):
                          dialect="http://json-schema.org/draft-07/schema#")
     findings = validator.validate_document(doc)
     assert not _sample_findings(findings)
-    assert [f["validator"] for f in _errors(findings)] == ["embedded-json-schema"]
+    assert [f.get("rule") for f in _errors(findings)] == ["RULE-ENDP-048"]
 
 
 def test_a_remote_ref_is_refused_without_reaching_the_network(validator):
@@ -531,7 +543,7 @@ _RUNAWAY_NODE = {"type": "string", "pattern": _RUNAWAY_PATTERN,
                  "examples": [_NEAR_MISS]}
 
 def _sample_findings_via_cli(validator_cli, doc, filename="doc.json"):
-    """This document's `embedded-schema-example` findings, from a child process.
+    """This document's RULE-ENDP-063 findings, from a child process.
 
     A regression in the bound does not make this check answer wrongly, it makes it
     not answer, so a direct call would hang the suite where the CLI fixture fails

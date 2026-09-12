@@ -47,7 +47,7 @@ pagination strategy needs its own declared params), the host is a fixture under
 `fixtures/prose-hosts/`: a frame the prose is graded in, never an archetype,
 which is why it lives here and not in the plugin tree. A graded endpoint is
 staged under the filename its own `endpoint_id` names — a fragment cannot state
-a filename, so pinning one would grade the host — leaving `endpoint-id-locator`
+a filename, so pinning one would grade the host — leaving `RULE-ENDP-046`
 to hold the id against the path the fragment declares.
 
 An empty object in a fragment is CONTENT here, graded as written — the sibling
@@ -672,7 +672,7 @@ def _assert_block_upholds_marker(marker: Marker, body: str, label: str,
     if marker.kind == "validate":
         assert not errors, (
             f"{label}, {where}, does not validate as {entity}: "
-            + "; ".join(f"{f['validator']} {f['path']}: {f['message']}"
+            + "; ".join(f"{f.get('rule')} {f['path']}: {f['message']}"
                         for f in errors)
             + " — the host validates on its own, so either the prose teaches "
               "an invalid shape or the marker's resource/pointer is wrong.")
@@ -738,7 +738,7 @@ def test_host_validates_clean(host_ref, tmp_path):
     for entity in sorted(entities):
         errors = _findings(entity, document, tmp_path / entity, host)
         assert not errors, f"{host_ref} as {entity}\n" + "\n".join(
-            f"{f['validator']} {f['path']}: {f['message']}" for f in errors)
+            f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors)
 
 
 @pytest.mark.parametrize("key,marker", GRADED)
@@ -787,7 +787,7 @@ def test_invalid_disposition_requires_the_failure(tmp_path):
     the resource and the merge places its keys in the host."""
     marker = _parse_marker(f"<!-- invalid: {_endpoint_rule()} -->")
     assert marker.kind == "invalid" and marker.target == _endpoint_rule()
-    # An id no path derives is what `endpoint-id-locator` refuses...
+    # An id no path derives is what `RULE-ENDP-046` refuses...
     _assert_block_upholds_marker(
         marker, '{"endpoint_id": "not__the__derived__handle"}',
         "synthetic", _ENDPOINT_HOST, tmp_path)

@@ -211,23 +211,6 @@ EXPECTED_BARE_MARKER_ARROW_TYPES = {"Object", "List", "Json"}
 # `database`), the same posture it holds for `file` / `s3` / `stdout`.
 EXPECTED_KINDS = {"api", "database", "nosql", "document", "file", "s3", "stdout"}
 EXPECTED_TRANSPORT_TYPES = {"http", "sqlalchemy", "adbc", "s3", "file", "stdout"}
-# Validator ids a connector/endpoint/type-map finding may carry — restated in
-# io-contracts.md's `Diagnostics` enum and README.md § Validation. Owned by
-# `analitiq.validator.VALIDATOR_IDS`, minus the `bundle-*` ids, which only apply
-# to pipeline bundles this plugin never validates.
-EXPECTED_VALIDATOR_IDS = {
-    "contract-model",
-    "document",
-    "type-map-coverage",
-    "type-map-rule",
-    "type-map-write-coverage",
-    "endpoint-filename",
-    "endpoint-id-unique",
-    "endpoint-id-locator",
-    "endpoint-transport-ref",
-    "embedded-json-schema",
-    "embedded-schema-example",
-}
 # Resolution scopes a `ref` / `${...}` placeholder may lead with — restated as the
 # scope table in references/value-expressions.md.
 EXPECTED_RESOLUTION_SCOPES = {
@@ -1749,26 +1732,6 @@ def _diagnostics_finding_item() -> dict:
     return _io_fragment("Diagnostics")["properties"]["findings"]["items"]
 
 
-def test_diagnostics_enum_matches_the_package() -> None:
-    """The id list an orchestrator routes findings by, read off this file.
-
-    `test_validator_ids_match_package` grades the package against this module's
-    constant and names io-contracts.md only in its fix text, so the fragment
-    could drift to a stale id set with that gate green.
-    """
-    from analitiq.validator import VALIDATOR_IDS
-
-    documented = set(_diagnostics_finding_item()["properties"]["validator"]["enum"])
-    package_set = {vid for vid in VALIDATOR_IDS if not vid.startswith("bundle-")}
-    assert documented == package_set, _diff_msg(
-        "Diagnostics validator enum",
-        package_set,
-        documented,
-        "update the `validator` enum in "
-        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md.",
-    )
-
-
 def test_diagnostics_severities_are_the_ones_finding_accepts() -> None:
     """Every severity the fragment declares must be one a `fail` finding
     actually carries, and the registry must never bind a validator to a
@@ -1783,8 +1746,8 @@ def test_diagnostics_severities_are_the_ones_finding_accepts() -> None:
     `packages/validator/tests/test_core.py`). Both directions close here: each
     documented severity is one a real rule of that severity produces, found
     dynamically rather than named so a retired or renamed example does not go
-    stale; and no validator-bound rule's severity falls outside the documented
-    set.
+    stale; and no rule bound to a validator-package check has a severity
+    falling outside the documented set.
     """
     from analitiq.contracts.shared.rules import all_rules
     from analitiq.validator._core import finding
@@ -1803,7 +1766,7 @@ def test_diagnostics_severities_are_the_ones_finding_accepts() -> None:
             "— pick a different fixture; the enum this test grades still names it"
         )
         produced.add(finding(
-            "document", rule=rule.id, message_id="probe", kind="fail",
+            rule=rule.id, message_id="probe", kind="fail",
             path="/", message="probe")["severity"])
     assert produced == documented, (produced, documented)
 
@@ -1825,7 +1788,7 @@ def test_diagnostics_severities_are_the_ones_finding_accepts() -> None:
         "a validator is now bound to a rule at a severity no fail finding may report.",
     )
     assert "severity" not in finding(
-        "document", message_id="probe", kind="notApplicable", path="/", message="probe")
+        message_id="probe", kind="notApplicable", path="/", message="probe")
 
 
 def test_diagnostics_properties_match_the_finding_constructor() -> None:
@@ -1838,8 +1801,7 @@ def test_diagnostics_properties_match_the_finding_constructor() -> None:
     produce (one `fail`, carrying `severity`; one `notApplicable`, not) rather
     than `inspect.signature`. A property the fragment names that neither call
     produces is a field no consumer will ever see — which is how `rule_doc`
-    survived in the prose. The enum inside is pinned separately by
-    `test_validator_ids_match_package`; nothing pinned the property SET.
+    survived in the prose. Nothing else pins the property SET.
     """
     from analitiq.contracts.shared.rules import all_rules
     from analitiq.validator._core import finding
@@ -1847,10 +1809,10 @@ def test_diagnostics_properties_match_the_finding_constructor() -> None:
     rule = next((r for r in all_rules() if r.severity == "error" and r.validator), None)
     assert rule is not None, "no registry rule is bound to a validator at severity=error"
     fail_finding = finding(
-        "document", rule=rule.id, message_id="probe", kind="fail",
+        rule=rule.id, message_id="probe", kind="fail",
         path="/", message="probe")
     not_applicable_finding = finding(
-        "document", message_id="probe", kind="notApplicable", path="/", message="probe")
+        message_id="probe", kind="notApplicable", path="/", message="probe")
 
     item = _diagnostics_finding_item()
     stated = set(item["properties"])
@@ -1870,27 +1832,6 @@ def test_diagnostics_properties_match_the_finding_constructor() -> None:
         f"keys both a `fail` and a `notApplicable` finding carry "
         f"{sorted(always_present)} — `rule` and `severity` are each present on "
         "only one of the two, so neither belongs in `required`."
-    )
-
-
-def test_validator_ids_match_package() -> None:
-    """The finding ids the plugin's prose enumerates must be the ones emitted.
-
-    `bundle-*` ids are excluded: they belong to pipeline-bundle validation, which
-    this plugin never invokes, so carrying them in an authoring reference would
-    imply findings an author can never see.
-    """
-    from analitiq.validator import VALIDATOR_IDS
-
-    package_set = {vid for vid in VALIDATOR_IDS if not vid.startswith("bundle-")}
-    assert package_set == EXPECTED_VALIDATOR_IDS, _diff_msg(
-        "validator ids",
-        package_set,
-        EXPECTED_VALIDATOR_IDS,
-        "update the Diagnostics enum in "
-        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md "
-        "and the check list in "
-        "plugins/analitiq-connector-builder/README.md § Validation.",
     )
 
 

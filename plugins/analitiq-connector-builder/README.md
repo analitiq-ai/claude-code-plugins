@@ -87,19 +87,20 @@ Schemas are generated from — so there is no schema fetch. It runs:
      (direction derives from the filename)
    - API endpoint → `https://schemas.analitiq.ai/api-endpoint/latest.json`
    - Database endpoint → `https://schemas.analitiq.ai/database-endpoint/latest.json`
-   Findings from this pass report under `contract-model`. Every rule an author
-   must satisfy is catalogued by id in
+   Every rule an author must satisfy is catalogued by id in
    `skills/connector-builder/references/rules/`.
    <!-- PROBE: connector-secret-literal-undetected, runtime-tail-unchecked -->
    Some rules hold only at
    connect or run time, so a clean run is not proof every rule holds.
 2. **Checks the contract models can't express** — cross-file relationships
-   (`type-map-coverage`, `endpoint-filename`, `endpoint-id-unique`,
-   `endpoint-id-locator`, `endpoint-transport-ref`), embedded-schema validity
-   (`embedded-json-schema`), a recorded sample against the node declaring it
-   (`embedded-schema-example`), and quality warnings on a type map
-   (`type-map-rule`, `type-map-write-coverage`). A document matching no known
-   artifact kind reports under `document`.
+   (sibling type-map coverage, filename ↔ endpoint_id, endpoint id uniqueness,
+   endpoint id ↔ locator, endpoint → transport), embedded-schema validity, a
+   recorded sample against the node declaring it, and quality warnings on a
+   type map.
+
+   `skills/connector-builder/references/io-contracts.md`'s `Diagnostics`
+   section owns the finding shape both passes above produce, and the
+   currently-pinned `analitiq-validator` release's caveat.
 
    The validator checks JSON documents only; the database package files
    (`connector.py`, `pyproject.toml`, …) are enforced by registry CI.

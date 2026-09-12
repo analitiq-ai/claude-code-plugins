@@ -80,7 +80,7 @@ def test_bare_sqlalchemy_driver_is_a_contract_model_finding(validator):
     doc = json.loads((CORPUS / "invalid_connector_bare_driver.json").read_text())
     errors = _errors(validator.validate_document(doc))
     assert any(
-        f["validator"] == "contract-model" and f["path"].endswith("/driver")
+        f.get("rule") is None and f["path"].endswith("/driver")
         for f in errors
     ), errors
 
@@ -128,7 +128,7 @@ def _endpoint(native_type, arrow_type, endpoint_id="widgets", path="/widgets"):
 def test_valid_embedded_schema_passes(validator):
     ep = _endpoint("STRING", "Utf8")
     assert not any(
-        e["validator"] == "embedded-json-schema"
+        e.get("rule") == "RULE-ENDP-048"
         for e in _errors(validator.validate_document(ep))
     )
 
@@ -139,10 +139,10 @@ def test_embedded_schema_must_be_valid_draft_2020_12(validator):
     contract model checks the arrow_type pairing, not meta-schema validity."""
     ep = _endpoint("STRING", "Utf8")
     # `minItems` must be a non-negative integer; a string is meta-invalid, and the
-    # contract model doesn't inspect it, so only the embedded-json-schema check fires.
+    # contract model doesn't inspect it, so only RULE-ENDP-048 fires.
     ep["operations"]["read"]["response"]["schema"]["minItems"] = "notanumber"
     errors = _errors(validator.validate_document(ep))
-    assert any(e["validator"] == "embedded-json-schema" for e in errors), errors
+    assert any(e.get("rule") == "RULE-ENDP-048" for e in errors), errors
 
 
 def test_embedded_schema_rejects_other_dialect(validator):
@@ -153,7 +153,7 @@ def test_embedded_schema_rejects_other_dialect(validator):
         "http://json-schema.org/draft-07/schema#"
     )
     errors = _errors(validator.validate_document(ep))
-    assert any(e["validator"] == "embedded-json-schema" for e in errors), errors
+    assert any(e.get("rule") == "RULE-ENDP-048" for e in errors), errors
 
 
 def test_embedded_schema_accepts_the_empty_fragment_spelling(validator):
@@ -163,7 +163,7 @@ def test_embedded_schema_accepts_the_empty_fragment_spelling(validator):
     ep = _endpoint("STRING", "Utf8")
     ep["operations"]["read"]["response"]["schema"]["$schema"] = f"{JS}#"
     errors = _errors(validator.validate_document(ep))
-    assert not any(e["validator"] == "embedded-json-schema" for e in errors), errors
+    assert not any(e.get("rule") == "RULE-ENDP-048" for e in errors), errors
 
 
 def test_embedded_schema_rejects_a_repeated_empty_fragment(validator):
@@ -173,18 +173,19 @@ def test_embedded_schema_rejects_a_repeated_empty_fragment(validator):
     ep = _endpoint("STRING", "Utf8")
     ep["operations"]["read"]["response"]["schema"]["$schema"] = f"{JS}##"
     errors = _errors(validator.validate_document(ep))
-    assert any(e["validator"] == "embedded-json-schema" for e in errors), errors
+    assert any(e.get("rule") == "RULE-ENDP-048" for e in errors), errors
 
 
 def test_a_nested_dialect_declaration_is_a_contract_model_error(validator):
     """`$schema` below the root of an embedded schema is refused by the
     contract model, whatever its value, and nothing downstream of that model
     crashes on it — a "validator bug" finding would hide the actionable one and
-    blame the tool for a defect in the document."""
+    blame the tool for a defect in the document. Attributed to RULE-ENDP-064,
+    the walker rule this exact "$schema on a subschema" complaint belongs to."""
     ep = _endpoint("STRING", "Utf8")
     ep["operations"]["read"]["response"]["schema"]["items"]["$schema"] = 5
     findings = validator.validate_document(ep)
-    assert any(f["validator"] == "contract-model" for f in _errors(findings)), findings
+    assert any(f.get("rule") == "RULE-ENDP-064" for f in _errors(findings)), findings
     assert not [f for f in findings if "validator bug" in f["message"]], findings
 
 
@@ -199,7 +200,7 @@ def test_a_root_non_string_dialect_declaration_is_a_document_error(validator):
     ep["operations"]["read"]["response"]["schema"]["$schema"] = 5
     findings = validator.validate_document(ep)
     errors = _errors(findings)
-    assert any(e["validator"] == "embedded-json-schema" for e in errors), errors
+    assert any(e.get("rule") == "RULE-ENDP-048" for e in errors), errors
     assert not [f for f in findings if "validator bug" in f["message"]], findings
 
 
@@ -252,18 +253,24 @@ class TestFourWalkerRulesAreAttributed:
     one finding per complaint instead of folding them into one.
     """
 
-    def _rule_findings(self, validator, doc):
-        return [
-            f for f in _errors(validator.validate_document(doc))
-            if f["validator"] == "contract-model"
-        ]
+    def _rule_findings(self, doc):
+        # Isolated to the model-validation pass itself (not the full
+        # validate_document dispatch, which also runs cross-document checks
+        # on the same api-endpoint doc — RULE-ENDP-046/047/048/063 — that
+        # would otherwise leak into these exact-list assertions): a finding
+        # no longer names which pass produced it, so this is now the only
+        # way to isolate what a `MultiRuleViolation` from the walker rules
+        # this class exercises expands into.
+        from analitiq.validator._core import _model_findings
+        from analitiq.validator.connectors import _API_ENDPOINT_ADAPTER
+        return _errors(_model_findings(doc, _API_ENDPOINT_ADAPTER))
 
     def test_response_schema_pairing_miss_is_rule_endp_005(self, validator):
         doc = _read_endpoint({
             "type": "object",
             "properties": {"a": {"native_type": "int"}},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["path"]) for f in findings
             if f["message_id"] == "native-arrow-pairing-incomplete"
@@ -274,7 +281,7 @@ class TestFourWalkerRulesAreAttributed:
             "type": "object",
             "properties": {"z": {"native_type": "int"}},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["path"]) for f in findings
             if f["message_id"] == "native-arrow-pairing-incomplete"
@@ -285,7 +292,7 @@ class TestFourWalkerRulesAreAttributed:
             "type": "object",
             "properties": {"b": {"$ref": "#/$defs/Typo"}},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
@@ -301,7 +308,7 @@ class TestFourWalkerRulesAreAttributed:
             "type": "object",
             "properties": {"a": {"$ref": "#/$defs/Typo"}},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
@@ -316,7 +323,7 @@ class TestFourWalkerRulesAreAttributed:
                 "type": "object", "$schema": JS, "properties": {},
             }},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
@@ -335,7 +342,7 @@ class TestFourWalkerRulesAreAttributed:
                 "b": {"$ref": "#/$defs/Typo"},
             },
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert sorted((f.get("rule"), f["path"]) for f in findings) == sorted([
             ("RULE-ENDP-005", "/operations/read/response/schema/properties/a"),
             ("RULE-ENDP-026", "/operations/read/response/schema/properties/b"),
@@ -353,7 +360,7 @@ class TestFourWalkerRulesAreAttributed:
                 "c": {"native_type": "int", "arrow_type": "NotArrowType"},
             },
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         unattributed = [f for f in findings if f.get("rule") is None]
         assert [(f["message_id"], f["path"]) for f in unattributed] == [
             ("value_error", "/operations/read/response/schema/properties/c"),
@@ -412,7 +419,7 @@ class TestFourWalkerRulesAreAttributed:
         # tests above) so the container-shape complaint is the only one this
         # node raises — isolating the message_id under test.
         doc = build({"type": "object", "properties": {"a": node}})
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         matches = [
             (f.get("rule"), f["path"]) for f in findings
             if f["message_id"] == expected_message_id
@@ -438,7 +445,7 @@ class TestFourWalkerRulesAreAttributed:
                 "b": node,
             },
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["path"]) for f in findings
             if f["message_id"] == expected_message_id
@@ -454,7 +461,7 @@ class TestFourWalkerRulesAreAttributed:
             "type": "object",
             "properties": {"b": {keyword: "x" if keyword != "$id" else "https://example.com/"}},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
@@ -482,7 +489,7 @@ class TestFourWalkerRulesAreAttributed:
                 "a": {"native_type": "dec", "arrow_type": "Decimal128(2, 9)"},
             },
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
@@ -497,7 +504,7 @@ class TestFourWalkerRulesAreAttributed:
             "type": "object",
             "properties": {"a": "not-a-schema"},
         })
-        findings = self._rule_findings(validator, doc)
+        findings = self._rule_findings(doc)
         assert [
             (f.get("rule"), f["message_id"], f["path"]) for f in findings
         ] == [(
@@ -734,7 +741,7 @@ def test_coverage_flags_duplicate_endpoint_id(tmp_path, connector_base, validato
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"dup.json": ep, "other.json": ep})
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
-    assert any(e["validator"] == "endpoint-id-unique" and "dup" in e["message"] for e in errors)
+    assert any(e.get("rule") == "RULE-PKG-032" and "dup" in e["message"] for e in errors)
 
 
 def test_coverage_distinct_endpoint_ids_pass(tmp_path, connector_base, validator):
@@ -774,7 +781,7 @@ def test_endpoint_id_must_match_locator(validator):
     errs = validator._endpoint_locator_findings(
         {"endpoint_id": "records",
          "operations": {"read": {"request": {"path": "/v1/records"}}}})
-    assert errs and errs[0]["validator"] == "endpoint-id-locator"
+    assert errs and errs[0].get("rule") == "RULE-ENDP-046"
     assert "v1__records" in errs[0]["message"]
 
 
@@ -802,7 +809,7 @@ def test_endpoint_locator_non_derivable_path_errors(validator):
                "operations": {"read": {"request": {"path": path}}}}
         findings = validator._endpoint_locator_findings(doc)
         assert findings and findings[0]["severity"] == "error", path
-        assert findings[0]["validator"] == "endpoint-id-locator"
+        assert findings[0].get("rule") == "RULE-ENDP-046"
         assert "must equal" not in findings[0]["message"]      # no fabricated id
         assert "cannot derive" in findings[0]["message"]
 
@@ -828,7 +835,7 @@ def test_coverage_flags_endpoint_id_locator_mismatch(tmp_path, connector_base, v
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": ep})
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
-    assert any(e["validator"] == "endpoint-id-locator" for e in errors)
+    assert any(e.get("rule") == "RULE-ENDP-046" for e in errors)
 
 
 # --- Database endpoint id = slug+hash8 (shared analitiq.contracts.endpoint_identity SSOT) ---
@@ -873,7 +880,7 @@ def test_database_endpoint_locator_gate(validator):
     assert not _errors(validator.validate_document(_db_endpoint(good_id)))
     legacy = _db_endpoint("public__orders")
     errs = _errors(validator.validate_document(legacy))
-    assert any(e["validator"] == "endpoint-id-locator" and "public__orders" in e["message"]
+    assert any(e.get("rule") == "RULE-DBEP-011" and "public__orders" in e["message"]
                for e in errs)
     # Catalog + schemaless variants are gated the same way (derived id passes).
     assert not _errors(validator.validate_document(
@@ -934,7 +941,7 @@ def test_database_endpoint_filename_not_checked_for_snapshot(validator, tmp_path
     p = snap_dir / "sha256-abc123.json"  # hash basename, not {endpoint_id}.json
     p.write_text(json.dumps(db))
     errors = _errors(validator.validate_document(db, doc_path=p))
-    assert not any(e["validator"] == "endpoint-filename" for e in errors)
+    assert not any(e.get("rule") == "RULE-PKG-031" for e in errors)
 
 
 def test_database_endpoint_filename_checked_in_bundle_layout(validator, tmp_path):
@@ -949,11 +956,11 @@ def test_database_endpoint_filename_checked_in_bundle_layout(validator, tmp_path
     wrong = ep_dir / "orders.json"  # stem != endpoint_id
     wrong.write_text(json.dumps(db))
     errors = _errors(validator.validate_document(db, doc_path=wrong))
-    assert any(e["validator"] == "endpoint-filename" for e in errors)
+    assert any(e.get("rule") == "RULE-PKG-031" for e in errors)
     # Correctly named -> no filename error.
     right = ep_dir / f"{eid}.json"
     right.write_text(json.dumps(db))
-    assert not any(e["validator"] == "endpoint-filename"
+    assert not any(e.get("rule") == "RULE-PKG-031"
                    for e in _errors(validator.validate_document(db, doc_path=right)))
 
 
@@ -965,7 +972,7 @@ def test_database_endpoint_filename_not_checked_when_unanchored(validator, tmp_p
     p = tmp_path / "orders.json"  # bare staged file, wrong stem, no endpoints/ parent
     p.write_text(json.dumps(db))
     errors = _errors(validator.validate_document(db, doc_path=p))
-    assert not any(e["validator"] == "endpoint-filename" for e in errors)
+    assert not any(e.get("rule") == "RULE-PKG-031" for e in errors)
 
 
 def test_endpoint_filename_findings_public_helper(validator):
@@ -975,14 +982,14 @@ def test_endpoint_filename_findings_public_helper(validator):
     # reimplementing the ~4-line check, keeping the invariant define-once.
     eid = derive_db_endpoint_id(None, "public", "orders")
     db = _db_endpoint(eid)
-    # Mismatched stem -> exactly one endpoint-filename error.
+    # Mismatched stem -> exactly one RULE-PKG-031 error.
     mismatch = _errors(validator.endpoint_filename_findings(db, "orders.json"))
-    assert [e["validator"] for e in mismatch] == ["endpoint-filename"]
+    assert [e.get("rule") for e in mismatch] == ["RULE-PKG-031"]
     # Correct {endpoint_id}.json -> no findings.
     assert validator.endpoint_filename_findings(db, f"{eid}.json") == []
     # Missing/unusable endpoint_id -> notApplicable (can't verify), not a fail.
     no_id = validator.endpoint_filename_findings({"database_object": {"name": "orders"}}, "orders.json")
-    assert [(f["validator"], f["kind"]) for f in no_id] == [("endpoint-filename", "notApplicable")]
+    assert [(f.get("rule"), f["kind"]) for f in no_id] == [("RULE-PKG-031", "notApplicable")]
 
 
 def test_is_stem_addressed_endpoint_path_public_helper(validator):
@@ -1087,7 +1094,7 @@ def test_regex_lowercase_literal_warning_truth_table(validator, tmp_path, native
         [{"match": "regex", "native_type": native, "arrow_type": "Utf8"}],
         doc_path=tmp_path / "type-map-read.json")
     dead = [w for w in _warnings(findings)
-            if w["validator"] == "type-map-rule" and "can never match" in w["message"]]
+            if w.get("rule") == "RULE-TMAP-014" and "can never match" in w["message"]]
     assert bool(dead) is warns, findings
 
 
@@ -1096,7 +1103,7 @@ def test_write_vocabulary_gap_warns(validator, tmp_path):
     p = tmp_path / "type-map-write.json"
     findings = validator.validate_document([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}],
                                            doc_path=p)
-    assert any(w["validator"] == "type-map-write-coverage" for w in _warnings(findings))
+    assert any(w.get("rule") == "RULE-TMAP-017" for w in _warnings(findings))
 
 
 def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
@@ -1110,7 +1117,7 @@ def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
     # StopIteration here is the failure signal working, not a case to guard:
     # no coverage warning at all means the probe stopped running.
     gap = next(  # skipcq: PTC-W0063
-        w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage"
+        w for w in _warnings(findings) if w.get("rule") == "RULE-TMAP-017"
     )
     assert "'Object'" in gap["message"] and "'List'" in gap["message"]
 
@@ -1123,7 +1130,7 @@ def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
     # signal working: it means the warning vanished entirely, which would make
     # the assertion below pass for the wrong reason.
     gap = next(  # skipcq: PTC-W0063
-        w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage"
+        w for w in _warnings(findings) if w.get("rule") == "RULE-TMAP-017"
     )
     assert "'Object'" not in gap["message"] and "'List'" not in gap["message"]
 
@@ -1156,7 +1163,7 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
         {"match": "regex", "arrow_type": r"^Duration\([A-Z]+\)$", "native_type": "INTERVAL"},
     ]
     findings = validator.validate_document(full_map, doc_path=tmp_path / "type-map-write.json")
-    coverage = [f for f in findings if f["validator"] == "type-map-write-coverage"]
+    coverage = [f for f in findings if f.get("rule") == "RULE-TMAP-017"]
     assert not coverage, coverage
 
 
@@ -1173,16 +1180,16 @@ _BROKEN_READ_MAPS = (
     ("unparseable", "{ not json", "could not be read or parsed"),
 )
 
-# What the defective endpoint tree below provokes: a validator id, and a fragment
+# What the defective endpoint tree below provokes: a rule id, and a fragment
 # of the verdict that check writes. The fragment is what makes the assertion
 # grade the check instead of its id — a check that crashes is reported under its
 # own id too, and an id-only assertion would read that as the check having run.
 _ENDPOINT_DEFECTS = {
-    "endpoint-filename": "must be named 'widgets.json'",
-    "endpoint-id-locator": "must equal 'v1__widgets'",
-    "endpoint-transport-ref": "is not declared in the sibling connector.json",
-    "embedded-json-schema": "is not a valid JSON Schema Draft 2020-12",
-    "embedded-schema-example": "which the node declaring it rejects",
+    "RULE-PKG-031": "must be named 'widgets.json'",
+    "RULE-ENDP-046": "must equal 'v1__widgets'",
+    "RULE-ENDP-047": "is not declared in the sibling connector.json",
+    "RULE-ENDP-048": "is not a valid JSON Schema Draft 2020-12",
+    "RULE-ENDP-063": "which the node declaring it rejects",
 }
 
 # The verdicts the native→Arrow rendering writes. A map that did not load feeds
@@ -1214,7 +1221,7 @@ def _write_defective_endpoints(root: Path, connector: dict, read_map_text: str |
 
 def _defects_reported(findings) -> set[str]:
     return {vid for vid, fragment in _ENDPOINT_DEFECTS.items()
-            if any(f["validator"] == vid and fragment in f["message"] for f in findings)}
+            if any(f.get("rule") == vid and fragment in f["message"] for f in findings)}
 
 
 def _database_tree(root: Path, *, read_map: str | None, write_map: bool, endpoints: bool) -> Path:
@@ -1250,7 +1257,7 @@ def test_unrendered_coverage_is_reported_not_silent(tmp_path, connector_base, va
     # one check the map feeds did not run — silence there reads as coverage passing.
     _write_defective_endpoints(tmp_path, connector_base, text)
     findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
-    assert any(f["validator"] == "type-map-coverage" and f["kind"] == "notApplicable"
+    assert any(f.get("rule") == "RULE-PKG-033" and f["kind"] == "notApplicable"
                and "not rendered" in f["message"] for f in findings), findings
     # ... and the warning is the whole of what coverage says here: a rendering
     # that never ran cannot also return per-endpoint verdicts.
@@ -1295,12 +1302,15 @@ def test_database_missing_both_maps_reports_both(tmp_path, validator):
     assert not [f for f in with_dir if "endpoints" in f["message"]], with_dir
 
 
+_COVERAGE_RULE_IDS = {"RULE-PKG-030", "RULE-PKG-032", "RULE-PKG-033", "RULE-PKG-035"}
+
+
 def test_clean_tree_emits_no_coverage_finding(tmp_path, connector_base, validator):
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("STRING", "Utf8")})
     findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
-    assert [f for f in findings if f["validator"] == "type-map-coverage"] == [], findings
+    assert [f for f in findings if f.get("rule") in _COVERAGE_RULE_IDS] == [], findings
 
 
 def test_rendered_coverage_reports_only_the_uncovered_native(tmp_path, connector_base, validator):
@@ -1310,7 +1320,7 @@ def test_rendered_coverage_reports_only_the_uncovered_native(tmp_path, connector
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("BIGINT", "Int64")})
     findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
-    coverage = [f for f in findings if f["validator"] == "type-map-coverage"]
+    coverage = [f for f in findings if f.get("rule") == "RULE-PKG-033"]
     assert len(coverage) == 1 and coverage[0]["severity"] == "error", coverage
     assert "no matching rule" in coverage[0]["message"], coverage
 

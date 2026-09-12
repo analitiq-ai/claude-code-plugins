@@ -361,7 +361,10 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
     artifact, passing the entity that artifact was authored as (the
     vocabulary is the agent's `entity` input); for the stitched pipeline
     pass `bundle_root: .` so the cross-document referential checks run —
-    `references/io-contracts.md` lists every finding id this pass can emit.
+    `references/io-contracts.md` documents the finding shape and the ids its
+    own cross-document checks emit; a finding may also name a rule its
+    contract model raised, or none at all where that section says none
+    applies.
 
     Run each artifact through the fix-and-revalidate loop
     (`references/pipeline.md` §"Fix-and-revalidate loop (phase 9)"), which owns
@@ -428,8 +431,9 @@ and leaves everything else — including `.secrets/` — untouched.
    `type_map_read` / `type_map_write`), which catches a stale or broken
    referenced artifact; plus the whole bundle with `bundle_root: .`, the pass
    that resolves cross-document references and the on-disk endpoint file names
-   (`references/io-contracts.md` lists the finding ids). Both surface at edit
-   time instead of at engine runtime. Write only once validation is clean.
+   (`references/io-contracts.md` documents its finding ids and shape). Both
+   surface at edit time instead of at engine runtime. Write only once
+   validation is clean.
 
    **Aligning a connector-scoped endpoint ref** is itself an edit intent ("align
    the endpoint names to the connector", "fix the endpoint reference"): on a

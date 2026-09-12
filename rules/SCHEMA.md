@@ -223,9 +223,16 @@ emits one.
   each rule naming a `fixture_model` is rejected by its own invalid fixtures
   and by no other constraint.
 - `packages/validator/tests/test_check_registry_census.py` — the same
-  enforcer→registry direction over the other enforcement home: every check id
-  `analitiq.validator` registers is emitted by a function some record binds, or
-  carries a written exemption. The census above walks contract classes, so it
-  cannot see a cross-document check.
+  enforcer→registry direction over the other enforcement home: every rule id a
+  `finding()` call in `analitiq.validator` names resolves to a live record,
+  every record whose `validator` names a function in this package is actually
+  emitted by that function, and every call site that names no rule *literally*
+  (`rule` absent, or the constant `None`) is one of the framework cases this
+  document's Findings section names — `_model_findings`'s own case, where
+  `rule` is a variable resolved per pydantic error rather than a literal, is
+  open-ended by construction and sits outside what the walk can check
+  syntactically. The census above walks contract classes, so it cannot see a
+  cross-document
+  check.
 - `tests/registry/test_rule_reachability.py` — every id a plugin's
   prose cites is readable inside that plugin.
