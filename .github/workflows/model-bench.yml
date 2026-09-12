@@ -1,7 +1,8 @@
 name: Model bench (throwaway)
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [chore/model-bench-throwaway]
 
 permissions:
   contents: read
