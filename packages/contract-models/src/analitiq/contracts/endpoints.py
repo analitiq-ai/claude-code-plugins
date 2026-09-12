@@ -1628,13 +1628,13 @@ def _validate_schema_refs(schema: Any, path: str, errors: list[RuleViolation]) -
     * the reference keywords in :data:`_REFUSED_REFERENCE_KEYWORDS`, refused
       for more than one reason: `$id` moves the base URI out from under the
       resolver, `$dynamicRef`/`$recursiveRef` defer the target to evaluation
-      time, and `$anchor`/`$dynamicAnchor`/`$recursiveAnchor` declare a
-      plain-name fragment target this contract's JSON-Pointer-only addressing
-      can never reach. Which of those reasons RULE-ENDP-026's own statement
-      actually names — and so which keywords the walker attributes to it,
-      versus leaving unattributed on the same underlying harm — is decided
-      once, by :data:`_KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS`, not restated
-      here.
+      time, and `$anchor`/`$dynamicAnchor`/`$recursiveAnchor` each address a
+      target only through a mechanism this contract's JSON-Pointer-only
+      addressing does not author (each keyword's own entry in the dict says
+      which). Which of those reasons RULE-ENDP-026's own statement actually
+      names — and so which keywords the walker attributes to it, versus
+      leaving unattributed on the same underlying harm — is decided once, by
+      :data:`_KEYWORDS_RULE_ENDP_026_STATEMENT_COVERS`, not restated here.
 
     Refusing all of them is what makes it safe for declared-path resolution to
     FOLLOW a `$ref` (see
