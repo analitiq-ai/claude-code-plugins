@@ -390,17 +390,22 @@ def _require_runnable_gated_pipelines_ids() -> set[str]:
     impossible — which is exactly the failure `measured_reachable_connectors_ids`
     already fixed on the connectors.py side of this same function, found here
     too: RULE-PIPE-019 fires only when a pipeline's status is not 'active', but
-    this adapter's own `_require_runnable` (`validate.py`) is true only when
+    this adapter's own `is_runnable_required` (`validate.py`) is true only when
     status IS 'active' — a rule and its own gate that can never both hold.
     """
     import ast
 
     tree = ast.parse((REPO_ROOT / "packages" / "validator" / "src" / "analitiq"
                        / "validator" / "pipelines.py").read_text())
-    target = next(
-        node for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "validate_pipeline_bundle"
-    )
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "validate_pipeline_bundle":
+            target = node
+            break
+    else:
+        raise RuntimeError(
+            "analitiq.validator.pipelines no longer defines validate_pipeline_bundle "
+            "— this measurement has nothing to walk"
+        )
     gated_functions = {
         call.func.id
         for stmt in ast.walk(target)
@@ -419,10 +424,10 @@ def _require_runnable_gated_pipelines_ids() -> set[str]:
 def _measured_reachable_pipelines_ids() -> set[str]:
     """Which of `_require_runnable_gated_pipelines_ids()` actually survive —
     measured the same way as the connectors.py half: run the adapter's real
-    `_require_runnable` and the published `validate_pipeline_bundle` on a
+    `is_runnable_required` and the published `validate_pipeline_bundle` on a
     minimal ACTIVE pipeline (status='active', no streams), which is the only
-    state `_require_runnable` ever answers True for, so it exercises the full
-    space that gate can put this adapter's calls into."""
+    state `is_runnable_required` ever answers True for, so it exercises the
+    full space that gate can put this adapter's calls into."""
     from analitiq.validator import validate_pipeline_bundle
 
     adapter = _pipeline_validate_adapter()
@@ -430,7 +435,7 @@ def _measured_reachable_pipelines_ids() -> set[str]:
     bundle = {"pipeline": pipeline, "streams": [], "connections": [],
               "connectors": [], "endpoints": []}
     findings = validate_pipeline_bundle(
-        bundle, require_runnable=adapter._require_runnable(pipeline))
+        bundle, require_runnable=adapter.is_runnable_required(pipeline))
     return {f.get("rule") for f in findings if f.get("rule") is not None}
 
 
