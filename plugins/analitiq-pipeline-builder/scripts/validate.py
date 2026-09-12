@@ -3,10 +3,13 @@
 
 This is a thin **adapter**: it dispatches to the published `analitiq-validator`
 + `analitiq-contract-models` packages (the same offline, model-driven contract
-the Analitiq services validate against) and normalizes every backend into one
-Diagnostics envelope:
-
-    {"passed": bool, "findings": [{"validator", "severity", "path", "message"}]}
+the Analitiq services validate against) and reduces every backend into one
+Diagnostics envelope: ``{"passed": bool, "findings": [...]}``, `passed` fails
+closed over every finding — a locally minted one (`validator`, `severity`,
+`path`, `message`) or one forwarded unchanged from `analitiq.validator`
+(`validator`, `rule`, `message_id`, `kind`, `path`, `message`, `severity` only
+for `kind: "fail"`) — through `_finding_costs_a_pass` (`skills/pipeline-builder/references/io-contracts.md`'s
+`Diagnostics` section owns the shape and the predicate in full).
 
 The published package exposes one single-document entry point plus one bundle
 entry point. This adapter routes each entity as follows:

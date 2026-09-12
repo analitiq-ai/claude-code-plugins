@@ -226,8 +226,12 @@ def test_finding_costs_a_pass_matches_the_published_predicate():
     from analitiq.contracts.shared.rules import all_rules
     from analitiq.validator import finding_costs_a_pass
 
-    error_rule = next(r for r in all_rules() if r.severity == "error")
-    warning_rule = next(r for r in all_rules() if r.severity == "warning")
+    error_rule = next((r for r in all_rules() if r.severity == "error"), None)
+    warning_rule = next((r for r in all_rules() if r.severity == "warning"), None)
+    assert error_rule is not None and warning_rule is not None, (
+        "the registry no longer has both an error- and a warning-tier rule — "
+        "the fixture this test needs no longer exists in rules/records/*.yaml"
+    )
     cases = [
         {"kind": "fail", "severity": "error"},
         {"kind": "fail", "severity": "warning"},

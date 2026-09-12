@@ -443,6 +443,26 @@ class TestStandaloneEndpointValidation:
         assert not any("was reachable" in f["message"] for f in warnings)
         assert any("could not be parsed" in f["message"] for f in warnings)
 
+    def test_unparseable_connector_does_not_also_fail_the_rule_it_skips(self, tmp_path):
+        """The read/parse failure is a framework-level `fail` (no `rule`
+        named — nothing has evaluated RULE-ENDP-047 either way), so it must
+        not ALSO report a `fail` under that rule alongside the
+        `notApplicable` this same path reports for it — a consumer branching
+        on `rule` would otherwise see two contradictory verdicts for one
+        check that never ran."""
+        findings = self._run(tmp_path, "{not json")
+        endpoint_transport_ref = [
+            f for f in findings if f["validator"] == "endpoint-transport-ref"
+        ]
+        assert not any(
+            f["kind"] == "fail" and f.get("rule") == "RULE-ENDP-047"
+            for f in endpoint_transport_ref
+        )
+        assert any(
+            f["kind"] == "notApplicable" and f.get("rule") == "RULE-ENDP-047"
+            for f in endpoint_transport_ref
+        )
+
     @pytest.mark.parametrize("shape", ["relative", "dotdot"])
     def test_a_non_absolute_document_path_still_finds_the_sibling(
         self, tmp_path, monkeypatch, shape

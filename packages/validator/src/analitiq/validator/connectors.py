@@ -1185,9 +1185,15 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
             connector_doc = None
             sibling_exists = sibling is not None and sibling.is_file()
             if sibling_exists:
+                # `rule=None`: a read/parse failure has not evaluated
+                # RULE-ENDP-047 one way or the other, so asserting a `fail`
+                # against it here would contradict the `notApplicable` the
+                # `elif sibling_exists` branch below reports for the identical
+                # case. The failure to read is a framework-level fact; which
+                # rule went unchecked as a result is that branch's to name.
                 connector_doc, load_findings = _load_json_sibling(
                     sibling, "endpoint-transport-ref",
-                    rule="RULE-ENDP-047", message_id="sibling-connector-unreadable",
+                    rule=None, message_id="sibling-connector-unreadable",
                 )
                 findings.extend(load_findings)
             transports = connector_doc.get("transports") if isinstance(connector_doc, dict) else None
