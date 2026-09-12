@@ -69,12 +69,13 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
     carries to the line it sits on.
 
     A call is ruleless when its `rule` keyword is absent or the literal
-    `None` — `_load_json_sibling` threads `rule` through from ITS caller, so
-    a call to it passing a literal `rule=None` is tracked the same way a
-    direct `finding()` call would be, attributed to whichever function made
-    that call. `_load_json_sibling`'s own internal `finding(rule=rule, …)`
-    is not itself ruleless by this walk (`rule` there is a variable, not a
-    literal `None`) — its callers are what decide, and are what this counts.
+    `None` — `_load_json_sibling` and `_run_guarded` each thread `rule`
+    through from THEIR caller, so a call to either passing a literal
+    `rule=None` (or omitting it) is tracked the same way a direct `finding()`
+    call would be, attributed to whichever function made that call. Neither
+    helper's own internal `finding(rule=rule, …)` is itself ruleless by this
+    walk (`rule` there is a variable, not a literal `None`) — their callers
+    are what decide, and are what this counts.
     """
     found: dict[tuple[str, str], int] = {}
 
@@ -84,14 +85,18 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
                 walk(child, module, owner or child.name)
                 continue
             if isinstance(child, ast.Call) and getattr(child.func, "id", None) in (
-                "finding", "_load_json_sibling",
+                "finding", "_load_json_sibling", "_run_guarded",
             ):
+                callee = child.func.id
                 kwargs = {kw.arg: kw.value for kw in child.keywords}
                 rule_kw = kwargs.get("rule")
                 is_ruleless = rule_kw is None or (
                     isinstance(rule_kw, ast.Constant) and rule_kw.value is None
                 )
-                mid = kwargs.get("message_id")
+                # `_run_guarded`'s own `message_id="check-crashed"` is fixed inside
+                # its body, never passed by a caller — the same literal every call
+                # site shares, unlike `finding`/`_load_json_sibling`'s caller-given one.
+                mid = ast.Constant("check-crashed") if callee == "_run_guarded" else kwargs.get("message_id")
                 if is_ruleless and isinstance(mid, ast.Constant) and isinstance(mid.value, str):
                     found[(f"{module}::{owner or '<module>'}", mid.value)] = child.lineno
             walk(child, module, owner)
@@ -114,9 +119,11 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator._core::main", "unreadable-document"): (
         "the document could not be read or parsed at all, before any kind "
         "was even identified"),
-    ("analitiq.validator._core::_run_guarded", "check-crashed"): (
-        "a check crashed; nothing decided whether the rule it would have "
-        "graded holds"),
+    ("analitiq.validator._core::validate_document", "check-crashed"): (
+        "top-level dispatch crashed before any kind was even identified, so "
+        "the crash is not attributable to any one rule; a guarded check "
+        "bound to exactly one rule instead passes it through _run_guarded's "
+        "own rule= parameter, which keeps that crash off this table"),
     ("analitiq.validator.connectors::<module>", "missing-contract-models-dependency"): (
         "the contract-models dependency is missing; no rule was even "
         "reachable to ask about"),

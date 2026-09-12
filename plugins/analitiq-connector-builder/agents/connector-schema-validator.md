@@ -61,9 +61,12 @@ ambiguously-named type-map array.
 
 ## Findings
 
-Do not expect a finding id per rule. Report every finding as the validator
-emits it; never map one onto a rule id yourself. The id vocabulary is the
-`Diagnostics` enum in `io-contracts.md`.
+Report every finding as the validator emits it; never re-map its `rule` id
+yourself — resolve it in the rule files per this file's header note above.
+A finding names no rule only where `io-contracts.md`'s `Diagnostics` section
+says one is absent (an unrecognized document, an unattributed model
+rejection, a check that could not run); treat that absence as the framework
+saying so, not as a gap to fill in.
 
 <!-- BEGIN GENERATED: validator-blind-spots -->
 Checks the plugin's prose once claimed but the validator does **not** perform —

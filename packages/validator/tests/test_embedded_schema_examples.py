@@ -313,6 +313,9 @@ def test_a_crash_in_the_check_costs_no_other_check(validator, monkeypatch):
     assert "RULE-ENDP-048" in {f.get("rule") for f in findings}
     crashes = [f for f in findings if f.get("message_id") == "check-crashed"]
     assert len(crashes) == 1 and "crashed unexpectedly" in crashes[0]["message"]
+    # The crashed check is bound to exactly one rule — the crash finding
+    # stays routable to it rather than losing attribution to the crash.
+    assert crashes[0]["rule"] == "RULE-ENDP-063"
 
 
 def test_a_node_asserting_nothing_is_graded_against_nothing(validator):

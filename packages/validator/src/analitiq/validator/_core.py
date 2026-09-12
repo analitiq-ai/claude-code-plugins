@@ -296,7 +296,7 @@ def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) ->
             "a pipeline 'connections'."))]
 
 
-def _run_guarded(fn: Callable, *args, crash_label: str) -> list[dict]:
+def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None) -> list[dict]:
     """Run a check; a crash becomes one finding so other checks survive.
 
     `crash_label` is keyword-only and named apart from any parameter a
@@ -306,16 +306,21 @@ def _run_guarded(fn: Callable, *args, crash_label: str) -> list[dict]:
 
     `notApplicable`, not `fail`: the crash means nothing here decided whether
     any rule the check would have graded holds, which is exactly what that
-    kind reports. Naming no `rule` (the crash is not attributable to one
-    check's obligation) keeps it inside the framework's own no-rule case and
-    off the "clears the bar" list `passed` reduces over, so it always costs —
-    matching what an unconditional `severity: error` finding always did here.
+    kind reports. `rule`, when the caller names one, is the obligation a
+    crash mid-check leaves unevaluated — a caller wrapping a check bound to
+    exactly one rule (`_embedded_schema_example_findings` and RULE-ENDP-063,
+    say) passes it so the crash stays routable to it; a caller wrapping
+    dispatch over an unidentified document (`validate_document`, which could
+    crash on behalf of any rule or none) leaves it `None`, which keeps the
+    finding inside the framework's own no-rule case and off the "clears the
+    bar" list `passed` reduces over, so it always costs — matching what an
+    unconditional `severity: error` finding always did here.
     """
     try:
         return fn(*args)
     except Exception as exc:  # noqa: BLE001 - last-resort guard
         return [finding(
-            message_id="check-crashed", kind="notApplicable", path="",
+            rule=rule, message_id="check-crashed", kind="notApplicable", path="",
             message=(
                 f"{crash_label} crashed unexpectedly ({type(exc).__name__}: {exc}); "
                 "this is a validator bug — please report."))]

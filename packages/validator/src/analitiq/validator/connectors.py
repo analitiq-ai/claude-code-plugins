@@ -1079,7 +1079,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             continue
         findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
         findings.extend(_run_guarded(_embedded_schema_example_findings, ep_doc,
-                                     ep_path.name, crash_label="embedded schema example grading"))
+                                     ep_path.name, crash_label="embedded schema example grading",
+                                     rule="RULE-ENDP-063"))
         # Cross-file: the endpoint's transport_ref sites resolve against THIS
         # connector's `transports` — checkable only here, where both documents
         # are in hand.
@@ -1135,7 +1136,8 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     if isinstance(doc, dict):
         findings += _embedded_schema_findings(doc)
         findings += _run_guarded(_embedded_schema_example_findings, doc,
-                                 crash_label="embedded schema example grading")
+                                 crash_label="embedded schema example grading",
+                                 rule="RULE-ENDP-063")
         # `endpoint-transport-ref` is cross-document: it needs the sibling
         # connector.json's `transports`, which only `check_coverage` has. Say so
         # rather than returning a silent clean pass — an author validating a
