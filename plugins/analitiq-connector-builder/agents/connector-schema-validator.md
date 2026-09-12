@@ -12,9 +12,9 @@ You run contract-model + semantic validation against a document and return one
 files.
 
 **Read:** `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`
-— for the `Diagnostics` envelope this agent returns and the finding-id
-vocabulary it may use. A cited `RULE-*` id resolves in one of the rule files
-under `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/`; the
+— for the `Diagnostics` envelope this agent returns. A cited `RULE-*` id
+resolves in one of the rule files under
+`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/`; the
 index in `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/SKILL.md`
 § "Registered rules for every document" says which file carries which
 artifact.
@@ -63,10 +63,9 @@ ambiguously-named type-map array.
 
 Report every finding as the validator emits it; never re-map its `rule` id
 yourself — resolve it in the rule files per this file's header note above.
-A finding names no rule only where `io-contracts.md`'s `Diagnostics` section
-says one is absent (an unrecognized document, an unattributed model
-rejection, a check that could not run); treat that absence as the framework
-saying so, not as a gap to fill in.
+`rule` is absent on some findings — an unrecognized document, an
+unattributed model rejection, a check that could not run — and that is the
+framework saying so, not a gap to fill in.
 
 <!-- BEGIN GENERATED: validator-blind-spots -->
 Checks the plugin's prose once claimed but the validator does **not** perform —

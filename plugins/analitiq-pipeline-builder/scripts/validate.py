@@ -564,7 +564,7 @@ def _check_connector_endpoint_refs(streams, connections,
                 continue
             cid, eid = ref.get("connection_id"), ref.get("endpoint_id")
             if not (isinstance(cid, str) and cid and isinstance(eid, str) and eid):
-                continue  # missing ids are contract-model / bundle-connection-ref concerns
+                continue  # missing ids are the contract model's concern, or RULE-STRM-033/034's
             connector = conn_to_connector.get(_base_id(cid))
             if connector is None:
                 continue  # unresolved connection — already flagged by the connection check

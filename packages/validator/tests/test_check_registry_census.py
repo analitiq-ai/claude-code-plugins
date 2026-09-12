@@ -111,8 +111,7 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
 #: Every call site this package emits a ruleless finding from, mapped to the
 #: `rules/SCHEMA.md` framework case it is. A site this file's walk finds and
 #: this table does not name fails the build — the only way a check earns the
-#: right to omit `rule` is stating which documented case it is, the same
-#: discipline `EXEMPT_VALIDATOR_IDS` once enforced over categories.
+#: right to omit `rule` is stating which documented case it is.
 RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator._core::_dispatch", "unrecognized-document"): (
         "no registered kind's detector claimed the document"),
@@ -161,10 +160,11 @@ def test_every_ruleless_finding_is_a_named_framework_case():
     found = _ruleless_emitters()
     unaccounted = sorted(set(found) - set(RULELESS_SITES))
     assert not unaccounted, (
-        "finding() (or _load_json_sibling, which threads rule through from "
-        "its caller) emits a ruleless finding RULELESS_SITES does not name "
-        "— add it with the framework case it is, or attribute an actual "
-        f"rule instead: {unaccounted}"
+        "finding() (or _load_json_sibling/_run_guarded, which thread rule "
+        "through from their caller) emits a ruleless finding RULELESS_SITES "
+        "does not name — add it with the framework case it is, or attribute "
+        "an actual rule instead: "
+        + ", ".join(f"{site} (line {found[site]})" for site in unaccounted)
     )
 
 

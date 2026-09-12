@@ -177,6 +177,24 @@ def test_renderer_emits_nonempty_block(block_id):
         f"{block_id} must end with exactly one newline")
 
 
+def test_reachable_connectors_symbols_are_live():
+    """`render_validator_ids`'s allowlist names four `connectors.py` functions
+    by their dotted `validator` symbol. `test_renderer_emits_nonempty_block`
+    only catches every symbol going stale at once — impossible while any
+    `analitiq.validator.pipelines`-bound rule exists — so a single renamed
+    symbol would silently drop that rule's id from the generated block with
+    nothing red. This pins each one against the live registry directly."""
+    from analitiq.contracts.shared.rules import all_rules
+
+    bound = {rule.validator for rule in all_rules() if rule.validator}
+    stale = sorted(G._REACHABLE_CONNECTORS_SYMBOLS - bound)
+    assert not stale, (
+        f"_REACHABLE_CONNECTORS_SYMBOLS names symbols no rule binds: {stale} "
+        "— the function was renamed/removed and its rule id silently stopped "
+        "rendering into the validator-ids block"
+    )
+
+
 def test_filter_operator_scopes_are_disjoint_and_complete():
     """The empirically probed operator vocabulary matches the published Literal."""
     from typing import get_args

@@ -166,9 +166,9 @@ This adapter's `database_endpoint` and `type_map_read`/`type_map_write`
 entities also run the document against its contract model, whose own
 `@model_validator`s can reject it citing a rule of their own — every rule
 bound to `DatabaseEndpointDoc`, `TypeMapReadDoc` or `TypeMapWriteDoc` is
-reachable that way, catalogued in full in `references/rules/
-database-endpoint.md` and `references/rules/type-map.md` rather than restated
-here.
+reachable that way, catalogued in full in
+`references/rules/database-endpoint.md` and `references/rules/type-map.md`
+rather than restated here.
 
 <!-- BEGIN GENERATED: validator-ids -->
 Rule ids this adapter's own cross-document checks in `analitiq.validator` can emit (the checks a single-document contract model cannot make on its own — sibling coverage, filename↔id, referential integrity across a bundle):
@@ -200,9 +200,10 @@ finding from a stderr excerpt, carried in `message` with `path` empty.
 This id names only a crash reaching a guard in this adapter. A crash inside
 the published validator's own single-document dispatch (the `database_endpoint`
 / `type_map_read` / `type_map_write` routes, which call it directly) is already
-caught there and returned as an ordinary `contract-model` finding whose
-`message` says the check itself crashed — that finding never reaches this
-adapter as an exception, so no guard here fires and it is not relabeled.
+caught there and returned as a forwarded `kind: "notApplicable"`,
+`message_id: "check-crashed"` finding whose `message` says the check itself
+crashed — that finding never reaches this adapter as an exception, so no
+guard here fires and it is not relabeled.
 
 Some findings name the rule they apply, as a leading `[RULE-<AREA>-NNN]` in
 `message`. Quote the id verbatim whenever one is present — `pipeline-spec` and
