@@ -2,7 +2,7 @@ id: RULE-STRM-022
 statement: >
   Every field name a stream references MUST resolve to a field the endpoint
   document on that side of the transfer declares.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: null

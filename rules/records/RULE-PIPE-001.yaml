@@ -2,7 +2,7 @@ id: RULE-PIPE-001
 statement: >
   A pipeline's destination list MUST NOT name the same connection more than
   once.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::PipelineConnections._destinations_unique"

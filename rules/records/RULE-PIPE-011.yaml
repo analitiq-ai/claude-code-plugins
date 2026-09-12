@@ -3,7 +3,7 @@ statement: >
   Every stream a pipeline references MUST resolve to exactly one stream
   document in the run assembled from it, and the pipeline MUST NOT reference
   the same stream twice.
-tier: referential
+tier: reference
 severity: error
 scopes: [pipeline]
 validator: "analitiq.validator.pipelines::_check_stream_refs"

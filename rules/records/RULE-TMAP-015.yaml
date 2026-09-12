@@ -3,7 +3,7 @@ statement: >
   A write rule's `arrow_type` matcher MUST be spelled in the casing the
   canonical Arrow vocabulary uses, because write-side matching preserves case
   where read-side matching does not.
-tier: procedural
+tier: process
 severity: warning
 scopes: [type-map]
 validator: null

@@ -2,7 +2,7 @@ id: RULE-CTOR-067
 statement: >
   error_map's key_attrs and codes MUST be declared together; a block declaring
   one without the other MUST be rejected.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ErrorMap._key_attrs_and_codes_together"

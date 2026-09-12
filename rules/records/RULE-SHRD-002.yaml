@@ -6,7 +6,7 @@ statement: >
   from a write direction, the sample MUST have been observed on the direction
   being declared — a sample observed on the other direction's payload is not
   evidence for this direction's declaration.
-tier: judgment
+tier: choice
 severity: error
 scopes: [any]
 validator: null

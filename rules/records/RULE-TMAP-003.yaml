@@ -2,7 +2,7 @@ id: RULE-TMAP-003
 statement: >
   Every `${name}` a read rule's arrow_type render substitutes MUST name a
   capture group its own native_type pattern declares.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"

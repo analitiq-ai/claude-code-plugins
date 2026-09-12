@@ -2,7 +2,7 @@ id: RULE-CONN-011
 statement: >
   A connection's `connector_id` MUST resolve to a connector present in the run
   the connection is assembled into.
-tier: referential
+tier: reference
 severity: error
 scopes: [connection]
 validator: "analitiq.validator.pipelines::_check_connection_connector_refs"

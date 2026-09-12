@@ -4,7 +4,7 @@ statement: >
   written; record identity is content-derived and the stage relation's name
   is engine-owned and deterministic, and together they are the whole
   idempotency mechanism.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

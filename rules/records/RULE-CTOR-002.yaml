@@ -3,7 +3,7 @@ statement: >
   A post-auth output MUST declare the request its mode consumes, MUST omit the
   request and the response-extraction paths belonging to the other mode, and
   MUST take a storage its mode admits.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::PostAuthOutput._mode_consistency"

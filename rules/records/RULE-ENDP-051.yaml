@@ -3,7 +3,7 @@ statement: >
   A read operation's request MUST name its HTTP method from the vocabulary the
   read-request branches declare; the branch that method selects is what decides
   whether the request may declare a body at all.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::GetReadRequest.method"

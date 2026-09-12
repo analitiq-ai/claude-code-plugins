@@ -8,7 +8,7 @@
     render_rules.py check    # CI: same, and fail if the compiled copy is stale
 
 **Why a compiled copy exists.** The registry ships inside
-`analitiq-contract-models`, because the models enforce the advisory tier at
+`analitiq-contract-models`, because the models enforce the coherence tier at
 `model_validate` time and the engine installs that wheel. Reading YAML there
 would add a parser dependency to a package deliberately kept to the minimum the
 models need at run time, for data that never changes. So the records compile to

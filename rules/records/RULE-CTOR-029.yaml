@@ -3,7 +3,7 @@ statement: >
   A connector whose `ssl_mode` input enum admits a mode that verifies the
   server certificate MUST also declare a CA-certificate input in the same
   connection contract.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: null

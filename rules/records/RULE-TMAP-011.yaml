@@ -2,7 +2,7 @@ id: RULE-TMAP-011
 statement: >
   A type map MUST NOT carry a catch-all rule standing in for whatever the map's
   earlier-resolving rules leave uncovered.
-tier: structural
+tier: shape
 severity: error
 scopes: [type-map]
 validator: null

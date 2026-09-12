@@ -2,7 +2,7 @@ id: RULE-ENDP-069
 statement: >
   Every `${...}` placeholder in a `filters` map template landing MUST begin
   with a declared resolution scope.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::TemplateFilterLanding._placeholders_qualified"

@@ -2,7 +2,7 @@ id: RULE-ENDP-027
 statement: >
   A request.path_params binding MUST NOT apply a wire-encoding function,
   because the engine percent-encodes every substituted path segment.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"

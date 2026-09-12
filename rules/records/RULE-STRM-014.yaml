@@ -2,7 +2,7 @@ id: RULE-STRM-014
 statement: >
   A stream source bound to a connector-scoped endpoint MUST NOT declare any
   read feature the source model reserves for database sources.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::StreamSource._validate_database_only_read_features"

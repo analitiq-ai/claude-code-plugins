@@ -27,7 +27,7 @@ from analitiq.contracts.shared.rule_record import (
     OWNERS,
     RETIRED_BEFORE_THE_REGISTRY,
     SEVERITIES,
-    STRUCTURAL_TIER,
+    SHAPE_TIER,
     SYMBOL_MECHANISMS,
     TIERS,
     RuleRecord,
@@ -106,7 +106,7 @@ def _carries(cls, member: str) -> bool:
     """Whether a model carries the member a binding names.
 
     Either half counts, because both halves enforce: a model validator is a
-    class attribute, and the `Literal`/pattern/bound a structural rule rides on
+    class attribute, and the `Literal`/pattern/bound a shape rule rides on
     is a pydantic field, which is not.
     """
     return hasattr(cls, member) or member in getattr(cls, "model_fields", {})
@@ -230,7 +230,7 @@ EXEMPT_MODEL_VALIDATORS = {
     ("analitiq.contracts.connector", "ConnectorBase", "_inherit_transport_type"): (
         "normalizer: stamps the transport_type discriminator onto transports "
         "entries before union dispatch; its raises only re-shape "
-        "container-type errors the structural tier reports anyway"
+        "container-type errors the shape tier reports anyway"
     ),
     ("analitiq.contracts.shared.common", "RetryErrorHandlingBase", "_default_retry_delay"): (
         "pure normalizer: injects the effective retry delay, never rejects"
@@ -430,7 +430,7 @@ def test_a_symbol_refuses_a_mechanism_that_does_not_take_one():
     base = dict(
         id="RULE-TEST-001",
         statement="A connector MUST be versioned by git tag.",
-        tier=STRUCTURAL_TIER,
+        tier=SHAPE_TIER,
         severity="error",
         scopes=("connector",),
         rationale="—",
@@ -490,8 +490,8 @@ def _field_head(expr: str) -> str:
     return expr.split("[]")[0].split(".")[0]
 
 
-def test_structural_fields_resolve_on_their_model():
-    """A structural entry's claim is checkable, or it is a comment.
+def test_shape_fields_resolve_on_their_model():
+    """A shape entry's claim is checkable, or it is a comment.
 
     The entry says "this model's shape carries the rule"; the only thing that
     makes that a claim rather than a gesture is that the named field still
@@ -500,7 +500,7 @@ def test_structural_fields_resolve_on_their_model():
     """
     unresolved = []
     for rule in all_rules():
-        if rule.tier != STRUCTURAL_TIER:
+        if rule.tier != SHAPE_TIER:
             continue
         for target in rule.targets:
             model = MODEL_INDEX[target]
@@ -532,7 +532,7 @@ def test_every_bound_vocabulary_field_yields_its_members():
             for expr in rule.fields:
                 info = model.model_fields.get(_field_head(expr))
                 if info is None:
-                    continue  # test_structural_fields_resolve_on_their_model owns this
+                    continue  # test_shape_fields_resolve_on_their_model owns this
                 if not closed_members(info.annotation):
                     silent.append(f"{rule.id}: {target}.{_field_head(expr)}")
     assert not silent, (
@@ -611,10 +611,10 @@ def test_every_multi_member_vocabulary_is_bound_by_a_rule():
     )
 
 
-def test_structural_rules_do_not_restate_the_values_they_point_at():
+def test_shape_rules_do_not_restate_the_values_they_point_at():
     """The tier exists to STOP the copy, so an entry must not become one.
 
-    A structural entry names where a value list lives; the renderer reads the
+    A shape entry names where a value list lives; the renderer reads the
     members off the live model. Spelling them into ``prose`` too would recreate
     the drift surface one layer down, where nothing regenerates it.
 
@@ -624,14 +624,14 @@ def test_structural_rules_do_not_restate_the_values_they_point_at():
     """
     leaked = []
     for rule in all_rules():
-        if rule.tier != STRUCTURAL_TIER or rule.mechanism != "literal_enum":
+        if rule.tier != SHAPE_TIER or rule.mechanism != "literal_enum":
             continue
         for target in rule.targets:
             model = MODEL_INDEX[target]
             for expr in rule.fields:
                 info = model.model_fields.get(_field_head(expr))
                 if info is None:
-                    continue  # test_structural_fields_resolve_on_their_model owns this
+                    continue  # test_shape_fields_resolve_on_their_model owns this
                 hits = sorted(
                     m
                     for m in set(closed_members(info.annotation))

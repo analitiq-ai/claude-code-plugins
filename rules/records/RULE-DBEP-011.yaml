@@ -2,7 +2,7 @@ id: RULE-DBEP-011
 statement: >
   A database endpoint's `endpoint_id` MUST equal the handle the contract's
   derivation produces from its verbatim `database_object`.
-tier: referential
+tier: reference
 severity: error
 scopes: [database-endpoint]
 validator: "analitiq.validator.connectors::_database_endpoint_locator_findings"

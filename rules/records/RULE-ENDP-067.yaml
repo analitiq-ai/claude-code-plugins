@@ -5,7 +5,7 @@ statement: >
   operation fail rather than send the request with that param's slot dropped,
   so leaving the flag off a param the operation cannot be correct without is
   the same defect as setting it on one whose absence the operation tolerates.
-tier: judgment
+tier: choice
 severity: error
 scopes: [api-endpoint]
 validator: null

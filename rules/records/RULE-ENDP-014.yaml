@@ -2,7 +2,7 @@ id: RULE-ENDP-014
 statement: >
   Every conflict key a write mode declares MUST name a top-level field of that
   mode's input schema.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteOperation._wiring"

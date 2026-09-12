@@ -3,7 +3,7 @@ statement: >
   A connector's `auth` block MUST carry only the children declared by the union
   branch its `type` selects, so a child belonging to a different auth type is
   rejected rather than ignored.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ApiKeyAuth"

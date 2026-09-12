@@ -3,7 +3,7 @@ statement: >
   Database identity MUST be read from an endpoint's `database_object`; the
   derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into
   the identifiers it was derived from.
-tier: procedural
+tier: process
 severity: error
 scopes: [database-endpoint, stream]
 validator: null

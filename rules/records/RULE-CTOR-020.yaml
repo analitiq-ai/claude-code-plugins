@@ -3,7 +3,7 @@ statement: >
   Each discovery action a connector configures on `ResourceDiscoveryTriggers`
   MUST name its trigger from the closed vocabulary that model's matching field
   declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ResourceDiscoveryTriggers.list_resources"

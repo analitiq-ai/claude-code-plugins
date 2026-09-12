@@ -2,7 +2,7 @@ id: RULE-ENDP-063
 statement: >
   Every value an embedded request or response schema records under `examples`
   MUST satisfy the schema node that declares it.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.validator.connectors::_embedded_schema_example_findings"

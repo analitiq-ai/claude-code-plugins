@@ -2,7 +2,7 @@ id: RULE-DBEP-005
 statement: >
   A discovered object MUST record every namespace level the system it came from
   actually has, and MUST invent none the system lacks.
-tier: judgment
+tier: choice
 severity: error
 scopes: [database-endpoint]
 validator: null

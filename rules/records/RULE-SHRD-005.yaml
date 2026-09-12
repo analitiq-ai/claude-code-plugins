@@ -2,7 +2,7 @@ id: RULE-SHRD-005
 statement: >
   An identity handle MUST be treated as opaque: no version, tenant or object
   identity is encoded into one, and none is parsed back out of one.
-tier: procedural
+tier: process
 severity: error
 scopes: [any]
 validator: null

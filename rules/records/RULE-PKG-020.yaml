@@ -3,7 +3,7 @@ statement: >
   A connector MUST NOT invent a stage name; stage naming is engine-owned
   and deterministic, and a name the connector chose breaks the idempotency
   a retried batch depends on.
-tier: procedural
+tier: process
 severity: error
 scopes: [connector-package]
 validator: null

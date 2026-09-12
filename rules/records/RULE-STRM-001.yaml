@@ -2,7 +2,7 @@ id: RULE-STRM-001
 statement: >
   Each entry in a stream's destinations MUST address an endpoint no other
   entry addresses.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::StreamAuthored._destinations_unique"

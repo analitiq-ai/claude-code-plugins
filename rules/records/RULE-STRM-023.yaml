@@ -3,7 +3,7 @@ statement: >
   A stream MUST reproduce every source-endpoint field name exactly as the
   endpoint document records it, with no case-folding, trimming, quoting or
   other normalization.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: null

@@ -2,7 +2,7 @@ id: RULE-CTOR-054
 statement: >
   A DSN binding's `value` MUST NOT apply a wire-encoding function, because
   the binding's declared `encoding` already owns that encoding.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: null

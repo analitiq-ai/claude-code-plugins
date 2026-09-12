@@ -2,7 +2,7 @@ id: RULE-CTOR-019
 statement: >
   A `resource_discovery.produces` entry MUST name an artifact kind the
   contract's vocabulary admits, and discovery MUST write nothing outside it.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ResourceDiscovery.produces"

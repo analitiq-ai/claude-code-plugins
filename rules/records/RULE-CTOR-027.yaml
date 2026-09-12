@@ -3,7 +3,7 @@ statement: >
   A database connector's transport and driver MUST be chosen by applying the
   decision order in `connector-spec-db/spec-driver-selection.md` and stopping at
   the first tier the target system satisfies.
-tier: judgment
+tier: choice
 severity: warning
 scopes: [connector]
 validator: null

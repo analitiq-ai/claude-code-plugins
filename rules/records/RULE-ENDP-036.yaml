@@ -2,7 +2,7 @@ id: RULE-ENDP-036
 statement: >
   An endpoint document's `endpoint_id` MUST match the slug pattern
   `_EndpointBase.endpoint_id` declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint, database-endpoint]
 validator: "analitiq.contracts.endpoints::_EndpointBase.endpoint_id"

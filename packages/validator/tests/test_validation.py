@@ -300,6 +300,29 @@ def test_coverage_flags_missing_read_map(tmp_path, connector_base, validator):
     assert any("type-map-read.json" in e["message"] for e in errors)
 
 
+def test_coverage_flags_missing_endpoints_directory(tmp_path, connector_base, validator):
+    # RULE-PKG-035: an API connector's release ships at least one endpoint
+    # document. No `endpoints/` directory at all is the more severe of its two
+    # ways to fail — nothing here even attempts to name an endpoint.
+    (tmp_path / "connector.json").write_text(json.dumps(connector_base))
+    (tmp_path / "type-map-read.json").write_text(json.dumps(
+        [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]))
+    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    assert any("endpoints" in e["message"] and "missing" in e["message"] for e in errors)
+
+
+def test_coverage_flags_empty_endpoints_directory(tmp_path, connector_base, validator):
+    # RULE-PKG-035's other way to fail: the directory exists but ships no
+    # endpoint document — a connector authored to look complete at the
+    # filesystem level while offering nothing to validate against.
+    (tmp_path / "endpoints").mkdir()
+    (tmp_path / "connector.json").write_text(json.dumps(connector_base))
+    (tmp_path / "type-map-read.json").write_text(json.dumps(
+        [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]))
+    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    assert any("endpoints" in e["message"] and "no *.json files" in e["message"] for e in errors)
+
+
 def _object_endpoint():
     # An `Object` arrow_type requires a sibling `properties` map (model rule).
     return {

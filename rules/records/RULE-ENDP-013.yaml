@@ -3,7 +3,7 @@ statement: >
   Every replication cursor field MUST resolve to a field declared in the record
   shape the operation's response schema describes, onto a node declaring a
   type.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"

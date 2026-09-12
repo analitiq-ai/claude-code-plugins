@@ -2,7 +2,7 @@ id: RULE-STRM-031
 statement: >
   A stream's reference to an API endpoint MUST use connector scope;
   connection scope refers to a database endpoint only.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: null

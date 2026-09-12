@@ -3,7 +3,7 @@ statement: >
   A destination's stage-relation block MUST state where stage relations live
   and how long they survive using only the vocabulary `SqlStageCapabilities`
   declares for each.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::SqlStageCapabilities.scope"

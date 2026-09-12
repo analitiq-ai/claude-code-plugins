@@ -2,7 +2,7 @@ id: RULE-STRM-009
 statement: >
   A validation rule MUST carry a value when its type takes a parameter, and
   MUST omit one when its type takes none.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::ValidationRule._validate_value_for_rule"

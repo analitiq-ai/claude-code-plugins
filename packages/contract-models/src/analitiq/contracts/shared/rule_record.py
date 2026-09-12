@@ -42,11 +42,11 @@ RULES_PATH = Path(__file__).with_name("rules.json")
 
 # --- Closed vocabularies ----------------------------------------------------
 
-STRUCTURAL_TIER = "structural"
-ADVISORY_TIER = "advisory"
-REFERENTIAL_TIER = "referential"
-PROCEDURAL_TIER = "procedural"
-JUDGMENT_TIER = "judgment"
+SHAPE_TIER = "shape"
+COHERENCE_TIER = "coherence"
+REFERENCE_TIER = "reference"
+PROCESS_TIER = "process"
+CHOICE_TIER = "choice"
 
 #: The tiers a record may take. ``descriptive`` is in the vocabulary and is
 #: deliberately absent here: prose that states no obligation
@@ -55,11 +55,11 @@ JUDGMENT_TIER = "judgment"
 #: "this states nothing" stays a verdict someone writes down instead of a
 #: silence nobody can review.
 TIERS = (
-    STRUCTURAL_TIER,
-    ADVISORY_TIER,
-    REFERENTIAL_TIER,
-    PROCEDURAL_TIER,
-    JUDGMENT_TIER,
+    SHAPE_TIER,
+    COHERENCE_TIER,
+    REFERENCE_TIER,
+    PROCESS_TIER,
+    CHOICE_TIER,
 )
 DESCRIPTIVE_TIER = "descriptive"
 
@@ -103,7 +103,7 @@ SCOPES = (
     "any",
 )
 
-#: Which shape device a structural rule is ABOUT — not merely which one the
+#: Which shape device a shape rule is ABOUT — not merely which one the
 #: target happens to carry, because a model usually carries several. It decides
 #: whether the rendered reference prints that rule's vocabulary off the live
 #: model: `literal_enum` says the members ARE the rule, so print them.
@@ -200,10 +200,10 @@ class RuleRecord:
     #: discriminated union lists every branch, and a rule naming no validator
     #: still names the models it governs.
     targets: tuple[str, ...] = ()
-    #: Fields on those classes that carry the rule, for a structural rule whose
+    #: Fields on those classes that carry the rule, for a shape rule whose
     #: `mechanism` the rendered reference reads members off.
     fields: tuple[str, ...] = ()
-    #: Which shape device a structural rule is about, from :data:`MECHANISMS`.
+    #: Which shape device a shape rule is about, from :data:`MECHANISMS`.
     mechanism: str | None = None
     #: The dotted constant the rule's `mechanism` is about, `dotted.module::NAME`
     #: — the regex a `pattern` rule points at, or the frozenset a

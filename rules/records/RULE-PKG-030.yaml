@@ -3,7 +3,7 @@ statement: >
   A connector MUST ship the sibling type-map documents its `kind` calls for
   under the filenames the engine reads them by, and MUST NOT ship one for a
   direction its kind has no use for.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector-package]
 validator: "analitiq.validator.connectors::check_coverage"

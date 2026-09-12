@@ -2,7 +2,7 @@ id: RULE-CTOR-058
 statement: >
   Every entry in a connector's error map MUST name its failure category from
   the vocabulary `ErrorMap` declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ErrorMap.codes"

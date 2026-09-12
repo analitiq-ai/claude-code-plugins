@@ -3,7 +3,7 @@ statement: >
   A connector's read map MUST resolve every `native_type` its endpoint
   documents declare, and MUST resolve each one to the canonical type the
   endpoint froze beside it.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector-package]
 validator: "analitiq.validator.connectors::check_coverage"

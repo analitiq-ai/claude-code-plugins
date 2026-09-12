@@ -50,7 +50,7 @@ RR = _load_script()
 BASELINE = {
     "id": "RULE-TEST-001",
     "statement": "A connector MUST declare a default transport.",
-    "tier": "structural",
+    "tier": "shape",
     "severity": "error",
     "scopes": "[connector]",
     "validator": "null",
@@ -379,7 +379,7 @@ def test_a_validator_naming_a_real_enforcer_is_accepted(registry):
 
 
 def test_a_validator_naming_a_model_field_is_accepted(registry):
-    """A structural rule binds the field carrying its `Literal` or pattern."""
+    """A shape rule binds the field carrying its `Literal` or pattern."""
     _write(registry, validator=f'"{CONTRACTS}.connector::SqlBulkLoad.sqlalchemy"')
     assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
 

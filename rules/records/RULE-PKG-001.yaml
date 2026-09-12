@@ -4,7 +4,7 @@ statement: >
   CDK's portable form is genuinely invalid on the target system, and MUST
   override type rendering only for logic the write map's rules cannot
   express.
-tier: judgment
+tier: choice
 severity: warning
 scopes: [connector-package]
 validator: null

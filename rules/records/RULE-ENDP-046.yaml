@@ -3,7 +3,7 @@ statement: >
   An API endpoint's `endpoint_id` MUST equal the handle derived from the
   resource locator its operations declare, and that locator MUST be one a
   handle can be derived from.
-tier: referential
+tier: reference
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.validator.connectors::_endpoint_locator_findings"

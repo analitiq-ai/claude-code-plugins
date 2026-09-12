@@ -2,7 +2,7 @@ id: RULE-DSYNC-004
 statement: >
   A run error MUST report its category from the code vocabulary
   `PublicRunError` declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [data-sync-run-status]
 validator: "analitiq.contracts.pipelines.data_sync::PublicRunError.code"

@@ -3,7 +3,7 @@ statement: >
   Every connector-internal ref — to a secret, a connection parameter or a
   discovered value — MUST name something the connection contract declares as
   an input or as a post-auth output.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: null

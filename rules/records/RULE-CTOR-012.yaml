@@ -2,7 +2,7 @@ id: RULE-CTOR-012
 statement: >
   A connection condition predicate MUST name the input it tests and MUST
   declare exactly one operator key per predicate.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectionConditionPredicate._exactly_one_operator"

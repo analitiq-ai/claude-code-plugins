@@ -4,7 +4,7 @@ statement: >
   same parameter names, the same keyword-only markers, and the same
   synchronous form, since the engine calls every dialect hook
   synchronously.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

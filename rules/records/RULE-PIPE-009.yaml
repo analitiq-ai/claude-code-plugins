@@ -2,7 +2,7 @@ id: RULE-PIPE-009
 statement: >
   A `cron_expression` MUST carry an inner spec the scheduler that runs it
   accepts; the contract constrains the wrapper alone.
-tier: structural
+tier: shape
 severity: error
 scopes: [pipeline]
 validator: null

@@ -2,7 +2,7 @@ id: RULE-DBEP-010
 statement: >
   A database endpoint for a table that does not exist yet MUST target a
   namespace discovery returned.
-tier: referential
+tier: reference
 severity: error
 scopes: [database-endpoint]
 validator: null

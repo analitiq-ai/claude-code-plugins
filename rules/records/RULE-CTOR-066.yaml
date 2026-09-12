@@ -3,7 +3,7 @@ statement: >
   An HTTP transport's `base_url` MUST NOT carry URL userinfo in text the
   connector author writes — the bare-string form, the `{literal}` form, or the
   authority of a `{template}`.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::HttpTransport._base_url_declares_no_credentials"

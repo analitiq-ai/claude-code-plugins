@@ -5,7 +5,7 @@ statement: >
   framework-owned `table_address` factory or `capabilities` attribute — and
   MUST add no public attribute of its own, giving each helper it needs a
   leading underscore and a name the base does not use.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

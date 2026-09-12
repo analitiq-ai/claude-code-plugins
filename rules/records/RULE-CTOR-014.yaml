@@ -2,7 +2,7 @@ id: RULE-CTOR-014
 statement: >
   A write_unit MUST declare at least one bound; a block declaring none states
   no preference and MUST be omitted instead.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::WriteUnit._at_least_one_bound"

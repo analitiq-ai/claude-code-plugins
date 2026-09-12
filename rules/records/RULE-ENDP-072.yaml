@@ -4,7 +4,7 @@ statement: >
   `${stream.filters.<field>.value}` for the field/operator entry it is
   declared on, and MUST NOT interpolate any other `stream.filters.*`
   reference.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"

@@ -2,7 +2,7 @@ id: RULE-PKG-015
 statement: >
   A connector's `empty_table_sql` MUST NOT render `TRUNCATE`, whose
   implicit commit breaks the staged write cycle.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

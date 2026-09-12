@@ -4,7 +4,7 @@ statement: >
   namespace level the target system actually has, because a strategy that
   folds a level away leaves every object outside that level's default
   unreachable.
-tier: judgment
+tier: choice
 severity: error
 scopes: [connector]
 validator: null

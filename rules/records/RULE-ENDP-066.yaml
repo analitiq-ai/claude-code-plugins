@@ -4,7 +4,7 @@ statement: >
   the value from: its own `default`, or — on a read — a `filters` entry
   landing on it, a pagination block that gives it a starting value, or a
   replication block that supports `incremental`.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"

@@ -1,0 +1,18 @@
+id: RULE-PKG-035
+statement: >
+  An API connector's release MUST ship at least one endpoint document in its
+  `endpoints/` directory.
+tier: reference
+severity: error
+scopes: [connector-package]
+validator: "analitiq.validator.connectors::check_coverage"
+owners: [connector-plugin, engine]
+rationale: >
+  `connector.json`'s `kind` says the connector is an API, and the engine reads
+  its streams' data from the endpoints that directory holds; a `kind: api`
+  connector with an empty or missing `endpoints/` has nothing for a stream to
+  bind, and the failure arrives at the first pipeline that tries rather than at
+  authoring. RULE-PKG-031 governs where an endpoint document ships once one
+  exists; this is the sibling obligation that one exists at all.
+status: active
+superseded_by: null

@@ -4,7 +4,7 @@ statement: >
   strings, never a driver-specific object, a filesystem path, or code;
   converting a resolved mode into driver connect arguments belongs to the
   connector package's dialect.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: null

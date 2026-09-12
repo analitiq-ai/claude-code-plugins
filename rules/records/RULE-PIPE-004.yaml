@@ -2,7 +2,7 @@ id: RULE-PIPE-004
 statement: >
   A pipeline in the status that schedules it MUST reference at least one
   stream.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::PipelineAuthored._check_active_requires_streams"

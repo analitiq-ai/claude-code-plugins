@@ -4,7 +4,7 @@ statement: >
   the source's own records arrive, and MUST NOT be authored as a rewind the
   stream can count on: whether a window shifts a read at all is decided by the
   source, not by the stream document.
-tier: judgment
+tier: choice
 severity: warning
 scopes: [stream]
 validator: null

@@ -3,7 +3,7 @@ statement: >
   Every binding in a `url_template` DSN MUST declare an `encoding` from the
   closed vocabulary the contract carries, selected for the URL position the
   value is substituted into.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::DsnBinding.encoding"

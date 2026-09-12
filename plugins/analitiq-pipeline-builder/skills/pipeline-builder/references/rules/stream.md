@@ -16,17 +16,17 @@ a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **15** structural · **15** advisory · **16** referential · **5** procedural · **6** judgment.
+In this file: **15** shape · **15** coherence · **16** reference · **5** process · **6** choice.
 
 ## Contents
 
-- Structural
-- Advisory
-- Referential
-- Procedural
-- Judgment
+- Shape
+- Coherence
+- Reference
+- Process
+- Choice
 
-## Structural
+## Shape
 
 One artifact has this shape — usually a `Literal`, a pattern, a bound or a
 closed object. These ids exist for prose: cite one instead of copying the shape
@@ -54,7 +54,7 @@ than edited.
 | RULE-STRM-037 | A validation rule MUST name its kind from the vocabulary `ValidationRule` declares. | `stream` | error | validator | `type`: `required`, `not_null`, `min_length`, `max_length`, `pattern`, `range`, `in_list` |
 | RULE-STRM-038 | A stream destination's write block MUST name its mode from the write-mode vocabulary the block it selects declares. | `stream` | error | validator | `mode`: `insert`, `upsert`, `truncate_insert` |
 
-## Advisory
+## Coherence
 
 Fields *within* one document that must agree — set-equality, disjointness,
 membership, cross-key uniqueness. Stock JSON Schema cannot state these, so
@@ -79,7 +79,7 @@ single field looks wrong.
 | RULE-STRM-021 | A validation rule's value MUST carry the payload shape its type requires. | `stream` | error | — |
 | RULE-STRM-041 | For an API-scope source, no two `filters` entries MUST share the same `field`/`operator` pair. | `stream` | error | validator |
 
-## Referential
+## Reference
 
 This artifact must agree with **another** one — a `connector_id` against the
 directory it ships in, a declared capability against the hook implementing it,
@@ -105,7 +105,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-STRM-033 | A stream's source connection MUST be the one its pipeline declares as the source, and each of its destination connections MUST be one the pipeline declares as a destination. | `stream` | error | validator |
 | RULE-STRM-034 | A connection-scoped endpoint reference MUST resolve to an endpoint document belonging to the connection it names. | `stream` | error | validator |
 
-## Procedural
+## Process
 
 Do it this way, or in this order. What is regenerated after what, what is never
 hand-edited, what the engine owns and is therefore never authored. Violating
@@ -119,7 +119,7 @@ one usually produces a document that validates and then behaves unexpectedly.
 | RULE-SHRD-009 | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. | `any` | error | — |
 | RULE-STRM-019 | A mapping's assignments MUST be kept in the order they were authored and MUST NOT be re-sorted, because the engine applies them in that order. | `stream` | error | — |
 
-## Judgment
+## Choice
 
 Several authorings all validate and one is right. A legal-but-wrong choice
 looks exactly like a correct one from the outside, so these are the rules an

@@ -2,7 +2,7 @@ id: RULE-STRM-027
 statement: >
   A filter's value MUST carry the type the referenced field declares, and a
   membership operator MUST carry an array of such values.
-tier: referential
+tier: reference
 severity: error
 scopes: [stream]
 validator: null

@@ -2,7 +2,7 @@ id: RULE-PKG-017
 statement: >
   Every write-capable database connector MUST implement `stage_table_sql`,
   whatever the rest of its `sql_capabilities` declare.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

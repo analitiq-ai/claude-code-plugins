@@ -2,7 +2,7 @@ id: RULE-SHRD-013
 statement: >
   An error-handling block MUST name what happens to a record once its retries
   are exhausted, from the vocabulary `RetryErrorHandlingBase` declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [any]
 validator: "analitiq.contracts.shared.common::RetryErrorHandlingBase.strategy"

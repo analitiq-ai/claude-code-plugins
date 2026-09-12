@@ -2,7 +2,7 @@ id: RULE-STRM-016
 statement: >
   A stream destination's write block MUST take the shape its mode selects
   and carry only the fields that shape declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::DatabaseKeylessWrite"

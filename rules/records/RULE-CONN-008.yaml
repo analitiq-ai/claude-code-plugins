@@ -2,7 +2,7 @@ id: RULE-CONN-008
 statement: >
   A connection selecting a TLS mode that verifies the server certificate MUST
   also supply the CA material the connector declares an input for.
-tier: referential
+tier: reference
 severity: error
 scopes: [connection]
 validator: null

@@ -16,17 +16,17 @@ a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **10** structural · **3** advisory · **5** referential · **6** procedural · **3** judgment.
+In this file: **10** shape · **3** coherence · **5** reference · **6** process · **3** choice.
 
 ## Contents
 
-- Structural
-- Advisory
-- Referential
-- Procedural
-- Judgment
+- Shape
+- Coherence
+- Reference
+- Process
+- Choice
 
-## Structural
+## Shape
 
 One artifact has this shape — usually a `Literal`, a pattern, a bound or a
 closed object. These ids exist for prose: cite one instead of copying the shape
@@ -49,7 +49,7 @@ than edited.
 | RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
 | RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
 
-## Advisory
+## Coherence
 
 Fields *within* one document that must agree — set-equality, disjointness,
 membership, cross-key uniqueness. Stock JSON Schema cannot state these, so
@@ -62,7 +62,7 @@ single field looks wrong.
 | RULE-ENDP-021 | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. | `database-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
-## Referential
+## Reference
 
 This artifact must agree with **another** one — a `connector_id` against the
 directory it ships in, a declared capability against the hook implementing it,
@@ -77,7 +77,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 
-## Procedural
+## Process
 
 Do it this way, or in this order. What is regenerated after what, what is never
 hand-edited, what the engine owns and is therefore never authored. Violating
@@ -92,7 +92,7 @@ one usually produces a document that validates and then behaves unexpectedly.
 | RULE-SHRD-005 | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. | `any` | error | — |
 | RULE-SHRD-009 | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. | `any` | error | — |
 
-## Judgment
+## Choice
 
 Several authorings all validate and one is right. A legal-but-wrong choice
 looks exactly like a correct one from the outside, so these are the rules an

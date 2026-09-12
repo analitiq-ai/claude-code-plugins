@@ -2,7 +2,7 @@ id: RULE-ENDP-049
 statement: >
   Every `${...}` placeholder in a template expression MUST begin with a
   declared resolution scope.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::TemplateExpression._placeholders_qualified"

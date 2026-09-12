@@ -2,7 +2,7 @@ id: RULE-ENDP-073
 statement: >
   A response extraction's `records.ref` MUST be `response.body` or start with
   `response.body.`.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ResponseExtraction._validate"

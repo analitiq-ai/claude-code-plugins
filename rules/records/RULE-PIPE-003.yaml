@@ -2,7 +2,7 @@ id: RULE-PIPE-003
 statement: >
   A pipeline MUST NOT list two streams that reduce to the same version-stripped
   base id.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::PipelineAuthored._validate_streams_unique_base"

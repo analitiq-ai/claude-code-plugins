@@ -3,7 +3,7 @@ statement: >
   An authored connector document MUST NOT declare `created_at` or
   `updated_at`, which the registry stamps on insert and on update; the
   connector model rejects any key it does not name.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase"

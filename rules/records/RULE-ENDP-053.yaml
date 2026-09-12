@@ -2,7 +2,7 @@ id: RULE-ENDP-053
 statement: >
   Every key of an endpoint's write map MUST name a write mode from the
   vocabulary `Operations` declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Operations.write"

@@ -2,7 +2,7 @@ id: RULE-SHRD-010
 statement: >
   An inherited header MUST be dropped with `headers_remove`; declaring the
   header with a value that resolves to null or empty is not a deletion.
-tier: structural
+tier: shape
 severity: error
 scopes: [any]
 validator: null

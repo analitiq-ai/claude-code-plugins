@@ -3,7 +3,7 @@ statement: >
   A transport's `tls.mode` MUST resolve to a value the same connector's
   ssl-mode connection-contract input admits, and that input MUST declare the
   `enum` the mode is drawn from.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: null

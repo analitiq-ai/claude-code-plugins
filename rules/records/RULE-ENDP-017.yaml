@@ -4,7 +4,7 @@ statement: >
   declaration implies — the whole batch when batching is declared, a single
   record or one of its fields otherwise — and any field path it addresses MUST
   be declared in that mode's input schema.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteOperation._wiring"

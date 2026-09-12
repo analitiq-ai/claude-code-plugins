@@ -2,7 +2,7 @@ id: RULE-STRM-012
 statement: >
   A filter's operator MUST belong to the operator vocabulary of the scope its
   source endpoint reference declares.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::StreamSource._validate_filter_operator_scope"

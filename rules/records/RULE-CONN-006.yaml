@@ -2,7 +2,7 @@ id: RULE-CONN-006
 statement: >
   Every connection-contract input and post-auth output MUST be authored into
   the connection map its own declaration's `storage` names.
-tier: referential
+tier: reference
 severity: error
 scopes: [connection]
 validator: null

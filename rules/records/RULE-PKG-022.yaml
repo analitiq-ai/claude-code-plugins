@@ -2,7 +2,7 @@ id: RULE-PKG-022
 statement: >
   A dialect's TLS hook MUST raise rather than connect when a
   certificate-verification mode resolves with an empty CA certificate.
-tier: structural
+tier: shape
 severity: error
 scopes: [connector-package]
 validator: null

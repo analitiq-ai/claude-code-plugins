@@ -3,7 +3,7 @@ statement: >
   A connection's non-secret maps MUST NOT carry a key that names credential
   material; such a value lives in secret storage and is reached through
   `secret_refs`.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connection]
 validator: "analitiq.contracts.connection::ConnectionStoredMaps._validate_no_secret_keys"

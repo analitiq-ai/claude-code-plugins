@@ -2,7 +2,7 @@ id: RULE-TMAP-006
 statement: >
   A `regex` read rule's arrow_type MUST be a full-string-valid Arrow type once
   its placeholders are read as parameter positions.
-tier: structural
+tier: shape
 severity: error
 scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"

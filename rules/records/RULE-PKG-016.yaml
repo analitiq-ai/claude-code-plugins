@@ -3,7 +3,7 @@ statement: >
   A database connector's dialect MUST implement exactly the hooks its
   `sql_capabilities` declaration obliges, so a declared fact with no hook
   behind it and a hook nothing routes to are both violations.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector-package]
 validator: null

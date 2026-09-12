@@ -4,7 +4,7 @@ statement: >
   in-document pointer that resolves to a schema node in the same document,
   and the schema MUST NOT use a keyword that retargets the base URI or
   defers a reference to evaluation time.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ResponseExtraction._validate"

@@ -3,7 +3,7 @@ statement: >
   A connector release MUST ship a README describing the system it connects
   to, its authentication, and any setup the user has to perform before the
   connector will run.
-tier: procedural
+tier: process
 severity: warning
 scopes: [connector]
 validator: null

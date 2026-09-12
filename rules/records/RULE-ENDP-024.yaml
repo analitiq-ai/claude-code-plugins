@@ -3,7 +3,7 @@ statement: >
   A `from_input` path_params binding MUST NOT appear on a read operation,
   and on a write MUST address one dotted record field that the mode's input
   schema declares, never the whole record and never the batch.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"

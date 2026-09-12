@@ -2,7 +2,7 @@ id: RULE-STRM-017
 statement: >
   A stream's replication block MUST take the shape its method selects and
   carry only the fields that shape declares.
-tier: structural
+tier: shape
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::FullRefreshReplication"

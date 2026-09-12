@@ -3,7 +3,7 @@ statement: >
   An endpoint document MUST ship at `endpoints/{endpoint_id}.json` under the
   connector release or the connection that carries it, directly in that
   directory rather than in a subdirectory of it.
-tier: referential
+tier: reference
 severity: error
 scopes: [connector-package]
 validator: "analitiq.validator.connectors::endpoint_filename_findings"

@@ -2,7 +2,7 @@ id: RULE-STRM-041
 statement: >
   For an API-scope source, no two `filters` entries MUST share the same
   `field`/`operator` pair.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [stream]
 validator: "analitiq.contracts.stream::StreamSource._validate_no_duplicate_api_filter_landings"

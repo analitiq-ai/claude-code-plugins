@@ -2,7 +2,7 @@ id: RULE-TMAP-005
 statement: >
   A `regex` read rule's native_type pattern MUST compile under the ECMA-262 regex
   dialect.
-tier: structural
+tier: shape
 severity: error
 scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"

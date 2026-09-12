@@ -3,7 +3,7 @@ statement: >
   A DSN binding's `value` MUST resolve to the unencoded value, because the
   binding's declared `encoding` is applied once, by the runtime, when the
   DSN is rendered.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: null

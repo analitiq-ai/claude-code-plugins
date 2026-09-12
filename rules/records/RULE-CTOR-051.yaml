@@ -3,7 +3,7 @@ statement: >
   A `runtime.oauth.*` reference MUST appear only in the auth operation for
   which that value exists, and only on a connector whose auth type produces
   it.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: null

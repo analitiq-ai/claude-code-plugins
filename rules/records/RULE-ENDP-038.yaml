@@ -3,7 +3,7 @@ statement: >
   An endpoint's `replication.supported_methods` MUST name only methods the
   vocabulary `Replication.supported_methods` declares, and the block MUST NOT
   carry a separate default-method key.
-tier: structural
+tier: shape
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Replication.supported_methods"

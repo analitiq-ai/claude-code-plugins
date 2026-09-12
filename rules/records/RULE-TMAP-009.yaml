@@ -3,7 +3,7 @@ statement: >
   A write `regex` rule's arrow_type matcher MUST compile under the ECMA-262
   regex dialect, and the native_type DDL it renders MUST carry only well-formed
   placeholders.
-tier: structural
+tier: shape
 severity: error
 scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapWriteRegexRule._check"

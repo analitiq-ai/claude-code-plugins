@@ -2,7 +2,7 @@ id: RULE-CTOR-009
 statement: >
   The fields a cross-input validation rule requires or forbids MUST be inputs
   the same connection contract declares.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs"

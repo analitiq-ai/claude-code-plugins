@@ -1,7 +1,7 @@
 id: RULE-CTOR-043
 statement: >
   An `api` connector's release MUST NOT carry connector-package Python files.
-tier: referential
+tier: reference
 severity: warning
 scopes: [connector]
 validator: null

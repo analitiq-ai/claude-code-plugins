@@ -2,7 +2,7 @@ id: RULE-CTOR-006
 statement: >
   Two declarations in one connection contract MUST NOT resolve to the same
   secret storage path.
-tier: advisory
+tier: coherence
 severity: error
 scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs"

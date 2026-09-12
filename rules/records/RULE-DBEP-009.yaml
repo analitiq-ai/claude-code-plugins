@@ -2,7 +2,7 @@ id: RULE-DBEP-009
 statement: >
   A database endpoint MUST record every provider identifier exactly as its
   source reports it, with no case-folding, quoting or other normalisation.
-tier: referential
+tier: reference
 severity: error
 scopes: [database-endpoint]
 validator: null
