@@ -26,7 +26,6 @@ from pydantic import ValidationError
 
 from analitiq.contracts.endpoints import (
     _OperationKind,
-    _REFUSED_REFERENCE_KEYWORDS,
     _unresolved_harm,
     _validate_arrow_type_in_json_schema,
     _validate_schema_refs,
