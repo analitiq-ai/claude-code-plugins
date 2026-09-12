@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.3.1](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.3.0...analitiq-pipeline-builder-v0.3.1) (2026-09-12)
+
+
+### Features
+
+* **contracts:** give a filter operator a landing site on the request ([4b3c544](https://github.com/analitiq-ai/claude-code-plugins/commit/4b3c54470a792fcd588b739f8a7610363f599780))
+* refuse two filters entries sharing a field/operator pair on an API source ([fa81ac3](https://github.com/analitiq-ai/claude-code-plugins/commit/fa81ac3864150d1cc2302b04ff51b7e7722e46d8))
+
+
+### Bug Fixes
+
+* a filter operator gets a landing site on the read operation's request ([b620722](https://github.com/analitiq-ai/claude-code-plugins/commit/b62072214ad41e0ec0ebd54745b958e0312e714c))
+* address DeepSource findings on the pipelines reachability measurement ([7e4db88](https://github.com/analitiq-ai/claude-code-plugins/commit/7e4db88a6d494682b90469d5d0fc3a92bcb5e52f))
+* address internal PR review findings on the category removal ([6f57408](https://github.com/analitiq-ai/claude-code-plugins/commit/6f5740868fd7edc47419ae2cb7f776abd9056817))
+* address internal review findings from re-running the review loop ([9d0c209](https://github.com/analitiq-ai/claude-code-plugins/commit/9d0c2094fa061533973b9d4d3a5d4cc3dd9ce031))
+* clean up remaining stale category-name references post-rebase ([fab01cd](https://github.com/analitiq-ai/claude-code-plugins/commit/fab01cdf0f06b067e96d49f1e7653b33621c3ade))
+* contain every crash route in the pipeline validator adapter ([3f1cb39](https://github.com/analitiq-ai/claude-code-plugins/commit/3f1cb394a046e1548fa7d0c4744ac3ecce4f242a))
+* contain every crash route in the pipeline validator adapter ([aa74f83](https://github.com/analitiq-ai/claude-code-plugins/commit/aa74f83e01b23f0c5666f0b1dd5b4ad816375e53))
+* convert every accumulate-then-return finding builder to mutate in place ([0471422](https://github.com/analitiq-ai/claude-code-plugins/commit/047142247c99d31f995fcd9397b674112e0eaa1f))
+* drop one more exhaustiveness claim found by a proactive sweep ([58df24f](https://github.com/analitiq-ai/claude-code-plugins/commit/58df24fe659d2fe1281bae60aca08c93b3a7c0c9))
+* exclude RULE-PIPE-019 from the generated block, same reachability bug ([da1c4c4](https://github.com/analitiq-ai/claude-code-plugins/commit/da1c4c4f17fd97b5a44de78551c27ff79666a949))
+* guard _connector_endpoint_sets's own top-level enumeration ([4340e00](https://github.com/analitiq-ai/claude-code-plugins/commit/4340e0086572d7cc1ab89b53eb9cbdfb461492a8))
+* guard section-level enumeration and halt the fix loop on adapter-crash ([39a1dbb](https://github.com/analitiq-ai/claude-code-plugins/commit/39a1dbb5b87f11aab96ec18d3fa82cc4bd3a0a75))
+* harden crash containment against three edge cases Codex found ([aa17c13](https://github.com/analitiq-ai/claude-code-plugins/commit/aa17c1300857cd4efe4f877a36fce163f5510370))
+* internal review — schema-version hygiene, rule-record accuracy, stale prose ([fab45ec](https://github.com/analitiq-ai/claude-code-plugins/commit/fab45ec2e504112243b26a6675dadcd2e1ff756c))
+* isolate the remaining crash-containment gaps the review loop found ([fd8f929](https://github.com/analitiq-ai/claude-code-plugins/commit/fd8f9293b3c9ec68d798a9ef517bc7b8288b1541))
+* limit the generated validator-ids block to what the adapter reaches ([d2e5d2a](https://github.com/analitiq-ai/claude-code-plugins/commit/d2e5d2a3e6a92c29721ed5d30270d6ec66b6b3af))
+* narrow crash containment blast radius in bundle assembly ([18e084c](https://github.com/analitiq-ai/claude-code-plugins/commit/18e084cba19ed952f3b1b346706dab7d98f418d8))
+* preserve rule on single-rule crashes, fix two stale agent/skill claims ([e9088b4](https://github.com/analitiq-ai/claude-code-plugins/commit/e9088b4ee92489a97c75d08283ebd0f25d6cb854))
+* replace remaining stale category-name mentions with rule ids ([537edb5](https://github.com/analitiq-ai/claude-code-plugins/commit/537edb5ec398ba0e71f9b4f7bd723d4c2eebce39))
+* **rules:** say which direction RULE-SHRD-002's sample must be observed on ([2aefc6c](https://github.com/analitiq-ai/claude-code-plugins/commit/2aefc6c36e8dc507136548e62436fa7bb0ec3a6a))
+* **rules:** say which direction RULE-SHRD-002's sample must be observed on ([4c4f23c](https://github.com/analitiq-ai/claude-code-plugins/commit/4c4f23c5b1e1291b3c36ad8e46a22e87399783f9))
+* **rules:** scope RULE-SHRD-002's direction clause to directional resources ([ec16742](https://github.com/analitiq-ai/claude-code-plugins/commit/ec1674279cdf09852e6f8edefcf4050fe6ed778e))
+* scope the generated rule-id block, disclaim the pin, and census ruleless sites ([d41b5a9](https://github.com/analitiq-ai/claude-code-plugins/commit/d41b5a99c8a064b9d8ab53af0468952ff1d33a96))
+* skip bundle referential checks when assembly is incomplete ([d02cdbf](https://github.com/analitiq-ai/claude-code-plugins/commit/d02cdbf056bd8344d1e94da13e6e458deadce326))
+* stop advertising a rule id this adapter's own filter strips, and two vacuous test asserts ([e68fec1](https://github.com/analitiq-ai/claude-code-plugins/commit/e68fec1cc9636157db24d6a03d2c3855385424f5))
+* stop reimplementing referential resolution, close two shared-guard gaps ([9b441e6](https://github.com/analitiq-ai/claude-code-plugins/commit/9b441e634458d4f3e2df2227ee80c8f81df047c3))
+
 ## [0.3.0](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.2.1...analitiq-pipeline-builder-v0.3.0) (2026-09-08)
 
 
