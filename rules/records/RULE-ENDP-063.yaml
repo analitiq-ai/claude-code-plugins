@@ -6,7 +6,7 @@ tier: coherence
 severity: error
 scopes: [api-endpoint]
 validator: "analitiq.validator.connectors::_embedded_schema_example_findings"
-owners: [connector-plugin, pipeline-plugin, engine]
+owners: [connector-plugin, engine]
 rationale: >
   Every other check over an endpoint compares one declaration with another —
   a node's native token against its canonical Arrow type, that type against the

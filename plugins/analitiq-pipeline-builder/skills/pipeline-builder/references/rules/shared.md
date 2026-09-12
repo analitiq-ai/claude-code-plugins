@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns whose artifact kind has no file of its own in this set, plus the rules that bind every authored document. For a document of one of those kinds, this file is the whole of what this plugin's rules ask of it; a document whose kind has its own file needs only that file, even where a rule graded for it also appears here under another of its kinds.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 12 of the 17 below have no validator, so nothing rejects
+all hold: 13 of the 20 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **8** shape · **1** coherence · **3** reference · **3** process · **2** choice.
+In this file: **9** shape · **1** coherence · **5** reference · **3** process · **2** choice.
 
 ## Contents
 
@@ -38,6 +38,7 @@ than edited.
 
 | ID | Rule | Grades | Severity | Checked | Values |
 |---|---|---|---|---|---|
+| RULE-ENDP-055 | The operator a `filters` map entry keys on MUST come from the Analitiq API-filter operator vocabulary. | `api-endpoint` | error | validator | `filters`: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |
@@ -68,6 +69,8 @@ both artifacts, which is more than you are authoring at the moment.
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
 | RULE-CTOR-045 | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. | `connector` | error | — |
+| RULE-ENDP-043 | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. | `api-endpoint` `database-endpoint` | error | — |
+| RULE-PKG-031 | An endpoint document MUST ship at `endpoints/{endpoint_id}.json` under the connector release or the connection that carries it, directly in that directory rather than in a subdirectory of it. | `connector-package` | error | validator |
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 

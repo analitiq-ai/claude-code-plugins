@@ -7,7 +7,7 @@ tier: reference
 severity: error
 scopes: [connector-package]
 validator: "analitiq.validator.connectors::check_coverage"
-owners: [connector-plugin, pipeline-plugin, engine]
+owners: [connector-plugin, engine]
 rationale: >
   The endpoint records the pair the connector observed; the map is how every
   later reader reproduces it. A native the map cannot resolve stalls the stream

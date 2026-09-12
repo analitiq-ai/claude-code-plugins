@@ -282,23 +282,42 @@ def render_filter_operators() -> str:
     return "\n".join(out) + "\n"
 
 
+# This adapter (`plugins/analitiq-pipeline-builder/scripts/validate.py`) hands
+# `analitiq.validator.validate_document` only a `database_endpoint` or
+# `type_map_read`/`type_map_write` document, calls `endpoint_filename_findings`
+# directly during bundle assembly, and runs `validate_pipeline_bundle` over the
+# stitched bundle — see that module's own docstring for the full routing
+# table. It never hands a raw api-endpoint or connector.json document to
+# `validate_document`, so a rule whose only cross-document emitter lives on
+# that path (an api-endpoint check, or the connector-package `check_coverage`)
+# can never actually surface here, and citing it would send an author looking
+# for a finding this plugin cannot produce.
+_REACHABLE_CONNECTORS_SYMBOLS = {
+    "analitiq.validator.connectors::_database_endpoint_locator_findings",
+    "analitiq.validator.connectors::_type_map_rule_warnings",
+    "analitiq.validator.connectors::_write_vocabulary_findings",
+    "analitiq.validator.connectors::endpoint_filename_findings",
+}
+
+
 def render_validator_ids() -> str:
-    """Every rule id a cross-document check in `analitiq.validator` can emit —
-    the population `packages/validator/tests/test_check_registry_census.py`
-    polices from the other side. A single-document contract-model rejection
-    carries a rule id too, when a `rules.violation` raised it, but that half
-    has no registry of ids to enumerate here: it is whichever rule the model
-    names."""
+    """Every rule id this adapter's own `analitiq.validator` entry points can
+    emit — the reachable subset of what
+    `packages/validator/tests/test_check_registry_census.py` polices
+    package-wide. A single-document contract-model rejection carries a rule id
+    too, when a `rules.violation` raised it, but that half has no registry of
+    ids to enumerate here: it is whichever rule the model names."""
     from analitiq.contracts.shared.rules import all_rules
 
     ids = sorted(
         rule.id for rule in all_rules()
-        if rule.validator and rule.validator.startswith("analitiq.validator.")
+        if rule.validator_module == "analitiq.validator.pipelines"
+        or rule.validator in _REACHABLE_CONNECTORS_SYMBOLS
     )
     if not ids:
-        raise RuntimeError("no rule is bound to a validator-package enforcer")
+        raise RuntimeError("no rule is bound to a validator function this adapter reaches")
     out = [
-        "Rule ids a cross-document check in `analitiq.validator` can emit:",
+        "Rule ids this adapter's own `analitiq.validator` entry points can emit:",
         "",
         ", ".join(f"`{v}`" for v in ids),
     ]

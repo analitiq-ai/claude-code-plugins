@@ -156,9 +156,9 @@ naming a lesser-tier rule do not fail validation.
 ```
 
 <!-- BEGIN GENERATED: validator-ids -->
-Rule ids a cross-document check in `analitiq.validator` can emit:
+Rule ids this adapter's own `analitiq.validator` entry points can emit:
 
-`RULE-CONN-011`, `RULE-DBEP-011`, `RULE-ENDP-046`, `RULE-ENDP-047`, `RULE-ENDP-048`, `RULE-ENDP-063`, `RULE-PIPE-011`, `RULE-PIPE-012`, `RULE-PIPE-013`, `RULE-PIPE-014`, `RULE-PIPE-018`, `RULE-PIPE-019`, `RULE-PKG-030`, `RULE-PKG-031`, `RULE-PKG-032`, `RULE-PKG-033`, `RULE-PKG-035`, `RULE-STRM-032`, `RULE-STRM-033`, `RULE-STRM-034`, `RULE-STRM-042`, `RULE-TMAP-014`, `RULE-TMAP-017`, `RULE-TMAP-022`
+`RULE-CONN-011`, `RULE-DBEP-011`, `RULE-PIPE-011`, `RULE-PIPE-012`, `RULE-PIPE-013`, `RULE-PIPE-014`, `RULE-PIPE-018`, `RULE-PIPE-019`, `RULE-PKG-031`, `RULE-STRM-032`, `RULE-STRM-033`, `RULE-STRM-034`, `RULE-STRM-042`, `RULE-TMAP-014`, `RULE-TMAP-017`, `RULE-TMAP-022`
 <!-- END GENERATED: validator-ids -->
 
 Pass `--bundle-root` when validating the stitched pipeline; that is what runs

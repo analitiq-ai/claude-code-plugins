@@ -6,7 +6,7 @@ tier: reference
 severity: error
 scopes: [connector-package]
 validator: "analitiq.validator.connectors::check_coverage"
-owners: [connector-plugin, pipeline-plugin, engine]
+owners: [connector-plugin, engine]
 rationale: >
   `connector.json`'s `kind` says the connector is an API, and the engine reads
   its streams' data from the endpoints that directory holds; a `kind: api`
