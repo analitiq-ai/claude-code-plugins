@@ -282,7 +282,7 @@ def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: Typ
     such a module supply just its detector and adapter, so the combination is
     defined once rather than reimplemented per kind.
     """
-    def _validate(doc: Any, doc_path: Path | None = None, schema_url: str | None = None) -> list[dict]:
+    def _validate(doc: Any, doc_path: Path | None = None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
         return _model_findings(doc, adapter) + _missing_schema_url_findings(doc)
     register_kind(detector, _validate)
 
