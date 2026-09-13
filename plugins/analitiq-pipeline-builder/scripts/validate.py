@@ -660,8 +660,13 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
                     direction: str | None = None) -> dict:
     """Validate one document and return the Diagnostics envelope. Raises nothing
     for validation failures — those become findings; only a genuinely unreadable
-    document short-circuits. `direction` (``"read"``/``"write"``) is required
-    with ``entity == "type-map"`` and meaningless otherwise."""
+    document, or a caller misusing this function's own signature, short-circuits.
+    `direction` (``"read"``/``"write"``) is required with ``entity == "type-map"``
+    and meaningless otherwise — a caller violating that raises `ValueError`."""
+    if (entity == "type-map") != (direction is not None):
+        raise ValueError(
+            f"direction is required with entity='type-map', and invalid otherwise "
+            f"(entity={entity!r}, direction={direction!r}).")
     try:
         doc = _read_json(document_path)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:

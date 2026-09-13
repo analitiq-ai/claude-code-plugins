@@ -391,6 +391,30 @@ def test_cli_usage_error(tmp_path):
     assert excinfo.value.code == 2
 
 
+def test_cli_type_map_entity_without_direction_is_a_usage_error(tmp_path):
+    with pytest.raises(SystemExit) as excinfo:
+        V.main(["--entity", "type-map", "--document", "x.json"])
+    assert excinfo.value.code == 2
+
+
+def test_cli_direction_with_non_type_map_entity_is_a_usage_error(tmp_path):
+    with pytest.raises(SystemExit) as excinfo:
+        V.main(["--entity", "connection", "--direction", "read", "--document", "x.json"])
+    assert excinfo.value.code == 2
+
+
+def test_diagnostics_for_requires_direction_with_type_map_entity(tmp_path):
+    p = _write(tmp_path, "type-map-read.json", [])
+    with pytest.raises(ValueError):
+        V.diagnostics_for("type-map", p)
+
+
+def test_diagnostics_for_rejects_direction_with_non_type_map_entity(tmp_path):
+    p = _write(tmp_path, "connection.json", {})
+    with pytest.raises(ValueError):
+        V.diagnostics_for("connection", p, direction="read")
+
+
 def test_endpoint_id_helper(capsys):
     import endpoint_id  # sibling of validate.py on sys.path
     rc = endpoint_id.main(["--schema", "public", "--name", "orders"])
@@ -1265,10 +1289,9 @@ def test_validator_agent_states_the_adapter_entity_vocabulary():
     paraphrases the vocabulary in running English ("database-endpoint",
     "connection-scoped type-map") because that string is what routes work to
     this agent, not something an agent reads members off. Grading a paraphrase
-    means deciding that a hyphenated phrase denotes an underscored identifier,
-    and that is a guard reading a sentence — banned by
-    `.claude/rules/guards.md`. So it is carried by the failure hint
-    below and by a reader, not by an assertion.
+    means deciding what a sentence of running English asserts, and that is a
+    guard reading a sentence — banned by `.claude/rules/guards.md`. So it is
+    carried by the failure hint below and by a reader, not by an assertion.
     """
     bullet = _ENTITY_BULLET.search(VALIDATOR_AGENT.read_text())
     assert bullet, (
