@@ -4,7 +4,7 @@ statement: >
   streams, and MUST NOT be presented to the user as one.
 tier: process
 severity: error
-scopes: [pipeline]
+artifact_kinds: [pipeline]
 validator: null
 enforcement_location: authoring-practice
 owners: [pipeline-plugin, engine]

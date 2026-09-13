@@ -5,7 +5,7 @@ statement: >
   time.
 tier: process
 severity: error
-scopes: [database-endpoint]
+artifact_kinds: [database-endpoint]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]

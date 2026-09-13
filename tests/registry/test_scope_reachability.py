@@ -1,18 +1,18 @@
-"""A record's `scopes` must agree with which documents reach its `targets`.
+"""A record's `artifact_kinds` must agree with which documents reach its `targets`.
 
 The defect class this closes: a rule whose statement binds one artifact's
-author while its `scopes` name another, so the reference renders it into a
-file that author never opens — and the per-scope headers tell them no other
-file applies. Without this comparison, each instance is only ever found by a
-person reading one record.
+author while its `artifact_kinds` name another, so the reference renders it
+into a file that author never opens — and the per-scope headers tell them no
+other file applies. Without this comparison, each instance is only ever found
+by a person reading one record.
 
-The comparison is structural, not semantic: for every scope there is a set of
-document root models, and a model is *reachable* from a scope when some root's
-field graph reaches it. A record's declared scopes must then match the scopes
-its targets are reachable from, in both directions — a target no declared
-scope reaches is a rule filed where its subject cannot appear, and a scope
-reaching a target that is not declared is an author the rule binds and never
-meets.
+The comparison is structural, not semantic: for every artifact kind there is a
+set of document root models, and a model is *reachable* from an artifact kind
+when some root's field graph reaches it. A record's declared artifact kinds
+must then match the artifact kinds its targets are reachable from, in both
+directions — a target no declared kind reaches is a rule filed where its
+subject cannot appear, and a kind reaching a target that is not declared is an
+author the rule binds and never meets.
 
 What this cannot decide: a rule on a model reachable from several documents
 whose *statement* genuinely binds only one of those authors. That narrowing is
@@ -50,20 +50,21 @@ def _roots() -> dict[str, tuple[type, ...]]:
     }
 
 
-#: Scopes deliberately given no document root: `connector-package` is a
-#: repository layout no model renders, `any` binds every document by fiat, and
-#: `data-sync-run-status` describes a wire payload whose schema is
+#: Artifact kinds deliberately given no document root: `connector-package` is
+#: a repository layout no model renders, `any` binds every document by fiat,
+#: and `data-sync-run-status` describes a wire payload whose schema is
 #: hand-maintained outside the model tree. Declared rather than derived — a
-#: new SCOPES member must be classified here or in `_roots()`, and the
+#: new ARTIFACT_KINDS member must be classified here or in `_roots()`, and the
 #: partition test below is what refuses an unclassified one. Deriving this as
-#: SCOPES-minus-roots would silently exempt a new document family whose root
-#: nobody wired in.
+#: ARTIFACT_KINDS-minus-roots would silently exempt a new document family
+#: whose root nobody wired in.
 UNROOTED = {"connector-package", "any", "data-sync-run-status"}
 
 #: Records whose statement semantically narrows a structurally wider reach —
-#: the model is reachable from these scopes too, but the sentence does not
-#: bind that author. Each entry is (record id, scope it deliberately omits)
-#: with the reason. An entry that stops being true fails the stale check.
+#: the model is reachable from these kinds too, but the sentence does not
+#: bind that author. Each entry is (record id, artifact kind it deliberately
+#: omits) with the reason. An entry that stops being true fails the stale
+#: check.
 #:
 #: The stream entries share one reason: a stream reaches `DatabaseObject`
 #: only inside a connection-scoped endpoint ref, which the stream rules
@@ -123,7 +124,7 @@ def _reachable_names(roots: tuple[type, ...]) -> set[str]:
 @dataclass(frozen=True)
 class _Verdict:
     record: str
-    scope: str
+    artifact_kind: str
     direction: str
 
 
@@ -131,37 +132,37 @@ def _mismatches() -> list[_Verdict]:
     from analitiq.contracts.shared.rules import all_rules
 
     roots = _roots()
-    reachable = {scope: _reachable_names(classes) for scope, classes in roots.items()}
+    reachable = {kind: _reachable_names(classes) for kind, classes in roots.items()}
     out: list[_Verdict] = []
     for rule in all_rules():
-        if not rule.targets or "any" in rule.scopes:
+        if not rule.targets or "any" in rule.artifact_kinds:
             continue
         implied = {
-            scope for scope, names in reachable.items()
+            kind for kind, names in reachable.items()
             if any(target in names for target in rule.targets)
         }
-        declared = set(rule.scopes) - UNROOTED
-        for scope in sorted(implied - declared):
-            if (rule.id, scope) not in NARROWED:
-                out.append(_Verdict(rule.id, scope, "missing"))
-        for scope in sorted(declared - implied):
-            out.append(_Verdict(rule.id, scope, "unreachable"))
+        declared = set(rule.artifact_kinds) - UNROOTED
+        for kind in sorted(implied - declared):
+            if (rule.id, kind) not in NARROWED:
+                out.append(_Verdict(rule.id, kind, "missing"))
+        for kind in sorted(declared - implied):
+            out.append(_Verdict(rule.id, kind, "unreachable"))
     return out
 
 
-def test_every_scope_matches_where_the_targets_live() -> None:
+def test_every_artifact_kind_matches_where_the_targets_live() -> None:
     mismatches = _mismatches()
     lines = [
-        f"  {v.record}: scope '{v.scope}' is {v.direction} — "
+        f"  {v.record}: artifact kind '{v.artifact_kind}' is {v.direction} — "
         + ("that document reaches a target, so its author is bound and never "
-           "meets the rule; add the scope or a NARROWED entry saying why not."
+           "meets the rule; add the kind or a NARROWED entry saying why not."
            if v.direction == "missing" else
            "no document of that kind reaches any target; the rule is filed "
            "where its subject cannot appear.")
         for v in mismatches
     ]
     assert not mismatches, (
-        "record scopes disagree with target reachability:\n" + "\n".join(lines)
+        "record artifact_kinds disagree with target reachability:\n" + "\n".join(lines)
     )
 
 
@@ -169,13 +170,13 @@ def test_narrowed_entries_are_still_live() -> None:
     """A NARROWED entry must still describe a real structural reach."""
     from analitiq.contracts.shared.rules import all_rules
 
-    reachable = {s: _reachable_names(c) for s, c in _roots().items()}
+    reachable = {k: _reachable_names(c) for k, c in _roots().items()}
     rules = {r.id: r for r in all_rules()}
     stale = [
-        (rid, scope) for rid, scope in NARROWED
+        (rid, kind) for rid, kind in NARROWED
         if rid not in rules
-        or scope in rules[rid].scopes
-        or not any(t in reachable.get(scope, set()) for t in rules[rid].targets)
+        or kind in rules[rid].artifact_kinds
+        or not any(t in reachable.get(kind, set()) for t in rules[rid].targets)
     ]
     assert not stale, (
         f"NARROWED entries no longer describe a narrowing: {stale} — the "
@@ -187,16 +188,17 @@ def test_the_guard_is_not_vacuous() -> None:
     """Most records carry targets; zero comparisons means the walk broke."""
     from analitiq.contracts.shared.rules import all_rules
 
-    compared = [r for r in all_rules() if r.targets and "any" not in r.scopes]
+    compared = [r for r in all_rules() if r.targets and "any" not in r.artifact_kinds]
     assert len(compared) > 100, len(compared)
     reachable = _reachable_names(_roots()["stream"])
     assert "ConnectionEndpointRef" in reachable and "DatabaseObject" in reachable
 
 
-def test_every_scope_is_rooted_or_declared_unrooted() -> None:
-    """The partition that keeps a new SCOPES member from being silently
-    exempt: it must gain a root in `_roots()` or a reasoned UNROOTED entry."""
-    from analitiq.contracts.shared.rule_record import SCOPES
+def test_every_artifact_kind_is_rooted_or_declared_unrooted() -> None:
+    """The partition that keeps a new ARTIFACT_KINDS member from being
+    silently exempt: it must gain a root in `_roots()` or a reasoned
+    UNROOTED entry."""
+    from analitiq.contracts.shared.rule_record import ARTIFACT_KINDS
 
-    assert set(_roots()) | UNROOTED == set(SCOPES)
+    assert set(_roots()) | UNROOTED == set(ARTIFACT_KINDS)
     assert not set(_roots()) & UNROOTED

@@ -4,7 +4,7 @@ statement: >
   case-insensitively.
 tier: shape
 severity: error
-scopes: [any]
+artifact_kinds: [any]
 validator: "analitiq.contracts.shared.rules::DeclaredHeaderNames._no_content_length_header"
 owners: [connector-plugin, engine]
 targets:

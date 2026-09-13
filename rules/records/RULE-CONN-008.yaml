@@ -4,7 +4,7 @@ statement: >
   also supply the CA material the connector declares an input for.
 tier: reference
 severity: error
-scopes: [connection]
+artifact_kinds: [connection]
 validator: null
 enforcement_location: authoring-practice
 owners: [pipeline-plugin, connector-plugin]

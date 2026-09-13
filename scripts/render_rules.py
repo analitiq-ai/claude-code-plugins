@@ -57,10 +57,10 @@ sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
 os.environ.setdefault("DOMAIN", "analitiq.ai")
 
 from analitiq.contracts.shared.rule_record import (  # noqa: E402
+    ARTIFACT_KINDS,
     OWNERS,
     RETIRED_BEFORE_THE_REGISTRY,
     RULES_PATH,
-    SCOPES,
     RuleRecord,
 )
 
@@ -203,7 +203,7 @@ def compile_registry(records: list[RuleRecord]) -> str:
                 "severity": r.severity,
                 # Canonical order, so the compiled copy does not churn on the
                 # order somebody happened to type into the YAML.
-                "scopes": [s for s in SCOPES if s in r.scopes],
+                "artifact_kinds": [s for s in ARTIFACT_KINDS if s in r.artifact_kinds],
                 "validator": r.validator,
                 "enforcement_location": r.enforcement_location,
                 "owners": [o for o in OWNERS if o in r.owners],

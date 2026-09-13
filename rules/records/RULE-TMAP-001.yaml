@@ -4,7 +4,7 @@ statement: >
   MUST NOT render a scalar Arrow type.
 tier: coherence
 severity: error
-scopes: [type-map]
+artifact_kinds: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapReadExactRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapReadExactRule]

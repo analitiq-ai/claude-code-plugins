@@ -7,7 +7,7 @@ statement: >
   the same defect as setting it on one whose absence the operation tolerates.
 tier: choice
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, engine]

@@ -27,7 +27,7 @@ SKILL_ENTITY = {
     "pipeline-spec": "pipeline",
     "stream-spec": "stream",
     "connection-spec": "connection",
-    "endpoint-spec": "database_endpoint",
+    "endpoint-spec": "database-endpoint",
 }
 
 
@@ -91,7 +91,7 @@ def test_example_declares_matching_schema_url(entity, path):
         "pipeline": PIPELINE_SCHEMA_URL,
         "stream": STREAM_SCHEMA_URL,
         "connection": CONNECTION_SCHEMA_URL,
-        "database_endpoint": DATABASE_ENDPOINT_SCHEMA_URL,
+        "database-endpoint": DATABASE_ENDPOINT_SCHEMA_URL,
     }[entity]
     assert json.loads(path.read_text()).get("$schema") == expected
 

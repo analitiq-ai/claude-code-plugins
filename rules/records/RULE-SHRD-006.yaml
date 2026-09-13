@@ -4,7 +4,7 @@ statement: >
   resolves a template; every other slot takes the characters literally.
 tier: shape
 severity: error
-scopes: [any]
+artifact_kinds: [any]
 validator: "analitiq.contracts.endpoints::_validate_param_wiring"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [_RequestBase, UrlTemplateDsn]

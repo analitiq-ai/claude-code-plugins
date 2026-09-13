@@ -4,7 +4,7 @@ statement: >
   as the pipeline.
 tier: reference
 severity: error
-scopes: [pipeline]
+artifact_kinds: [pipeline]
 validator: null
 enforcement_location: platform-save
 owners: [pipeline-plugin, engine]

@@ -4,7 +4,7 @@ statement: >
   `response.body.`.
 tier: shape
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ResponseExtraction._validate"
 owners: [connector-plugin, engine]
 targets: [ResponseExtraction]

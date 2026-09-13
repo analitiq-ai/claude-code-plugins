@@ -5,7 +5,7 @@ statement: >
   own, and MUST NOT declare keys that contradict the endpoint's.
 tier: reference
 severity: error
-scopes: [stream]
+artifact_kinds: [stream]
 validator: null
 enforcement_location: unenforced
 owners: [pipeline-plugin, engine]

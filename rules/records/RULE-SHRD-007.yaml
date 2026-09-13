@@ -4,7 +4,7 @@ statement: >
   including where documentation describes an unregistered one as planned.
 tier: reference
 severity: error
-scopes: [any]
+artifact_kinds: [any]
 validator: null
 enforcement_location: engine
 owners: [connector-plugin, pipeline-plugin, engine]

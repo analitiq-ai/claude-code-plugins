@@ -4,7 +4,7 @@ statement: >
   have, and MUST NOT declare that absence as an explicit null.
 tier: shape
 severity: error
-scopes: [database-endpoint, stream]
+artifact_kinds: [database-endpoint, stream]
 validator: "analitiq.contracts.endpoints::DatabaseObject._reject_explicit_null_namespaces"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [DatabaseObject]

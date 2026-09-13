@@ -5,7 +5,7 @@ statement: >
   arrow_type is not a container marker.
 tier: coherence
 severity: error
-scopes: [database-endpoint]
+artifact_kinds: [database-endpoint]
 validator: "analitiq.contracts.endpoints::ColumnFieldSpec._validate_container_shape"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [ColumnFieldSpec]

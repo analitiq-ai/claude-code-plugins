@@ -262,7 +262,7 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
    The filename is the endpoint's **derived** `endpoint_id`; compute it
    for the table with `scripts/endpoint_id.py` to know the filename —
    never hand-write one (see `endpoint-spec/spec-database-object.md`):
-   - **If yes** → reuse it. Validate it (entity `database_endpoint`) so
+   - **If yes** → reuse it. Validate it (entity `database-endpoint`) so
      a stale shape is caught early. If validation passes, record reuse
      in the final summary and do **not** re-introspect or rewrite the
      file. If validation **fails**, halt and surface the validator's
@@ -331,8 +331,8 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
      ambiguities.
    - Write a non-null `type_maps.read` / `type_maps.write` to
      `connections/<connection-slug>/definition/type-map-read.json` /
-     `type-map-write.json` and validate each (entity `type_map_read` /
-     `type_map_write`) through the same fix-and-revalidate loop as other artifacts.
+     `type-map-write.json` and validate each (entity `type-map`, `--direction
+     read` / `write`) through the same fix-and-revalidate loop as other artifacts.
      `null` means write nothing — never create an empty map file, and never
      delete an existing one. Record authored or extended maps in the final
      summary.
@@ -427,8 +427,8 @@ and leaves everything else — including `.secrets/` — untouched.
    validate its **referenced closure** — every connection the pipeline references
    (public and private), every connection-scoped private endpoint those
    connections own, and any connection-scoped type maps beside them — each
-   against its own contract (entities `connection` / `database_endpoint` /
-   `type_map_read` / `type_map_write`), which catches a stale or broken
+   against its own contract (entities `connection` / `database-endpoint` /
+   `type-map`), which catches a stale or broken
    referenced artifact; plus the whole bundle with `bundle_root: .`, the pass
    that resolves cross-document references and the on-disk endpoint file names
    (`references/io-contracts.md` documents its finding ids and shape). Both

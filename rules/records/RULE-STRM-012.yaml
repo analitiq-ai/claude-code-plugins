@@ -4,7 +4,7 @@ statement: >
   source endpoint reference declares.
 tier: coherence
 severity: error
-scopes: [stream]
+artifact_kinds: [stream]
 validator: "analitiq.contracts.stream::StreamSource._validate_filter_operator_scope"
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]

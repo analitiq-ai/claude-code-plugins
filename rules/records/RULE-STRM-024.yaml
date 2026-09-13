@@ -4,7 +4,7 @@ statement: >
   document declares a write operation for.
 tier: reference
 severity: error
-scopes: [stream]
+artifact_kinds: [stream]
 validator: null
 enforcement_location: engine
 owners: [pipeline-plugin, engine]

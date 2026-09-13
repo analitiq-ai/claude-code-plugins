@@ -5,7 +5,7 @@ statement: >
   the field optional.
 tier: shape
 severity: warning
-scopes: [any]
+artifact_kinds: [any]
 validator: "analitiq.validator._core::_missing_schema_url_findings"
 owners: [connector-plugin, pipeline-plugin]
 targets: [ConnectionAuthored, StreamAuthored, PipelineAuthored, ConnectorBase]

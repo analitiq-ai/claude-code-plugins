@@ -5,7 +5,7 @@ statement: >
   how the provider spells the value that placeholder carries.
 tier: shape
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::_RequestBase._validate"
 owners: [connector-plugin]
 targets: [_RequestBase]

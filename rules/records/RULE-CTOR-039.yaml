@@ -5,7 +5,7 @@ statement: >
   `requirements.txt` ships.
 tier: reference
 severity: error
-scopes: [connector]
+artifact_kinds: [connector]
 validator: null
 enforcement_location: engine
 owners: [connector-plugin, engine]

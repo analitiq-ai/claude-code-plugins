@@ -318,9 +318,9 @@ def measured_reachable_connectors_ids() -> set[str]:
     such a document, so those checks are never even probed), and separately
     by naming one whose finding the adapter's own write-vocabulary filter
     (`_type_map_findings` in `validate.py`) discards before it ever reaches
-    output — probing `type_map_write` through the adapter's own
-    `diagnostics_for`, filter included, is what proves that exclusion instead
-    of asserting it.
+    output — probing entity `type-map` with `direction="write"` through the
+    adapter's own `diagnostics_for`, filter included, is what proves that
+    exclusion instead of asserting it.
 
     `endpoint_filename_findings` is never reached via dispatch at all —
     `validate.py` calls it directly during bundle assembly (see that module's
@@ -345,7 +345,7 @@ def measured_reachable_connectors_ids() -> set[str]:
         path = root / "endpoint.json"
         path.write_text(json.dumps(endpoint))
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
-            "database_endpoint", path)["findings"]}
+            "database-endpoint", path)["findings"]}
 
         # RULE-TMAP-022 (a duplicate rule) and RULE-TMAP-014 (a regex read
         # matcher containing a lowercase literal, which an UPPERCASED native
@@ -358,7 +358,7 @@ def measured_reachable_connectors_ids() -> set[str]:
         path = root / "type-map-read.json"
         path.write_text(json.dumps(read_rules))
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
-            "type_map_read", path)["findings"]}
+            "type-map", path, direction="read")["findings"]}
 
         # RULE-TMAP-017 (write-vocabulary coverage) fires in the published
         # validator on an empty write map — reachable at that layer — but
@@ -369,7 +369,7 @@ def measured_reachable_connectors_ids() -> set[str]:
         path = root / "type-map-write.json"
         path.write_text(json.dumps([]))
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
-            "type_map_write", path)["findings"]}
+            "type-map", path, direction="write")["findings"]}
 
     from analitiq.validator import endpoint_filename_findings
     observed |= {

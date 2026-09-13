@@ -5,7 +5,7 @@ statement: >
   vocabulary `SqlCapabilities` declares for each.
 tier: shape
 severity: error
-scopes: [connector]
+artifact_kinds: [connector]
 validator: "analitiq.contracts.connector::SqlCapabilities.catalog"
 owners: [connector-plugin, engine]
 targets: [SqlCapabilities]

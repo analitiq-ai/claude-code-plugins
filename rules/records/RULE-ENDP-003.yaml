@@ -5,7 +5,7 @@ statement: >
   flag.
 tier: shape
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Param._validate"
 owners: [connector-plugin, engine]
 targets: [Param]

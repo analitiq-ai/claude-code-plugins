@@ -5,7 +5,7 @@ statement: >
   direction its kind has no use for.
 tier: reference
 severity: error
-scopes: [connector-package]
+artifact_kinds: [connector-package]
 validator: "analitiq.validator.connectors::check_coverage"
 owners: [connector-plugin, engine]
 rationale: >

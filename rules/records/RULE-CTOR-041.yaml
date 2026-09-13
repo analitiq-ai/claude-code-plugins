@@ -5,7 +5,7 @@ statement: >
   from a similar or wire-compatible system.
 tier: process
 severity: error
-scopes: [connector]
+artifact_kinds: [connector]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, engine]

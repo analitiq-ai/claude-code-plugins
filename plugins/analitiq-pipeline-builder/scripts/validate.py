@@ -14,7 +14,7 @@ closed over every finding — a locally minted one (`validator`, `severity`,
 The published package exposes one single-document entry point plus one bundle
 entry point. This adapter routes each entity as follows:
 
-  * ``database_endpoint`` -> ``analitiq.validator.validate_document`` — the model
+  * ``database-endpoint`` -> ``analitiq.validator.validate_document`` — the model
     plus the derived-``endpoint_id`` gate and column checks (the same code the
     ``analitiq-validate`` CLI runs).
   * ``connection`` / ``stream`` / ``pipeline`` -> the matching ``*Input`` Pydantic
@@ -27,16 +27,16 @@ entry point. This adapter routes each entity as follows:
     "unrecognized artifact" finding. Routing by the caller-supplied ``--entity``,
     which is already known here, guarantees the right model runs and yields
     per-field findings instead.
-  * ``type_map_read`` / ``type_map_write`` -> ``analitiq.validator.validate_document``
+  * ``type-map`` (with ``--direction {read,write}``) -> ``analitiq.validator.validate_document``
     over the connection-scoped type-map rule array, after an adapter filename gate:
     the engine loads ``connections/<slug>/definition/type-map-{read,write}.json`` by
     exactly those names (and the published validator derives rule direction from
     them, defaulting an unknown name to read), so a misnamed file gets the rename
     finding alone rather than findings that could be graded in the wrong direction.
     The published write-vocabulary-coverage warning (``RULE-TMAP-017``) is
-    filtered out here: it presumes a connector's full-vocabulary write map,
-    which a gap-only connection map deliberately is not (see
-    ``_type_map_findings``).
+    filtered out here for ``--direction write``: it presumes a connector's
+    full-vocabulary write map, which a gap-only connection map deliberately is
+    not (see ``_type_map_findings``).
   * ``pipeline`` with ``--bundle-root`` -> additionally
     ``analitiq.validator.validate_pipeline_bundle`` over the on-disk bundle, for the
     cross-document referential integrity no single document can verify. A draft
@@ -69,6 +69,7 @@ cannot make it:
 Validation is offline — no schema is fetched. Usage::
 
     python3 plugins/analitiq-pipeline-builder/scripts/validate.py --entity pipeline --document path/to/pipeline.json --bundle-root .
+    python3 plugins/analitiq-pipeline-builder/scripts/validate.py --entity type-map --direction write --document path/to/type-map-write.json
 
 Exit status is ``0`` iff ``passed`` (``_finding_costs_a_pass`` owns the full
 predicate — a ``fail`` finding at ``severity: "error"``, or an unchecked
@@ -84,14 +85,24 @@ from pathlib import Path
 
 from _bootstrap import ensure_deps_or_reexec
 
-ENTITIES = ("pipeline", "stream", "connection", "database_endpoint",
-            "type_map_read", "type_map_write")
+# The plugin's document-authoring vocabulary — a literal, not an import of
+# `analitiq.contracts.shared.rule_record.DOCUMENT_ARTIFACT_KINDS`: `--entity`'s
+# `choices=` below is evaluated at argparse-parse time, before `main()` calls
+# `ensure_deps_or_reexec`, so a module-level import here would raise
+# `ImportError` for an end user who has not yet self-installed the pinned
+# `analitiq-validator` — before the bootstrap that installs it ever runs.
+# `test_pipeline_entities_are_a_document_artifact_kind_subset` pins this tuple
+# to `DOCUMENT_ARTIFACT_KINDS` so the two cannot drift apart member by member.
+# `connector` and `api-endpoint` are authored by the connector-builder plugin's
+# own validator route, not this one; type-map direction is `--direction`, not a
+# vocabulary member (`analitiq.contracts` keeps one `type-map` kind, splitting
+# native<->Arrow direction is this adapter's own dispatch).
+PIPELINE_ENTITIES = ("connection", "stream", "pipeline", "database-endpoint", "type-map")
 
 # The engine loads connection-scoped type maps by these exact filenames under
 # connections/<slug>/definition/ — a differently-named file is silently ignored
 # at runtime, so the adapter gates the name like the endpoint filename gate does.
-_TYPE_MAP_FILENAMES = {"type_map_read": "type-map-read.json",
-                       "type_map_write": "type-map-write.json"}
+_TYPE_MAP_FILENAMES = {"read": "type-map-read.json", "write": "type-map-write.json"}
 # The pre-split filename: the engine never reads it, at either scope. The
 # published validator rejects it beside a connector; the adapter mirrors that
 # for connections, where the published bundle validator cannot see files.
@@ -216,7 +227,7 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
     return validate_document(doc, doc_path=document_path.resolve())
 
 
-def _type_map_findings(entity: str, doc, document_path: Path) -> list[dict]:
+def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
     """Validate a connection-scoped type-map file. The filename gate runs first
     and alone on a mismatch: the published validator derives rule direction from
     the filename, so validating a misnamed file's content could grade it in the
@@ -226,11 +237,11 @@ def _type_map_findings(entity: str, doc, document_path: Path) -> list[dict]:
     under a type-map filename would be graded as some other artifact (a
     connection document would even pass clean) instead of failing as the
     non-array the engine's loader will choke on."""
-    expected = _TYPE_MAP_FILENAMES[entity]
+    expected = _TYPE_MAP_FILENAMES[direction]
     if document_path.name != expected:
         return [_finding(
             "connection-type-map", "error", "",
-            f"file is named {document_path.name!r} but entity {entity!r} requires "
+            f"file is named {document_path.name!r} but direction {direction!r} requires "
             f"{expected!r} — the engine loads each direction only from its exact "
             f"filename (connections/<slug>/definition/{expected}).")]
     if not isinstance(doc, list):
@@ -243,7 +254,7 @@ def _type_map_findings(entity: str, doc, document_path: Path) -> list[dict]:
     # derives direction from `doc_path.name`, and a full resolve() would follow a
     # symlinked map to a differently-named target and silently re-grade it.
     findings = validate_document(doc, doc_path=document_path.parent.resolve() / document_path.name)
-    if entity == "type_map_write":
+    if direction == "write":
         # The published write-vocabulary coverage warning presumes a CONNECTOR
         # write map, which must cover the full canonical vocabulary. A connection
         # map is gap-only by rule (spec-type-map-gaps.md) — the warning would fire
@@ -286,7 +297,7 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                 f"{_LEGACY_TYPE_MAP_FILENAME} is the pre-split filename; the engine never "
                 "reads it. Split it into type-map-read.json (native → Arrow) and, for the "
                 "write direction, type-map-write.json (Arrow → native)."))
-    for entity, fname in _TYPE_MAP_FILENAMES.items():
+    for direction, fname in _TYPE_MAP_FILENAMES.items():
         path = definition / fname
         with _contained(findings, f"{site}/{fname}"):
             if not (path.exists() or path.is_symlink()):
@@ -307,7 +318,7 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                                          f"Cannot read {fname}: {exc}"))
                 continue
             findings.extend({**f, "path": f"{site}/{fname}{f.get('path', '')}"}
-                            for f in _type_map_findings(entity, doc, path))
+                            for f in _type_map_findings(direction, doc, path))
 
 
 def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:
@@ -645,19 +656,21 @@ def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> lis
     return findings
 
 
-def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None = None) -> dict:
+def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None = None,
+                    direction: str | None = None) -> dict:
     """Validate one document and return the Diagnostics envelope. Raises nothing
     for validation failures — those become findings; only a genuinely unreadable
-    document short-circuits."""
+    document short-circuits. `direction` (``"read"``/``"write"``) is required
+    with ``entity == "type-map"`` and meaningless otherwise."""
     try:
         doc = _read_json(document_path)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         return _diagnostics([_finding("document", "error", "", f"Cannot read document: {exc}")])
 
-    if entity == "database_endpoint":
+    if entity == "database-endpoint":
         findings = _endpoint_findings(doc, document_path)
-    elif entity in _TYPE_MAP_FILENAMES:
-        findings = _type_map_findings(entity, doc, document_path)
+    elif entity == "type-map":
+        findings = _type_map_findings(direction, doc, document_path)
     else:
         findings = _model_findings(entity, doc)
         if entity == "pipeline" and bundle_root is not None:
@@ -682,14 +695,18 @@ def _read_json(path: Path):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--entity", required=True, choices=ENTITIES,
+    parser.add_argument("--entity", required=True, choices=PIPELINE_ENTITIES,
                         help="Which published contract the document is authored against.")
     parser.add_argument("--document", required=True, help="Path to the JSON document to validate.")
+    parser.add_argument("--direction", choices=("read", "write"),
+                        help="Type-map direction. Required with --entity type-map, invalid otherwise.")
     parser.add_argument("--bundle-root",
                         help="Project root for cross-document validation of a stitched pipeline "
                              "(walks connections/, connectors/, and the pipeline's streams/). "
                              "Only meaningful with --entity pipeline.")
     args = parser.parse_args(argv)
+    if (args.entity == "type-map") != (args.direction is not None):
+        parser.error("--direction is required with --entity type-map, and invalid otherwise.")
 
     # The one guard that must contain everything Python exception handling can
     # contain, MemoryError included — it is reached however deep the failing
@@ -702,7 +719,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         ensure_deps_or_reexec(__file__)
         bundle_root = Path(args.bundle_root) if args.bundle_root else None
-        diagnostics = diagnostics_for(args.entity, Path(args.document), bundle_root)
+        diagnostics = diagnostics_for(args.entity, Path(args.document), bundle_root, args.direction)
         # Serialized inside the guard: a backend finding carrying a
         # JSON-incompatible value (a malformed message from a validator
         # regression) must itself become an adapter-crash result, not a
