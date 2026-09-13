@@ -87,7 +87,7 @@ The orchestrator handles disk I/O.
 <!-- illustrative -->
 ```jsonc
 {
-  "entity": "pipeline",                       // "pipeline" | "stream" | "connection" | "database_endpoint"
+  "entity": "pipeline",                       // "pipeline" | "stream" | "connection" | "database-endpoint"
   "directory_slug": "wise_to_postgresql",     // matching directory name under pipelines/ etc.
   "document": { /* the authored JSON, $schema set, no server-managed fields */ },
   "secondary_files": [                        // optional — e.g., .secrets templates
@@ -162,12 +162,11 @@ Treat both until the pin catches up.
 }
 ```
 
-This adapter's `database_endpoint` and `type_map_read`/`type_map_write`
-entities also run the document against its contract model, whose own
-`@model_validator`s can reject it citing a rule of their own — every rule
-bound to `DatabaseEndpointDoc`, `TypeMapReadDoc` or `TypeMapWriteDoc` is
-reachable that way, catalogued in full in
-`references/rules/database-endpoint.md` and `references/rules/type-map.md`
+This adapter's `database-endpoint` and `type-map` entities also run the
+document against its contract model, whose own `@model_validator`s can reject
+it citing a rule of their own — every rule bound to `DatabaseEndpointDoc`,
+`TypeMapReadDoc` or `TypeMapWriteDoc` is reachable that way, catalogued in full
+in `references/rules/database-endpoint.md` and `references/rules/type-map.md`
 rather than restated here.
 
 <!-- BEGIN GENERATED: validator-ids -->
@@ -192,8 +191,8 @@ structurally cannot make:
 - `contract-model` — **error**: a `connection`/`stream`/`pipeline` entity's
   own contract-model rejection, mapped locally rather than through
   `analitiq.validator` (that entity's model is validated directly; only
-  `database_endpoint`/`type_map_read`/`type_map_write` and the bundle path
-  route through the published package).
+  `database-endpoint`/`type-map` and the bundle path route through the
+  published package).
 - `document` — **error**: a sibling bundle member could not be read, parsed,
   or was not a JSON object.
 
@@ -205,9 +204,9 @@ printed no `Diagnostics` JSON at all and the driving agent reconstructed this
 finding from a stderr excerpt, carried in `message` with `path` empty.
 
 This id names only a crash reaching a guard in this adapter. A crash inside
-the published validator's own single-document dispatch (the `database_endpoint`
-/ `type_map_read` / `type_map_write` routes, which call it directly) is already
-caught there and returned as a forwarded `kind: "notApplicable"`,
+the published validator's own single-document dispatch (the `database-endpoint`
+/ `type-map` routes, which call it directly) is already caught there and
+returned as a forwarded `kind: "notApplicable"`,
 `message_id: "check-crashed"` finding whose `message` says the check itself
 crashed — that finding never reaches this adapter as an exception, so no
 guard here fires and it is not relabeled.

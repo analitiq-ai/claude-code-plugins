@@ -3,7 +3,7 @@ statement: >
   An `api` connector's release MUST NOT carry connector-package Python files.
 tier: reference
 severity: warning
-scopes: [connector]
+artifact_kinds: [connector]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, engine]

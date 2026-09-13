@@ -5,7 +5,7 @@ statement: >
   list where it declares one.
 tier: reference
 severity: error
-scopes: [connection]
+artifact_kinds: [connection]
 validator: null
 enforcement_location: platform-save
 owners: [pipeline-plugin, engine]

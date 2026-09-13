@@ -4,7 +4,7 @@ statement: >
   resolves a template; every other slot takes the characters literally.
 tier: shape
 severity: error
-scopes: [any]
+artifact_kinds: [any]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]

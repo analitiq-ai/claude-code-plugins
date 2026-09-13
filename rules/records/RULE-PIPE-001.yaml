@@ -4,7 +4,7 @@ statement: >
   once.
 tier: coherence
 severity: error
-scopes: [pipeline]
+artifact_kinds: [pipeline]
 validator: "analitiq.contracts.pipelines.config::PipelineConnections._destinations_unique"
 owners: [pipeline-plugin]
 targets: [PipelineConnections]

@@ -198,7 +198,7 @@ def test_every_id_an_agent_cites_is_in_a_file_it_can_reach(owner: str) -> None:
     assert not unresolved, (
         f"{owner}: agents cite rule ids no file they can reach carries: "
         f"{unresolved}. Name the rule file (or the SKILL.md index) in the "
-        "agent, or re-check the record's scopes."
+        "agent, or re-check the record's artifact_kinds."
     )
 
 

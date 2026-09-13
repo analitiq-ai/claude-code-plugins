@@ -4,7 +4,7 @@ statement: >
   the referenced input's `enum`, and no key outside it.
 tier: reference
 severity: warning
-scopes: [connector, api-endpoint]
+artifact_kinds: [connector, api-endpoint]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin]

@@ -8,7 +8,7 @@ contract source compiles it. Prose cites a rule by id
 (`RULE-DBEP-005`) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 
-Scope: every rule this plugin owns that binds a **`database-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
+Covers: every rule this plugin owns that binds a **`database-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
 all hold: 17 of the 27 below have no validator, so nothing rejects

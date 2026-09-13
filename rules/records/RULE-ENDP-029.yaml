@@ -4,7 +4,7 @@ statement: >
   pattern and MUST NOT collide with a reserved response-scope name.
 tier: shape
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteResponse._metadata_keys"
 owners: [connector-plugin, engine]
 targets: [WriteResponse]

@@ -52,7 +52,7 @@ BASELINE = {
     "statement": "A connector MUST declare a default transport.",
     "tier": "shape",
     "severity": "error",
-    "scopes": "[connector]",
+    "artifact_kinds": "[connector]",
     "validator": "null",
     "enforcement_location": "unenforced",
     "owners": "[connector-plugin]",
@@ -145,7 +145,7 @@ def test_a_list_of_non_names_is_refused(registry, field):
     assert field in _refusal(registry)
 
 
-@pytest.mark.parametrize("field", ["scopes", "owners", "targets", "fields"])
+@pytest.mark.parametrize("field", ["artifact_kinds", "owners", "targets", "fields"])
 def test_a_mapping_where_a_list_belongs_is_refused(registry, field):
     """`tuple(dict)` is the dict's keys — `{connector: 1}` would validate as
     `("connector",)` with the author's value structure silently discarded."""
@@ -164,46 +164,47 @@ def test_a_record_naming_no_owner_is_refused(registry):
     assert "owners" in _refusal(registry) or "applies this rule" in _refusal(registry)
 
 
-def test_an_unknown_scope_is_refused(registry):
-    _write(registry, scopes="[nonsense]")
+def test_an_unknown_artifact_kind_is_refused(registry):
+    _write(registry, artifact_kinds="[nonsense]")
     assert "nonsense" in _refusal(registry)
 
 
-def test_an_empty_scope_list_is_refused(registry):
+def test_an_empty_artifact_kind_list_is_refused(registry):
     """A record naming no artifact kind renders into no file.
 
-    `owners` decides which plugin's set a rule joins; `scopes` decides which
-    file inside it. With an empty `scopes` the rule is owned by a plugin yet
-    reachable from none of its documents — cited in prose, resolvable nowhere.
+    `owners` decides which plugin's set a rule joins; `artifact_kinds` decides
+    which file inside it. With an empty `artifact_kinds` the rule is owned by
+    a plugin yet reachable from none of its documents — cited in prose,
+    resolvable nowhere.
     """
-    _write(registry, scopes="[]")
+    _write(registry, artifact_kinds="[]")
     assert "artifact kind" in _refusal(registry)
 
 
-def test_a_scalar_scope_is_refused(registry):
-    """`scopes: connector` is a YAML scalar; `tuple()` of it is one-letter names.
+def test_a_scalar_artifact_kind_is_refused(registry):
+    """`artifact_kinds: connector` is a YAML scalar; `tuple()` of it is one-letter names.
 
     YAML reads the value as one string, and tupling a string yields its
-    characters — scopes matching nothing and saying so nowhere, which is why
-    the record refuses the scalar rather than coercing it.
+    characters — artifact kinds matching nothing and saying so nowhere, which
+    is why the record refuses the scalar rather than coercing it.
     """
-    _write(registry, scopes="connector")
+    _write(registry, artifact_kinds="connector")
     assert "list of names" in _refusal(registry)
 
 
-def test_a_repeated_scope_is_refused(registry):
-    _write(registry, scopes="[connector, connector]")
+def test_a_repeated_artifact_kind_is_refused(registry):
+    _write(registry, artifact_kinds="[connector, connector]")
     assert "repeats" in _refusal(registry)
 
 
-def test_any_beside_a_named_scope_is_refused(registry):
+def test_any_beside_a_named_artifact_kind_is_refused(registry):
     """`any` already covers every authored document.
 
     Naming it beside a specific kind states a narrower claim than the record
     makes, and the renderer would ignore the narrower half — so the record is
     refused instead of rendering something its author did not mean.
     """
-    _write(registry, scopes="[any, connector]")
+    _write(registry, artifact_kinds="[any, connector]")
     assert "any" in _refusal(registry)
 
 
@@ -213,9 +214,9 @@ def test_a_rule_may_bind_two_artifact_kinds(registry):
     A rule binding two kinds renders into both files, so both authors meet it.
     Under a scalar one of them silently did not.
     """
-    _write(registry, scopes="[connector, api-endpoint]")
+    _write(registry, artifact_kinds="[connector, api-endpoint]")
     records = RR.load_registry()
-    assert records[0].scopes == ("connector", "api-endpoint")
+    assert records[0].artifact_kinds == ("connector", "api-endpoint")
 
 
 def test_an_unknown_owner_is_refused(registry):

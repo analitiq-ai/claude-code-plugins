@@ -4,7 +4,7 @@ statement: >
   same document declares.
 tier: coherence
 severity: error
-scopes: [database-endpoint]
+artifact_kinds: [database-endpoint]
 validator: "analitiq.contracts.endpoints::DatabaseEndpointDoc._primary_keys_name_columns"
 owners: [pipeline-plugin, engine]
 targets: [DatabaseEndpointDoc]

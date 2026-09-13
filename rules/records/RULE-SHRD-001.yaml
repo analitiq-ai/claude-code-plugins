@@ -4,7 +4,7 @@ statement: >
   expression into the secret scope, never as a literal value.
 tier: shape
 severity: error
-scopes: [any]
+artifact_kinds: [any]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin, engine]

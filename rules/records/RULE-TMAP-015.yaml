@@ -5,7 +5,7 @@ statement: >
   where read-side matching does not.
 tier: process
 severity: warning
-scopes: [type-map]
+artifact_kinds: [type-map]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]

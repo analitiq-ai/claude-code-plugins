@@ -4,7 +4,7 @@ statement: >
   some declared input or post-auth output materializes.
 tier: coherence
 severity: error
-scopes: [connector]
+artifact_kinds: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs"
 owners: [engine, connector-plugin]
 targets: [ConnectorBase]

@@ -5,7 +5,7 @@ statement: >
   one.
 tier: choice
 severity: warning
-scopes: [any]
+artifact_kinds: [any]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin]

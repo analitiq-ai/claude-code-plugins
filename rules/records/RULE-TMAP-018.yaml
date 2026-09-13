@@ -4,7 +4,7 @@ statement: >
   arrow_type its connector's own map leaves unresolved.
 tier: reference
 severity: error
-scopes: [type-map]
+artifact_kinds: [type-map]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]

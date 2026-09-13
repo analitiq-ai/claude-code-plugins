@@ -4,7 +4,7 @@ statement: >
   the value into secret storage.
 tier: coherence
 severity: error
-scopes: [connector]
+artifact_kinds: [connector]
 validator: "analitiq.contracts.connector::ConnectionContractInput._consistency"
 owners: [connector-plugin, engine]
 targets: [ConnectionContractInput]

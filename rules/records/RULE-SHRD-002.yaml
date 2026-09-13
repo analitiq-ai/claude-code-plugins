@@ -8,7 +8,7 @@ statement: >
   evidence for this direction's declaration.
 tier: choice
 severity: error
-scopes: [any]
+artifact_kinds: [any]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin]

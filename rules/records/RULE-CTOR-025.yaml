@@ -4,7 +4,7 @@ statement: >
   only the request fields that model names and rejects any other key.
 tier: shape
 severity: error
-scopes: [connector]
+artifact_kinds: [connector]
 validator: "analitiq.contracts.connector::AuthOperationTemplate"
 owners: [connector-plugin, engine]
 targets: [AuthOperationTemplate]

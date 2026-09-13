@@ -4,7 +4,7 @@ statement: >
   policy — a lookback, an overlap, a backfill depth — into a cursor mapping.
 tier: process
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, engine]

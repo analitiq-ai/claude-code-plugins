@@ -6,7 +6,7 @@ statement: >
   source, not by the stream document.
 tier: choice
 severity: warning
-scopes: [stream]
+artifact_kinds: [stream]
 validator: null
 enforcement_location: authoring-practice
 owners: [pipeline-plugin, engine]

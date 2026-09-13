@@ -4,7 +4,7 @@ statement: >
   that declares a default.
 tier: coherence
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [WriteOperation]

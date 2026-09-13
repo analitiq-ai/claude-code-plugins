@@ -36,8 +36,8 @@ def _load(name: str):
     return module
 
 
-def _rule(rid: str, *scopes: str):
-    return SimpleNamespace(id=rid, scopes=tuple(scopes))
+def _rule(rid: str, *artifact_kinds: str):
+    return SimpleNamespace(id=rid, artifact_kinds=tuple(artifact_kinds))
 
 
 def _buckets(monkeypatch, rules):

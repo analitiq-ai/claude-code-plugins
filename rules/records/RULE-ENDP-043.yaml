@@ -4,7 +4,7 @@ statement: >
   ships as a new endpoint document alongside the removal of the old one.
 tier: reference
 severity: error
-scopes: [api-endpoint, database-endpoint]
+artifact_kinds: [api-endpoint, database-endpoint]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin]

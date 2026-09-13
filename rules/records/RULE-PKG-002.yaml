@@ -6,7 +6,7 @@ statement: >
   sit at the root beside it.
 tier: process
 severity: error
-scopes: [connector-package]
+artifact_kinds: [connector-package]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, engine]

@@ -6,7 +6,7 @@ statement: >
   package MUST NOT declare `tls` at all.
 tier: reference
 severity: error
-scopes: [connector-package]
+artifact_kinds: [connector-package]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, engine]

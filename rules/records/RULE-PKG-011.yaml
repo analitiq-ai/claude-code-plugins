@@ -6,7 +6,7 @@ statement: >
   other third-party package, or an engine or runtime.
 tier: shape
 severity: error
-scopes: [connector-package]
+artifact_kinds: [connector-package]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, engine]

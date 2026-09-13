@@ -4,7 +4,7 @@ statement: >
   delay.
 tier: coherence
 severity: error
-scopes: [any]
+artifact_kinds: [any]
 validator: "analitiq.contracts.shared.common::RetryErrorHandlingBase._validate_retry_fields"
 owners: [pipeline-plugin, engine]
 targets: [RetryErrorHandlingBase]

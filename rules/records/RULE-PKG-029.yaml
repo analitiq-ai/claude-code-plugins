@@ -6,7 +6,7 @@ statement: >
   the input does not declare.
 tier: reference
 severity: error
-scopes: [connector-package]
+artifact_kinds: [connector-package]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, engine]

@@ -4,7 +4,7 @@ statement: >
   `response.record_count`, a scope only a read response carries.
 tier: coherence
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteResponse._reject_record_count"
 owners: [connector-plugin, engine]
 targets: [WriteResponse]

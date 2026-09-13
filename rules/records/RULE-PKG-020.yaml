@@ -5,7 +5,7 @@ statement: >
   a retried batch depends on.
 tier: process
 severity: error
-scopes: [connector-package]
+artifact_kinds: [connector-package]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, engine]
