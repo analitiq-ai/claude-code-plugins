@@ -326,6 +326,17 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                             for f in _type_map_findings(direction, doc, path))
 
 
+def _at_site(site: str, findings: list[dict]) -> list[dict]:
+    """Re-root a member's own findings at the file they came from.
+
+    A document graded on its own reports a pointer into itself (`/scope`), which
+    is the whole address when that document is what was validated. A bundle
+    holds many, so the same pointer names none of them — the reader is told
+    what is wrong and not which file to open. Same shape
+    `_connection_type_map_findings` uses for the maps beside a connection."""
+    return [{**f, "path": f"{site}{f.get('path', '')}"} for f in findings]
+
+
 def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:
     """Read one sibling bundle document. On an unreadable/invalid file or a
     non-object payload, append an error finding and return None — so a malformed
@@ -386,7 +397,8 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                     # the bundle: the referential checks below read a stream's
                     # refs and never its shape, so an unbundled member would
                     # otherwise be graded on this route and a bundled one not.
-                    findings.extend(_model_findings("stream", doc))
+                    findings.extend(_at_site(f"streams/{p.name}",
+                                             _model_findings("stream", doc)))
                     streams.append(doc)
             if outcome.crashed:
                 crashed = True
@@ -410,7 +422,8 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
             with _contained(findings, f"connections/{conn_json.parent.name}") as outcome:
                 conn = _read_bundle_member(conn_json, findings)
                 if conn is not None:
-                    findings.extend(_model_findings("connection", conn))
+                    findings.extend(_at_site(f"connections/{conn_json.parent.name}/connection.json",
+                                             _model_findings("connection", conn)))
                     connections.append(conn)
                     connection_id = conn.get("connection_id")
                     for ep_json in sorted((conn_json.parent / "definition" / "endpoints").glob("*.json")):
@@ -442,7 +455,8 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                         # endpoint's place in the bundle, which the lines below
                         # still give it.
                         with _contained(findings, ep_site):
-                            findings.extend(_endpoint_findings(endpoint, ep_json))
+                            findings.extend(_at_site(
+                                ep_site, _endpoint_findings(endpoint, ep_json)))
                         # Endpoint documents omit connection_id (server-managed); supply the
                         # owning connection's id so the bundle's endpoint-ref check can resolve
                         # connection-scoped references.

@@ -944,6 +944,22 @@ def is_stem_addressed_endpoint_path(doc_path: Path) -> bool:
     return parent.name == "endpoints" and parent.parent.name == "definition"
 
 
+def is_addressed_endpoint_path(doc_path: Path) -> bool:
+    """True iff `doc_path` is an endpoint file sitting at the home the engine
+    resolves it from — an `endpoints/` directory, whatever carries that
+    directory: a connector release for an api endpoint, a connection's
+    `definition/` for a connection-scoped one.
+
+    Wider than `is_stem_addressed_endpoint_path`, which additionally demands
+    `definition/` because a DATABASE endpoint has a second on-disk shape whose
+    basename is a content hash. An api endpoint has only the one shape, so the
+    `endpoints/` parent is the whole question. What both exclude is a bare or
+    staged path: a file not yet at its home carries no filename the engine will
+    ever resolve, so RULE-PKG-031 has nothing to grade there and reporting it
+    would fire on every pass of an authoring fix loop."""
+    return doc_path.parent.name == "endpoints"
+
+
 def _load_json_sibling(
     path: Path, *, rule: str | None, message_id: str,
 ) -> tuple[Any, list[dict]]:
@@ -1287,7 +1303,10 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     # appended the `notApplicable` naming which one it was. The filename rides
     # along so the locating half of those checks reads the same on both routes.
     findings = _api_endpoint_document_findings(
-        doc, transports, filename=doc_path.name if doc_path is not None else "")
+        doc, transports,
+        filename=(doc_path.name
+                  if doc_path is not None and is_addressed_endpoint_path(doc_path)
+                  else ""))
     findings.extend(sibling_findings)
     return findings
 

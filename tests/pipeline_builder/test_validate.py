@@ -1357,12 +1357,16 @@ def test_bundle_grades_a_symlinked_endpoint_by_its_authored_name(tmp_path):
     assert any(f.get("rule") == "RULE-PKG-031" for f in diag["findings"]), diag["findings"]
 
 
-@pytest.mark.parametrize("member", ["connections/postgresql/connection.json",
-                                    "pipelines/p/streams/orders.json"])
-def test_bundle_grades_every_member_as_the_document_it_is(tmp_path, member):
+@pytest.mark.parametrize("member, site", [
+    ("connections/postgresql/connection.json", "connections/postgresql/connection.json"),
+    ("pipelines/p/streams/orders.json", "streams/orders.json"),
+])
+def test_bundle_grades_every_member_as_the_document_it_is(tmp_path, member, site):
     # The referential checks read a member's refs, never its shape, so a
     # bundled connection or stream would be graded by nothing on the route
-    # that assembles it while the same file validated alone was rejected.
+    # that assembles it while the same file validated alone was rejected. The
+    # finding is re-rooted at the file: a pointer into a document names nothing
+    # in a bundle holding several.
     doc = _build_bundle(tmp_path)
     path = tmp_path / member
     body = json.loads(path.read_text())
@@ -1370,7 +1374,8 @@ def test_bundle_grades_every_member_as_the_document_it_is(tmp_path, member):
     path.write_text(json.dumps(body))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"], diag["findings"]
-    assert any(f.get("severity") == "error" and f.get("path") == "/not_a_declared_field"
+    assert any(f.get("severity") == "error"
+               and f.get("path") == f"{site}/not_a_declared_field"
                for f in diag["findings"]), diag["findings"]
 
 
@@ -1385,5 +1390,7 @@ def test_bundle_grades_a_connection_scoped_endpoint_document(tmp_path):
     ep_path.write_text(json.dumps(ep))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"], diag["findings"]
-    assert any(f.get("severity") == "error" and f.get("path") == "/not_a_declared_field"
+    site = f"connections/postgresql/definition/endpoints/{EID}.json"
+    assert any(f.get("severity") == "error"
+               and f.get("path") == f"{site}/not_a_declared_field"
                for f in diag["findings"]), diag["findings"]

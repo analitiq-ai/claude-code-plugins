@@ -939,6 +939,28 @@ def test_check_coverage_and_standalone_route_agree_on_shared_per_endpoint_checks
         coverage_findings, standalone_findings)
 
 
+@pytest.mark.parametrize("rel, graded", [
+    ("draft.json", False),
+    ("staging/draft.json", False),
+    ("endpoints/draft.json", True),
+    ("definition/endpoints/draft.json", True),
+])
+def test_api_endpoint_filename_is_graded_only_where_the_engine_resolves_it(
+        rel, graded, tmp_path, validator):
+    # RULE-PKG-031 is about the name the engine will look the endpoint up by.
+    # A file not yet in an `endpoints/` directory has no such name, so the gate
+    # has nothing to grade — and reporting it anyway fires on every pass of an
+    # authoring fix loop with no way to clear it. An api endpoint has one home,
+    # unlike a database endpoint's second hash-addressed shape, so the
+    # `endpoints/` parent is the whole test.
+    ep = _keyset_endpoint(initial="abc")
+    path = tmp_path / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    findings = validator.validate_document(ep, doc_path=path)
+    hit = any(f.get("rule") == "RULE-PKG-031" for f in findings)
+    assert hit is graded, findings
+
+
 # --- RULE-SHRD-003: every authored document must declare `$schema` ------------
 
 def _connection_doc(schema_url=...):
