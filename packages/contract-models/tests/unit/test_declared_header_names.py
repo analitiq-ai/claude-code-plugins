@@ -193,12 +193,15 @@ def test_a_removal_naming_a_header_parses(label, model, kwargs):
     assert model(**kwargs, headers_remove=["Accept"]).headers_remove == ["Accept"]
 
 
-@pytest.mark.parametrize("value", [None, "", {"literal": None}, {"literal": ""}])
+@pytest.mark.parametrize("value", [None, "", {"literal": None}, {"literal": ""},
+                                   {"template": ""}])
 @pytest.mark.parametrize("label, model, kwargs", NULL_VALUE_BLOCKS)
 def test_a_header_declared_null_or_empty_is_refused(label, model, kwargs, value):
     # RULE-SHRD-010: a null value merges as skip-override (the inherited
     # value survives untouched) and an empty string merges and reaches the
-    # wire empty — neither is the deletion `headers_remove` states.
+    # wire empty — neither is the deletion `headers_remove` states. A template
+    # carrying no substitution is that same empty string spelled longer: there
+    # is nothing in it left to resolve.
     with pytest.raises(ValidationError) as exc:
         model(**kwargs, headers={"Accept": value})
     assert "RULE-SHRD-010" in str(exc.value)

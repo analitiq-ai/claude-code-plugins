@@ -190,18 +190,28 @@ def _resolves_to_null_or_empty(value: Any) -> bool:
     """Whether an authored header value is void rather than removed.
 
     A bare JSON `null` or empty string is exactly that regardless of wrapping
-    — `{"literal": ...}` unwraps to what it holds and nothing else. Any other
-    object form (`{ref}`, `{template}`, a function call) resolves to something
-    this repo cannot see until the engine runs it, so it is not this rule's
-    business — RULE-SHRD-010 only catches what an author wrote down directly.
+    — `{"literal": ...}` unwraps to what it holds and nothing else, and a
+    `{"template": ...}` holding no `${...}` placeholder is a literal wearing
+    the other spelling: the resolver has nothing to substitute into it, so it
+    reaches the wire as the string it already is. Any other object form
+    (`{ref}`, a template that does interpolate, a function call) resolves to
+    something this repo cannot see until the engine runs it, so it is not this
+    rule's business — RULE-SHRD-010 only catches what an author wrote down
+    directly.
     """
     if value is None or value == "":
         return True
     if isinstance(value, dict):
         keys = set(_EXPRESSION_KEYS) & set(value)
-        if len(keys) == 1 and "literal" in keys:
-            literal = value["literal"]
-            return literal is None or literal == ""
+        if len(keys) == 1:
+            key = keys.pop()
+            if key == "literal":
+                literal = value["literal"]
+                return literal is None or literal == ""
+            # An empty template has no `${...}` to interpolate, so the
+            # resolver copies it through and the wire sees the empty string.
+            if key == "template":
+                return value["template"] == ""
     return False
 
 
