@@ -8,7 +8,7 @@ tier: shape
 severity: error
 scopes: [connector-package]
 validator: null
-enforcement_location: external-ci
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   Depending only on the CDK is what keeps connectors independently
@@ -18,8 +18,12 @@ rationale: >
   install into a wheel that installs cleanly. The temptation is real — a
   wire-compatible system looks like a one-line import away, which is why
   MariaDB ships its own copy of the mysql-shaped dialect instead. Imports
-  live in Python no contract model parses; the CDK conformance kit is what
-  would catch the reach, and only after the package is pushed to registry
-  CI.
+  live in Python no contract model parses. Known enforcement gap: the CDK
+  conformance kit audits the loaded class's method and attribute surface
+  through runtime introspection, never `connector.py`'s source text or
+  import statements, so a forbidden import that adds no extra class
+  attribute — and installs cleanly, which a package already present in the
+  engine's own environment always does — is invisible to every check the
+  kit runs.
 status: active
 superseded_by: null

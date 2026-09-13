@@ -134,7 +134,7 @@
     "connection"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -147,7 +147,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "One routing rule covers every connector and every auth type, and the routing target is declared in the connector document rather than in the connection — a connection carries no view of the contract it instantiates. So a value filed into the wrong map is a perfectly well-formed document holding a value nothing will ever read. Catching it means opening the connector's `connection_contract` beside the connection, which no single-document validation run does; the gap surfaces at connect time, when the engine looks for the value in the map the contract named and finds it absent.\n",
+   "rationale": "One routing rule covers every connector and every auth type, and the routing target is declared in the connector document rather than in the connection — a connection carries no view of the contract it instantiates. So a value filed into the wrong map is a perfectly well-formed document holding a value nothing will ever read. Catching it means opening the connector's `connection_contract` beside the connection, which no single-document validation run does. Known enforcement gap for a required input with no default: the gap surfaces at connect time, when the engine looks for the value in the map the contract named and finds it absent. It does not surface at all for an optional input with a declared default, or for a post-auth output a later step can still collect — the engine finds the correct map's entry absent, as an optional field legitimately can be, uses the default or waits, and the misfiled value sits unread and unflagged.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -238,7 +238,7 @@
     "connection"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -251,7 +251,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The plugin's credentials template and a sidecar credentials file look alike and resolve nothing alike. The template is keyed by env-var name and is read by nothing — the user exports it, and `env:` pointers pick the values up out of the environment — while a sidecar file is read by the engine directly and keyed by the same contract input name that keys `secret_refs`. Alone among the pointer schemes, `sidecar:` constrains nothing after its prefix, so a pointer aimed at the wrong file validates cleanly and fails only when the engine resolves it at connect time, with an error about a missing entry rather than a mismatched file.\n",
+   "rationale": "The plugin's credentials template and a sidecar credentials file look alike and resolve nothing alike. The template is keyed by env-var name and is read by nothing — the user exports it, and `env:` pointers pick the values up out of the environment — while a sidecar file is read by the engine directly and keyed by the same contract input name that keys `secret_refs`. Alone among the pointer schemes, `sidecar:` constrains nothing after its prefix, so a pointer aimed at the wrong file validates cleanly. Known enforcement gap: the engine checks only that the named key is present in the sidecar file, never that it is the correct contract-input name — a pointer naming the wrong key resolves without complaint whenever the sidecar file happens to carry an entry under that name too (the env-var template's own key spelling, say), and fails with a missing-entry error only when it does not. Neither outcome is the engine checking the agreement this rule states.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4894,7 +4894,7 @@
     "connector-package"
    ],
    "validator": null,
-   "enforcement_location": "external-ci",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4904,7 +4904,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine imports a connector through a package name mapped onto that root, so a nested source directory, or a definition document loose at the root, produces a wheel whose module path the entry point cannot resolve — the connector is installed and unreachable. The layout is a directory tree on disk, not a document any contract model parses; registry CI's `pip wheel --no-deps .` build is the first thing that sees whether the root is actually the package, well after the connector was authored.\n",
+   "rationale": "The engine resolves a connector's class through the entry point its installed distribution declares, never by walking the repository tree, so a conventional nested source layout (`src/<package>/`, mapped correctly in `pyproject.toml`) builds a wheel with the same importable module and the same entry points a flat-root layout would — indistinguishable to everything downstream. The layout is a directory tree on disk, not a document any contract model parses. Known enforcement gap: registry CI's `pip wheel --no-deps .` build and every conformance-kit check reach the package only through its installed entry points, so none of them can see whether the repository root itself was the package or a wrapper around one.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5076,7 +5076,7 @@
     "connector-package"
    ],
    "validator": null,
-   "enforcement_location": "external-ci",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5086,7 +5086,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Depending only on the CDK is what keeps connectors independently releasable: importing another connector couples two release trains, and importing an engine inverts the dependency the whole architecture rests on. Either import also drags a package the engine environment does not install into a wheel that installs cleanly. The temptation is real — a wire-compatible system looks like a one-line import away, which is why MariaDB ships its own copy of the mysql-shaped dialect instead. Imports live in Python no contract model parses; the CDK conformance kit is what would catch the reach, and only after the package is pushed to registry CI.\n",
+   "rationale": "Depending only on the CDK is what keeps connectors independently releasable: importing another connector couples two release trains, and importing an engine inverts the dependency the whole architecture rests on. Either import also drags a package the engine environment does not install into a wheel that installs cleanly. The temptation is real — a wire-compatible system looks like a one-line import away, which is why MariaDB ships its own copy of the mysql-shaped dialect instead. Imports live in Python no contract model parses. Known enforcement gap: the CDK conformance kit audits the loaded class's method and attribute surface through runtime introspection, never `connector.py`'s source text or import statements, so a forbidden import that adds no extra class attribute — and installs cleanly, which a package already present in the engine's own environment always does — is invisible to every check the kit runs.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7281,7 +7281,7 @@
     "type-map"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -7295,7 +7295,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Case handling belongs to the reader, and the reader normalizes only on the read side — so an author who learned that casing does not matter learns it from the direction where it genuinely does not. How loudly the mistake fails then depends on the rule kind: a mis-cased `exact` arrow_type is rejected outright by the Arrow type pattern, while a mis-cased `regex` arrow_type is structurally a valid pattern, validates with no findings at all, and simply never fires — leaving the family to hard-error at stream configuration, long after the map was reviewed.\n",
+   "rationale": "Case handling belongs to the reader, and the reader normalizes only on the read side — so an author who learned that casing does not matter learns it from the direction where it genuinely does not. A mis-cased `exact` arrow_type is rejected outright by the Arrow type pattern; a mis-cased `regex` arrow_type is structurally a valid pattern, validates with no findings at all, and simply never fires. Known enforcement gap for that case: whether it ever hard-errors depends on map order and on whether the family it silently fails to match is ever actually written — a later rule matching first, or the family simply never occurring in synced data, lets the mis-cased rule sit unfired and unnoticed indefinitely.\n",
    "status": "active",
    "superseded_by": null
   },
