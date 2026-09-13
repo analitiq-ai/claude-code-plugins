@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._core import contract_model_domain, register_kind, _missing_schema_url_findings, _model_findings
+from ._core import contract_model_domain, register_model_and_schema_kind
 
 # Import the contract model under the shared DOMAIN guard (the model binds the
 # `$schema` host at import; see `contract_model_domain`).
@@ -37,8 +37,4 @@ def is_stream_doc(doc: Any) -> bool:
     return isinstance(doc, dict) and "source" in doc and "destinations" in doc
 
 
-def _validate_stream(doc: Any, doc_path=None, schema_url=None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    return _model_findings(doc, _STREAM_ADAPTER) + _missing_schema_url_findings(doc)
-
-
-register_kind(is_stream_doc, _validate_stream)
+register_model_and_schema_kind(is_stream_doc, _STREAM_ADAPTER)

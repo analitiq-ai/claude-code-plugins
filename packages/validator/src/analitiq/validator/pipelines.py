@@ -61,8 +61,7 @@ from ._core import (
     contract_model_domain,
     finding,
     register_kind,
-    _missing_schema_url_findings,
-    _model_findings,
+    register_model_and_schema_kind,
 )
 
 # Import the single-document contract model under the shared DOMAIN guard (the
@@ -648,12 +647,8 @@ def _validate_pipeline_bundle(doc: Any, doc_path: Any = None,  # skipcq: PYL-W06
     return validate_pipeline_bundle(doc)
 
 
-def _validate_pipeline_doc(doc: Any, doc_path: Any = None, schema_url: Any = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    return _model_findings(doc, _PIPELINE_ADAPTER) + _missing_schema_url_findings(doc)
-
-
 # The bundle is registered BEFORE the single-pipeline document so the bundle
 # detector claims an assembled-run mapping first; `is_pipeline_doc` then only sees
 # a `connections`-bearing mapping with no nested `pipeline` document.
 register_kind(is_pipeline_bundle, _validate_pipeline_bundle)
-register_kind(is_pipeline_doc, _validate_pipeline_doc)
+register_model_and_schema_kind(is_pipeline_doc, _PIPELINE_ADAPTER)

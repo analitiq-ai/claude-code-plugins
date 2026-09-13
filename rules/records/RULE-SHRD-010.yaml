@@ -7,7 +7,7 @@ severity: error
 scopes: [any]
 validator: "analitiq.contracts.shared.rules::HeaderMergeRules._headers_no_null_or_empty_value"
 owners: [connector-plugin, pipeline-plugin, engine]
-targets: [HttpTransport, TransportDefaults, _RequestBase]
+targets: [HttpTransport, TransportDefaults, _RequestBase, AuthOperationTemplate]
 rationale: >
   The header merge resolves each layer's value and skips overriding when the
   resolved value is null, so a null-valued header leaves whatever an earlier

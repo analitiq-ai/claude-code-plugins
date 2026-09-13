@@ -3128,32 +3128,6 @@ def _has_disallowed_dynamic_refs(value: Any) -> str | None:
     return None
 
 
-def _first_template_sigil(value: Any) -> str | None:
-    """Return the first string reachable in ``value`` that contains
-    `TEMPLATE_SIGIL`, or ``None``.
-
-    Unlike `_expression_tokens`, this does not ask whether the grammar
-    resolves what follows the sigil — `path_params` never reaches the
-    template resolver at all (its only shapes are `{from_param}` /
-    `{from_input}` singletons), so a `${...}` there is not a misscoped
-    expression, it is a slot that takes the characters literally and ships
-    them on the wire unexpanded.
-    """
-    if isinstance(value, str):
-        return value if TEMPLATE_SIGIL in value else None
-    if isinstance(value, dict):
-        for v in value.values():
-            found = _first_template_sigil(v)
-            if found is not None:
-                return found
-    elif isinstance(value, list):
-        for item in value:
-            found = _first_template_sigil(item)
-            if found is not None:
-                return found
-    return None
-
-
 def _expression_tokens(value: Any) -> Iterator[str]:
     """Yield every resolution token reachable in ``value``, stripped like the
     resolver strips before lookup.
@@ -3201,21 +3175,25 @@ def _validate_param_wiring(
     _validate_expression_shapes(request.query, "request.query")
     _validate_expression_shapes(getattr(request, "body", None), "request.body")
 
-    # `path_params` resolves only `{from_param}` / `{from_input}` singleton
-    # dispatch — it never reaches the template resolver, so a `${...}` sigil
-    # here is not a misscoped expression (RULE-ENDP-033), it is a slot that
-    # takes the characters literally and ships them on the wire unexpanded.
-    bad_sigil = _first_template_sigil(request.path_params)
-    if bad_sigil is not None:
-        raise violation(
-            "RULE-SHRD-006",
-            "path-params-has-value-expression",
-            f"request.path_params contains {bad_sigil!r}, which carries a "
-            "${...} value-expression sigil; path_params resolves only "
-            "`{from_param}`/`{from_input}` bindings, never templates, so the "
-            "sigil would ship on the wire unexpanded "
-            "(spec: §Request Parameter Binding)"
-        )
+    # `path_params` is documented and authored only as `{from_param}` /
+    # `{from_input}` singleton bindings (spec: §Request Parameter Binding) —
+    # it has no `${...}` template form of its own, so a sigil surviving an
+    # otherwise grammar-valid expression here is not a misscoped expression
+    # (RULE-ENDP-033), it is content outside what this slot is authored to
+    # carry. Walked with `iter_expression_strings` rather than a blind
+    # string search so a `literal` payload or a `function.map` table — data
+    # the resolver never touches — cannot trip this on a grammar-valid
+    # document.
+    for _kind, _s in iter_expression_strings(request.path_params):
+        if _kind == "template" and TEMPLATE_SIGIL in _s:
+            raise violation(
+                "RULE-SHRD-006",
+                "path-params-has-value-expression",
+                f"request.path_params contains {_s!r}, which carries a "
+                "${...} value-expression sigil; path_params is authored "
+                "only as `{from_param}`/`{from_input}` bindings, never "
+                "templates (spec: §Request Parameter Binding)"
+            )
 
     # `path_params` is a from_input site on WRITE operations only: a REST
     # write addresses one record by its own key (`PATCH /contacts/{id}`), and the
