@@ -1,0 +1,21 @@
+id: RULE-STRM-043
+statement: >
+  A stream's connector-scoped endpoint_ref SHOULD name an endpoint the
+  referenced connector actually publishes.
+tier: reference
+severity: warning
+artifact_kinds: [stream]
+validator: "analitiq.validator.document_set::_connector_endpoint_ref_findings"
+owners: [pipeline-plugin, engine]
+rationale: >
+  RULE-STRM-033/034 already resolve a connector-scoped ref's connection_id and
+  a connection-scoped ref's endpoint document; what neither reaches is whether
+  a connector-scoped endpoint_id names something the connector it resolves to
+  actually ships, because that set lives in the connector's own bundled
+  definition rather than in anything a pipeline bundle carries on its own.
+  Warning, not error: a connector is a trusted, version-pinned registry
+  artifact, and a stale ref there is an authoring mistake to realign rather
+  than a defect that should block an otherwise-sound pipeline from being
+  authored further.
+status: active
+superseded_by: null

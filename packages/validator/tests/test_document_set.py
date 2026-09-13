@@ -1,10 +1,5 @@
 """Fixture corpus for the path-free document-set API (`analitiq.validator
-.document_set`) — every case here is `xfail(strict=True)` because every
-function it exercises currently raises `NotImplementedError`. An
-implementation PR turns each case from `xfail` to passing by replacing the
-stub body it exercises and removing that case's marker; `strict=True` means a
-case that starts passing while its marker is still on it fails the suite,
-so a marker can never survive its own fix by accident.
+.document_set`).
 
 Two corpora already committed for the path-based routes are reused here
 rather than re-authored: `packages/validator/tests/corpus/` (a connector
@@ -34,16 +29,8 @@ if str(_PLUGIN_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_PLUGIN_SCRIPTS))
 
 
-def _xfail(fn_name: str):
-    return pytest.mark.xfail(
-        strict=True, raises=NotImplementedError,
-        reason=f"{fn_name} is not yet implemented (analitiq.validator.document_set)")
-
-
 # ---------------------------------------------------------------------------
-# Entity — drift guard against DOCUMENT_ARTIFACT_KINDS (not xfail: this is a
-# type-contract fact settled now, independent of any function body below
-# being implemented).
+# Entity — drift guard against DOCUMENT_ARTIFACT_KINDS.
 # ---------------------------------------------------------------------------
 
 def test_entity_matches_document_artifact_kinds(validator):
@@ -52,9 +39,8 @@ def test_entity_matches_document_artifact_kinds(validator):
 
 # ---------------------------------------------------------------------------
 # Finding — drift guard against the keys `analitiq.validator.finding` actually
-# produces (not xfail: a type-contract fact settled now). `finding()`'s own
-# docstring is the source: `rule` only when given, `severity` only for a
-# `fail` kind, everything else unconditional.
+# produces. `finding()`'s own docstring is the source: `rule` only when given,
+# `severity` only for a `fail` kind, everything else unconditional.
 # ---------------------------------------------------------------------------
 
 def test_finding_matches_the_keys_finding_builder_produces(validator):
@@ -355,7 +341,6 @@ def _write_tree(root: Path, documents: dict) -> None:
 # resolve_type_map_gaps: never raises, {"findings"} only.
 # ---------------------------------------------------------------------------
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_reports_unreadable_map_without_raising(validator):
     result = validator.resolve_type_map_gaps(
         maps={"type-map-read.json": "not json"}, direction="read", probes=["STRING"])
@@ -365,7 +350,6 @@ def test_gap_resolution_reports_unreadable_map_without_raising(validator):
     assert "direction" not in result["findings"][0]
 
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_reports_invalid_map_with_its_direction(validator):
     # Fails TypeMapReadDoc: a list, but of a rule object missing its `match`
     # discriminator (and its arrow_type).
@@ -377,7 +361,6 @@ def test_gap_resolution_reports_invalid_map_with_its_direction(validator):
     assert invalid[0]["direction"] == "read"
 
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_direction_selects_the_matching_model(validator):
     # Valid under TypeMapReadDoc (native_type is a bare matcher, unvalidated for
     # placeholders) but invalid under TypeMapWriteDoc (native_type is the write
@@ -394,7 +377,6 @@ def test_gap_resolution_direction_selects_the_matching_model(validator):
     assert invalid[0]["direction"] == "write"
 
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_reports_an_unresolved_probe_as_informational(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING", "BIGINT"])
@@ -404,14 +386,12 @@ def test_gap_resolution_reports_an_unresolved_probe_as_informational(validator):
     assert gaps[0]["direction"] == "read"
 
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_fully_covered_reports_no_findings(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING"])
     assert result == {"findings": []}
 
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_falls_through_to_a_later_map_for_a_probe_the_first_does_not_cover(validator):
     # Neither map alone covers every probe: a probe the first key's map does
     # not render must still resolve via the second key's map rather than
@@ -431,7 +411,6 @@ def test_gap_resolution_falls_through_to_a_later_map_for_a_probe_the_first_does_
 # Key handling.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_tree")
 def test_leading_dot_slash_is_normalized_away(validator):
     with_prefix = validator.validate_tree({f"./{k}": v for k, v in _connector_tree_documents().items()})
     without_prefix = validator.validate_tree(_connector_tree_documents())
@@ -439,7 +418,6 @@ def test_leading_dot_slash_is_normalized_away(validator):
 
 
 @pytest.mark.parametrize("bad_key", ["/connector.json", "../connector.json", ""])
-@_xfail("validate_tree")
 def test_invalid_keys_are_reported_not_raised(validator, bad_key):
     documents = {**_connector_tree_documents(), bad_key: {}}
     result = validator.validate_tree(documents)
@@ -447,14 +425,12 @@ def test_invalid_keys_are_reported_not_raised(validator, bad_key):
     assert result["passed"] is False
 
 
-@_xfail("validate_tree")
 def test_key_that_is_both_document_and_directory_prefix_conflicts(validator):
     documents = {**_connector_tree_documents(), "endpoints/v1__records.json/extra.json": {}}
     result = validator.validate_tree(documents)
     assert any(f["message_id"] == "key-path-conflict" for f in result["findings"])
 
 
-@_xfail("validate_tree")
 def test_output_finding_order_is_independent_of_input_mapping_order(validator):
     # Two distinct uncovered endpoints, not the clean tree: comparing two
     # empty findings lists cannot detect order-sensitivity at all.
@@ -472,7 +448,6 @@ def test_output_finding_order_is_independent_of_input_mapping_order(validator):
     assert forward == backward
 
 
-@_xfail("validate_tree")
 def test_one_invalid_key_does_not_block_validating_the_rest(validator):
     documents = {
         **_connector_tree_documents(),
@@ -493,7 +468,6 @@ def test_one_invalid_key_does_not_block_validating_the_rest(validator):
 # resolve_type_map_gaps's `maps`.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_tree")
 def test_bytes_value_is_decoded_as_utf8_with_bom_stripped(validator):
     documents = _connector_tree_documents()
     text_result = validator.validate_tree(documents)
@@ -503,7 +477,6 @@ def test_bytes_value_is_decoded_as_utf8_with_bom_stripped(validator):
     assert bytes_result == text_result
 
 
-@_xfail("validate_tree")
 def test_non_str_bytes_object_value_is_invalid_not_raised(validator):
     documents = {**_connector_tree_documents(), "connector.json": 42}
     result = validator.validate_tree(documents)
@@ -512,7 +485,6 @@ def test_non_str_bytes_object_value_is_invalid_not_raised(validator):
     assert result["passed"] is False
 
 
-@_xfail("resolve_type_map_gaps")
 def test_invalid_value_applies_to_resolve_type_map_gaps_maps_too(validator):
     result = validator.resolve_type_map_gaps(maps={"type-map-read.json": 42}, direction="read", probes=["STRING"])
     assert any(f["message_id"] == "invalid-value" for f in result["findings"])
@@ -522,28 +494,24 @@ def test_invalid_value_applies_to_resolve_type_map_gaps_maps_too(validator):
 # Package-kind dispatch is a registry.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_connector_tree")
 def test_validate_connector_tree_validates_its_own_root_shape_directly(validator):
     result = validator.validate_connector_tree(_connector_tree_documents())
     assert result["passed"] is True
     assert not any(f["message_id"] in ("ambiguous-layout", "unrecognized-layout") for f in result["findings"])
 
 
-@_xfail("validate_pipeline_tree")
 def test_validate_pipeline_tree_validates_its_own_root_shape_directly(validator):
     result = validator.validate_pipeline_tree(_pipeline_tree_documents())
     assert result["passed"] is True
     assert not any(f["message_id"] in ("ambiguous-layout", "unrecognized-layout") for f in result["findings"])
 
 
-@_xfail("validate_tree")
 def test_validate_tree_reports_unrecognized_layout_for_neither_shape(validator):
     result = validator.validate_tree({"README.md": "not a document set at all"})
     assert result["passed"] is False
     assert any(f["message_id"] == "unrecognized-layout" for f in result["findings"])
 
 
-@_xfail("validate_tree")
 def test_validate_tree_reports_ambiguous_layout_when_both_shapes_match(validator):
     # A pipeline tree that ALSO carries a root-level connector.json — matching
     # both the connector-tree and the pipeline-tree detector at once.
@@ -553,7 +521,6 @@ def test_validate_tree_reports_ambiguous_layout_when_both_shapes_match(validator
     assert any(f["message_id"] == "ambiguous-layout" for f in result["findings"])
 
 
-@_xfail("validate_tree")
 def test_validate_tree_dispatches_a_pipeline_tree_to_pipeline_validation(validator):
     # Every other validate_tree case above exercises the connector-tree
     # detector or the fallthrough cases; this is the one case that proves the
@@ -568,7 +535,6 @@ def test_validate_tree_dispatches_a_pipeline_tree_to_pipeline_validation(validat
                for f in result["findings"]), result["findings"]
 
 
-@_xfail("validate_pipeline_tree")
 def test_embedded_connector_subtree_gets_its_own_coverage_findings(validator):
     """`connectors/wise/definition/connector.json` (kind=api) ships no sibling
     type-map or `endpoints/` directory — today's plugin never notices, because
@@ -598,7 +564,6 @@ def _cyclic_dict() -> dict:
     return node
 
 
-@_xfail("validate_tree")
 def test_one_document_crash_is_isolated_to_its_key(validator):
     documents = {
         **_connector_tree_documents(),
@@ -617,7 +582,6 @@ def test_one_document_crash_is_isolated_to_its_key(validator):
     assert any(f["message_id"] == "native-type-unresolved" for f in result["findings"]), result["findings"]
 
 
-@_xfail("validate_pipeline_tree")
 def test_embedded_package_crash_is_isolated_to_its_subtree_prefix(validator):
     documents = {
         **_pipeline_tree_documents_with_embedded_connectors(),
@@ -641,7 +605,6 @@ def test_embedded_package_crash_is_isolated_to_its_subtree_prefix(validator):
 # either result in one ValidationEnvelope shape.
 # ---------------------------------------------------------------------------
 
-@_xfail("diagnostics")
 def test_diagnostics_dispatches_a_single_document_to_validate_document(validator):
     document = json.loads((CORPUS / "valid_connector.json").read_text())
     expected_findings = validator.validate_document(document)
@@ -650,7 +613,6 @@ def test_diagnostics_dispatches_a_single_document_to_validate_document(validator
     assert json.dumps(validator.diagnostics(document)) == json.dumps(expected)
 
 
-@_xfail("diagnostics")
 def test_diagnostics_dispatches_a_document_set_to_validate_tree(validator):
     documents = {
         **_connector_tree_documents(),
@@ -664,7 +626,6 @@ def test_diagnostics_dispatches_a_document_set_to_validate_tree(validator):
 # produce byte-identical results for the same content, per package kind.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_connector_tree")
 def test_connector_tree_equivalence_with_the_path_based_route(validator, tmp_path):
     # Two distinct uncovered endpoints, not just a clean tree: a route
     # producing zero findings would make "findings order included" vacuous.
@@ -684,7 +645,6 @@ def test_connector_tree_equivalence_with_the_path_based_route(validator, tmp_pat
     assert json.dumps(tree_based) == json.dumps(expected)
 
 
-@_xfail("validate_pipeline_tree")
 def test_pipeline_tree_equivalence_with_the_path_based_route(validator, tmp_path):
     import validate as pipeline_adapter  # plugins/analitiq-pipeline-builder/scripts/validate.py
 

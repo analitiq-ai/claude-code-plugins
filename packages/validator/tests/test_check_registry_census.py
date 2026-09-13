@@ -148,6 +148,43 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator.pipelines::validate_pipeline_bundle", "bundle-missing-pipeline-document"): (
         "rejects before any referential check the registry binds could even "
         "begin"),
+    ("analitiq.validator.document_set::_key_and_value_findings", "invalid-key"): (
+        "a structural precondition on the document set itself — a key that is "
+        "not a usable relative path — rejected before any rule-specific check "
+        "of the value it maps to could run"),
+    ("analitiq.validator.document_set::_key_and_value_findings", "invalid-value"): (
+        "a structural precondition on the document set itself — a value of a "
+        "type no route can materialize into a document — rejected before any "
+        "rule-specific check of its content could run"),
+    ("analitiq.validator.document_set::_normalize_documents", "internal-error"): (
+        "a structural precondition rejected the entry before any rule-specific "
+        "check could run: the raw value could not even be materialized into "
+        "JSON text, let alone dispatched to a kind whose rules could apply"),
+    ("analitiq.validator.document_set::_normalize_documents", "key-path-conflict"): (
+        "a structural precondition on the document set's own shape — one key "
+        "is simultaneously a document and a directory prefix of another — "
+        "rejected before any one document's content could be checked"),
+    ("analitiq.validator.document_set::_validate_tree_document", "internal-error"): (
+        "a structural precondition rejected the entry before any rule-specific "
+        "check could run: the materialized text could not even be parsed as "
+        "JSON, let alone dispatched to a kind whose rules could apply"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "type-map-unreadable"): (
+        "a structural precondition — the map is not readable as a JSON array "
+        "at all — rejected before any rule-specific check of its rows could "
+        "run"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "invalid-type-map"): (
+        "a structural precondition — the map does not satisfy its read/write "
+        "model — rejected before any one probe's gap could be evaluated "
+        "against it"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "type-map-gap"): (
+        "informational: an unresolved probe is a fact about how this run's "
+        "coverage came out, with no rule to bind it to"),
+    ("analitiq.validator.document_set::validate_tree", "ambiguous-layout"): (
+        "a hand-written shape guard ahead of any kind-specific check: the "
+        "document set matches more than one registered root shape at once, "
+        "so no single shape's own validation route could even be chosen"),
+    ("analitiq.validator.document_set::validate_tree", "unrecognized-layout"): (
+        "no registered root shape's detector claimed the document set"),
 }
 
 
