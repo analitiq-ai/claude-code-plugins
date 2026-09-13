@@ -80,14 +80,13 @@ def test_finding_matches_the_keys_finding_builder_produces(validator):
     assert Finding.__required_keys__ == always_present
     assert Finding.__optional_keys__ == (possible_keys - always_present) | {"direction"}
 
-    # `kind`: every value Finding declares is one finding() actually accepts,
-    # and finding() rejects a value Finding does not declare — so the two
-    # vocabularies match in both directions, not just on the members tried.
-    observed_kinds = {
-        validator.finding(message_id="m", kind=k, path="p", message="msg")["kind"]
-        for k in get_args(hints["kind"])
-    }
-    assert observed_kinds == set(get_args(hints["kind"]))
+    # `kind`: pinned directly against `finding()`'s own vocabulary constant,
+    # not just against the members this test happens to try — a member
+    # landing in one and not the other fails here rather than staying invisible.
+    from analitiq.validator._core import _KINDS
+    assert set(get_args(hints["kind"])) == set(_KINDS)
+    for k in _KINDS:
+        assert validator.finding(message_id="m", kind=k, path="p", message="msg")["kind"] == k
     with pytest.raises(ValueError):
         validator.finding(message_id="m", kind="not-a-real-kind", path="p", message="msg")
 
@@ -273,17 +272,6 @@ _CONNECTOR_PG_TYPE_MAP_WRITE = [
     {"match": "exact", "native_type": "bigint", "arrow_type": "Int64"},
     {"match": "regex", "native_type": "TEXT", "arrow_type": ".*"},
 ]
-# Identity-only stand-ins with no sibling type-map or endpoints/ directory —
-# the embedded-connector fixture below swaps these in for the fully-covered
-# documents above to demonstrate the embedded-connector coverage gap: today's
-# plugin reads only a connection's connector identity (for the referential
-# check that its `connector_id` is bundled) and `wise`'s endpoint ids (for
-# stream-ref resolution) from an embedded `connectors/<slug>/definition/...`
-# subtree, never `check_coverage`'s own findings against it.
-_CONNECTOR_WISE_UNCOVERED = {"connector_id": "wise", "kind": "api"}
-_CONNECTOR_PG_UNCOVERED = {"connector_id": "postgresql", "kind": "database"}
-
-
 def _pipeline_core_documents() -> dict:
     """The connection, stream, pipeline, and destination-endpoint documents a
     pipeline-tree `DocumentSet` carries regardless of what its embedded
@@ -319,18 +307,40 @@ def _pipeline_tree_documents() -> dict:
     }
 
 
+def _pipeline_tree_documents_with_two_findings() -> dict:
+    """`_pipeline_tree_documents` with two additional connection ids on the
+    pipeline's own `connections.destinations` that no bundled connection
+    document resolves — two real, distinguishable `connection-ref-unresolved`
+    findings (one per missing id) that `validate_pipeline_bundle` reports
+    identically down either route, so the byte-identical equivalence
+    comparison below is checking real, order-sensitive content instead of two
+    empty findings lists."""
+    documents = _pipeline_tree_documents()
+    pipeline = {**documents["pipelines/p/pipeline.json"]}
+    pipeline["connections"] = {
+        **pipeline["connections"],
+        "destinations": [*pipeline["connections"]["destinations"], "missing-connection-a", "missing-connection-b"],
+    }
+    return {**documents, "pipelines/p/pipeline.json": pipeline}
+
+
 def _pipeline_tree_documents_with_embedded_connectors() -> dict:
-    """`_pipeline_core_documents` plus `wise`'s and `postgresql`'s
-    `connectors/<slug>/definition/connector.json` shipped alone — no sibling
-    type-map or `endpoints/` directory — so a resolver that closes the
-    embedded-connector coverage gap has something real to report for each:
-    `wise`'s own RULE-PKG-030/035 findings prove the gap is closed, and
-    `postgresql`'s own RULE-PKG-030 finding proves a crash isolated to
-    `wise`'s subtree still leaves the rest of the walk checkable."""
+    """`_pipeline_core_documents` plus `wise`'s and `postgresql`'s own
+    model-valid `connector.json` (the same documents the equivalence fixture
+    ships fully covered) shipped alone — no sibling type-map or `endpoints/`
+    directory — so a resolver that closes the embedded-connector coverage gap
+    has something real to report for each: today's plugin reads only a
+    connection's connector identity (for the referential check that its
+    `connector_id` is bundled) and `wise`'s endpoint ids (for stream-ref
+    resolution) from an embedded `connectors/<slug>/definition/...` subtree,
+    never `check_coverage`'s own findings against it. `wise`'s own
+    RULE-PKG-030/035 findings prove the gap is closed, and `postgresql`'s own
+    RULE-PKG-030 finding proves a crash isolated to `wise`'s subtree still
+    leaves the rest of the walk checkable."""
     return {
         **_pipeline_core_documents(),
-        "connectors/wise/definition/connector.json": _CONNECTOR_WISE_UNCOVERED,
-        "connectors/postgresql/definition/connector.json": _CONNECTOR_PG_UNCOVERED,
+        "connectors/wise/definition/connector.json": _CONNECTOR_WISE,
+        "connectors/postgresql/definition/connector.json": _CONNECTOR_PG,
     }
 
 
@@ -357,11 +367,31 @@ def test_gap_resolution_reports_unreadable_map_without_raising(validator):
 
 @_xfail("resolve_type_map_gaps")
 def test_gap_resolution_reports_invalid_map_with_its_direction(validator):
-    # Fails TypeMapReadDoc: not a list of rule objects.
+    # Fails TypeMapReadDoc: a list, but of a rule object missing its `match`
+    # discriminator (and its arrow_type).
     result = validator.resolve_type_map_gaps(
         maps={"type-map-read.json": [{"native_type": "STRING"}]}, direction="read", probes=["STRING"])
-    assert any(f["message_id"] == "invalid-type-map" and f.get("direction") == "read"
-               for f in result["findings"]), result["findings"]
+    invalid = [f for f in result["findings"] if f["message_id"] == "invalid-type-map"]
+    assert len(invalid) == 1, result["findings"]
+    assert invalid[0]["kind"] == "fail" and invalid[0]["severity"] == "error"
+    assert invalid[0]["direction"] == "read"
+
+
+@_xfail("resolve_type_map_gaps")
+def test_gap_resolution_direction_selects_the_matching_model(validator):
+    # Valid under TypeMapReadDoc (native_type is a bare matcher, unvalidated for
+    # placeholders) but invalid under TypeMapWriteDoc (native_type is the write
+    # side's render template, and `${` with no closing `}` is malformed there) —
+    # so direction alone decides which model this rule is checked against.
+    rule = {"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}
+    read_result = validator.resolve_type_map_gaps(
+        maps={"type-map.json": [rule]}, direction="read", probes=["VARCHAR${"])
+    assert not any(f["message_id"] == "invalid-type-map" for f in read_result["findings"]), read_result
+    write_result = validator.resolve_type_map_gaps(
+        maps={"type-map.json": [rule]}, direction="write", probes=["Utf8"])
+    invalid = [f for f in write_result["findings"] if f["message_id"] == "invalid-type-map"]
+    assert len(invalid) == 1, write_result
+    assert invalid[0]["direction"] == "write"
 
 
 @_xfail("resolve_type_map_gaps")
@@ -379,6 +409,22 @@ def test_gap_resolution_fully_covered_reports_no_findings(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING"])
     assert result == {"findings": []}
+
+
+@_xfail("resolve_type_map_gaps")
+def test_gap_resolution_falls_through_to_a_later_map_for_a_probe_the_first_does_not_cover(validator):
+    # Neither map alone covers every probe: a probe the first key's map does
+    # not render must still resolve via the second key's map rather than
+    # being reported as a gap just because the first key didn't cover it.
+    # (`resolve_type_map_gaps` reports only findings, never a resolved value,
+    # so this is the one multi-map behaviour its envelope can observe —
+    # WHICH map's value wins on a genuine conflict is not visible here.)
+    maps = {
+        "type-map-primary.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        "type-map-fallback.json": [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}],
+    }
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING", "BIGINT"])
+    assert result == {"findings": []}, result
 
 
 # ---------------------------------------------------------------------------
@@ -410,8 +456,17 @@ def test_key_that_is_both_document_and_directory_prefix_conflicts(validator):
 
 @_xfail("validate_tree")
 def test_output_finding_order_is_independent_of_input_mapping_order(validator):
-    documents = _connector_tree_documents()
+    # Two distinct uncovered endpoints, not the clean tree: comparing two
+    # empty findings lists cannot detect order-sensitivity at all.
+    documents = {
+        **_connector_tree_documents(),
+        "endpoints/v2__widgets.json": _uncovered_endpoint_document(
+            endpoint_id="v2__widgets", request_path="/v2/widgets", native="BOOLEAN", arrow="Boolean"),
+        "endpoints/v3__gadgets.json": _uncovered_endpoint_document(
+            endpoint_id="v3__gadgets", request_path="/v3/gadgets", native="INTEGER", arrow="Int64"),
+    }
     forward = validator.validate_tree(documents)
+    assert len(forward["findings"]) >= 2, forward  # non-vacuous: order genuinely matters below
     reversed_documents = dict(reversed(list(documents.items())))
     backward = validator.validate_tree(reversed_documents)
     assert forward == backward
@@ -477,6 +532,7 @@ def test_validate_connector_tree_validates_its_own_root_shape_directly(validator
 @_xfail("validate_pipeline_tree")
 def test_validate_pipeline_tree_validates_its_own_root_shape_directly(validator):
     result = validator.validate_pipeline_tree(_pipeline_tree_documents())
+    assert result["passed"] is True
     assert not any(f["message_id"] in ("ambiguous-layout", "unrecognized-layout") for f in result["findings"])
 
 
@@ -495,6 +551,21 @@ def test_validate_tree_reports_ambiguous_layout_when_both_shapes_match(validator
     result = validator.validate_tree(documents)
     assert result["passed"] is False
     assert any(f["message_id"] == "ambiguous-layout" for f in result["findings"])
+
+
+@_xfail("validate_tree")
+def test_validate_tree_dispatches_a_pipeline_tree_to_pipeline_validation(validator):
+    # Every other validate_tree case above exercises the connector-tree
+    # detector or the fallthrough cases; this is the one case that proves the
+    # registry actually dispatches a pipeline-shaped tree to pipeline
+    # validation rather than, say, always matching the connector-tree
+    # detector first. `_pipeline_tree_documents_with_embedded_connectors`
+    # gives it a real, path-scoped finding to prove the dispatch happened,
+    # the same way the connector-tree cases use `native-type-unresolved`.
+    result = validator.validate_tree(_pipeline_tree_documents_with_embedded_connectors())
+    assert not any(f["message_id"] in ("ambiguous-layout", "unrecognized-layout") for f in result["findings"])
+    assert any(f["path"].startswith("connectors/wise/") and f["rule"] == "RULE-PKG-030"
+               for f in result["findings"]), result["findings"]
 
 
 @_xfail("validate_pipeline_tree")
@@ -617,9 +688,10 @@ def test_connector_tree_equivalence_with_the_path_based_route(validator, tmp_pat
 def test_pipeline_tree_equivalence_with_the_path_based_route(validator, tmp_path):
     import validate as pipeline_adapter  # plugins/analitiq-pipeline-builder/scripts/validate.py
 
-    documents = _pipeline_tree_documents()
+    documents = _pipeline_tree_documents_with_two_findings()
     _write_tree(tmp_path, documents)
     path_based = pipeline_adapter.diagnostics_for(
         "pipeline", tmp_path / "pipelines" / "p" / "pipeline.json", bundle_root=tmp_path)
+    assert len(path_based["findings"]) >= 2, path_based  # non-vacuous: order genuinely matters below
     tree_based = validator.validate_pipeline_tree(documents)
     assert json.dumps(tree_based) == json.dumps(path_based)

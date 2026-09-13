@@ -43,8 +43,11 @@ DocumentSet = dict[str, DocumentSetValue]
 #: of `DOCUMENT_ARTIFACT_KINDS`: a `Literal`'s members must be spelled out for
 #: the type checker, which a name resolved at import time is not. Mirrors
 #: `plugins/analitiq-pipeline-builder/scripts/validate.py`'s `PIPELINE_ENTITIES`,
-#: which takes the same approach for the same reason and is pinned the same
-#: way. `test_document_set.py::test_entity_matches_document_artifact_kinds`
+#: which is a hand-spelled tuple for a different reason — it must not import
+#: `DOCUMENT_ARTIFACT_KINDS` at module level, since argparse evaluates its
+#: `--entity` `choices=` before that module's own self-install bootstrap runs
+#: — and is pinned the same way against drift.
+#: `test_document_set.py::test_entity_matches_document_artifact_kinds`
 #: pins this tuple to `DOCUMENT_ARTIFACT_KINDS` so the two cannot drift apart
 #: member by member.
 Entity = Literal[
@@ -59,8 +62,8 @@ Entity = Literal[
 
 
 class _FindingRequired(TypedDict):
-    """`finding()` sets these four unconditionally on every result it builds —
-    see `Finding`."""
+    """`finding()` sets every key below unconditionally on every result it
+    builds — see `Finding`."""
 
     message_id: str
     kind: Literal["fail", "notApplicable", "informational"]
@@ -126,19 +129,23 @@ def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
 def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     """Validate a pipeline bundle supplied as an in-memory `DocumentSet`
     instead of files on disk: the pipeline document, its sibling
-    `streams/*.json`, every `connections/*/connection.json` (plus their scoped
-    endpoints and type maps), and any `connectors/<slug>/definition/...`
-    subtree — assembled the way `plugins/analitiq-pipeline-builder/scripts/
-    validate.py`'s `_assemble_bundle` already does from a filesystem root, then
-    checked for referential integrity.
+    `streams/*.json`, and every `connections/*/connection.json` (plus their
+    scoped endpoints and type maps) — assembled the way `plugins/
+    analitiq-pipeline-builder/scripts/validate.py`'s `_assemble_bundle`
+    already does from a filesystem root, then checked for referential
+    integrity.
 
-    A `connectors/<slug>/definition/...` subtree is validated by resolving it
-    against the same package-kind registry `validate_tree` walks, scoping its
-    findings' `path` under the subtree's key prefix — so an embedded
-    connector's own coverage findings (native-type coverage, `transport_ref`
-    resolution, duplicate endpoint ids) are reported, not only its endpoint
-    ids read for stream-ref resolution the way the plugin's
-    `_connector_endpoint_sets` reads them today.
+    Any `connectors/<slug>/definition/...` subtree is validated separately, by
+    resolving it against the same package-kind registry `validate_tree`
+    walks and scoping its findings' `path` under the subtree's key prefix —
+    so an embedded connector's own coverage findings (native-type coverage,
+    `transport_ref` resolution, duplicate endpoint ids) are reported. Today's
+    plugin never resolves this subtree that way at all: `_assemble_bundle`
+    itself reads only that subtree's `connector.json`, and only for its
+    `connector_id` (the referential check that the identity is bundled); a
+    separate function, `_connector_endpoint_sets`, reads the subtree's
+    endpoint ids for stream-ref resolution — neither reports the subtree's
+    own coverage findings the way this function must.
 
     This is the pipeline package-kind's root-shape entry, called directly — it
     never walks the registry, so it can never itself report an
