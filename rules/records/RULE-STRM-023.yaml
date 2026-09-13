@@ -7,17 +7,18 @@ tier: reference
 severity: error
 scopes: [stream]
 validator: null
-enforcement_location: engine
+enforcement_location: platform-save
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]
 rationale: >
   The authoritative spelling lives in the source endpoint document, which
-  the stream model never sees, and both the contract and the engine compare
-  the strings literally — so a name that differs only in case or whitespace
-  is a perfectly valid document naming nothing. Normalizing is the natural
-  reflex, because the identifiers that arrive from introspection often look
-  untidy and because most tooling folds case for the author; here folding it
-  is what breaks the reference. Catching a violation means comparing the
-  string byte for byte against the endpoint document.
+  the stream model never sees — the same gap `RULE-STRM-022` names for field
+  references generally, and this rule is that check's exact-spelling case:
+  resolution happens server-side when the stream is saved, comparing the
+  string literally, so a name that differs only in case or whitespace is a
+  perfectly valid document naming nothing until then. Normalizing is the
+  natural reflex, because the identifiers that arrive from introspection
+  often look untidy and because most tooling folds case for the author; here
+  folding it is what breaks the reference.
 status: active
 superseded_by: null

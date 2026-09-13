@@ -1320,7 +1320,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "external-ci",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1330,7 +1330,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "That slug is the connector's identity in three places at once — the registry path the contract builds, the entry-point name the engine resolves the connector class by, and the directory itself — so a directory renamed for readability detaches the package from the document describing it and the engine silently falls back to the generic class for the kind. The directory is invisible to a single-document validation run: no contract model sees the path, and the validator resolves siblings relative to whatever path it was handed rather than comparing that path's name to `connector_id`, so only registry CI can compare the two.\n",
+   "rationale": "That slug is the connector's identity in three places at once — the registry path the contract builds, the entry-point name the engine resolves the connector class by, and the directory itself — so a directory renamed for readability detaches the package from the document describing it and the engine silently falls back to the generic class for the kind. The directory is invisible to a single-document validation run: no contract model sees the path, and the validator resolves siblings relative to whatever path it was handed rather than comparing that path's name to `connector_id`. Known enforcement gap at registry CI too, for the same reason `RULE-PKG-002`'s repository-root layout is: every documented CI step (the wheel build, entry-point resolution, the conformance kit) reaches the package through its installed distribution, never the release directory's own name, so a rename that leaves the document, package mapping and entry points internally consistent passes every one of them.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3469,7 +3469,7 @@
     "api-endpoint"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -3481,7 +3481,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The transport is where the connection's origin, its auth and its TLS settings are declared, so a URL that leaves that origin either arrives without the credentials the request needs or carries them to a host the connection never named. The half of containment that checks the transport *name* is settled at author time; this half is not. `request.path` is an open string and a followed next-page link comes from the provider's own response, so where a URL actually lands is decided only when the engine builds the request — and the engine as it stands opens one session at connect time and refuses a link that leaves that origin, which `_RequestBase.transport_ref`'s description already declares unenforced by the contract. Catching a violation means reading every URL-producing site in the document against the sibling connector's transports.\n",
+   "rationale": "The transport is where the connection's origin, its auth and its TLS settings are declared, so a URL that leaves that origin either arrives without the credentials the request needs or carries them to a host the connection never named. The half of containment that checks the transport *name* is settled at author time; this half is not. `request.path` is an open string and a followed next-page link comes from the provider's own response, so where a URL actually lands is decided only when the engine builds the request. Known enforcement gap, pinned by `TestOriginContainmentGapIsRecorded` in `test_endpoint_transport_ref.py`: the engine opens one session from `default_transport` and no production call site selects a transport per operation, so an endpoint that correctly declares a non-default `transport_ref` states an origin nothing currently reaches — the session's own default-origin guard checks the wrong transport entirely for that case, and there is no write-path origin guard at all. Catching a violation means reading every URL-producing site in the document against the sibling connector's transports.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6420,7 +6420,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "platform-save",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6432,7 +6432,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The authoritative spelling lives in the source endpoint document, which the stream model never sees, and both the contract and the engine compare the strings literally — so a name that differs only in case or whitespace is a perfectly valid document naming nothing. Normalizing is the natural reflex, because the identifiers that arrive from introspection often look untidy and because most tooling folds case for the author; here folding it is what breaks the reference. Catching a violation means comparing the string byte for byte against the endpoint document.\n",
+   "rationale": "The authoritative spelling lives in the source endpoint document, which the stream model never sees — the same gap `RULE-STRM-022` names for field references generally, and this rule is that check's exact-spelling case: resolution happens server-side when the stream is saved, comparing the string literally, so a name that differs only in case or whitespace is a perfectly valid document naming nothing until then. Normalizing is the natural reflex, because the identifiers that arrive from introspection often look untidy and because most tooling folds case for the author; here folding it is what breaks the reference.\n",
    "status": "active",
    "superseded_by": null
   },

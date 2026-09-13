@@ -6,7 +6,7 @@ tier: reference
 severity: error
 scopes: [api-endpoint]
 validator: null
-enforcement_location: engine
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 targets: [_RequestBase]
 rationale: >
@@ -16,10 +16,15 @@ rationale: >
   named. The half of containment that checks the transport *name* is settled at
   author time; this half is not. `request.path` is an open string and a followed
   next-page link comes from the provider's own response, so where a URL actually
-  lands is decided only when the engine builds the request — and the engine as
-  it stands opens one session at connect time and refuses a link that leaves
-  that origin, which `_RequestBase.transport_ref`'s description already declares
-  unenforced by the contract. Catching a violation means reading every
-  URL-producing site in the document against the sibling connector's transports.
+  lands is decided only when the engine builds the request. Known enforcement
+  gap, pinned by `TestOriginContainmentGapIsRecorded` in
+  `test_endpoint_transport_ref.py`: the engine opens one session from
+  `default_transport` and no production call site selects a transport per
+  operation, so an endpoint that correctly declares a non-default
+  `transport_ref` states an origin nothing currently reaches — the session's
+  own default-origin guard checks the wrong transport entirely for that case,
+  and there is no write-path origin guard at all. Catching a violation means
+  reading every URL-producing site in the document against the sibling
+  connector's transports.
 status: active
 superseded_by: null
