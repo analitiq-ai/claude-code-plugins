@@ -5,17 +5,16 @@ statement: >
 tier: shape
 severity: error
 scopes: [any]
-validator: null
-enforcement_location: unenforced
+validator: "analitiq.contracts.shared.rules::HeaderMergeRules._headers_no_null_or_empty_value"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [HttpTransport, TransportDefaults, _RequestBase]
 rationale: >
-  The headers map is typed open and what the runtime does with an
-  empty resolved value is deliberately left undecided by the contract, so an
-  explicit null validates and behaves however the runtime happens to — most
-  often by sending the header with an empty value, which on an inherited
-  auth header is a rejected request rather than an inherited default that
-  went away. The removal list is the only spelling that states the intent
-  where the resolution order can act on it.
+  The header merge resolves each layer's value and skips overriding when the
+  resolved value is null, so a null-valued header leaves whatever an earlier
+  layer already set in place rather than clearing it — not a deletion. An
+  empty-string value does override and reaches the wire as an empty header,
+  which on an inherited auth header is a rejected request rather than an
+  inherited default that went away. The removal list is the only spelling
+  that states the intent where the resolution order can act on it.
 status: active
 superseded_by: null
