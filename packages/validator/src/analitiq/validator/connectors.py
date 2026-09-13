@@ -1114,6 +1114,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             # the actionable findings with a generic "validator bug" via _run_guarded).
             continue
         findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
+        findings.extend(_keyset_initial_null_findings(ep_doc))
         findings.extend(_run_guarded(_embedded_schema_example_findings, ep_doc,
                                      ep_path.name, crash_label="embedded schema example grading",
                                      rule="RULE-ENDP-063"))

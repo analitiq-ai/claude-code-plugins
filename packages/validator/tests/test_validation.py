@@ -897,6 +897,18 @@ def test_keyset_non_null_initial_is_clean(initial, validator):
     assert not any(f.get("rule") == "RULE-ENDP-044" for f in findings), findings
 
 
+def test_coverage_flags_keyset_explicit_null_initial(tmp_path, connector_base, validator):
+    # End-to-end through the connector-package route (check_coverage's sibling-
+    # endpoint loop), not just the standalone single-document route: the two
+    # walk different code paths, and only the standalone one used to call
+    # `_keyset_initial_null_findings` (Codex P2).
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+                {"v1__records.json": _keyset_endpoint(initial=None)})
+    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    assert any(f.get("rule") == "RULE-ENDP-044" for f in findings), findings
+
+
 # --- RULE-SHRD-003: every authored document must declare `$schema` ------------
 
 def _connection_doc(schema_url=...):
