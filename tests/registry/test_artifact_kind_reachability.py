@@ -2,9 +2,9 @@
 
 The defect class this closes: a rule whose statement binds one artifact's
 author while its `artifact_kinds` name another, so the reference renders it
-into a file that author never opens — and the per-scope headers tell them no
-other file applies. Without this comparison, each instance is only ever found
-by a person reading one record.
+into a file that author never opens — and the per-artifact-kind "Grades:"
+headers tell them no other file applies. Without this comparison, each
+instance is only ever found by a person reading one record.
 
 The comparison is structural, not semantic: for every artifact kind there is a
 set of document root models, and a model is *reachable* from an artifact kind
@@ -53,12 +53,16 @@ def _roots() -> dict[str, tuple[type, ...]]:
 #: Artifact kinds deliberately given no document root: `connector-package` is
 #: a repository layout no model renders, `any` binds every document by fiat,
 #: and `data-sync-run-status` describes a wire payload whose schema is
-#: hand-maintained outside the model tree. Declared rather than derived — a
-#: new ARTIFACT_KINDS member must be classified here or in `_roots()`, and the
-#: partition test below is what refuses an unclassified one. Deriving this as
-#: ARTIFACT_KINDS-minus-roots would silently exempt a new document family
-#: whose root nobody wired in.
-UNROOTED = {"connector-package", "any", "data-sync-run-status"}
+#: hand-maintained outside the model tree. Derived from the contract's own
+#: document/non-document partition rather than a second hand-typed set, so
+#: the two cannot drift apart member by member (`no-drift-surfaces.md`). This
+#: derives from `DOCUMENT_ARTIFACT_KINDS`, never from `_roots()` — a new
+#: ARTIFACT_KINDS member the contract classifies as a document lands outside
+#: UNROOTED regardless of whether `_roots()` has caught up, so the partition
+#: test below still refuses it until a root is wired in.
+from analitiq.contracts.shared.rule_record import ARTIFACT_KINDS, DOCUMENT_ARTIFACT_KINDS
+
+UNROOTED = set(ARTIFACT_KINDS) - set(DOCUMENT_ARTIFACT_KINDS)
 
 #: Records whose statement semantically narrows a structurally wider reach —
 #: the model is reachable from these kinds too, but the sentence does not
@@ -196,9 +200,8 @@ def test_the_guard_is_not_vacuous() -> None:
 
 def test_every_artifact_kind_is_rooted_or_declared_unrooted() -> None:
     """The partition that keeps a new ARTIFACT_KINDS member from being
-    silently exempt: it must gain a root in `_roots()` or a reasoned
-    UNROOTED entry."""
-    from analitiq.contracts.shared.rule_record import ARTIFACT_KINDS
-
+    silently exempt: a document kind must gain a root in `_roots()`; a
+    non-document kind must be excluded from DOCUMENT_ARTIFACT_KINDS, which is
+    what UNROOTED derives from."""
     assert set(_roots()) | UNROOTED == set(ARTIFACT_KINDS)
     assert not set(_roots()) & UNROOTED

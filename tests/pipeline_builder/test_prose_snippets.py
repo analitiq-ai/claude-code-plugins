@@ -227,7 +227,7 @@ def test_real_tree_has_no_unaccounted_jsonish_lines():
 _MARKER = re.compile(
     r"^\s*<!--\s*(?:"
     r"(?P<illustrative>illustrative)"
-    r"|validate:\s*(?P<entity>[a-z_]+)(?:#(?P<pointer>/\S+))?"
+    r"|validate:\s*(?P<entity>[a-z][a-z-]*)(?:#(?P<pointer>/\S+))?"
     r"|invalid:\s*(?P<rule>RULE-[A-Z]+-\d+)"
     r")\s*-->\s*$")
 
@@ -523,7 +523,7 @@ def _grading_entity(marker: Marker, label: str) -> str:
     """The adapter entity a block grades as.
 
     A ``validate:`` marker states it. An ``invalid:`` marker states only the
-    rule id; the registry's ``scope`` field supplies the entity —
+    rule id; the registry's ``artifact_kinds`` field supplies the entity —
     which also makes a dangling rule id fail the build, the same property a
     citation carries (plugin-prose rung 1). ``invalid:`` blocks target a
     sub-shape by showing its enclosing key (the wrapped-context form), which

@@ -120,7 +120,7 @@ ARTIFACT_KINDS = (
 #: layout rather than a single document, `data-sync-run-status` is a server
 #: response neither plugin authors — but a call site naming exactly one kind of
 #: document a plugin dispatches on (the pipeline-builder's validation adapter,
-#: for instance) never means one of those three. Derived rather than a second
+#: for instance) never means one of those. Derived rather than a second
 #: hand-typed tuple, so the two cannot drift apart member by member.
 DOCUMENT_ARTIFACT_KINDS = tuple(
     kind for kind in ARTIFACT_KINDS if kind not in ("any", "connector-package", "data-sync-run-status")
