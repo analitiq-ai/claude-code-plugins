@@ -21,6 +21,9 @@ rationale: >
   logged at INFO level, not raised, so the connection succeeds unverified
   and the exact silent-plaintext-session risk this half of the rule exists
   to close is the one case nothing catches. The `tls` block is JSON this
-  repo validates while the hooks are dialect methods it never sees.
+  repo validates while the hooks are dialect methods it never sees. Rated
+  `unenforced` as a whole rather than `engine`: the vocabulary has no member
+  for "one obligation, one enforced half and one silent half," and the
+  silent half is the one this rule exists to close.
 status: active
 superseded_by: null

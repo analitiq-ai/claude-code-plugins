@@ -22,6 +22,9 @@ rationale: >
   source table the engine itself created carries these columns as ordinary
   discovered columns, so copying the source's list forward reproduces them
   without anyone deciding to, and the column model accepts any non-empty
-  name, so nothing in the document can recognise them as synthetic.
+  name, so nothing in the document can recognise them as synthetic. Rated
+  `unenforced` as a whole rather than `engine`: the ordinary column, the
+  case that actually happens (an author declaring or mirroring the audit
+  column), is the silent one.
 status: active
 superseded_by: null

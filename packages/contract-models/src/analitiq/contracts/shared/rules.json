@@ -1181,7 +1181,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Naming a strategy and shipping one are separate edits in separate files, so the pair drifts easily: an author who renames the entry-point class, or who copies a strategy id from a connector whose package they did not copy, leaves a document that validates and, if a registered discovery mechanism keyed by this id exists for the connector's kind, a connection that finds none at discovery time. `strategy` is an open string here regardless, so an unregistered id passes every check this repo runs.\n",
+   "rationale": "Naming a strategy and shipping one are separate edits in separate files, so the pair drifts easily: an author who renames the entry-point class, or who copies a strategy id from a connector whose package they did not copy, leaves a document that validates. `strategy` is an open string here, so an unregistered id passes every check this repo runs. Known enforcement gap: no discovery-strategy registry matching this description was located in the engine's SQL discovery path, so whether — and how — an unregistered id actually fails at discovery time is not confirmed.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1263,7 +1263,7 @@
   },
   {
    "id": "RULE-CTOR-040",
-   "statement": "A `database` connector MUST declare its `sql_capabilities` block, which the contract leaves optional and the engine requires before it will run any write mode.\n",
+   "statement": "A `database` connector that supports writing MUST declare its `sql_capabilities` block, which the contract leaves optional.\n",
    "tier": "shape",
    "severity": "error",
    "scopes": [
@@ -1282,7 +1282,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine reads the declaration instead of probing the live database, so an absent block is not a request for defaults, and the connector reads as finished right up until someone tries to write through it. The field is deliberately optional on `DatabaseConnector` so a partial document still validates. Known enforcement gap: no located engine mechanism refuses every write mode outright for a connector shipping no `sql_capabilities` at all — the class-level role checks that exist grade the CDK's own kind-default classes against `Readable`/`Writable`, not a per-connector declaration this document carries, so what actually happens against a live system this repo never sees is not confirmed.\n",
+   "rationale": "The engine reads the declaration instead of probing the live database, so an absent block is not a request for defaults, and the connector reads as finished right up until someone tries to write through it. The field is deliberately optional on `DatabaseConnector` so a partial document still validates. Known enforcement gap: no located engine mechanism refuses every write mode outright for a connector shipping no `sql_capabilities` at all — the class-level role checks that exist grade the CDK's own kind-default classes at class-definition time, not a per-connector declaration this document carries, so what actually happens against a live system this repo never sees is not confirmed.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1502,7 +1502,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Capability comes from the protocol the class in `connector.py` satisfies rather than from a flag in the document, so the two artifacts can disagree without either looking wrong on its own: the class advertises writes and the document declares no `sql_capabilities`. Known enforcement gap: no contract model sees `connector.py`, so nothing here can tell a write-capable connector from a discovery-only one and the field stays optional; no located engine mechanism checks the disagreement either — the class-level role checks that exist grade the CDK's own kind-default classes against `Readable`/`Writable` at class-definition time, not this connector's own declared block against its own class, so what a live write attempt actually does is not confirmed.\n",
+   "rationale": "Capability comes from the protocol the class in `connector.py` satisfies rather than from a flag in the document, so the two artifacts can disagree without either looking wrong on its own: the class advertises writes and the document declares no `sql_capabilities`. Known enforcement gap: no contract model sees `connector.py`, so nothing here can tell a write-capable connector from a discovery-only one and the field stays optional; no located engine mechanism checks the disagreement either — the class-level role checks that exist grade the CDK's own kind-default classes at class-definition time, not this connector's own declared block against its own class, so what a live write attempt actually does is not confirmed.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2188,7 +2188,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine adds its own bookkeeping columns to any table it creates. Known enforcement gap, and not the loud one it sounds like: for the write handler's main audit column, declaring it ahead of time is not a collision the engine raises on — the handler finds its own column already present and silently skips adding a second one, so the document's mistake costs nothing visible and the column's true origin (engine-synthesised, not authored) goes unrecorded. Only the keyless-insert audit column collides loudly, and only for that one stream shape. The trap is the mirror case either way: a source table the engine itself created carries these columns as ordinary discovered columns, so copying the source's list forward reproduces them without anyone deciding to, and the column model accepts any non-empty name, so nothing in the document can recognise them as synthetic.\n",
+   "rationale": "The engine adds its own bookkeeping columns to any table it creates. Known enforcement gap, and not the loud one it sounds like: for the write handler's main audit column, declaring it ahead of time is not a collision the engine raises on — the handler finds its own column already present and silently skips adding a second one, so the document's mistake costs nothing visible and the column's true origin (engine-synthesised, not authored) goes unrecorded. Only the keyless-insert audit column collides loudly, and only for that one stream shape. The trap is the mirror case either way: a source table the engine itself created carries these columns as ordinary discovered columns, so copying the source's list forward reproduces them without anyone deciding to, and the column model accepts any non-empty name, so nothing in the document can recognise them as synthetic. Rated `unenforced` as a whole rather than `engine`: the ordinary column, the case that actually happens (an author declaring or mirroring the audit column), is the silent one.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5293,7 +5293,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine has no built-in TLS interpretation for any driver — the CDK base dialect raises for every mode — so declaring `tls` with no connect-argument hook implemented is inert on its own and the connection fails at connect. The verification hook is the other half of the pair because a driver that quietly negotiates a plain session would otherwise satisfy a TLS-promising mode with no encryption at all, and that half is the actual known enforcement gap: a missing verification hook is only logged at INFO level, not raised, so the connection succeeds unverified and the exact silent-plaintext-session risk this half of the rule exists to close is the one case nothing catches. The `tls` block is JSON this repo validates while the hooks are dialect methods it never sees.\n",
+   "rationale": "The engine has no built-in TLS interpretation for any driver — the CDK base dialect raises for every mode — so declaring `tls` with no connect-argument hook implemented is inert on its own and the connection fails at connect. The verification hook is the other half of the pair because a driver that quietly negotiates a plain session would otherwise satisfy a TLS-promising mode with no encryption at all, and that half is the actual known enforcement gap: a missing verification hook is only logged at INFO level, not raised, so the connection succeeds unverified and the exact silent-plaintext-session risk this half of the rule exists to close is the one case nothing catches. The `tls` block is JSON this repo validates while the hooks are dialect methods it never sees. Rated `unenforced` as a whole rather than `engine`: the vocabulary has no member for \"one obligation, one enforced half and one silent half,\" and the silent half is the one this rule exists to close.\n",
    "status": "active",
    "superseded_by": null
   },

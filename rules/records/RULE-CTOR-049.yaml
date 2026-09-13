@@ -18,8 +18,8 @@ rationale: >
   write-capable connector from a discovery-only one and the field stays
   optional; no located engine mechanism checks the disagreement either — the
   class-level role checks that exist grade the CDK's own kind-default
-  classes against `Readable`/`Writable` at class-definition time, not this
-  connector's own declared block against its own class, so what a live write
-  attempt actually does is not confirmed.
+  classes at class-definition time, not this connector's own declared block
+  against its own class, so what a live write attempt actually does is not
+  confirmed.
 status: active
 superseded_by: null
