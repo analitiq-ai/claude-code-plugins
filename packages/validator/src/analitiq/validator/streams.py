@@ -6,8 +6,10 @@ the same model the published `stream` JSON Schema is generated from):
 rule (endpoint-ref shape, unique destinations, the authored-top-level guard)
 offline, no schema fetch, no drift. There is no cross-file or referential check a
 stream document needs in isolation — its wiring within an assembled run is checked
-by the pipeline-bundle kind — so the model IS the whole validity story, and this
-kind registers via `register_model_kind`.
+by the pipeline-bundle kind. The one check the model cannot carry is
+RULE-SHRD-003 (`$schema` omission is a `warning`, and a `@model_validator`
+rejection always surfaces as `error`), so this kind registers a combined
+validator.
 
 At import this module registers its detector -> validator pair with the core
 dispatch registry, so `_core` never hard-codes a stream branch — a new kind is a
@@ -17,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._core import contract_model_domain, register_model_kind
+from ._core import contract_model_domain, register_kind, _missing_schema_url_findings, _model_findings
 
 # Import the contract model under the shared DOMAIN guard (the model binds the
 # `$schema` host at import; see `contract_model_domain`).
@@ -35,4 +37,8 @@ def is_stream_doc(doc: Any) -> bool:
     return isinstance(doc, dict) and "source" in doc and "destinations" in doc
 
 
-register_model_kind(is_stream_doc, _STREAM_ADAPTER)
+def _validate_stream(doc: Any, doc_path=None, schema_url=None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+    return _model_findings(doc, _STREAM_ADAPTER) + _missing_schema_url_findings(doc)
+
+
+register_kind(is_stream_doc, _validate_stream)

@@ -53,6 +53,7 @@ from ._core import (
     finding,
     register_kind,
     _bounded,
+    _missing_schema_url_findings,
     _model_findings,
     _run_guarded,
 )
@@ -1161,6 +1162,7 @@ _WRITE_MAP_ADAPTER = TypeAdapter(TypeMapWriteDoc)
 
 def _validate_connector(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
     findings = _model_findings(doc, _CONNECTOR_ADAPTER)
+    findings += _missing_schema_url_findings(doc)
     findings += check_coverage(doc, doc_path)
     return findings
 

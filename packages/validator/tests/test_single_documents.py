@@ -10,6 +10,10 @@ exclusive: no authored kind claims another's shape.
 import json
 from pathlib import Path
 
+from analitiq.contracts.connection import CONNECTION_SCHEMA_URL
+from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
+from analitiq.contracts.stream import STREAM_SCHEMA_URL
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_SRC_ROOT = _REPO_ROOT / "contract-models" / "src"
 SRC_ROOT = _REPO_ROOT / "validator" / "src"
@@ -26,11 +30,12 @@ def _errors(findings):
 # --- valid document fixtures (minimal, model-valid) -------------------------
 
 def _valid_connection() -> dict:
-    return {"connector_id": "stripe"}
+    return {"$schema": CONNECTION_SCHEMA_URL, "connector_id": "stripe"}
 
 
 def _valid_stream() -> dict:
     return {
+        "$schema": STREAM_SCHEMA_URL,
         "pipeline_id": PIPELINE,
         "source": {
             "endpoint_ref": {
@@ -54,6 +59,7 @@ def _valid_stream() -> dict:
 
 def _valid_pipeline() -> dict:
     return {
+        "$schema": PIPELINE_SCHEMA_URL,
         "connections": {
             "source": f"{SOURCE_CONN}_v1",
             "destinations": [f"{DEST_CONN}_v1"],

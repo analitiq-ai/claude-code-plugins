@@ -6,18 +6,20 @@ statement: >
 tier: shape
 severity: warning
 scopes: [any]
-validator: null
-enforcement_location: unenforced
+validator: "analitiq.validator._core::_missing_schema_url_findings"
 owners: [connector-plugin, pipeline-plugin]
+targets: [ConnectionAuthored, StreamAuthored, PipelineAuthored, ConnectorBase]
 rationale: >
-  Where the contract leaves the field optional an omission validates cleanly,
-  so requiring it everywhere is a plugin house rule no validator expresses. A
-  presence check is a plain mechanical comparison — the field is absent or it
-  is not the family's published `Literal` URL — so nothing about catching the
-  omission needs a human judgment call; it is simply a check nothing here runs
-  today. Without it a reviewer, an editor's live validation and any future
+  Where the contract leaves the field optional a present-but-wrong value is
+  already rejected structurally — each of these models types `$schema` as a
+  `Literal` naming its family's published URL — so the one gap is omission, a
+  plain mechanical comparison: the key is absent or it is not. Checked in
+  `analitiq.validator` rather than by a `@model_validator` on each model
+  itself: this rule's declared severity is `warning`, and a model-level
+  refusal always surfaces as an `error`-severity finding regardless of what a
+  record declares, so a `warning`-severity rule must be a validator check
+  instead. Without it a reviewer, an editor's live validation and any future
   migration all have to guess which contract the document was authored
-  against, and it silently reads as belonging to whatever is current. Nothing
-  breaks the day it is omitted, which is precisely why the omission survives.
+  against, and it silently reads as belonging to whatever is current.
 status: active
 superseded_by: null

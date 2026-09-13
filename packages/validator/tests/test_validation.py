@@ -12,8 +12,12 @@ from pathlib import Path
 
 import pytest
 
+from analitiq.contracts.connection import CONNECTION_SCHEMA_URL
+from analitiq.contracts.connector import CONNECTOR_SCHEMA_URL
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
 from analitiq.contracts.endpoints import _REFUSED_REFERENCE_KEYWORDS
+from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
+from analitiq.contracts.stream import STREAM_SCHEMA_URL
 from analitiq.validator.connectors import (
     _DATABASE_KINDS,
     _READ_MAP_FILENAME,
@@ -891,6 +895,86 @@ def test_keyset_explicit_null_initial_warns(validator):
 def test_keyset_non_null_initial_is_clean(initial, validator):
     findings = validator.validate_document(_keyset_endpoint(initial=initial))
     assert not any(f.get("rule") == "RULE-ENDP-044" for f in findings), findings
+
+
+# --- RULE-SHRD-003: every authored document must declare `$schema` ------------
+
+def _connection_doc(schema_url=...):
+    doc = {"connector_id": "stripe"}
+    if schema_url is not ...:
+        doc["$schema"] = schema_url
+    return doc
+
+
+def _stream_doc(schema_url=...):
+    doc = {
+        "pipeline_id": "b4904c77-0a4a-4a8d-a768-4a8b5f2f2414",
+        "source": {
+            "endpoint_ref": {
+                "scope": "connector",
+                "connection_id": "11111111-1111-4111-8111-111111111111_v1",
+                "endpoint_id": "transfers",
+            }
+        },
+        "destinations": [
+            {
+                "endpoint_ref": {
+                    "scope": "connector",
+                    "connection_id": "22222222-2222-4222-8222-222222222222_v1",
+                    "endpoint_id": "orders",
+                },
+                "write": {"mode": "insert"},
+            }
+        ],
+    }
+    if schema_url is not ...:
+        doc["$schema"] = schema_url
+    return doc
+
+
+def _pipeline_doc(schema_url=...):
+    doc = {
+        "connections": {
+            "source": "11111111-1111-4111-8111-111111111111_v1",
+            "destinations": ["22222222-2222-4222-8222-222222222222_v1"],
+        }
+    }
+    if schema_url is not ...:
+        doc["$schema"] = schema_url
+    return doc
+
+
+def _connector_doc(schema_url=...):
+    doc = json.loads((CORPUS / "valid_connector.json").read_text())
+    if schema_url is ...:
+        del doc["$schema"]
+    else:
+        doc["$schema"] = schema_url
+    return doc
+
+
+_SHRD_003_FAMILIES = [
+    (_connection_doc, CONNECTION_SCHEMA_URL),
+    (_stream_doc, STREAM_SCHEMA_URL),
+    (_pipeline_doc, PIPELINE_SCHEMA_URL),
+    (_connector_doc, CONNECTOR_SCHEMA_URL),
+]
+
+
+@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
+def test_missing_schema_url_warns(make_doc, schema_url, validator):
+    findings = validator.validate_document(make_doc(schema_url=...))
+    hits = [f for f in findings if f.get("rule") == "RULE-SHRD-003"]
+    assert hits, findings
+    assert hits[0]["kind"] == "fail"
+    assert hits[0]["severity"] == "warning"
+    assert hits[0]["path"] == "/$schema"
+
+
+@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
+def test_present_schema_url_is_clean(make_doc, schema_url, validator):
+    findings = validator.validate_document(make_doc(schema_url=schema_url))
+    assert not any(f.get("rule") == "RULE-SHRD-003" for f in findings), findings
 
 
 # --- Database endpoint id = slug+hash8 (shared analitiq.contracts.endpoint_identity SSOT) ---

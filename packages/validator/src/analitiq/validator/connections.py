@@ -6,8 +6,10 @@ generated from): `TypeAdapter(...).validate_python` enforces its structure *and*
 every cross-field rule (the storage-map / `secret_refs` scheme rules, the
 authored-top-level guard) offline, no schema fetch, no drift. There is no
 cross-file or referential check a connection document needs in isolation — its
-place in an assembled run is checked by the pipeline-bundle kind — so the model
-IS the whole validity story, and this kind registers via `register_model_kind`.
+place in an assembled run is checked by the pipeline-bundle kind. The one check
+the model cannot carry is RULE-SHRD-003 (`$schema` omission is a `warning`, and
+a `@model_validator` rejection always surfaces as `error`), so this kind
+registers a combined validator.
 
 At import this module registers its detector -> validator pair with the core
 dispatch registry, so `_core` never hard-codes a connection branch — a new kind
@@ -17,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._core import contract_model_domain, register_model_kind
+from ._core import contract_model_domain, register_kind, _missing_schema_url_findings, _model_findings
 
 # Import the contract model under the shared DOMAIN guard (the model binds the
 # `$schema` host at import; see `contract_model_domain`).
@@ -42,4 +44,8 @@ def is_connection_doc(doc: Any) -> bool:
     )
 
 
-register_model_kind(is_connection_doc, _CONNECTION_ADAPTER)
+def _validate_connection(doc: Any, doc_path=None, schema_url=None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+    return _model_findings(doc, _CONNECTION_ADAPTER) + _missing_schema_url_findings(doc)
+
+
+register_kind(is_connection_doc, _validate_connection)
