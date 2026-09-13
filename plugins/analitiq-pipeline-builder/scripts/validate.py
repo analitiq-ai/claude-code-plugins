@@ -663,10 +663,15 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     document, or a caller misusing this function's own signature, short-circuits.
     `direction` (``"read"``/``"write"``) is required with ``entity == "type-map"``
     and meaningless otherwise — a caller violating that raises `ValueError`."""
-    if (entity == "type-map") != (direction is not None):
+    if entity == "type-map":
+        if direction not in ("read", "write"):
+            raise ValueError(
+                f"direction must be 'read' or 'write' with entity='type-map' "
+                f"(got direction={direction!r}).")
+    elif direction is not None:
         raise ValueError(
-            f"direction is required with entity='type-map', and invalid otherwise "
-            f"(entity={entity!r}, direction={direction!r}).")
+            f"direction is invalid with entity={entity!r} (only entity='type-map' "
+            f"takes a direction; got direction={direction!r}).")
     try:
         doc = _read_json(document_path)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:

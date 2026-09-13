@@ -426,9 +426,10 @@ and leaves everything else — including `.secrets/` — untouched.
    through the same fix-and-revalidate loop. When a pipeline or stream changed, also
    validate its **referenced closure** — every connection the pipeline references
    (public and private), every connection-scoped private endpoint those
-   connections own, and any connection-scoped type maps beside them — each
-   against its own contract (entities `connection` / `database-endpoint` /
-   `type-map`), which catches a stale or broken
+   connections own (entities `connection` / `database-endpoint`), and any
+   connection-scoped `type-map-read.json` / `type-map-write.json` beside them
+   (entity `type-map`, `--direction read` / `write` matching the file) — which
+   catches a stale or broken
    referenced artifact; plus the whole bundle with `bundle_root: .`, the pass
    that resolves cross-document references and the on-disk endpoint file names
    (`references/io-contracts.md` documents its finding ids and shape). Both
