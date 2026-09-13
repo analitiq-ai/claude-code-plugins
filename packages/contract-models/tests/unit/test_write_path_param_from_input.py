@@ -397,12 +397,11 @@ class TestPathParamBindingNotRegressed:
             )}))
 
     def test_path_param_that_is_neither_binding_still_rejected(self):
-        # A `${record.id}` template is not a binding expression; the original
-        # "must be a {from_param} expression" message is what an author sees.
-        with pytest.raises(
-            ValidationError,
-            match=r"request\.path_params\['id'\] must be a `\{from_param: <name>\}` expression",
-        ):
+        # A `${record.id}` template carries a value-expression sigil into a
+        # slot that never resolves one — RULE-SHRD-006 names that defect
+        # before the generic "must be a {from_param} expression" shape check
+        # is ever reached.
+        with pytest.raises(ValidationError, match=r"\[RULE-SHRD-006\]"):
             parse_endpoint(_api_payload({"insert": _write_op(
                 path_params={"id": {"template": "${record.id}"}},
             )}))

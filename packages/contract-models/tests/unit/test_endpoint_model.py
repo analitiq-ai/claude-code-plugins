@@ -1719,6 +1719,24 @@ class TestRequestPathPlaceholders:
                 }},
             ))
 
+    def test_dollar_brace_template_in_path_params_rejected(self):
+        """`path_params` resolves only `{from_param}`/`{from_input}` singleton
+        dispatch — a bare `${...}` string dropped in as a value never reaches
+        the template resolver and ships on the wire unexpanded."""
+        with pytest.raises(ValidationError, match="RULE-SHRD-006"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {
+                        "method": "GET",
+                        "path": "/v1/{account_id}/transactions",
+                        "path_params": {"account_id": "${account_id}"},
+                    },
+                    "params": {"account_id": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.account_id"}}},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
     def test_camel_case_placeholder_rejected(self):
         """The placeholder is the document's slot, so the provider's spelling
         of the value does not travel into `path` with the path it was copied
