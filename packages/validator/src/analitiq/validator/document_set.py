@@ -165,9 +165,9 @@ def _key_and_value_findings(raw_key: Any, value: Any) -> tuple[str | None, list[
         return None, [finding(
             message_id="invalid-key", kind="fail", path=raw_key,
             message=(
-                f"key {raw_key!r} is not a usable relative document path: an "
-                "absolute path, a '..' segment, and the empty string are all "
-                "rejected."))]
+                f"key {raw_key!r} is not a usable relative document path: it must "
+                "be a non-empty relative path (no leading '/') with no '.' or "
+                "'..' path segment."))]
     if not isinstance(value, (str, bytes, dict, list)):
         return None, [finding(
             message_id="invalid-value", kind="fail", path=key,
@@ -260,10 +260,19 @@ def _at_site(site: str, findings: list[dict]) -> list[dict]:
 
 def _validate_tree_document(fs: _VirtualFS, key: str, *, entity: str | None = None) -> tuple[Any, list[dict]]:
     """Parse `key`'s content and validate it via the single-document route,
-    isolating a parse crash to this one key. Returns `(doc, findings)` — `doc`
-    is `None` on a parse crash (already reported in `findings`), so a caller
-    that also needs the parsed value for bundle assembly reads it off this
-    return instead of parsing `key` a second time.
+    isolating a materialization or parse crash to this one key. Returns
+    `(doc, findings)` — `doc` is `None` when `key` never materialized or when
+    parsing it crashed, so a caller that also needs the parsed value for
+    bundle assembly reads it off this return instead of parsing `key` a
+    second time, and can call this function unconditionally rather than
+    pre-guarding with `fs.materialized(key)` itself.
+
+    A key that never materialized produces no NEW finding here —
+    `_normalize_documents` already reported that crash (`internal-error`,
+    `path=key`) when it first tried to turn the value into text, and a second
+    finding for the same crash would only double-report it. A key that
+    materializes but fails to parse as JSON gets its own `internal-error`
+    here instead, since nothing upstream could have caught that failure.
 
     `entity`, when given, is passed straight through to `validate_document`'s
     own explicit-kind override, for a key whose kind this module already
@@ -277,13 +286,16 @@ def _validate_tree_document(fs: _VirtualFS, key: str, *, entity: str | None = No
     `internal-error` (`fail`/`error`), scoped to this key rather than the
     framework's generic no-rule case, and distinct from `check-crashed`.
 
-    The crash finding's own `path` is `"/"` — the same whole-document pointer
-    convention `validate_document` itself uses (e.g. `unrecognized-document`)
-    — never `key`: every caller re-roots this function's findings at a site
-    with `_at_site`, which already turns a leading-slash path into `site` +
-    that path; a bare `key` here would instead be appended AGAIN as a
-    relative suffix, double-prefixing the finding's path.
+    The parse-crash finding's own `path` is `"/"` — the same whole-document
+    pointer convention `validate_document` itself uses (e.g.
+    `unrecognized-document`) — never `key`: every caller re-roots this
+    function's findings at a site with `_at_site`, which already turns a
+    leading-slash path into `site` + that path; a bare `key` here would
+    instead be appended AGAIN as a relative suffix, double-prefixing the
+    finding's path.
     """
+    if not fs.materialized(key):
+        return None, []
     try:
         doc = fs.parsed(key)
     except Exception as exc:  # noqa: BLE001 - isolate one key's crash
@@ -293,16 +305,53 @@ def _validate_tree_document(fs: _VirtualFS, key: str, *, entity: str | None = No
     return doc, validate_document(doc, doc_path=VirtualPath(fs, key), entity=entity)
 
 
-def _identity_parsed(fs: _VirtualFS, key: str) -> Any:
-    """`fs.parsed(key)`, or `None` on a crash — for reading a document purely
-    to pull an identity field (`connector_id`) off it, where the document
-    itself is (or, if genuinely absent, structurally cannot be) validated by
-    another walk over this same tree, so a second finding for the same crash
-    would only double-report it."""
-    try:
-        return fs.parsed(key)
-    except Exception:  # noqa: BLE001 - reported, if at all, by the walk that owns this key
-        return None
+def _resolved_member(
+        fs: _VirtualFS, key: str, *, entity: str | None = None, validate: bool = True,
+) -> tuple[dict | None, list[dict]]:
+    """The one gate a document-set member — the pipeline document, a stream,
+    a connection, a connection- or connector-scoped endpoint, an embedded
+    connector's own identity document — must clear to be usable for
+    referential checking: `key` must materialize, parse without crashing,
+    and — every member this gate is used for is expected to be an object —
+    be a `dict`. Returns `(None, findings)` on any of those four ways to fail
+    (missing key, materialization crash, parse crash, wrong shape); a caller
+    collapses all four into its own single "this member is excluded" signal
+    rather than re-deriving which one happened.
+
+    `validate=True` (the default) resolves `key` through
+    `_validate_tree_document`, so a member this call is itself the one place
+    that checks its content also earns its model-validation findings.
+    `validate=False` resolves it with the same materialize/parse isolation
+    but skips `validate_document` entirely — for a document a DIFFERENT walk
+    over this same tree already validates (an embedded connector's own
+    `connector.json`, re-validated by the recursive `validate_connector_tree`
+    call over its own subtree) or one no walk validates at all today (a
+    connector-scoped endpoint file for a `kind` `check_coverage` never routes
+    through, e.g. `database`/`storage`) — running `validate_document` here
+    too would either double-report the same findings or grade content
+    genuinely out of this call's scope. A materialization crash is never
+    reported by this function either way: `_normalize_documents` already
+    named it. Every current `validate=False` caller that has no use for a
+    parse-crash finding of its own (the embedded-connector identity lookups,
+    whose crash, if any, is already reported by the `validate_connector_tree`
+    walk over that same subtree) discards this function's returned findings
+    outright rather than asking this gate to suppress them.
+    """
+    if validate:
+        doc, findings = _validate_tree_document(fs, key, entity=entity)
+    elif not fs.materialized(key):
+        doc, findings = None, []
+    else:
+        try:
+            doc, findings = fs.parsed(key), []
+        except Exception as exc:  # noqa: BLE001 - isolate one key's crash
+            doc = None
+            findings = [finding(
+                message_id="internal-error", kind="fail", path="/",
+                message=f"{key!r} could not be parsed as JSON ({type(exc).__name__}: {exc}).")]
+    if not isinstance(doc, dict):
+        return None, findings
+    return doc, findings
 
 
 def _extract_subtree(documents: DocumentSet, prefix: str) -> DocumentSet:
@@ -356,7 +405,7 @@ def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
         findings.append(finding(
             message_id="missing-connector-document", kind="fail", path="connector.json",
             message="this document set has no root connector.json; a connector package must ship one."))
-    elif fs.materialized("connector.json"):
+    else:
         _, doc_findings = _validate_tree_document(fs, "connector.json")
         findings.extend(doc_findings)
     return _envelope(findings)
@@ -396,8 +445,6 @@ def _connection_type_map_findings(fs: _VirtualFS, slug: str) -> list[dict]:
                 "for a connection whose connector kind renders a write direction).")))
     for direction, filename in (("read", _READ_MAP_FILENAME), ("write", _WRITE_MAP_FILENAME)):
         key = f"{site}/{filename}"
-        if not fs.materialized(key):
-            continue
         _, doc_findings = _validate_tree_document(fs, key, entity="type-map")
         if direction == "write":
             doc_findings = [f for f in doc_findings if f.get("rule") != "RULE-TMAP-017"]
@@ -417,34 +464,38 @@ def _connector_endpoint_sets(
     This is the only walk over a pipeline tree's embedded-connector
     `endpoints/*.json` files for connectors whose `kind` never routes
     `check_coverage` through them at all (`database`/`storage`), so a crash
-    parsing one is reported here (`internal-error`) rather than swallowed —
-    the only alternative would be treating the crashed file's name as a
-    published endpoint id regardless, which could wrongly resolve a stream's
-    `endpoint_ref` against a document that never actually validated."""
+    reading one (materialization or parse) is reported here (`internal-error`,
+    parse-crash only — a materialization crash is `_normalize_documents`'s
+    own to name) rather than swallowed, and a key that never resolves is
+    excluded from `ids` outright — the only alternative would be treating a
+    broken file's name as a published endpoint id regardless, which could
+    wrongly resolve a stream's `endpoint_ref` against a document that never
+    actually validated. `_resolved_member(..., validate=False)` is used
+    rather than the full single-document route: nothing here validates a
+    connector-scoped endpoint's own model shape (that is out of scope for
+    the `kind`s this walk exists for), only whether it resolves to a `dict`
+    an id can be read off."""
     sets: dict[str, set[str]] = {}
     findings: list[dict] = []
     for slug in connector_slugs:
         ep_prefix = f"connectors/{slug}/definition/endpoints/"
         ids: set[str] = set()
-        for key in fs.direct_json_children(ep_prefix):
+        for key in fs.known_json_children(ep_prefix):
+            ep_doc, ep_findings = _resolved_member(fs, key, validate=False)
+            findings.extend(_at_site(key, ep_findings))
+            if ep_doc is None:
+                continue
             suffix = key[len(ep_prefix):]
             ids.add(suffix[:-len(".json")])
-            try:
-                ep_doc = fs.parsed(key)
-            except Exception as exc:  # noqa: BLE001 - isolate one key's crash
-                findings.append(finding(
-                    message_id="internal-error", kind="fail", path=key,
-                    message=f"{key!r} could not be parsed as JSON ({type(exc).__name__}: {exc})."))
-                continue
-            if isinstance(ep_doc, dict):
-                eid = ep_doc.get("endpoint_id")
-                if isinstance(eid, str) and eid:
-                    ids.add(eid)
+            eid = ep_doc.get("endpoint_id")
+            if isinstance(eid, str) and eid:
+                ids.add(eid)
         if not ids:
             continue
         keys = {slug}
-        connector_doc = _identity_parsed(fs, f"connectors/{slug}/definition/connector.json")
-        if isinstance(connector_doc, dict):
+        connector_doc, _ = _resolved_member(
+            fs, f"connectors/{slug}/definition/connector.json", validate=False)
+        if connector_doc is not None:
             cid = connector_doc.get("connector_id")
             if isinstance(cid, str) and cid:
                 keys.add(cid)
@@ -540,20 +591,27 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     walking those same keys (their presence is how a subtree is discovered at
     all).
 
-    When any bundle member is missing or broken — a pipeline/stream/connection/
-    connection-endpoint key that is `known` but never materialized (crashed in
-    `_normalize_documents`), or one that materialized but failed to parse
-    (crashed in `_validate_tree_document`) — the referential pass
-    (`validate_pipeline_bundle`) is skipped entirely for this call, keeping
-    only the `internal-error` finding(s) already collected for the member(s)
-    responsible — mirroring `plugins/analitiq-pipeline-builder/scripts/
-    validate.py`'s own `complete`/`crashed` gate: the published bundle
-    validator has no way to tell "excluded here because it's broken" from
-    "genuinely missing", so running it against a bundle this incomplete risks
-    reporting a reference as broken that the missing/broken member, not the
-    author, made unresolvable. Both crash layers cost the bundle the same way
-    because they leave it in the same state — one member short — regardless of
-    which of `_VirtualFS`'s two stages caught it.
+    Every bundle member this function collects — the pipeline document, each
+    stream, each connection, each connection-scoped endpoint, and each
+    embedded connector's own identity (its `connector_id`, read for the
+    referential check that it is bundled) — is resolved through one gate,
+    `_resolved_member`: usable only when its key materializes, parses, and is
+    a `dict`. When any bundle member is excluded for any of those reasons, the
+    referential pass (`validate_pipeline_bundle`) is skipped entirely for this
+    call, keeping only the `internal-error` finding(s) (if any — a
+    materialization crash is already named by `_normalize_documents`, never
+    reported twice) already collected for the member(s) responsible —
+    mirroring `plugins/analitiq-pipeline-builder/scripts/validate.py`'s own
+    `complete`/`crashed` gate: the published bundle validator has no way to
+    tell "excluded here because it's broken" from "genuinely missing", so
+    running it against a bundle this incomplete risks reporting a reference as
+    broken that the missing/broken member, not the author, made unresolvable.
+    A connection-scoped endpoint's own resolution does not depend on its
+    parent connection resolving — the two are independently gated bundle
+    members, sharing only the `conn_slug` this function derives from the
+    connection's own KEY (never its content) to locate them — so a connection
+    that fails to resolve still leaves its sibling endpoints and type maps
+    checked on their own terms.
     `_connector_endpoint_ref_findings` (RULE-STRM-043) is a plugin-local aid
     rather than a referential check the published bundle validator owns, and
     runs regardless, the same way the plugin's own connector-endpoint-ref
@@ -580,12 +638,9 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     if pipeline_keys:
         primary_key = pipeline_keys[0]
         slug = _PIPELINE_DOC_RE.match(primary_key).group(1)
-        if fs.materialized(primary_key):
-            pipeline_doc, doc_findings = _validate_tree_document(fs, primary_key)
-            findings.extend(doc_findings)
-            if pipeline_doc is None:
-                bundle_is_incomplete = True
-        else:
+        pipeline_doc, doc_findings = _resolved_member(fs, primary_key)
+        findings.extend(doc_findings)
+        if pipeline_doc is None:
             bundle_is_incomplete = True
         # A second (or further) pipelines/<slug>/pipeline.json is not silently
         # ignored: only `primary_key` (the first in sorted key order) becomes
@@ -604,11 +659,8 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     if slug is not None:
         stream_prefix = f"pipelines/{slug}/streams/"
         for key in fs.known_json_children(stream_prefix):
-            if not fs.materialized(key):
-                bundle_is_incomplete = True
-                continue
             suffix = key[len(stream_prefix):]
-            doc, doc_findings = _validate_tree_document(fs, key)
+            doc, doc_findings = _resolved_member(fs, key)
             findings.extend(_at_site(f"streams/{suffix}", doc_findings))
             if doc is None:
                 bundle_is_incomplete = True
@@ -618,32 +670,31 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     connections: list[Any] = []
     endpoints: list[Any] = []
     for key in sorted(k for k in fs.known_keys if _CONNECTION_DOC_RE.match(k)):
-        if not fs.materialized(key):
-            bundle_is_incomplete = True
-            continue
+        # `conn_slug` comes from the KEY alone, never the connection document's
+        # own content, so a connection-scoped endpoint or type map is still
+        # locatable and independently checked even when the connection itself
+        # fails to resolve.
         conn_slug = _CONNECTION_DOC_RE.match(key).group(1)
-        doc, doc_findings = _validate_tree_document(fs, key)
+        doc, doc_findings = _resolved_member(fs, key)
         findings.extend(_at_site(key, doc_findings))
         if doc is None:
             bundle_is_incomplete = True
-        connection_id_value = doc.get("connection_id") if isinstance(doc, dict) else None
-        if isinstance(doc, dict):
+            connection_id_value = None
+        else:
             connections.append(doc)
+            connection_id_value = doc.get("connection_id")
 
         ep_prefix = f"connections/{conn_slug}/definition/endpoints/"
         for ep_key in fs.known_json_children(ep_prefix):
-            if not fs.materialized(ep_key):
-                bundle_is_incomplete = True
-                continue
-            ep_doc, ep_findings = _validate_tree_document(fs, ep_key)
+            ep_doc, ep_findings = _resolved_member(fs, ep_key)
             findings.extend(_at_site(ep_key, ep_findings))
             if ep_doc is None:
                 bundle_is_incomplete = True
-            elif isinstance(ep_doc, dict):
-                entry = {**ep_doc}
-                entry.setdefault("connection_id", connection_id_value)
-                entry.setdefault("scope", "connection")
-                endpoints.append(entry)
+                continue
+            entry = {**ep_doc}
+            entry.setdefault("connection_id", connection_id_value)
+            entry.setdefault("scope", "connection")
+            endpoints.append(entry)
 
         findings.extend(_connection_type_map_findings(fs, conn_slug))
 
@@ -653,8 +704,15 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
         subtree = _extract_subtree(documents, prefix)
         sub_findings = validate_connector_tree(subtree)["findings"]
         findings.extend(_at_site(prefix.rstrip("/"), sub_findings))
-        connector_doc = _identity_parsed(fs, f"{prefix}connector.json")
-        if isinstance(connector_doc, dict):
+        # validate=False: the recursive `validate_connector_tree` call just
+        # above already validated this same connector.json (or reported why
+        # it could not), scoped under `prefix` — this lookup exists only to
+        # pull `connector_id` off it, not to check it a second time.
+        connector_doc, _ = _resolved_member(
+            fs, f"{prefix}connector.json", validate=False)
+        if connector_doc is None:
+            bundle_is_incomplete = True
+        else:
             cid = connector_doc.get("connector_id")
             if isinstance(cid, str) and cid:
                 connector_identities.add(cid)

@@ -80,8 +80,9 @@ class _VirtualFS:
         Sorted by path-part tuple, matching `pathlib.Path`'s ordering (which
         compares parts, not the raw string) rather than raw-string order — the
         two disagree whenever a `-` (0x2D) and a `/` (0x2F) compete at the same
-        position, e.g. `"a-b.json"` sorts before `"a/z.json"` as a path but
-        after it as a string."""
+        position, e.g. `"a-b.json"` sorts after `"a/z.json"` as a path (its
+        first part `"a-b.json"` follows the shorter, prefix-equal first part
+        `"a"`) but before it as a string (`-` is the lower byte)."""
         prefix = f"{dir_key}/" if dir_key else ""
         return sorted(
             (k for k in self.known_keys
@@ -94,25 +95,19 @@ class _VirtualFS:
         segment) ending in `.json`, whether or not it materialized — the flat,
         one-level `*.json` listing `_connector_endpoint_sets` and
         `validate_pipeline_tree`'s stream/connection-endpoint scans each need,
-        factored once so the filter isn't hand-written at every call site. A
-        caller that must tell "known but crashed during materialization" apart
-        from "materialized cleanly" — `validate_pipeline_tree`'s own bundle
-        completeness gate — reads `materialized()` itself over this list
-        rather than have that case silently excluded, the way
-        `direct_json_children` excludes it for a caller that doesn't need to
-        know."""
+        factored once so the filter isn't hand-written at every call site.
+        Every caller of this method resolves each key it returns through
+        `document_set._resolved_member` (or `_validate_tree_document`
+        directly), which excludes — rather than silently treats as absent — a
+        key that is `known` but never materialized, so "known but crashed
+        during materialization" and "materialized cleanly" both reach the
+        caller, distinguishable by `materialized()`."""
         return [
             key for key in sorted(self.known_keys)
             if key.startswith(prefix)
             and "/" not in key[len(prefix):]
             and key.endswith(".json")
         ]
-
-    def direct_json_children(self, prefix: str) -> list[str]:
-        """`known_json_children(prefix)`, filtered to the keys that actually
-        materialized — for a caller that treats a materialization crash the
-        same as no file being there at all."""
-        return [key for key in self.known_json_children(prefix) if self.materialized(key)]
 
 
 class VirtualPath:

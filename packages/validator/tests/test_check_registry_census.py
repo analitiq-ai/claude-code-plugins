@@ -168,10 +168,12 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "a structural precondition rejected the entry before any rule-specific "
         "check could run: the materialized text could not even be parsed as "
         "JSON, let alone dispatched to a kind whose rules could apply"),
-    ("analitiq.validator.document_set::_connector_endpoint_sets", "internal-error"): (
+    ("analitiq.validator.document_set::_resolved_member", "internal-error"): (
         "a structural precondition rejected the entry before any rule-specific "
-        "check could run: an embedded connector's endpoint file could not even "
-        "be parsed as JSON, let alone graded for RULE-STRM-043"),
+        "check could run: `validate=False`'s own materialize/parse isolation, "
+        "for a connector-scoped endpoint file `check_coverage` never reaches, "
+        "found the materialized text could not even be parsed as JSON, let "
+        "alone graded for RULE-STRM-043"),
     ("analitiq.validator.document_set::validate_connector_tree", "missing-connector-document"): (
         "a structural precondition on the document set's own shape — no root "
         "connector.json key at all — rejected before any rule-specific check "

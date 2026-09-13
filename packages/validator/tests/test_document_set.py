@@ -321,6 +321,34 @@ def _pipeline_tree_documents_with_two_findings() -> dict:
     return {**documents, "pipelines/p/pipeline.json": pipeline}
 
 
+_WISE_BALANCES_ENDPOINT = {
+    **_WISE_TRANSFERS_ENDPOINT,
+    "endpoint_id": "balances",
+    "operations": {"read": {
+        "request": {"method": "GET", "path": "/balances"}, "params": {},
+        "response": {
+            "records": {"ref": "response.body"},
+            "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "array",
+                "items": {"type": "object", "properties": {
+                    "id": {"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}}}}}}},
+}
+
+
+def _pipeline_tree_documents_with_extra_wise_endpoint() -> dict:
+    """`_pipeline_tree_documents_with_two_findings` plus a second
+    connector-scoped endpoint under `wise`'s subtree (`balances.json`), so
+    excluding `transfers.json` leaves `wise`'s published-endpoint-id set
+    non-empty rather than empty. `_connector_endpoint_ref_findings` treats an
+    empty set as unknown and skips it (its own docstring), so a
+    single-endpoint connector can never demonstrate RULE-STRM-043 firing after
+    its one endpoint is excluded — the exclusion would just look identical to
+    "this connector's endpoints were never walked at all"."""
+    documents = _pipeline_tree_documents_with_two_findings()
+    return {**documents, "connectors/wise/definition/endpoints/balances.json": _WISE_BALANCES_ENDPOINT}
+
+
 def _pipeline_tree_documents_with_embedded_connectors() -> dict:
     """`_pipeline_core_documents` plus `wise`'s and `postgresql`'s own
     model-valid `connector.json` (the same documents the equivalence fixture
@@ -707,6 +735,257 @@ def test_a_document_that_never_materializes_also_skips_the_referential_pass(vali
 
 
 # ---------------------------------------------------------------------------
+# The crash-isolation matrix: every bundle member `_resolved_member` gates
+# (pipeline, stream, connection, connection-scoped endpoint, embedded
+# connector identity, connector-scoped endpoint id) against every way it can
+# fail to resolve (missing key, materialization crash, parse crash, wrong
+# shape). One mechanism gates all six member kinds, so this is one
+# parametrized test rather than N hand-written per-case tests — reverting any
+# one piece of that mechanism should turn most of this matrix red at once,
+# not just the cell that names the piece.
+# ---------------------------------------------------------------------------
+
+def _drop(documents: dict, key: str) -> dict:
+    return {k: v for k, v in documents.items() if k != key}
+
+
+def _crash_materialization(documents: dict, key: str) -> dict:
+    return {**documents, key: _cyclic_dict()}
+
+
+def _crash_parse(documents: dict, key: str) -> dict:
+    return {**documents, key: "{not valid json"}
+
+
+def _wrong_shape(documents: dict, key: str) -> dict:
+    # Valid JSON, wrong Python shape: every member this matrix covers is
+    # expected to be an object, so a list is "parses fine, still excluded".
+    return {**documents, key: []}
+
+
+_MATRIX_MUTATORS = {
+    "missing": _drop,
+    "materialization-crash": _crash_materialization,
+    "parse-crash": _crash_parse,
+    "wrong-shape": _wrong_shape,
+}
+
+# Five of the six member kinds are gated by `bundle_is_incomplete`: excluding
+# one for any reason skips `validate_pipeline_bundle`'s whole referential pass
+# for this call, which is observed here by the two `connection-ref-unresolved`
+# findings `_pipeline_tree_documents_with_two_findings` otherwise always
+# produces (for its two permanently-unresolvable injected connection ids)
+# going missing along with everything else.
+#
+# `missing` is absent for pipeline/stream/connection/connection-endpoint:
+# each of those is DISCOVERED by the presence of its own key
+# (`pipelines/<slug>/pipeline.json`, `pipelines/<slug>/streams/*.json`,
+# `connections/<slug>/connection.json`,
+# `connections/<slug>/definition/endpoints/*.json`) — a key that was never
+# there is never discovered at all, so there is nothing for `_resolved_member`
+# to exclude. That is a structurally different case from a key that IS
+# discovered and then fails to resolve, and it is not silently skipped here:
+# see the four `test_missing_*_is_not_an_exclusion...` tests below, which
+# pin what actually happens instead (each is independently reachable through
+# a referential check that already exists for a different reason).
+#
+# `connector-identity` is the one member of these five discovered by its
+# SUBTREE's presence (any file under `connectors/<slug>/definition/`,
+# independent of `connector.json` itself), so a missing `connector.json`
+# alongside an otherwise-present subtree IS reachable through this gate.
+_INCOMPLETENESS_CELLS = {
+    "pipeline": ("pipelines/p/pipeline.json",
+                 ("materialization-crash", "parse-crash", "wrong-shape")),
+    "stream": ("pipelines/p/streams/orders.json",
+               ("materialization-crash", "parse-crash", "wrong-shape")),
+    "connection": ("connections/postgresql/connection.json",
+                   ("materialization-crash", "parse-crash", "wrong-shape")),
+    "connection-endpoint": (f"connections/postgresql/definition/endpoints/{_EID}.json",
+                            ("materialization-crash", "parse-crash", "wrong-shape")),
+    "connector-identity": ("connectors/wise/definition/connector.json",
+                           ("missing", "materialization-crash", "parse-crash", "wrong-shape")),
+}
+
+
+@pytest.mark.parametrize(
+    "member_kind,failure_mode",
+    [(kind, mode) for kind, (_, modes) in _INCOMPLETENESS_CELLS.items() for mode in modes],
+)
+def test_excluded_bundle_member_marks_the_bundle_incomplete(validator, member_kind, failure_mode):
+    key, _ = _INCOMPLETENESS_CELLS[member_kind]
+    documents = _MATRIX_MUTATORS[failure_mode](_pipeline_tree_documents_with_two_findings(), key)
+    result = validator.validate_pipeline_tree(documents)
+    assert not any(
+        f.get("message_id") == "connection-ref-unresolved" and "missing-connection" in f.get("message", "")
+        for f in result["findings"]), result["findings"]
+    if member_kind == "pipeline":
+        # A crashed (not merely absent) pipeline document is `bundle_is_incomplete`'s
+        # OWN job to catch: `bundle["pipeline"]` reaches `validate_pipeline_bundle`
+        # as `None` either way, so without this flag skipping the call entirely,
+        # that function's `bundle-missing-pipeline-document` framework check would
+        # fire in its place — a real, observable finding this flag exists to
+        # prevent, not just the two-findings-absent signal every other kind shares.
+        assert not any(f["message_id"] == "bundle-missing-pipeline-document" for f in result["findings"]), \
+            result["findings"]
+
+
+@pytest.mark.parametrize("failure_mode", ["missing", "materialization-crash", "parse-crash", "wrong-shape"])
+def test_excluded_connector_scoped_endpoint_id_is_dropped_from_the_published_set(validator, failure_mode):
+    """The sixth member kind is not gated by `bundle_is_incomplete` at all —
+    excluding a connector-scoped endpoint file only drops its id from
+    `_connector_endpoint_sets`'s own published-id set for that connector,
+    which RULE-STRM-043 (`connector-endpoint-ref-unresolved`) then reports the
+    stream's `transfers` ref against as unresolved. Every failure mode is
+    reachable here, `missing` included: unlike the five members above,
+    nothing about this member's OWN exclusion also determines whether its
+    sibling is discovered — discovery here just is enumerating
+    `endpoints/*.json`, so a missing file behaves exactly like an excluded
+    one."""
+    key = "connectors/wise/definition/endpoints/transfers.json"
+    documents = _MATRIX_MUTATORS[failure_mode](_pipeline_tree_documents_with_extra_wise_endpoint(), key)
+    result = validator.validate_pipeline_tree(documents)
+    assert any(
+        f.get("rule") == "RULE-STRM-043" and f["message_id"] == "connector-endpoint-ref-unresolved"
+        and "'transfers'" in f["message"]
+        for f in result["findings"]), result["findings"]
+
+
+@pytest.mark.parametrize("failure_mode,expected_internal_errors", [
+    ("missing", 0),
+    ("materialization-crash", 1),
+    ("parse-crash", 1),
+    ("wrong-shape", 0),
+])
+def test_excluded_connector_scoped_endpoint_crash_is_reported_exactly_once(
+        validator, failure_mode, expected_internal_errors):
+    """`_connector_endpoint_sets` is the only walk that ever reads a
+    connector-scoped endpoint file for a `database`/`storage`-kind connector
+    (`check_coverage` never routes through `endpoints/` for those kinds), so
+    its own materialize/parse gate must report a genuine parse crash exactly
+    once and must NOT re-report a materialization crash `_normalize_documents`
+    already named — both are `_resolved_member`'s job, and a shape defect or
+    an absent file (never a crash) reports neither."""
+    key = f"connectors/postgresql/definition/endpoints/{_EID}.json"
+    documents = _MATRIX_MUTATORS[failure_mode](_pipeline_tree_documents(), key)
+    result = validator.validate_pipeline_tree(documents)
+    hits = [f for f in result["findings"] if f["message_id"] == "internal-error" and f["path"] == key]
+    assert len(hits) == expected_internal_errors, result["findings"]
+
+
+def test_connector_scoped_endpoint_is_not_independently_shape_validated(validator):
+    """`_connector_endpoint_sets` reads a connector-scoped endpoint file only
+    to check whether it resolves to a `dict` an id can be read off —
+    `validate=False` is what keeps it from ALSO running full model validation
+    (shape auto-detection included) over that same document a second time.
+    Without it, a document this specific shape's own dedicated check already
+    covers (via `check_coverage`'s sibling-endpoint walk, run once through the
+    connector's own `validate_connector_tree` resolution) would additionally
+    be graded as a standalone document of unknown kind — reporting
+    `unrecognized-document` for a document that is not unrecognized, merely
+    incomplete in a way its own dedicated check already names."""
+    documents = _pipeline_tree_documents()
+    broken_endpoint = {**_WISE_TRANSFERS_ENDPOINT}
+    del broken_endpoint["operations"]
+    documents = {**documents, "connectors/wise/definition/endpoints/transfers.json": broken_endpoint}
+    result = validator.validate_pipeline_tree(documents)
+    assert not any(f["message_id"] == "unrecognized-document" for f in result["findings"]), result["findings"]
+    # The endpoint's one real defect (a missing `operations`) is still
+    # reported — by `check_coverage`'s own walk, not a second time by this one.
+    assert any(f["message_id"] == "missing" for f in result["findings"]), result["findings"]
+
+
+def test_a_crashed_connection_still_leaves_its_sibling_type_map_checked(validator):
+    """`conn_slug` is derived from the connection document's own KEY, never its
+    content, so a connection that fails to resolve does not also block its
+    sibling scoped type map from being independently checked — RULE-CONN-012's
+    legacy-filename rejection still fires for the crashed connection's own
+    sibling, proving the sibling scan is not skipped just because the
+    connection it sits beside excluded itself."""
+    documents = _pipeline_tree_documents()
+    documents = {
+        **documents,
+        "connections/postgresql/connection.json": _cyclic_dict(),
+        "connections/postgresql/definition/type-map.json": _CONNECTOR_PG_TYPE_MAP_READ,
+    }
+    result = validator.validate_pipeline_tree(documents)
+    assert any(
+        f.get("rule") == "RULE-CONN-012" and f["message_id"] == "legacy-type-map-filename"
+        and f["path"] == "connections/postgresql/definition/type-map.json"
+        for f in result["findings"]), result["findings"]
+
+
+def test_missing_pipeline_document_is_not_an_exclusion(validator):
+    """pipeline x missing is the one cell of the six-kind matrix
+    `_resolved_member`'s own gate cannot reach: with zero
+    `pipelines/<slug>/pipeline.json` keys at all, `validate_pipeline_tree`'s
+    `if pipeline_keys:` guard is never entered, so `_resolved_member` is never
+    called for a pipeline document and `bundle_is_incomplete` stays False —
+    `bundle["pipeline"]` reaches `validate_pipeline_bundle` as `None`, and
+    that function's own framework-level `bundle-missing-pipeline-document`
+    check (fired before any registered referential rule runs) reports it
+    instead, short-circuiting the referential pass by itself."""
+    documents = _drop(_pipeline_tree_documents_with_two_findings(), "pipelines/p/pipeline.json")
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "bundle-missing-pipeline-document" for f in result["findings"]), \
+        result["findings"]
+    assert not any(
+        f.get("message_id") == "connection-ref-unresolved" and "missing-connection" in f.get("message", "")
+        for f in result["findings"]), result["findings"]
+
+
+def test_missing_stream_document_is_not_an_exclusion(validator):
+    """A `pipelines/<slug>/streams/*.json` key that was never there is never
+    discovered by `fs.known_json_children`, so it is not something
+    `_resolved_member` excludes — `bundle_is_incomplete` stays False, the
+    referential pass runs, and the stream's own absence surfaces the ordinary
+    way: RULE-PIPE-011's `stream-ref-unresolved` against the pipeline's own
+    `streams` list, alongside the always-otherwise-firing injected findings,
+    which still fire because the pass was never skipped."""
+    documents = _drop(_pipeline_tree_documents_with_two_findings(), "pipelines/p/streams/orders.json")
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "stream-ref-unresolved" for f in result["findings"]), result["findings"]
+    assert any(
+        f.get("message_id") == "connection-ref-unresolved" and "missing-connection" in f.get("message", "")
+        for f in result["findings"]), result["findings"]
+
+
+def test_missing_connection_document_is_not_an_exclusion(validator):
+    """A `connections/<slug>/connection.json` key that was never there is
+    never iterated by the connections loop at all — not just the connection
+    itself but its sibling scoped endpoint is never discovered either, since
+    both are located from that same key's presence (never its content). The
+    referential pass still runs (`bundle_is_incomplete` stays False): the
+    missing connection surfaces as its stream's now-unresolvable destination
+    `endpoint_ref` (RULE-STRM-034's `endpoint-ref-unresolved`, since the
+    connection-scoped endpoint the ref names was never discovered either),
+    alongside the always-otherwise-firing injected findings."""
+    documents = _drop(_pipeline_tree_documents_with_two_findings(), "connections/postgresql/connection.json")
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "endpoint-ref-unresolved" for f in result["findings"]), result["findings"]
+    assert any(
+        f.get("message_id") == "connection-ref-unresolved" and "missing-connection" in f.get("message", "")
+        for f in result["findings"]), result["findings"]
+
+
+def test_missing_connection_endpoint_document_is_not_an_exclusion(validator):
+    """A connection-scoped `endpoints/*.json` key that was never there is
+    never discovered by `fs.known_json_children`, so — unlike a materialization
+    crash, parse crash, or wrong-shaped value at that same key — there is
+    nothing for `_resolved_member` to exclude and `bundle_is_incomplete` stays
+    False. The referential pass still runs, and the missing endpoint surfaces
+    as the stream's destination `endpoint_ref` failing to resolve against the
+    bundle's (now one entry short) `endpoints` list."""
+    documents = _drop(
+        _pipeline_tree_documents_with_two_findings(),
+        f"connections/postgresql/definition/endpoints/{_EID}.json")
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "endpoint-ref-unresolved" for f in result["findings"]), result["findings"]
+    assert any(
+        f.get("message_id") == "connection-ref-unresolved" and "missing-connection" in f.get("message", "")
+        for f in result["findings"]), result["findings"]
+
+
+# ---------------------------------------------------------------------------
 # Entity override — end-to-end: validate_document(entity=...) dispatches
 # straight to the named kind, bypassing shape auto-detection; diagnostics on a
 # DocumentSet never consults it.
@@ -759,10 +1038,15 @@ def test_connection_scoped_legacy_type_map_filename_is_rejected(validator):
 
 
 def test_connection_scoped_type_map_dict_is_rejected_not_auto_detected_as_something_else(validator):
-    """A dict under a connection's type-map-read.json must fail — shape
-    auto-detection could otherwise grade it as some other kind's document
-    (even a connection document) and let it pass clean; `entity="type-map"`
-    is what forces it through the type-map model instead."""
+    """A dict under a connection's type-map-read.json must fail against the
+    type-map model specifically — `entity="type-map"` is what forces it
+    through that model instead of shape auto-detection. Without the
+    override, a dict this malformed still fails (shape auto-detection
+    matches no registered kind and reports `unrecognized-document`), so
+    `result["passed"] is False` alone cannot tell the override was applied —
+    only the finding's own `message_id` can: the type-map model's own
+    rejection (`list_type`, for a dict where the model requires a list),
+    never the auto-detection fallback."""
     documents = {
         **_pipeline_tree_documents(),
         "connections/wise/definition/type-map-read.json": {"not": "a list"},
@@ -770,7 +1054,9 @@ def test_connection_scoped_type_map_dict_is_rejected_not_auto_detected_as_someth
     result = validator.validate_pipeline_tree(documents)
     assert result["passed"] is False
     site = "connections/wise/definition/type-map-read.json"
-    assert any(f["path"].startswith(site) for f in result["findings"]), result["findings"]
+    scoped = [f for f in result["findings"] if f["path"].startswith(site)]
+    assert any(f["message_id"] == "list_type" for f in scoped), result["findings"]
+    assert not any(f["message_id"] == "unrecognized-document" for f in scoped), result["findings"]
 
 
 def test_connector_scoped_endpoint_ref_naming_an_unpublished_endpoint_warns(validator):
