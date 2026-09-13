@@ -177,10 +177,13 @@ def diagnostics(target: Any, entity: Entity | None = None) -> ValidationEnvelope
     `DocumentSet`, and dispatch to `analitiq.validator.validate_document` or
     `validate_tree` accordingly — replacing the pipeline-builder plugin's
     private `diagnostics_for()`, which takes an explicit `entity` argument
-    naming the document's kind rather than detecting it. `entity`, when given
-    here, is forwarded as that same kind of hint to whichever single-document
-    validation this dispatches to — it plays no part in detecting or
-    validating a document SET, which is identified by its shape alone.
+    naming the document's kind rather than detecting it. `entity` plays no
+    part in detecting or validating a document SET, which is identified by
+    its shape alone. What it does for the single-document route is not
+    defined by this specification: `validate_document` takes no such
+    parameter today, and wiring `entity` into that route (or into whichever
+    replaces it) is implementation, not contract — out of scope here the same
+    way implementing this function's body is.
 
     Wraps a single-document result in a `ValidationEnvelope` (`{"passed":
     finding_costs_a_pass`-reduction, "findings": ...}`) rather than returning
