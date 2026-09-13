@@ -300,6 +300,22 @@ def test_an_empty_string_symbol_is_refused_not_treated_as_null(registry):
     assert "''" in _refusal(registry)
 
 
+def test_a_non_string_validator_is_refused_cleanly(registry):
+    """`validator: false` (or any non-null, non-string YAML scalar) must
+    fail with a named refusal, not an uncaught `AttributeError` from calling
+    `.partition()` on a bool — `load_registry()` only catches `TypeError`
+    and `ValueError`, so anything else aborts the whole render instead of
+    reporting which record is malformed."""
+    _write(registry, validator="false")
+    assert "not a string" in _refusal(registry)
+
+
+def test_a_non_string_symbol_is_refused_cleanly(registry):
+    """The same defect class as the validator test above, on `symbol`."""
+    _write(registry, symbol="0", mechanism="pattern")
+    assert "not a string" in _refusal(registry)
+
+
 def test_a_validator_naming_a_source_path_is_refused(registry):
     """The binding names what is imported, never a path standing in for it.
 

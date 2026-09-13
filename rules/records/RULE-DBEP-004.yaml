@@ -7,7 +7,7 @@ tier: reference
 severity: error
 scopes: [database-endpoint]
 validator: null
-enforcement_location: authoring-practice
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [Column, DatabaseEndpointDoc]
 rationale: >

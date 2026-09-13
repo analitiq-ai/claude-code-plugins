@@ -7,7 +7,7 @@ tier: reference
 severity: error
 scopes: [stream]
 validator: null
-enforcement_location: authoring-practice
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]
 rationale: >
@@ -18,8 +18,12 @@ rationale: >
   against an endpoint that already carries keys, it is a second source of
   truth for record identity that can disagree; omitted where an API source
   feeds a conflict-resolving write, it leaves the transfer with no identity
-  at all, since an API endpoint document has none to inherit. Catching
-  either means reading the source endpoint and the destination's write mode
+  at all, since an API endpoint document has none to inherit. Neither half
+  is refused anywhere: the engine reads `primary_keys` as a plain optional
+  list and falls back to a synthetic whole-record hash when it is empty, on
+  both the read and the write side, so an omission that needed real identity
+  does not fail the run — it silently derives a weaker one. Catching either
+  means reading the source endpoint and the destination's write mode
   together.
 status: active
 superseded_by: null

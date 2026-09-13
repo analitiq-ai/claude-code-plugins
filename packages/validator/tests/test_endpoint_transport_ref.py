@@ -237,39 +237,42 @@ def test_malformed_connector_transports_yields_no_fabricated_finding(
     assert _errors(findings), "the malformed connector must still be reported"
 
 
-class TestOriginContainmentGapIsRecorded:
+class TestOriginContainmentIsAValidatorBlindSpot:
     """`CONTRIBUTING.md` → "A fix that narrows a rule records what it
     deliberately left wide": the record ships with the narrowing, as a test or
     a follow-up issue.
 
-    `transport_ref`'s containment rule has two halves. The NAME half is enforced
-    here. The ORIGIN half — every URL a request produces landing on a declared
-    transport's origin — is enforced by nothing: not this contract, not this
-    validator, and not the engine, which opens one session from
-    `default_transport`, pins the read path to that single origin and has no
-    write-path origin guard at all.
+    `transport_ref`'s containment rule has two halves. The NAME half is
+    enforced here. The ORIGIN half — every URL a request produces landing on
+    the origin of the transport actually selected for the operation — is
+    enforced by the engine at run time, on both the read and the write path,
+    resolved per operation. It is enforced by neither this contract nor this
+    validator: the endpoint and the connector are separate documents, and an
+    offline, single-document-at-a-time check has no way to resolve which
+    origin a `transport_ref` names, let alone follow a response-driven
+    next-page URL to see where it lands.
 
-    Each test below asserts the CURRENT behaviour, not the desired one: a
-    document the ORIGIN half would refuse, accepted. They run through the
-    connector-anchored walk, which is where an origin check would have to live
-    for the same reason the NAME half does — origins are declared on the
-    connector and consumed by the endpoint. Three documents, because they reach
-    the walk by different legs and a check need not cover all three: a read
-    request, a write request, and a next-page URL the document takes from the
-    response body.
+    Each test below asserts the CURRENT behaviour of THIS validator, not of
+    the engine: a document the ORIGIN half would refuse at run time still
+    validates clean here. They run through the connector-anchored walk, which
+    is where an origin check would have to live for the same reason the NAME
+    half does — origins are declared on the connector and consumed by the
+    endpoint. Three documents, because they reach the walk by different legs
+    and a check need not cover all three: a read request, a write request, and
+    a next-page URL the document takes from the response body.
 
     Each asserts on EVERY error the walk emits, not on `RULE-ENDP-047`
     alone: the NAME half already owns that id, so an origin rule arriving under
     an id of its own — the likelier shape, since each check registers one —
     would pass a scoped assertion unnoticed.
 
-    That the field description still declares the half unenforced is a reader's
-    check, not this module's: deciding it means reading what a description
-    means, which `.claude/rules/guards.md` keeps out of tests and
+    That the field description still describes this split correctly is a
+    reader's check, not this module's: deciding it means reading what a
+    description means, which `.claude/rules/guards.md` keeps out of tests and
     `.claude/rules/contract-prose.md` states as an authoring obligation. The
     description lives on `_RequestBase.transport_ref`, which every
     endpoint-operation request model — read and write alike — inherits, and its
-    census entry records the ORIGIN half as its waiver, so softening the
+    census entry records the ORIGIN half as engine-conduct, so changing the
     disclaimer is a hash mismatch a reviewer must re-affirm. The connector
     document declares its own `transport_ref` sites — the auth operation
     template, the post-auth operation request, resource discovery — whose
@@ -277,16 +280,16 @@ class TestOriginContainmentGapIsRecorded:
     engine-owned defaulting instead.
     """
 
-    def test_a_second_origin_is_accepted_because_nothing_checks_origins(
+    def test_a_second_origin_is_accepted_because_this_validator_checks_names_not_origins(
         self, tmp_path, connector_base, validator
     ):
         # The connector declares a second transport on its own origin, and the
         # endpoint DECLARES dispatch through it rather than through
         # `default_transport`. The NAME half is satisfied — the transport is
-        # declared — so the document states an origin nothing can currently
-        # reach, and it validates clean: the engine opens one session from
-        # `default_transport` and no production call site selects a transport
-        # per operation. The ref is read here only to grade the name.
+        # declared — so this offline validator, which cannot resolve which
+        # origin a transport_ref names without walking the response the
+        # engine would send, validates the document clean. The ref is read
+        # here only to grade the name.
         _declare_second_origin(connector_base)
         findings = _run(
             tmp_path,
@@ -299,9 +302,9 @@ class TestOriginContainmentGapIsRecorded:
     def test_a_second_origin_on_the_write_path_is_accepted_too(
         self, tmp_path, connector_base, validator
     ):
-        # The read path's single-origin pinning does not extend to the write
-        # path, which has no origin guard of its own, so recording only the
-        # read one would leave half the gap unrecorded.
+        # This validator's blind spot is not read-path-specific — it never
+        # resolves an origin on either path — so recording only the read one
+        # would leave half the gap unrecorded.
         _declare_second_origin(connector_base)
         findings = _run(
             tmp_path,
@@ -311,12 +314,13 @@ class TestOriginContainmentGapIsRecorded:
         )
         assert not _errors(findings), findings
 
-    def test_a_response_driven_next_url_is_accepted_because_nothing_checks_origins(
+    def test_a_response_driven_next_url_is_accepted_because_this_validator_checks_names_not_origins(
         self, tmp_path, connector_base, validator
     ):
-        # The next-page URL is read out of the response body, so the document
-        # bounds it by no origin at all — which is why
-        # `pagination.link.next_url` is named in the description's ORIGIN half.
+        # The next-page URL is read out of the response body, so this
+        # validator — which never fetches a response — has no origin to check
+        # it against, which is why `pagination.link.next_url` is named in the
+        # description's ORIGIN half.
         endpoint = _read_endpoint(DECLARED_TRANSPORT)
         read = endpoint["operations"]["read"]
         read["pagination"] = {

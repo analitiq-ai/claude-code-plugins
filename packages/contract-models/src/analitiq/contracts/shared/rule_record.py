@@ -346,7 +346,9 @@ class RuleRecord:
             # `is not None`, not truthiness: an authored `validator: ""` is a
             # non-null, malformed binding, not the same state as `null` — it
             # must fail the dotted-format check just below, not skip it and
-            # read as unmechanized.
+            # read as unmechanized. A non-string non-null value (`false`, `0`)
+            # is the same malformed-binding case one level earlier: refused
+            # here, before `.partition()` gets a type it cannot call that on.
             #
             # The binding names what is IMPORTED, so the left half is a dotted
             # identifier chain and nothing else. A path was the earlier form:
@@ -356,6 +358,11 @@ class RuleRecord:
             # cleanly. Refusing every non-identifier module half refuses that
             # whole shape, including a file extension, a separator, and a
             # markdown document standing in for a mechanism.
+            if not isinstance(self.validator, str):
+                self._fail(
+                    f"validator {self.validator!r} is not a string — expected "
+                    "dotted.module::Symbol or null"
+                )
             dotted, separator, _ = self.validator.partition("::")
             if not separator or not all(
                 part.isidentifier() for part in dotted.split(".")
@@ -369,6 +376,11 @@ class RuleRecord:
             # `is not None`, not truthiness — the same reason as `validator`
             # above: an authored `symbol: ""` is a non-null, malformed value,
             # not the same state as `null`.
+            if not isinstance(self.symbol, str):
+                self._fail(
+                    f"symbol {self.symbol!r} is not a string — expected "
+                    "dotted.module::NAME or null"
+                )
             dotted, separator, _ = self.symbol.partition("::")
             if not separator or not all(
                 part.isidentifier() for part in dotted.split(".")

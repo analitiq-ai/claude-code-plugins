@@ -8,7 +8,7 @@ tier: shape
 severity: error
 scopes: [connector-package]
 validator: null
-enforcement_location: external-ci
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   The engine discovers each direction by looking the connector up in that
@@ -16,8 +16,11 @@ rationale: >
   when a pipeline points the other way — an omission no error names. This
   is where the both-directions principle becomes concrete for a database
   connector, and it is easy to lose when the driving request was
-  one-directional. Registry CI inspects the built wheel's entry points,
-  which is after the plugin has authored and returned a half connector;
-  nothing in this repo sees `pyproject.toml`.
+  one-directional. The CDK conformance kit resolves whichever of the two
+  entry-point groups is present and only objects when both are present and
+  resolve to different classes — it never requires both to be present, so a
+  connector registered under just one group passes conformance clean.
+  Nothing in this repo sees `pyproject.toml` either, so no mechanism, at
+  registry CI or here, actually checks that both groups are registered.
 status: active
 superseded_by: null

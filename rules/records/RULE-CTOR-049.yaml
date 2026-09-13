@@ -6,20 +6,20 @@ tier: reference
 severity: error
 scopes: [connector]
 validator: null
-enforcement_location: unenforced
+enforcement_location: engine
 owners: [connector-plugin, engine]
 targets: [DatabaseConnector]
 rationale: >
   Capability comes from the protocol the class in `connector.py` satisfies
   rather than from a flag in the document, so the two artifacts can disagree
   without either looking wrong on its own: the class advertises writes and
-  the document declares no `sql_capabilities`. Known enforcement gap: no
-  contract model sees `connector.py`, so nothing here can tell a
-  write-capable connector from a discovery-only one and the field stays
-  optional; no located engine mechanism checks the disagreement either — the
-  class-level role checks that exist grade the CDK's own kind-default
-  classes at class-definition time, not this connector's own declared block
-  against its own class, so what a live write attempt actually does is not
-  confirmed.
+  the document declares no `sql_capabilities`. No contract model sees
+  `connector.py`, so nothing here can tell a write-capable connector from a
+  discovery-only one before a run, and the field stays optional — but the
+  engine's schema-handshake path treats every write mode alike: it checks the
+  parsed capabilities before any write RPC and raises a schema-configuration
+  error when none were declared, so a class dispatched to write with no
+  declared `sql_capabilities` fails loudly and deterministically at handshake
+  time.
 status: active
 superseded_by: null

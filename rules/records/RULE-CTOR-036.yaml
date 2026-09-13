@@ -16,8 +16,9 @@ rationale: >
   who copies a strategy id from a connector whose package they did not copy,
   leaves a document that validates. `strategy` is an open string here, so an
   unregistered id passes every check this repo runs. Known enforcement gap:
-  no discovery-strategy registry matching this description was located in
-  the engine's SQL discovery path, so whether — and how — an unregistered id
-  actually fails at discovery time is not confirmed.
+  the engine's SQL discovery path implements schema/table/column discovery
+  directly, with no `resource_discovery`-strategy registry anywhere in its
+  source, so an unregistered id is not merely uninspected by anything here —
+  nothing located in the engine reads this field either.
 status: active
 superseded_by: null

@@ -6,7 +6,7 @@ tier: shape
 severity: error
 scopes: [connector]
 validator: null
-enforcement_location: unenforced
+enforcement_location: engine
 owners: [connector-plugin, engine]
 targets: [DatabaseConnector]
 rationale: >
@@ -14,11 +14,10 @@ rationale: >
   an absent block is not a request for defaults, and the connector reads as
   finished right up until someone tries to write through it. The field is
   deliberately optional on `DatabaseConnector` so a partial document still
-  validates. Known enforcement gap: no located engine mechanism refuses every
-  write mode outright for a connector shipping no `sql_capabilities` at all —
-  the class-level role checks that exist grade the CDK's own kind-default
-  classes at class-definition time, not a per-connector declaration this
-  document carries, so what actually happens against a live system this repo
-  never sees is not confirmed.
+  validates. The engine's schema-handshake path checks the parsed
+  capabilities before any write RPC, for every write mode, and raises a
+  schema-configuration error when none were declared — a write-capable
+  connector shipping no `sql_capabilities` fails loudly and deterministically
+  at handshake time, never silently at the write itself.
 status: active
 superseded_by: null

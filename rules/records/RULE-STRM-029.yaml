@@ -6,7 +6,7 @@ tier: reference
 severity: error
 scopes: [stream]
 validator: null
-enforcement_location: platform-save
+enforcement_location: engine
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]
 rationale: >
@@ -14,11 +14,13 @@ rationale: >
   reading everything each run, which only a source that supports full
   refresh can do. Endpoint capability is invisible to the stream document,
   so the correctness of the default is decided by an artifact the model
-  cannot read and the rejection lands server-side. That makes the omission
-  the most attractive wrong answer — it is shorter, it validates, and it
-  requires the author to know nothing. Where full-refresh support is not
-  established, authoring an explicit policy is what removes the guess;
-  catching a violation otherwise means reading the endpoint's declared read
-  capability.
+  cannot read, and this is the one case a database source cannot violate —
+  every database read is treated as capable of full refresh, with no
+  declared vocabulary to fail against. Where it is violable, on an API
+  source, the engine's read-plan check closes it deliberately: an omitted
+  block folds into the same `full_refresh` default an explicit selection
+  would produce, before the same `supported_methods` guard `RULE-STRM-025`
+  names runs against it, precisely so the one stream shape that skips
+  authoring a method is not the one shape that skips the check.
 status: active
 superseded_by: null

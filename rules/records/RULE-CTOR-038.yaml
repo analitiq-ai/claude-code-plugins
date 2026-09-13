@@ -6,7 +6,7 @@ tier: coherence
 severity: error
 scopes: [connector]
 validator: null
-enforcement_location: authoring-practice
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 targets: [PostAuthOutput, ConnectorBase]
 rationale: >
@@ -15,7 +15,9 @@ rationale: >
   decides dispatch order at connect time, so a dependent output may resolve
   against a value that does not exist yet and the connection activates with
   that field silently empty. A chain is indistinguishable in the document
-  from independent entries, so catching it means reading every entry's refs
-  against every other entry's key.
+  from independent entries, so catching it means comparing every entry's refs
+  against every other entry's key. Known enforcement gap: that comparison is a
+  check over the entries this one document already carries, not a vendor
+  fact, and nothing in this repo's model validation performs it yet.
 status: active
 superseded_by: null

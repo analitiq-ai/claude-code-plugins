@@ -6,7 +6,7 @@ tier: shape
 severity: warning
 scopes: [api-endpoint]
 validator: null
-enforcement_location: authoring-practice
+enforcement_location: unenforced
 owners: [connector-plugin]
 targets: [Keyset]
 rationale: >
@@ -15,10 +15,10 @@ rationale: >
   happens to be null. Today the two behave alike, which is exactly why it goes
   unnoticed and why it is not yet a broken run — but the document has lost the
   distinction, and it stays lost until something needs it: a provider whose
-  first key genuinely is null, or a stricter reading of the field. Nothing
-  catches it: `Keyset.initial` admits null as an ordinary value, so the refusal
-  RULE-ENDP-031 makes for namespace fields has no counterpart here, and seeing
-  the mistake means reading the pagination block knowing that omission is the
-  intended spelling.
+  first key genuinely is null, or a stricter reading of the field. Known
+  enforcement gap: `Keyset.initial` admits null as an ordinary value, so the
+  refusal RULE-ENDP-031 makes for namespace fields has no counterpart here —
+  nothing yet forbids the explicit null the way that precedent already
+  forbids it for namespace fields.
 status: active
 superseded_by: null

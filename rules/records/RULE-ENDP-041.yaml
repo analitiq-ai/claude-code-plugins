@@ -6,7 +6,7 @@ tier: reference
 severity: error
 scopes: [api-endpoint]
 validator: null
-enforcement_location: unenforced
+enforcement_location: engine
 owners: [connector-plugin, engine]
 targets: [_RequestBase]
 rationale: >
@@ -14,17 +14,14 @@ rationale: >
   are declared, so a URL that leaves that origin either arrives without the
   credentials the request needs or carries them to a host the connection never
   named. The half of containment that checks the transport *name* is settled at
-  author time; this half is not. `request.path` is an open string and a followed
-  next-page link comes from the provider's own response, so where a URL actually
-  lands is decided only when the engine builds the request. Known enforcement
-  gap, pinned by `TestOriginContainmentGapIsRecorded` in
-  `test_endpoint_transport_ref.py`: the engine opens one session from
-  `default_transport` and no production call site selects a transport per
-  operation, so an endpoint that correctly declares a non-default
-  `transport_ref` states an origin nothing currently reaches — the session's
-  own default-origin guard checks the wrong transport entirely for that case,
-  and there is no write-path origin guard at all. Catching a violation means
-  reading every URL-producing site in the document against the sibling
-  connector's transports.
+  author time; the origin half is settled at run time by the engine itself: it
+  resolves the transport an operation actually names through `transport_ref` —
+  the default and a named non-default alike — separately for each operation,
+  and checks every URL that operation's request produces, including a followed
+  next-page link, against that resolved transport's own declared origin on
+  both the read and the write path, refusing one that lands anywhere else.
+  Because the check runs against the transport actually selected for the
+  request rather than a single fixed one, a non-default `transport_ref` is
+  covered the same way the default is.
 status: active
 superseded_by: null

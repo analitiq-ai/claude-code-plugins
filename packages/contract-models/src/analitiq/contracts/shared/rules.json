@@ -186,7 +186,7 @@
     "connection"
    ],
    "validator": null,
-   "enforcement_location": "unenforced",
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -1052,7 +1052,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "unenforced",
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1062,7 +1062,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Depth is the intuitive reading and the wrong one: a system with a database sitting above the schema still has no addressable catalog when one connection cannot reach across it, and declaring one anyway makes the engine qualify statements the system will not accept — while under-declaring a genuinely addressable catalog strands every object outside the connection's default. Whether one connection reaches across catalogs is an external fact no document declares, and the discovery half the rule obliges is only a strategy id, so nothing here can tell a wrong level from a right one.\n",
+   "rationale": "Depth is the intuitive reading and the wrong one: a system with a database sitting above the schema still has no addressable catalog when one connection cannot reach across it, and declaring one anyway makes the engine qualify statements the system will not accept — while under-declaring a genuinely addressable catalog strands every object outside the connection's default. Whether one connection reaches across catalogs is an external fact no document declares, and the discovery half the rule obliges is only a strategy id, so nothing here can tell a wrong level from a right one. Catching a violation means knowing, from the target system's own documentation, whether one connection can address across its catalogs, and comparing that fact to the level declared here — the same vendor-level judgment `RULE-CTOR-030` names for hierarchy depth.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1181,7 +1181,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Naming a strategy and shipping one are separate edits in separate files, so the pair drifts easily: an author who renames the entry-point class, or who copies a strategy id from a connector whose package they did not copy, leaves a document that validates. `strategy` is an open string here, so an unregistered id passes every check this repo runs. Known enforcement gap: no discovery-strategy registry matching this description was located in the engine's SQL discovery path, so whether — and how — an unregistered id actually fails at discovery time is not confirmed.\n",
+   "rationale": "Naming a strategy and shipping one are separate edits in separate files, so the pair drifts easily: an author who renames the entry-point class, or who copies a strategy id from a connector whose package they did not copy, leaves a document that validates. `strategy` is an open string here, so an unregistered id passes every check this repo runs. Known enforcement gap: the engine's SQL discovery path implements schema/table/column discovery directly, with no `resource_discovery`-strategy registry anywhere in its source, so an unregistered id is not merely uninspected by anything here — nothing located in the engine reads this field either.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1195,7 +1195,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -1206,7 +1206,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Authoring one produces an artifact that passes every check here and can never run, and the refusal is what tells the user the gap is platform support rather than something they can fix in their document — a half-authored connector left in the registry says the opposite. Which kinds the engine executes is engine state no artifact here tracks: the contract models accept every declared kind, so this is plugin policy that an engine release retires with nobody editing the prose.\n",
+   "rationale": "Authoring one produces an artifact that passes every check here and can never run, and the refusal is what tells the user the gap is platform support rather than something they can fix in their document — a half-authored connector left in the registry says the opposite. Which kinds the engine executes is engine state no artifact here tracks: the contract models accept every declared kind, so this is plugin policy that an engine release retires with nobody editing the prose. Known enforcement gap: nothing here or downstream refuses a declared kind the engine no longer executes — closing it would take the engine publishing its supported-kind set the way it already publishes the Arrow type grammar, which does not exist for connector kinds today.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1219,7 +1219,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1232,7 +1232,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Authors reach for a chain — fetch the account, then use its id to fetch the tenant domain — and the block gives no way to express one: the engine decides dispatch order at connect time, so a dependent output may resolve against a value that does not exist yet and the connection activates with that field silently empty. A chain is indistinguishable in the document from independent entries, so catching it means reading every entry's refs against every other entry's key.\n",
+   "rationale": "Authors reach for a chain — fetch the account, then use its id to fetch the tenant domain — and the block gives no way to express one: the engine decides dispatch order at connect time, so a dependent output may resolve against a value that does not exist yet and the connection activates with that field silently empty. A chain is indistinguishable in the document from independent entries, so catching it means comparing every entry's refs against every other entry's key. Known enforcement gap: that comparison is a check over the entries this one document already carries, not a vendor fact, and nothing in this repo's model validation performs it yet.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1270,7 +1270,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "unenforced",
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1282,7 +1282,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine reads the declaration instead of probing the live database, so an absent block is not a request for defaults, and the connector reads as finished right up until someone tries to write through it. The field is deliberately optional on `DatabaseConnector` so a partial document still validates. Known enforcement gap: no located engine mechanism refuses every write mode outright for a connector shipping no `sql_capabilities` at all — the class-level role checks that exist grade the CDK's own kind-default classes at class-definition time, not a per-connector declaration this document carries, so what actually happens against a live system this repo never sees is not confirmed.\n",
+   "rationale": "The engine reads the declaration instead of probing the live database, so an absent block is not a request for defaults, and the connector reads as finished right up until someone tries to write through it. The field is deliberately optional on `DatabaseConnector` so a partial document still validates. The engine's schema-handshake path checks the parsed capabilities before any write RPC, for every write mode, and raises a schema-configuration error when none were declared — a write-capable connector shipping no `sql_capabilities` fails loudly and deterministically at handshake time, never silently at the write itself.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1366,7 +1366,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1490,7 +1490,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "unenforced",
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1502,7 +1502,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Capability comes from the protocol the class in `connector.py` satisfies rather than from a flag in the document, so the two artifacts can disagree without either looking wrong on its own: the class advertises writes and the document declares no `sql_capabilities`. Known enforcement gap: no contract model sees `connector.py`, so nothing here can tell a write-capable connector from a discovery-only one and the field stays optional; no located engine mechanism checks the disagreement either — the class-level role checks that exist grade the CDK's own kind-default classes at class-definition time, not this connector's own declared block against its own class, so what a live write attempt actually does is not confirmed.\n",
+   "rationale": "Capability comes from the protocol the class in `connector.py` satisfies rather than from a flag in the document, so the two artifacts can disagree without either looking wrong on its own: the class advertises writes and the document declares no `sql_capabilities`. No contract model sees `connector.py`, so nothing here can tell a write-capable connector from a discovery-only one before a run, and the field stays optional — but the engine's schema-handshake path treats every write mode alike: it checks the parsed capabilities before any write RPC and raises a schema-configuration error when none were declared, so a class dispatched to write with no declared `sql_capabilities` fails loudly and deterministically at handshake time.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1860,7 +1860,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "unenforced",
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1872,7 +1872,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The TLS slots are untyped value-expression carriers, so a driver object or a path parked in one is a well-formed document: it resolves to something the dialect was never written to interpret, and the failure arrives at connect as a driver error naming nothing the author wrote. The instinct is strong because every driver's own documentation shows exactly such an object. Nothing here can see it — the fields are typed open precisely so the mode vocabulary can stay the connector's own, and no validator resolves an expression offline.\n",
+   "rationale": "The TLS slots are untyped value-expression carriers, so a driver object or a path parked in one is a well-formed document. The engine does refuse a resolved value that is not a plain string before it reaches the connector package's dialect, which closes the case an author reaches for most often: copying the object every driver's own documentation shows. It cannot close the quieter half — a plain string that is nonetheless the wrong content, a filesystem path where the mode vocabulary is expected, or a fragment of code serialized as text — because the fields are typed open precisely so the mode vocabulary can stay the connector's own, and no generic check can tell a legitimate mode string from a wrong one without knowing that connector's driver semantics.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2068,7 +2068,7 @@
     "database-endpoint"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -2120,7 +2120,7 @@
     "database-endpoint"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -3469,7 +3469,7 @@
     "api-endpoint"
    ],
    "validator": null,
-   "enforcement_location": "unenforced",
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "connector-plugin"
@@ -3481,7 +3481,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The transport is where the connection's origin, its auth and its TLS settings are declared, so a URL that leaves that origin either arrives without the credentials the request needs or carries them to a host the connection never named. The half of containment that checks the transport *name* is settled at author time; this half is not. `request.path` is an open string and a followed next-page link comes from the provider's own response, so where a URL actually lands is decided only when the engine builds the request. Known enforcement gap, pinned by `TestOriginContainmentGapIsRecorded` in `test_endpoint_transport_ref.py`: the engine opens one session from `default_transport` and no production call site selects a transport per operation, so an endpoint that correctly declares a non-default `transport_ref` states an origin nothing currently reaches — the session's own default-origin guard checks the wrong transport entirely for that case, and there is no write-path origin guard at all. Catching a violation means reading every URL-producing site in the document against the sibling connector's transports.\n",
+   "rationale": "The transport is where the connection's origin, its auth and its TLS settings are declared, so a URL that leaves that origin either arrives without the credentials the request needs or carries them to a host the connection never named. The half of containment that checks the transport *name* is settled at author time; the origin half is settled at run time by the engine itself: it resolves the transport an operation actually names through `transport_ref` — the default and a named non-default alike — separately for each operation, and checks every URL that operation's request produces, including a followed next-page link, against that resolved transport's own declared origin on both the read and the write path, refusing one that lands anywhere else. Because the check runs against the transport actually selected for the request rather than a single fixed one, a non-default `transport_ref` is covered the same way the default is.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3543,7 +3543,7 @@
     "api-endpoint"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin"
    ],
@@ -3554,7 +3554,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Omission is how the block says \"send no keyset on the first request\"; a null is a value, so a document writing one is claiming a first-page key that happens to be null. Today the two behave alike, which is exactly why it goes unnoticed and why it is not yet a broken run — but the document has lost the distinction, and it stays lost until something needs it: a provider whose first key genuinely is null, or a stricter reading of the field. Nothing catches it: `Keyset.initial` admits null as an ordinary value, so the refusal RULE-ENDP-031 makes for namespace fields has no counterpart here, and seeing the mistake means reading the pagination block knowing that omission is the intended spelling.\n",
+   "rationale": "Omission is how the block says \"send no keyset on the first request\"; a null is a value, so a document writing one is claiming a first-page key that happens to be null. Today the two behave alike, which is exactly why it goes unnoticed and why it is not yet a broken run — but the document has lost the distinction, and it stays lost until something needs it: a provider whose first key genuinely is null, or a stricter reading of the field. Known enforcement gap: `Keyset.initial` admits null as an ordinary value, so the refusal RULE-ENDP-031 makes for namespace fields has no counterpart here — nothing yet forbids the explicit null the way that precedent already forbids it for namespace fields.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3567,7 +3567,7 @@
     "api-endpoint"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4871,7 +4871,7 @@
     "connector-package"
    ],
    "validator": null,
-   "enforcement_location": "unenforced",
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5008,7 +5008,7 @@
     "connector-package"
    ],
    "validator": null,
-   "enforcement_location": "external-ci",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5018,7 +5018,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine discovers each direction by looking the connector up in that direction's group, so registering one leaves the connector simply absent when a pipeline points the other way — an omission no error names. This is where the both-directions principle becomes concrete for a database connector, and it is easy to lose when the driving request was one-directional. Registry CI inspects the built wheel's entry points, which is after the plugin has authored and returned a half connector; nothing in this repo sees `pyproject.toml`.\n",
+   "rationale": "The engine discovers each direction by looking the connector up in that direction's group, so registering one leaves the connector simply absent when a pipeline points the other way — an omission no error names. This is where the both-directions principle becomes concrete for a database connector, and it is easy to lose when the driving request was one-directional. The CDK conformance kit resolves whichever of the two entry-point groups is present and only objects when both are present and resolve to different classes — it never requires both to be present, so a connector registered under just one group passes conformance clean. Nothing in this repo sees `pyproject.toml` either, so no mechanism, at registry CI or here, actually checks that both groups are registered.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5397,7 +5397,7 @@
     "connector-package"
    ],
    "validator": null,
-   "enforcement_location": "unenforced",
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5407,7 +5407,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The vocabulary is the system's own, researched from the driver's docs and never translated, so nothing derives one half from the other — the author holding both in mind at once is the only link. A declared mode the dialect does not handle reaches the CDK base and raises at connect for whichever user selects it; a mode the dialect handles but the input never offers is dead code standing in for a gap in the enum. The mode set is authored into `connector.json` while its interpretation lives in the package's dialect hook, no validator opens the dialect, and the contract's TLS block is deliberately vocabulary-agnostic.\n",
+   "rationale": "The vocabulary is the system's own, researched from the driver's docs and never translated, so nothing derives one half from the other — the author holding both in mind at once, against what the driver's docs actually document, is the only link, and no mechanical comparison stands in for that reading. A declared mode the dialect does not handle reaches the CDK base and raises at connect for whichever user selects it; a mode the dialect handles but the input never offers is dead code standing in for a gap in the enum. The mode set is authored into `connector.json` while its interpretation lives in the package's dialect hook, no validator opens the dialect, and the contract's TLS block is deliberately vocabulary-agnostic.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5631,7 +5631,7 @@
     "any"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -5641,7 +5641,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Where the contract leaves the field optional an omission validates cleanly, so requiring it everywhere is a plugin house rule no validator expresses. It earns that status because the URL is the only thing in the document that says which contract it was authored against: without it a reviewer, an editor's live validation and any future migration all have to guess, and the document silently reads as belonging to whatever is current. Nothing breaks the day it is omitted, which is precisely why the omission survives.\n",
+   "rationale": "Where the contract leaves the field optional an omission validates cleanly, so requiring it everywhere is a plugin house rule no validator expresses. A presence check is a plain mechanical comparison — the field is absent or it is not the family's published `Literal` URL — so nothing about catching the omission needs a human judgment call; it is simply a check nothing here runs today. Without it a reviewer, an editor's live validation and any future migration all have to guess which contract the document was authored against, and it silently reads as belonging to whatever is current. Nothing breaks the day it is omitted, which is precisely why the omission survives.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5700,7 +5700,7 @@
     "any"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -5714,7 +5714,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The resolver substitutes into the strings it is handed and nothing else, so outside the fields that refuse a placeholder structurally an out-of-place `${...}` validates cleanly and is simply never expanded — the braces go out on the wire inside a URL, a DSN or a header, and the failure comes back as a provider error naming nothing the author wrote. The idiom is seductive because it works two fields over. Which slots resolve is the grammar's to say, so the only way to check one is to look it up there.\n",
+   "rationale": "The resolver substitutes into the strings it is handed and nothing else, so outside the fields that refuse a placeholder structurally an out-of-place `${...}` validates cleanly and is simply never expanded — the braces go out on the wire inside a URL, a DSN or a header, and the failure comes back as a provider error naming nothing the author wrote. The idiom is seductive because it works two fields over. `_RequestBase.path` and `UrlTemplateDsn.template` already reject the sigil structurally, so the same mechanism — a field-level check against the grammar's own record of which fields resolve a template — could close the remaining fields; nothing here does that sweep yet. Which slots resolve is the grammar's to say, so the only way to check one today is to look it up there.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6316,7 +6316,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6392,7 +6392,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "platform-save",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6407,7 +6407,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The declaring endpoint document is not part of the stream, so no in-process check can resolve a name — the local validator proves only that a name is well-formed, and resolution happens server-side when the stream is saved. That gap is wide: a projection, a filter, a cursor, a pagination order key, a mapping target and a conflict key are all just strings until then, and a typo in any of them reads as a registry rejection long after the document looked clean. Catching one before that means reading the name back against the endpoint document that declares it, or back to the user rather than guessing it.\n",
+   "rationale": "The declaring endpoint document is not part of the stream, so no in-process check can resolve a name — the local validator proves only that a name is well-formed. What resolves it at run time is uneven, not reliable across the names this rule covers: for an API source the engine checks a filter's field and the cursor field against the endpoint's declared operation before the first request, but a SQL source never compares its selected columns, a filter field or the pagination order-by field against the endpoint's actual columns, and a mapping's destination target is the worst case — an unmatched `target.path` is not an error at all, the field is silently dropped from the write. A typo therefore surfaces, where it surfaces, as an ordinary database or provider error unrelated to this rule, or as data quietly missing from the destination. Catching one before that means reading the name back against the endpoint document that declares it, or back to the user rather than guessing it.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6420,7 +6420,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "platform-save",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6432,7 +6432,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The authoritative spelling lives in the source endpoint document, which the stream model never sees — the same gap `RULE-STRM-022` names for field references generally, and this rule is that check's exact-spelling case: resolution happens server-side when the stream is saved, comparing the string literally, so a name that differs only in case or whitespace is a perfectly valid document naming nothing until then. Normalizing is the natural reflex, because the identifiers that arrive from introspection often look untidy and because most tooling folds case for the author; here folding it is what breaks the reference.\n",
+   "rationale": "The authoritative spelling lives in the source endpoint document, which the stream model never sees — the same gap `RULE-STRM-022` names for field references generally, and this rule is that check's exact-spelling case. Where the engine resolves a name by exact key lookup — an API filter's field or its cursor field against the endpoint's declared operation — exactness rides along with existence, since a case or whitespace difference already fails as unresolved. A SQL source's selected columns, filter fields and pagination order-by field are never compared against the endpoint's declared columns at all, so a spelling difference there is whatever the database's own identifier-folding does with it — silently accepted on a case-insensitive engine, a rejected query on a case-sensitive one. Normalizing is the natural reflex, because the identifiers that arrive from introspection often look untidy and because most tooling folds case for the author; here folding it is what breaks the reference on the paths nothing else checks.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6470,7 +6470,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6483,7 +6483,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The declared support set lives in the connector's api-endpoint document, which the stream model cannot read, so the stream-side vocabulary check cannot narrow to it — every method in the contract validates against every API source. The asymmetry is the trap: a database endpoint declares no such set, so an author who has been reading database endpoints has no reason to expect one to exist. Catching a violation means opening the referenced endpoint's read operation and reading the set.\n",
+   "rationale": "The declared support set lives in the connector's api-endpoint document, which the stream model cannot read, so the stream-side vocabulary check cannot narrow to it — every method in the contract validates against every API source. The asymmetry is the trap: a database endpoint declares no such set, so an author who has been reading database endpoints has no reason to expect one to exist. The engine closes the gap this rule scopes to: at read-plan time, before the first request, it resolves the stream's selected method against the endpoint's declared `read.replication.supported_methods` and refuses the run if it is absent — the read-side mirror of the write-mode check `RULE-STRM-024` performs. No equivalent vocabulary exists for database sources, which is exactly why the rule is scoped to API sources only.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6496,7 +6496,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "platform-save",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6508,7 +6508,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The `filters` map lives on the endpoint document, which is not part of the stream, so no in-process check can compare a stream's filter against it — a connector-scoped (API) endpoint document is never carried by the pipeline bundle the local validator resolves against, only connection-scoped ones are — and resolution happens server-side when the stream is saved. Two failures hide behind one string until then: a field the map does not carry at all, and a field the map carries with no entry for this operator, which is a parameter the runtime owns (RULE-ENDP-002) or an operator the map simply never declared for that field.\n",
+   "rationale": "The `filters` map lives on the endpoint document, which is not part of the stream, so no in-process check here can compare a stream's filter against it — a connector-scoped (API) endpoint document is never carried by the pipeline bundle the local validator resolves against, only connection-scoped ones are. The engine narrows only half of what this rule requires, at read-plan time: it refuses a filter naming a field with no params-map entry at all, but that lookup is keyed on field name alone, with no operator dimension, so a field declared for one operator and filtered with a different one passes identically to a genuine match and goes out on the wire as whatever the provider does with an operator it never declared support for — a parameter the runtime owns (RULE-ENDP-002) or an operator the map simply never declared for that field.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6571,7 +6571,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "platform-save",
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6583,7 +6583,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Omitting the block is a policy choice, not an absence: it falls back to reading everything each run, which only a source that supports full refresh can do. Endpoint capability is invisible to the stream document, so the correctness of the default is decided by an artifact the model cannot read and the rejection lands server-side. That makes the omission the most attractive wrong answer — it is shorter, it validates, and it requires the author to know nothing. Where full-refresh support is not established, authoring an explicit policy is what removes the guess; catching a violation otherwise means reading the endpoint's declared read capability.\n",
+   "rationale": "Omitting the block is a policy choice, not an absence: it falls back to reading everything each run, which only a source that supports full refresh can do. Endpoint capability is invisible to the stream document, so the correctness of the default is decided by an artifact the model cannot read, and this is the one case a database source cannot violate — every database read is treated as capable of full refresh, with no declared vocabulary to fail against. Where it is violable, on an API source, the engine's read-plan check closes it deliberately: an omitted block folds into the same `full_refresh` default an explicit selection would produce, before the same `supported_methods` guard `RULE-STRM-025` names runs against it, precisely so the one stream shape that skips authoring a method is not the one shape that skips the check.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6596,7 +6596,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6608,7 +6608,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The field is a fallback identity hint, and both halves of the condition are outside the stream: the endpoint's own primary-key metadata sits in a document the stream only references, and whether identity is needed at all is decided by the destination's write mode in a third one. Declared against an endpoint that already carries keys, it is a second source of truth for record identity that can disagree; omitted where an API source feeds a conflict-resolving write, it leaves the transfer with no identity at all, since an API endpoint document has none to inherit. Catching either means reading the source endpoint and the destination's write mode together.\n",
+   "rationale": "The field is a fallback identity hint, and both halves of the condition are outside the stream: the endpoint's own primary-key metadata sits in a document the stream only references, and whether identity is needed at all is decided by the destination's write mode in a third one. Declared against an endpoint that already carries keys, it is a second source of truth for record identity that can disagree; omitted where an API source feeds a conflict-resolving write, it leaves the transfer with no identity at all, since an API endpoint document has none to inherit. Neither half is refused anywhere: the engine reads `primary_keys` as a plain optional list and falls back to a synthetic whole-record hash when it is empty, on both the read and the write side, so an omission that needed real identity does not fail the run — it silently derives a weaker one. Catching either means reading the source endpoint and the destination's write mode together.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6621,7 +6621,7 @@
     "stream"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6634,7 +6634,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Whether the referenced endpoint is an API or a database one is a fact in that endpoint's own document, and the ref model can only require that a connection-scoped ref carry a database object — which an author can invent for an API endpoint and satisfy. The scopes differ in how the endpoint is pinned, the connector version for one and a per-connection snapshot for the other, and no snapshot-hashing spec exists for API endpoints yet, so the combination names a pinning mechanism that has not been defined. Refusing to author it is the only check there is; catching a violation afterwards means reading the referenced endpoint's kind.\n",
+   "rationale": "Whether the referenced endpoint is an API or a database one is a fact in that endpoint's own document, and the ref model can only require that a connection-scoped ref carry a database object — which an author can invent for an API endpoint and satisfy. Only half of this is caught: the platform materializes every connection-scoped ref at stream-save time and rejects one that resolves to a non-database connector, but a connector-scoped ref is never resolved against the referenced endpoint's own kind anywhere, so an author can point one at a database endpoint and the document is accepted. The scopes also differ in how the endpoint is pinned, the connector version for one and a per-connection snapshot for the other, and no snapshot-hashing spec exists for API endpoints yet, so extending the existing save-time check to the connector-scope direction is a live, closeable gap rather than an undefined mechanism.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7185,7 +7185,7 @@
     "type-map"
    ],
    "validator": null,
-   "enforcement_location": "unenforced",
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin",
@@ -7209,7 +7209,7 @@
     "type-map"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "pipeline-plugin"
    ],
@@ -7358,7 +7358,7 @@
     "type-map"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -7406,7 +7406,7 @@
     "type-map"
    ],
    "validator": null,
-   "enforcement_location": "authoring-practice",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"

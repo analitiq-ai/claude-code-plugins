@@ -34,12 +34,16 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="_RequestBase", field="transport_ref",
-        prose_hash="f9d9c2b54c62",
+        prose_hash="04638b82e7fc",
         waiver=(
             "the NAME half is cross-document — enforced by analitiq-validator's "
             "endpoint-transport-ref check, which a single-document model cannot "
-            "run; the ORIGIN half is enforced by nothing today, as the prose "
-            "itself states; the defaulting to default_transport is engine-owned"
+            "run; the ORIGIN half is "
+            + ENGINE_CONDUCT
+            + " — the engine resolves the transport per operation and checks "
+            "every URL the request produces against that transport's origin on "
+            "both the read and the write path; the defaulting to "
+            "default_transport is engine-owned"
         ),
     ),
     ProseObligation(
