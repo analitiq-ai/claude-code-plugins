@@ -12,8 +12,12 @@ from pathlib import Path
 
 import pytest
 
+from analitiq.contracts.connection import CONNECTION_SCHEMA_URL
+from analitiq.contracts.connector import CONNECTOR_SCHEMA_URL
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
 from analitiq.contracts.endpoints import _REFUSED_REFERENCE_KEYWORDS
+from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
+from analitiq.contracts.stream import STREAM_SCHEMA_URL
 from analitiq.validator.connectors import (
     _DATABASE_KINDS,
     _READ_MAP_FILENAME,
@@ -766,7 +770,7 @@ def test_flatten_api_locator(validator):
     assert f("/customers/v2/orders") == "customers__v2__orders"  # every segment IN ORDER (no hoist)
     assert f("/customers") == "customers"
     # A mixed segment ({id}-{slug}) is NOT a pure path-param -> not dropped, so it
-    # does NOT collide with the pure-param sibling (Codex P3).
+    # does NOT collide with the pure-param sibling.
     assert f("/orders/{id}-{slug}") != f("/orders/{id}")
     assert "{" in f("/orders/{id}-{slug}")   # kept -> later flagged non-charset-safe
     assert f("/orders/{id}") == "orders"     # pure param dropped
@@ -816,7 +820,7 @@ def test_endpoint_locator_non_derivable_path_errors(validator):
 
 def test_coverage_non_dict_endpoint_file_no_crash(tmp_path, connector_base, validator):
     # A JSON-array endpoint file is a recorded model error, NOT a generic
-    # "validator bug" crash from the coverage walk calling .get() on a list (Codex P3).
+    # "validator bug" crash from the coverage walk calling .get() on a list.
     (tmp_path / "endpoints").mkdir(parents=True)
     (tmp_path / "connector.json").write_text(json.dumps(connector_base))
     (tmp_path / "type-map-read.json").write_text(
@@ -836,6 +840,217 @@ def test_coverage_flags_endpoint_id_locator_mismatch(tmp_path, connector_base, v
                 {"widgets.json": ep})
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert any(e.get("rule") == "RULE-ENDP-046" for e in errors)
+
+
+# --- RULE-ENDP-044: a keyset block must omit `initial`, never spell it null -----
+
+def _keyset_endpoint(initial=..., transport_ref=...):
+    keyset = {"param": "after", "order_by_field": "id"}
+    if initial is not ...:
+        keyset["initial"] = initial
+    request = {
+        "method": "GET", "path": "/v1/records",
+        "query": {"after": {"from_param": "after"}},
+    }
+    if transport_ref is not ...:
+        request["transport_ref"] = transport_ref
+    return {
+        "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+        "endpoint_id": "v1__records",
+        "operations": {
+            "read": {
+                "request": request,
+                "params": {
+                    "after": {"in": "query", "type": "string", "required": False,
+                              "controlled_by": "pagination"},
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {
+                        "$schema": "https://json-schema.org/draft/2020-12/schema",
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                        },
+                    },
+                },
+                "pagination": {
+                    "type": "keyset",
+                    "keyset": keyset,
+                    "stop_when": {"empty": {"ref": "response.records"}},
+                },
+            },
+        },
+    }
+
+
+def test_keyset_explicit_null_initial_warns(validator):
+    findings = validator.validate_document(_keyset_endpoint(initial=None))
+    hits = [f for f in findings if f.get("rule") == "RULE-ENDP-044"]
+    assert hits, findings
+    assert hits[0]["kind"] == "fail"
+    assert hits[0]["severity"] == "warning"
+    assert hits[0]["path"] == "/operations/read/pagination/keyset/initial"
+
+
+@pytest.mark.parametrize("initial", [..., "abc123", 0])
+def test_keyset_non_null_initial_is_clean(initial, validator):
+    findings = validator.validate_document(_keyset_endpoint(initial=initial))
+    assert not any(f.get("rule") == "RULE-ENDP-044" for f in findings), findings
+
+
+def test_coverage_flags_keyset_explicit_null_initial(tmp_path, connector_base, validator):
+    # End-to-end through the connector-package route (check_coverage's sibling-
+    # endpoint loop), not just the standalone single-document route: the two
+    # walk different code paths and must reach the same verdict.
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+                {"v1__records.json": _keyset_endpoint(initial=None)})
+    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    assert any(f.get("rule") == "RULE-ENDP-044" for f in findings), findings
+
+
+def test_check_coverage_and_standalone_route_agree_on_shared_per_endpoint_checks(
+        tmp_path, connector_base, validator):
+    # check_coverage's sibling-endpoint loop and the standalone
+    # _validate_api_endpoint route each reach `_api_endpoint_document_findings`
+    # from a different caller. Everything that function decides must come back
+    # identical, so this compares the two sets rather than asserting a named
+    # pair is in both: a check wired into one caller and not the other shows up
+    # as a set difference whatever rule it grades.
+    ep_doc = _keyset_endpoint(initial=None, transport_ref="bogus")
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+                {"v1__records.json": ep_doc})
+
+    def _graded(findings):
+        return {(f.get("rule"), f.get("message_id"), f.get("kind")) for f in findings}
+
+    coverage_findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    standalone_findings = validator.validate_document(
+        ep_doc, doc_path=tmp_path / "endpoints" / "v1__records.json")
+
+    # The tree is a clean connector whose single endpoint carries the defects,
+    # so neither route has anything of its own to add: equality both ways, not
+    # a subset, so a check wired into either caller alone shows up here.
+    assert _graded(coverage_findings), coverage_findings
+    assert _graded(coverage_findings) == _graded(standalone_findings), (
+        coverage_findings, standalone_findings)
+
+
+@pytest.mark.parametrize("rel, graded", [
+    ("draft.json", False),
+    ("staging/draft.json", False),
+    ("endpoints/draft.json", True),
+    ("definition/endpoints/draft.json", True),
+])
+def test_api_endpoint_filename_is_graded_only_where_the_engine_resolves_it(
+        rel, graded, tmp_path, validator):
+    # RULE-PKG-031 is about the name the engine will look the endpoint up by.
+    # A file not yet in an `endpoints/` directory has no such name, so the gate
+    # has nothing to grade — and reporting it anyway fires on every pass of an
+    # authoring fix loop with no way to clear it. An api endpoint has one home,
+    # unlike a database endpoint's second hash-addressed shape, so the
+    # `endpoints/` parent is the whole test.
+    ep = _keyset_endpoint(initial="abc")
+    path = tmp_path / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    findings = validator.validate_document(ep, doc_path=path)
+    hit = any(f.get("rule") == "RULE-PKG-031" for f in findings)
+    assert hit is graded, findings
+
+
+# --- RULE-SHRD-003: every authored document must declare `$schema` ------------
+
+def _connection_doc(schema_url=...):
+    doc = {"connector_id": "stripe"}
+    if schema_url is not ...:
+        doc["$schema"] = schema_url
+    return doc
+
+
+def _stream_doc(schema_url=...):
+    doc = {
+        "pipeline_id": "b4904c77-0a4a-4a8d-a768-4a8b5f2f2414",
+        "source": {
+            "endpoint_ref": {
+                "scope": "connector",
+                "connection_id": "11111111-1111-4111-8111-111111111111_v1",
+                "endpoint_id": "transfers",
+            }
+        },
+        "destinations": [
+            {
+                "endpoint_ref": {
+                    "scope": "connector",
+                    "connection_id": "22222222-2222-4222-8222-222222222222_v1",
+                    "endpoint_id": "orders",
+                },
+                "write": {"mode": "insert"},
+            }
+        ],
+    }
+    if schema_url is not ...:
+        doc["$schema"] = schema_url
+    return doc
+
+
+def _pipeline_doc(schema_url=...):
+    doc = {
+        "connections": {
+            "source": "11111111-1111-4111-8111-111111111111_v1",
+            "destinations": ["22222222-2222-4222-8222-222222222222_v1"],
+        }
+    }
+    if schema_url is not ...:
+        doc["$schema"] = schema_url
+    return doc
+
+
+def _connector_doc(schema_url=...):
+    doc = json.loads((CORPUS / "valid_connector.json").read_text())
+    if schema_url is ...:
+        del doc["$schema"]
+    else:
+        doc["$schema"] = schema_url
+    return doc
+
+
+_SHRD_003_FAMILIES = [
+    (_connection_doc, CONNECTION_SCHEMA_URL),
+    (_stream_doc, STREAM_SCHEMA_URL),
+    (_pipeline_doc, PIPELINE_SCHEMA_URL),
+    (_connector_doc, CONNECTOR_SCHEMA_URL),
+]
+
+
+@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
+def test_missing_schema_url_warns(make_doc, schema_url, validator):
+    findings = validator.validate_document(make_doc(schema_url=...))
+    hits = [f for f in findings if f.get("rule") == "RULE-SHRD-003"]
+    assert hits, findings
+    assert hits[0]["kind"] == "fail"
+    assert hits[0]["severity"] == "warning"
+    assert hits[0]["path"] == "/$schema"
+
+
+@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
+def test_present_schema_url_is_clean(make_doc, schema_url, validator):
+    findings = validator.validate_document(make_doc(schema_url=schema_url))
+    assert not any(f.get("rule") == "RULE-SHRD-003" for f in findings), findings
+
+
+@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
+def test_null_schema_url_reports_the_same_as_omission(make_doc, schema_url, validator):
+    # `$schema: null` is what every one of these models types as optional, so
+    # nothing structural rejects it — and a document spelling the absence as a
+    # null names no contract exactly as one leaving the key out does.
+    findings = validator.validate_document(make_doc(schema_url=None))
+    hits = [f for f in findings if f.get("rule") == "RULE-SHRD-003"]
+    assert len(hits) == 1, findings
+    assert hits[0]["severity"] == "warning"
+    assert hits[0]["path"] == "/$schema"
 
 
 # --- Database endpoint id = slug+hash8 (shared analitiq.contracts.endpoint_identity SSOT) ---
@@ -1375,3 +1590,44 @@ def test_cli_unreadable_document_exit1(tmp_path, validator_cli):
 def test_cli_missing_arg_exit2(validator_cli):
     r = validator_cli.run()
     assert r.returncode == 2
+
+
+# --- One document, one verdict, whichever route reaches it --------------------
+# A document's findings are a property of the document, not of the call that
+# produced them. Two routes reach an api-endpoint — `check_coverage`'s
+# sibling-endpoint loop and the standalone single-document route — and two
+# reach a connector-shaped dict, with and without its `kind`. Each pair must
+# agree.
+
+def test_kindless_connector_still_reports_a_missing_schema_url(validator):
+    # `Connector.schema_url` is optional, so RULE-SHRD-003 is the only thing
+    # that reports its omission — and a connector-shaped dict with no `kind` is
+    # the document most likely to be missing `$schema` too, so the route that
+    # claims it must carry the check as well as the model.
+    doc = {"connector_id": "x", "transports": {}, "connection_contract": {},
+           "default_transport": "m"}
+    findings = validator.validate_document(doc)
+    assert any(f.get("rule") == "RULE-SHRD-003" for f in findings), findings
+
+
+def test_endpoint_findings_name_the_file_on_both_routes(tmp_path, connector_base, validator):
+    # RULE-ENDP-048's message locates the offending schema, and inside a
+    # connector that location is only useful with the filename on it. The
+    # standalone route has the filename in hand — it takes `doc_path` — so it
+    # must spell the location the same way the coverage route does.
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["read"]["response"]["schema"]["minItems"] = "notanumber"
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+                {"widgets.json": ep})
+
+    via_connector = [f for f in validator.validate_document(
+        connector_base, doc_path=tmp_path / "connector.json")
+        if f.get("rule") == "RULE-ENDP-048"]
+    via_endpoint = [f for f in validator.validate_document(
+        ep, doc_path=tmp_path / "endpoints" / "widgets.json")
+        if f.get("rule") == "RULE-ENDP-048"]
+
+    assert via_connector and via_endpoint, (via_connector, via_endpoint)
+    assert "widgets.json" in via_connector[0]["message"], via_connector[0]
+    assert "widgets.json" in via_endpoint[0]["message"], via_endpoint[0]

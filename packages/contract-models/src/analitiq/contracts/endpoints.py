@@ -3165,6 +3165,19 @@ def _validate_param_wiring(
     allow_from_input: bool,
 ) -> None:
     """Validate from_param/from_input usage and request-binding location rules."""
+    # `transport_ref` is a key into the connector's `transports` map, looked up
+    # by the text the document carries. Nothing resolves it, so a `${...}` in
+    # it is not a late-bound transport name — it is a name no connector can
+    # declare, and the lookup fails at dispatch with the braces still in it.
+    if request.transport_ref is not None and TEMPLATE_SIGIL in request.transport_ref:
+        raise violation(
+            "RULE-SHRD-006",
+            "transport-ref-has-value-expression",
+            f"request.transport_ref is {request.transport_ref!r}, which carries "
+            "a ${...} value-expression sigil; transport_ref is a literal name "
+            "the sibling connector.json declares in `transports`, resolved by "
+            "nothing (spec: §Transport Selection)"
+        )
     # Reject malformed expression dicts (e.g. `{from_param: "x", "rogue": 1}`)
     # at their actual location before the per-binding walks. Without this,
     # the singleton check would fall through to recursion and the user would
@@ -3174,6 +3187,34 @@ def _validate_param_wiring(
     _validate_expression_shapes(request.headers, "request.headers")
     _validate_expression_shapes(request.query, "request.query")
     _validate_expression_shapes(getattr(request, "body", None), "request.body")
+
+    # `path_params` is documented and authored only as `{from_param}` /
+    # `{from_input}` singleton bindings (spec: §Request Parameter Binding) —
+    # it has no `${...}` template form of its own, so a sigil surviving an
+    # otherwise grammar-valid expression here is not a misscoped expression
+    # (RULE-ENDP-033), it is content outside what this slot is authored to
+    # carry. Walked with `iter_expression_strings` rather than a blind
+    # string search so a `literal` payload or a `function.map` table — data
+    # the resolver never touches — cannot trip this on a grammar-valid
+    # document.
+    # Per key, not over the map as a whole: the remedy is to rewrite one
+    # binding, and a document with several path params gives the author
+    # nowhere to start from a message naming only the offending string.
+    for name, binding in (request.path_params or {}).items():
+        for kind, s in iter_expression_strings(binding):
+            # `ref` strings are left to the singleton-binding check below,
+            # which rejects the whole form with the remedy for it. Reporting a
+            # sigil inside one first would name a defect the author cannot act
+            # on without first being told that a `ref` does not belong here.
+            if kind == "template" and TEMPLATE_SIGIL in s:
+                raise violation(
+                    "RULE-SHRD-006",
+                    "path-params-has-value-expression",
+                    f"request.path_params[{name!r}] is {s!r}, which carries a "
+                    "${...} value-expression sigil; path_params is authored "
+                    "only as `{from_param}`/`{from_input}` bindings, never "
+                    "templates (spec: §Request Parameter Binding)"
+                )
 
     # `path_params` is a from_input site on WRITE operations only: a REST
     # write addresses one record by its own key (`PATCH /contacts/{id}`), and the

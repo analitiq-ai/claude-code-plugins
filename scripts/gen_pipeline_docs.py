@@ -321,11 +321,6 @@ def measured_reachable_connectors_ids() -> set[str]:
     output — probing entity `type-map` with `direction="write"` through the
     adapter's own `diagnostics_for`, filter included, is what proves that
     exclusion instead of asserting it.
-
-    `endpoint_filename_findings` is never reached via dispatch at all —
-    `validate.py` calls it directly during bundle assembly (see that module's
-    own docstring) — so it is measured directly rather than through
-    `diagnostics_for`.
     """
     import json
     import tempfile
@@ -371,11 +366,21 @@ def measured_reachable_connectors_ids() -> set[str]:
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
             "type-map", path, direction="write")["findings"]}
 
-    from analitiq.validator import endpoint_filename_findings
-    observed |= {
-        f.get("rule") for f in
-        endpoint_filename_findings({"endpoint_id": "probe"}, "wrong-name.json")
-    }
+        # RULE-PKG-031: an endpoint document under a connection's
+        # `definition/endpoints/` whose filename does not carry its
+        # endpoint_id. Laid out on disk rather than calling the gate directly,
+        # because the gate only applies to a document the adapter reached at
+        # that address — probing it out of place would record an id the
+        # adapter's own routing might not surface.
+        ep_dir = root / "connections" / "pg" / "definition" / "endpoints"
+        ep_dir.mkdir(parents=True)
+        path = ep_dir / "wrong-name.json"
+        path.write_text(json.dumps({
+            "endpoint_id": "public__orders__aaaaaaaa",
+            "database_object": {"schema": "public", "name": "orders", "object_type": "table"},
+        }))
+        observed |= {f.get("rule") for f in adapter.diagnostics_for(
+            "database-endpoint", path)["findings"]}
 
     return {rule_id for rule_id in observed if rule_id is not None}
 

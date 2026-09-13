@@ -6,8 +6,9 @@ This module registers TWO kinds:
 1. **`pipeline` document** — validated wholly against its contract model
    (`PipelineInput`, the source of the published `pipeline` JSON Schema):
    `TypeAdapter(...).validate_python` enforces structure and every cross-field
-   rule offline. The model IS the whole single-document validity story, so it
-   registers via `register_model_kind`.
+   rule offline. The one check the model cannot carry is RULE-SHRD-003, which
+   reports a `warning` — a severity no `@model_validator` can carry
+   (`rules/SCHEMA.md`, `validator`) — so it registers a combined validator.
 
 2. **pipeline bundle** — cross-document referential integrity across an assembled
    run (pipeline + streams + connections + connectors + endpoints).
@@ -60,7 +61,7 @@ from ._core import (
     contract_model_domain,
     finding,
     register_kind,
-    register_model_kind,
+    register_model_and_schema_kind,
 )
 
 # Import the single-document contract model under the shared DOMAIN guard (the
@@ -650,4 +651,4 @@ def _validate_pipeline_bundle(doc: Any, doc_path: Any = None,  # skipcq: PYL-W06
 # detector claims an assembled-run mapping first; `is_pipeline_doc` then only sees
 # a `connections`-bearing mapping with no nested `pipeline` document.
 register_kind(is_pipeline_bundle, _validate_pipeline_bundle)
-register_model_kind(is_pipeline_doc, _PIPELINE_ADAPTER)
+register_model_and_schema_kind(is_pipeline_doc, _PIPELINE_ADAPTER)

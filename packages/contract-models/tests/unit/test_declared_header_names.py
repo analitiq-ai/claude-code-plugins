@@ -33,7 +33,10 @@ from analitiq.contracts.endpoints import (
     WriteRequest,
 )
 from analitiq.contracts.shared.introspect import contract_classes
-from analitiq.contracts.shared.rules import DeclaredHeaderNames
+from analitiq.contracts.shared.rules import (
+    DeclaredHeaderNames,
+    NoNullOrEmptyHeaderValues,
+)
 
 #: A minimal instance of each block that names headers through a `headers`
 #: map, as (label, model, kwargs-without-headers).
@@ -170,7 +173,6 @@ REMOVAL_BLOCKS = [
     ("WriteRequest", WriteRequest, {"method": "POST", "path": "/v1/x"}),
 ]
 
-
 @pytest.mark.parametrize("name", NOT_HEADER_NAMES)
 @pytest.mark.parametrize("label, model, kwargs", REMOVAL_BLOCKS)
 def test_a_removal_naming_no_header_name_is_refused(name, label, model, kwargs):
@@ -186,6 +188,44 @@ def test_a_removal_naming_a_header_parses(label, model, kwargs):
     assert model(**kwargs, headers_remove=["Accept"]).headers_remove == ["Accept"]
 
 
+@pytest.mark.parametrize("value", [None, "", "   ", {"literal": None},
+                                   {"literal": ""}, {"literal": " "},
+                                   {"template": ""}, {"template": "  "}])
+@pytest.mark.parametrize("label, model, kwargs", HEADER_MAP_BLOCKS)
+def test_a_header_declared_null_or_empty_is_refused(label, model, kwargs, value):
+    # RULE-SHRD-010: a null value merges as skip-override (the inherited
+    # value survives untouched) and an empty string merges and reaches the
+    # wire empty — neither is the deletion `headers_remove` states. A template
+    # carrying no substitution is that same empty string spelled longer: there
+    # is nothing in it left to resolve.
+    with pytest.raises(ValidationError) as exc:
+        model(**kwargs, headers={"Accept": value})
+    assert "RULE-SHRD-010" in str(exc.value)
+
+
+@pytest.mark.parametrize("label, model, kwargs", HEADER_MAP_BLOCKS)
+def test_a_header_declared_with_an_ordinary_value_parses(label, model, kwargs):
+    assert model(**kwargs, headers={"Accept": "application/json"}).headers == {
+        "Accept": "application/json"
+    }
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"ref": "connection.parameters.token"},
+        {"template": "Bearer ${connection.parameters.token}"},
+    ],
+)
+@pytest.mark.parametrize("label, model, kwargs", HEADER_MAP_BLOCKS)
+def test_a_header_declared_as_an_unresolved_expression_is_untouched_by_shrd_010(
+    label, model, kwargs, value
+):
+    # Out of scope: what a `ref`/`template` resolves to is not knowable here,
+    # so this rule only catches what an author wrote down directly.
+    assert model(**kwargs, headers={"Accept": value}).headers == {"Accept": value}
+
+
 @pytest.mark.parametrize("name", ["Accept", "X-Api-Key", "content-type-ish"])
 def test_an_ordinary_header_name_still_parses(name):
     assert HttpTransport(
@@ -196,11 +236,9 @@ def test_an_ordinary_header_name_still_parses(name):
 def test_every_block_naming_headers_carries_the_checks():
     """The coverage claim, as a property of the contract rather than a list.
 
-    A model that grows a `headers` map and does not inherit the mixin is a
-    route to the wire that neither rule grades — which is exactly how the
-    refusal came to exist at some call sites and not others. Membership is
-    read off the live tree, so a new block fails here rather than shipping
-    ungraded.
+    A model that grows a `headers` map and does not inherit the mixins is a
+    route to the wire that no rule grades. Membership is read off the live
+    tree, so a new block fails here rather than shipping ungraded.
     """
     declaring = [cls for cls in contract_classes() if "headers" in cls.model_fields]
     # A floor, because an extractor that matches nothing reports green in the
@@ -213,13 +251,14 @@ def test_every_block_naming_headers_carries_the_checks():
         f"fewer than the blocks parametrized here — `contract_classes()` or the "
         "field name has moved, and this check is measuring nothing."
     )
-    missing = sorted(
-        cls.__name__ for cls in declaring if not issubclass(cls, DeclaredHeaderNames)
-    )
-    assert not missing, (
-        f"models declaring `headers` without DeclaredHeaderNames: {missing}. "
-        "Mix it in, or the block can name a header no rule grades."
-    )
+    for mixin in (DeclaredHeaderNames, NoNullOrEmptyHeaderValues):
+        missing = sorted(
+            cls.__name__ for cls in declaring if not issubclass(cls, mixin)
+        )
+        assert not missing, (
+            f"models declaring `headers` without {mixin.__name__}: {missing}. "
+            "Mix it in, or the block can name a header no rule grades."
+        )
 
 
 @pytest.mark.parametrize(

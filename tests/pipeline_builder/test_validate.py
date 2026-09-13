@@ -10,6 +10,7 @@ there are no committed fixtures to drift from the contract.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -765,18 +766,18 @@ def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, m
 
 
 def test_endpoint_route_crash_before_validate_document_contained(tmp_path, monkeypatch, capsys):
-    # the import and doc_path.resolve() ahead of validate_document's own
+    # the import and the path normalization ahead of validate_document's own
     # internal guard are not themselves guarded by it — a failure there (e.g.
-    # a path that cannot resolve) must still produce Diagnostics on stdout
+    # a path that cannot be made absolute) must still produce Diagnostics on stdout
     p = _write(tmp_path, "database-endpoint.json", DB_ENDPOINT)
-    original_resolve = Path.resolve
+    original_abspath = os.path.abspath
 
-    def boom(self, *a, **kw):
-        if self == p:
+    def boom(path, *a, **kw):
+        if str(path) == str(p):
             raise OSError("cannot resolve")
-        return original_resolve(self, *a, **kw)
+        return original_abspath(path, *a, **kw)
 
-    monkeypatch.setattr(Path, "resolve", boom)
+    monkeypatch.setattr(V.os.path, "abspath", boom)
     rc = V.main(["--entity", "database-endpoint", "--document", str(p)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
@@ -895,8 +896,8 @@ def test_bundle_findings_crash_unrelated_to_exclusion_does_not_mislabel_it(tmp_p
     ), diag["findings"]  # the exclusion was an ordinary error, not caused by that crash
 
 
-def test_bundle_endpoint_filename_crash_preserves_endpoint_and_siblings(tmp_path, monkeypatch):
-    # a crash in one endpoint's filename gate must not cost that endpoint its
+def test_bundle_endpoint_grading_crash_preserves_endpoint_and_siblings(tmp_path, monkeypatch):
+    # a crash grading one endpoint document must not cost that endpoint its
     # place in the bundle passed to the referential check, nor the remaining
     # endpoints and the connection's trailing type-map check the per-connection
     # guard would otherwise discard as one shared unit
@@ -907,15 +908,14 @@ def test_bundle_endpoint_filename_crash_preserves_endpoint_and_siblings(tmp_path
                         "database_object": build_database_object(None, "public", "customers")}
     _write(tmp_path, f"connections/postgresql/definition/endpoints/{second_eid}.json", second_endpoint)
 
-    import analitiq.validator as validator_module
-    original = validator_module.endpoint_filename_findings
+    original = V._endpoint_findings
 
-    def boom(endpoint, filename):
-        if filename == f"{EID}.json":
+    def boom(endpoint, document_path):
+        if document_path.name == f"{EID}.json":
             raise TypeError("simulated crash")
-        return original(endpoint, filename)
+        return original(endpoint, document_path)
 
-    monkeypatch.setattr(validator_module, "endpoint_filename_findings", boom)
+    monkeypatch.setattr(V, "_endpoint_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
@@ -1337,3 +1337,107 @@ def test_cli_main_type_map_entities(tmp_path, capsys):
     rc = V.main(["--entity", "type-map", "--direction", "write", "--document", str(path)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 0 and out["passed"], out
+
+
+def test_bundle_grades_a_symlinked_endpoint_by_its_authored_name(tmp_path):
+    # RULE-PKG-031 is about where the engine will look for the file, which is
+    # the name the connection directory carries — not the name of whatever the
+    # entry points at. Resolving the whole path hands the gate the target's
+    # basename, and a misnamed endpoint reads clean.
+    doc = _build_bundle(tmp_path)
+    ep_dir = tmp_path / "connections/postgresql/definition/endpoints"
+    ep_path = ep_dir / f"{EID}.json"
+    store = tmp_path / "shared"
+    store.mkdir()
+    target = store / f"{EID}.json"
+    target.write_text(ep_path.read_text())
+    ep_path.unlink()
+    (ep_dir / "wrong-name.json").symlink_to(target)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"], diag["findings"]
+    assert any(f.get("rule") == "RULE-PKG-031" for f in diag["findings"]), diag["findings"]
+
+
+@pytest.mark.parametrize("member, site", [
+    ("connections/postgresql/connection.json", "connections/postgresql/connection.json"),
+    ("pipelines/p/streams/orders.json", "streams/orders.json"),
+])
+def test_bundle_grades_every_member_as_the_document_it_is(tmp_path, member, site):
+    # The referential checks read a member's refs, never its shape, so a
+    # bundled connection or stream would be graded by nothing on the route
+    # that assembles it while the same file validated alone was rejected. The
+    # finding is re-rooted at the file: a pointer into a document names nothing
+    # in a bundle holding several.
+    doc = _build_bundle(tmp_path)
+    path = tmp_path / member
+    body = json.loads(path.read_text())
+    body["not_a_declared_field"] = "x"
+    path.write_text(json.dumps(body))
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"], diag["findings"]
+    assert any(f.get("severity") == "error"
+               and f.get("path") == f"{site}/not_a_declared_field"
+               for f in diag["findings"]), diag["findings"]
+
+
+@pytest.mark.parametrize("link", ["endpoints", "definition"])
+def test_bundle_grades_an_endpoint_under_a_symlinked_directory(tmp_path, link):
+    # Following the link takes the file out of the layout RULE-PKG-031
+    # recognises, and the gate then reports nothing at all — a misnamed
+    # endpoint reads clean. Fails open, where the symlinked-file case at least
+    # failed under the wrong name.
+    doc = _build_bundle(tmp_path)
+    definition = tmp_path / "connections/postgresql/definition"
+    moved = tmp_path / f"elsewhere-{link}"
+    (definition / link if link == "endpoints" else definition).rename(moved)
+    if link == "endpoints":
+        (definition / "endpoints").symlink_to(moved, target_is_directory=True)
+        ep_dir = definition / "endpoints"
+    else:
+        definition.parent.joinpath("definition").symlink_to(moved, target_is_directory=True)
+        ep_dir = definition / "endpoints"
+    (ep_dir / f"{EID}.json").rename(ep_dir / "wrong-name.json")
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"], diag["findings"]
+    assert any(f.get("rule") == "RULE-PKG-031" for f in diag["findings"]), diag["findings"]
+
+
+@pytest.mark.parametrize("member", ["connection", "stream"])
+def test_a_crash_grading_a_member_does_not_cost_it_its_place_in_the_bundle(
+        tmp_path, monkeypatch, member):
+    # `_model_findings` catches only ValidationError. Anything else escaping it
+    # must cost its own findings and nothing more: a member excluded from the
+    # bundle marks assembly incomplete, and the whole cross-document referential
+    # pass is then skipped — so a crash grading one document's shape would
+    # silently stop grading every reference in the bundle.
+    doc = _build_bundle(tmp_path)
+    original = V._model_findings
+
+    def boom(entity, body):
+        if entity == member:
+            raise RecursionError("too deep")
+        return original(entity, body)
+
+    monkeypatch.setattr(V, "_model_findings", boom)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert any(f.get("validator") == "adapter-crash" for f in diag["findings"]), \
+        diag["findings"]
+    assert not any("referential integrity was not evaluated" in f.get("message", "")
+                   for f in diag["findings"]), diag["findings"]
+
+
+def test_bundle_grades_a_connection_scoped_endpoint_document(tmp_path):
+    # An endpoint in the bundle is graded by every rule its own document
+    # settles, the contract model included — not by the filename gate alone.
+    # A file the single-document route rejects cannot pass here.
+    doc = _build_bundle(tmp_path)
+    ep_path = tmp_path / f"connections/postgresql/definition/endpoints/{EID}.json"
+    ep = json.loads(ep_path.read_text())
+    ep["not_a_declared_field"] = "x"
+    ep_path.write_text(json.dumps(ep))
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"], diag["findings"]
+    site = f"connections/postgresql/definition/endpoints/{EID}.json"
+    assert any(f.get("severity") == "error"
+               and f.get("path") == f"{site}/not_a_declared_field"
+               for f in diag["findings"]), diag["findings"]

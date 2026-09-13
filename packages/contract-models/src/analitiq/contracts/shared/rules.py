@@ -28,7 +28,7 @@ from typing import Any, Callable
 
 from pydantic import model_validator
 
-from analitiq.contracts.value_expression import header_name_key
+from analitiq.contracts.value_expression import _EXPRESSION_KEYS, header_name_key
 
 from .rule_record import RuleRecord, load_records
 
@@ -186,13 +186,71 @@ def find_duplicates(seq: Any, key: Callable[[Any], Any] | None = None) -> list:
 # --- Rules binding several models -------------------------------------------
 
 
-class HeaderMergeRules:
+def _is_blank(value: Any) -> bool:
+    return isinstance(value, str) and value.strip() == ""
+
+
+def _resolves_to_null_or_empty(value: Any) -> bool:
+    """Whether an authored header value is void rather than removed.
+
+    A bare JSON `null`, or a string holding nothing a recipient can read, is
+    exactly that regardless of wrapping — `{"literal": ...}` unwraps to what it
+    holds and nothing else, and a `{"template": ...}` holding no `${...}`
+    placeholder is a literal wearing the other spelling: the resolver has
+    nothing to substitute into it, so it reaches the wire as the string it
+    already is. Whitespace counts as nothing: HTTP strips the optional
+    whitespace around a field value, so `"   "` and `""` are one header on the
+    wire. Any other object form (`{ref}`, a template that does interpolate, a
+    function call) resolves to something this repo cannot see until the engine
+    runs it, so it is not this rule's business — RULE-SHRD-010 only catches
+    what an author wrote down directly.
+    """
+    if value is None or _is_blank(value):
+        return True
+    if isinstance(value, dict):
+        keys = set(_EXPRESSION_KEYS) & set(value)
+        if len(keys) == 1:
+            key = keys.pop()
+            if key == "literal":
+                literal = value["literal"]
+                return literal is None or _is_blank(literal)
+            # A template with no `${...}` to interpolate is copied through, so
+            # a blank one reaches the wire as the blank string it already is.
+            if key == "template":
+                return _is_blank(value["template"])
+    return False
+
+
+class NoNullOrEmptyHeaderValues:
+    """A block that declares HTTP headers.
+
+    Enforces RULE-SHRD-010 alone, needing only `self.headers` — so a model
+    that declares headers but no removal list (`PostAuthOperationRequest`) can
+    mix this in directly rather than taking on `HeaderMergeRules`' other
+    validator, which would fail at construction over a `headers_remove` field
+    the model does not have.
+    """
+
+    @model_validator(mode="after")
+    def _headers_no_null_or_empty_value(self):
+        headers = self.headers
+        if not headers:
+            return self
+        bad = sorted(name for name, value in headers.items() if _resolves_to_null_or_empty(value))
+        if bad:
+            raise violation("RULE-SHRD-010", "header-value-null-or-empty", f"names={bad!r}")
+        return self
+
+
+class HeaderMergeRules(NoNullOrEmptyHeaderValues):
     """A block that both declares HTTP headers and names headers to remove.
 
-    Enforces RULE-HTTP-001 for every such block — a request, an auth operation
-    template, a transport, and the transport defaults all resolve headers the
-    same way, so they can all contradict themselves the same way. Mixed in
-    rather than repeated: one check, and a model gains it by inheriting.
+    Enforces RULE-HTTP-001 on top of what `NoNullOrEmptyHeaderValues` already
+    applies — a request, an auth operation template, a transport and the
+    transport defaults all resolve headers the same way, so a block that also
+    names removals can contradict itself the same way wherever it sits. Mixed
+    in rather than repeated: each check is written once, and a model gains it
+    by inheriting.
     """
 
     @model_validator(mode="after")

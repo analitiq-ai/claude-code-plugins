@@ -81,6 +81,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import os
 from pathlib import Path
 
 from _bootstrap import ensure_deps_or_reexec
@@ -222,9 +223,26 @@ def _model_findings(entity: str, doc) -> list[dict]:
         ]
 
 
+def _authored_path(document_path: Path) -> Path:
+    """The document's path made absolute WITHOUT following any symlink on it.
+
+    The published validator reads the authored layout off the path it is given
+    — RULE-PKG-031 off `doc_path.name`, and the directories above it to decide
+    whether that name is one the engine will ever resolve; a type map's
+    direction off its basename. Every one of those is a fact about where the
+    author put the file, so following a link to wherever its bytes really live
+    grades a layout nobody wrote: a symlinked endpoint is re-graded under its
+    target's basename, and a symlinked `endpoints/` directory takes the file
+    out of the layout the gate recognises, which fails open. `abspath`
+    normalizes lexically, so it gives the validator an absolute path — which it
+    needs, to find a sibling `connector.json` — while leaving the authored
+    shape intact."""
+    return Path(os.path.abspath(document_path))
+
+
 def _endpoint_findings(doc, document_path: Path) -> list[dict]:
     from analitiq.validator import validate_document
-    return validate_document(doc, doc_path=document_path.resolve())
+    return validate_document(doc, doc_path=_authored_path(document_path))
 
 
 def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
@@ -250,10 +268,7 @@ def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
             f"{expected} must be a top-level JSON array of rules, got "
             f"{type(doc).__name__}.")]
     from analitiq.validator import validate_document
-    # Resolve the parent but keep the authored basename: the published validator
-    # derives direction from `doc_path.name`, and a full resolve() would follow a
-    # symlinked map to a differently-named target and silently re-grade it.
-    findings = validate_document(doc, doc_path=document_path.parent.resolve() / document_path.name)
+    findings = validate_document(doc, doc_path=_authored_path(document_path))
     if direction == "write":
         # The published write-vocabulary coverage warning presumes a CONNECTOR
         # write map, which must cover the full canonical vocabulary. A connection
@@ -321,6 +336,17 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                             for f in _type_map_findings(direction, doc, path))
 
 
+def _at_site(site: str, findings: list[dict]) -> list[dict]:
+    """Re-root a member's own findings at the file they came from.
+
+    A document graded on its own reports a pointer into itself (`/scope`), which
+    is the whole address when that document is what was validated. A bundle
+    holds many, so the same pointer names none of them — the reader is told
+    what is wrong and not which file to open. Same shape
+    `_connection_type_map_findings` uses for the maps beside a connection."""
+    return [{**f, "path": f"{site}{f.get('path', '')}"} for f in findings]
+
+
 def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:
     """Read one sibling bundle document. On an unreadable/invalid file or a
     non-object payload, append an error finding and return None — so a malformed
@@ -352,12 +378,9 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     whether that exclusion came from an actual crash (worth its own labeled
     finding) or an already-reported ordinary read error (which needs no second,
     misleading one)."""
-    # The engine locates a connection-scoped endpoint by its filename stem, so a file
-    # named other than <endpoint_id>.json won't resolve at runtime. validate_document
-    # gates this for a stem-addressed file, but validate_pipeline_bundle takes a
-    # filename-less dict — so run the published gate here, where the names are known.
-    from analitiq.validator import endpoint_filename_findings
-
+    # `validate_pipeline_bundle` takes filename-less dicts, so every check that
+    # needs a name — RULE-PKG-031, on where an endpoint document ships — is run
+    # here, per file, where the names are known.
     findings: list[dict] = []
     complete = True
     crashed = False
@@ -381,6 +404,16 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                 doc = _read_bundle_member(p, findings)
                 if doc is not None:
                     streams.append(doc)
+                    # Grade it as the document it is, not only as a member of
+                    # the bundle: the referential checks below read a stream's
+                    # refs and never its shape, so an unbundled member would
+                    # otherwise be graded on this route and a bundled one not.
+                    # Its own guard, like the endpoint branch below: a crash
+                    # here costs these findings, never the stream's place in
+                    # the bundle, which the append above already gave it.
+                    with _contained(findings, f"streams/{p.name}"):
+                        findings.extend(_at_site(f"streams/{p.name}",
+                                                 _model_findings("stream", doc)))
             if outcome.crashed:
                 crashed = True
             if outcome.crashed or doc is None:
@@ -404,6 +437,14 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                 conn = _read_bundle_member(conn_json, findings)
                 if conn is not None:
                     connections.append(conn)
+                    conn_site = f"connections/{conn_json.parent.name}/connection.json"
+                    # Own guard, same reason as the stream and endpoint
+                    # branches: a crash grading this connection's shape must
+                    # not take the connection — and every endpoint under it —
+                    # out of the bundle the referential pass reads.
+                    with _contained(findings, conn_site):
+                        findings.extend(_at_site(conn_site,
+                                                 _model_findings("connection", conn)))
                     connection_id = conn.get("connection_id")
                     for ep_json in sorted((conn_json.parent / "definition" / "endpoints").glob("*.json")):
                         # One endpoint is its own independently-decidable unit, same
@@ -421,19 +462,27 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                         if ep_outcome.crashed or endpoint is None:
                             complete = False
                             continue
+                        # Grade the document the same way validating this one
+                        # file on its own does — every rule it settles alone,
+                        # not just the filename. It runs BEFORE the bundle keys
+                        # below are set on it: the endpoint models forbid
+                        # unknown keys, so a `connection_id`/`scope` supplied
+                        # here would come back as the author's error. Files
+                        # here are stem-addressed by construction (globbed from
+                        # definition/endpoints/), so the filename gate inside
+                        # applies directly and is not called separately. Its own
+                        # guard: a crash costs these findings, never the
+                        # endpoint's place in the bundle, which the lines below
+                        # still give it.
+                        with _contained(findings, ep_site):
+                            findings.extend(_at_site(
+                                ep_site, _endpoint_findings(endpoint, ep_json)))
                         # Endpoint documents omit connection_id (server-managed); supply the
                         # owning connection's id so the bundle's endpoint-ref check can resolve
                         # connection-scoped references.
                         endpoint.setdefault("connection_id", connection_id)
                         endpoint.setdefault("scope", "connection")
                         endpoints.append(endpoint)
-                        # files here are stem-addressed by construction (globbed from
-                        # definition/endpoints/), so the published filename gate applies
-                        # directly. The gate is its own guard too, run LAST: the
-                        # endpoint is already in the bundle by this point, so a crash
-                        # here costs only this one finding, not the bundle's completeness.
-                        with _contained(findings, ep_site):
-                            findings.extend(endpoint_filename_findings(endpoint, ep_json.name))
             if outcome.crashed:
                 crashed = True
             if outcome.crashed or conn is None:

@@ -1719,6 +1719,96 @@ class TestRequestPathPlaceholders:
                 }},
             ))
 
+    def test_dollar_brace_template_in_path_params_rejected(self):
+        """`path_params` is authored only as `{from_param}`/`{from_input}`
+        singleton bindings — a bare `${...}` string dropped in as a value is
+        not that shape, whatever a resolver would do with it."""
+        with pytest.raises(ValidationError, match="RULE-SHRD-006"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {
+                        "method": "GET",
+                        "path": "/v1/{account_id}/transactions",
+                        "path_params": {"account_id": "${account_id}"},
+                    },
+                    "params": {"account_id": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.account_id"}}},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    def test_dollar_brace_inside_path_params_literal_not_flagged_as_template(self):
+        """A `${...}`-shaped string sitting inside a `literal` value is opaque
+        data the resolver never inspects — the RULE-SHRD-006 template-sigil
+        check must not fire on it. The document is still rejected, but for the
+        actual defect: a `literal` payload is not a `{from_param}`/
+        `{from_input}` binding, so `path_params` has nothing to substitute
+        `{account_id}` with."""
+        with pytest.raises(ValidationError, match=r"must be a `\{from_param: <name>\}` expression"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {
+                        "method": "GET",
+                        "path": "/v1/{account_id}/transactions",
+                        "path_params": {"account_id": {"literal": "${not-a-template}"}},
+                    },
+                    "params": {"account_id": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.account_id"}}},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    def test_transport_ref_carrying_a_sigil_is_rejected(self):
+        """`transport_ref` is looked up verbatim as a key in the connector's
+        `transports` map. Nothing resolves it, so a `${...}` in it is not a
+        late-bound transport name — it is a name no connector can declare, and
+        the failure surfaces at dispatch with the braces still in it."""
+        with pytest.raises(ValidationError, match=r"\[RULE-SHRD-006\].*transport_ref"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {
+                        "method": "GET",
+                        "path": "/v1/transactions",
+                        "transport_ref": "${connection.parameters.transport}",
+                    },
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    def test_a_literal_transport_ref_parses(self):
+        ep = parse_endpoint(_minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/transactions",
+                            "transport_ref": "secondary"},
+                "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+            }},
+        ))
+        assert ep.operations.read.request.transport_ref == "secondary"
+
+    def test_sigil_inside_a_path_params_ref_is_not_the_reported_defect(self):
+        """A `ref` is a dotted lookup, not a template: nothing interpolates a
+        `${...}` sitting inside one, so RULE-SHRD-006 is not what a `ref` under
+        `path_params` gets rejected for. The defect is the `ref` itself — the
+        slot takes only `{from_param}`/`{from_input}` — and reporting the sigil
+        instead would hand the author a remedy that leaves the document just as
+        broken."""
+        with pytest.raises(ValidationError) as excinfo:
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {
+                        "method": "GET",
+                        "path": "/v1/{account_id}/transactions",
+                        "path_params": {"account_id": {"ref": "connection.selections.${account_id}"}},
+                    },
+                    "params": {"account_id": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.account_id"}}},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+        assert "RULE-SHRD-006" not in str(excinfo.value), str(excinfo.value)
+
     def test_camel_case_placeholder_rejected(self):
         """The placeholder is the document's slot, so the provider's spelling
         of the value does not travel into `path` with the path it was copied
