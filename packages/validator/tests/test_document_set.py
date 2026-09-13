@@ -36,7 +36,8 @@ if str(_PLUGIN_SCRIPTS) not in sys.path:
 
 def _xfail(fn_name: str):
     return pytest.mark.xfail(
-        strict=True, reason=f"{fn_name} is not yet implemented (analitiq.validator.document_set)")
+        strict=True, raises=NotImplementedError,
+        reason=f"{fn_name} is not yet implemented (analitiq.validator.document_set)")
 
 
 # ---------------------------------------------------------------------------
@@ -66,11 +67,18 @@ def test_finding_matches_the_keys_finding_builder_produces(validator):
     without_rule_or_severity = validator.finding(
         message_id="m", kind="notApplicable", path="p", message="msg")
     possible_keys = set(with_rule_and_severity) | set(without_rule_or_severity)
+    always_present = set(with_rule_and_severity) & set(without_rule_or_severity)
     hints = get_type_hints(Finding)
     # `direction` is the one key `finding()` itself never sets — only
     # `resolve_type_map_gaps` adds it, on top of a `finding()`-built dict — so
     # it is the sole declared key excluded from this pin.
     assert set(hints) - possible_keys == {"direction"}
+    # Required vs. optional tracks what these two real calls actually agreed
+    # on: a key both included is one `finding()` always sets; a key only one
+    # included (`rule`, `severity`) is conditional — as is `direction`, which
+    # neither call included at all.
+    assert Finding.__required_keys__ == always_present
+    assert Finding.__optional_keys__ == (possible_keys - always_present) | {"direction"}
 
     # `kind`: every value Finding declares is one finding() actually accepts,
     # and finding() rejects a value Finding does not declare — so the two

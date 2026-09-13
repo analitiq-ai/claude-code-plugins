@@ -58,7 +58,17 @@ Entity = Literal[
 ]
 
 
-class Finding(TypedDict, total=False):
+class _FindingRequired(TypedDict):
+    """`finding()` sets these four unconditionally on every result it builds —
+    see `Finding`."""
+
+    message_id: str
+    kind: Literal["fail", "notApplicable", "informational"]
+    path: str
+    message: str
+
+
+class Finding(_FindingRequired, total=False):
     """One entry of a `ValidationEnvelope`'s `findings` list — the shape
     `rules/SCHEMA.md`'s "Findings" section defines and
     `analitiq.validator.finding` already constructs, plus `direction`, which
@@ -66,15 +76,12 @@ class Finding(TypedDict, total=False):
     finding kinds carry it). Restated here only so this module's signatures
     are checkable; the shape itself stays owned by `finding()`, and
     `test_document_set.py::
-    test_finding_matches_the_keys_finding_builder_produces` pins the restated
-    half to the keys `finding()` actually produces."""
+    test_finding_matches_the_keys_finding_builder_produces` pins both the
+    restated keys and which of them are required to what `finding()`
+    actually produces."""
 
     rule: str
-    message_id: str
-    kind: Literal["fail", "notApplicable", "informational"]
     severity: Literal["error", "warning"]
-    path: str
-    message: str
     direction: Literal["read", "write"]
 
 
