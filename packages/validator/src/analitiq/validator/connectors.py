@@ -51,6 +51,7 @@ from typing import Any, Callable, Iterator
 from ._core import (
     contract_model_domain,
     finding,
+    register_entity,
     register_kind,
     _bounded,
     _missing_schema_url_findings,
@@ -1377,3 +1378,10 @@ register_kind(
     lambda doc: isinstance(doc, dict) and any(k in doc for k in _CONNECTOR_SENTINELS),
     _validate_kindless_connector,
 )
+
+# `Entity` names each of these four kinds directly, for `validate_document`'s
+# explicit-kind override (`document_set.diagnostics`'s single-document route).
+register_entity("connector", _validate_connector)
+register_entity("api-endpoint", _validate_api_endpoint)
+register_entity("database-endpoint", _validate_database_endpoint)
+register_entity("type-map", _validate_type_map)

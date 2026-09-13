@@ -60,6 +60,7 @@ from typing import Any
 from ._core import (
     contract_model_domain,
     finding,
+    register_entity,
     register_kind,
     register_model_and_schema_kind,
 )
@@ -651,4 +652,6 @@ def _validate_pipeline_bundle(doc: Any, doc_path: Any = None,  # skipcq: PYL-W06
 # detector claims an assembled-run mapping first; `is_pipeline_doc` then only sees
 # a `connections`-bearing mapping with no nested `pipeline` document.
 register_kind(is_pipeline_bundle, _validate_pipeline_bundle)
-register_model_and_schema_kind(is_pipeline_doc, _PIPELINE_ADAPTER)
+# The bundle kind carries no filesystem anchor and is never dispatched to by
+# `Entity` name — only the single pipeline document is.
+register_entity("pipeline", register_model_and_schema_kind(is_pipeline_doc, _PIPELINE_ADAPTER))
