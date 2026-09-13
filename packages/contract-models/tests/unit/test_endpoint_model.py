@@ -1758,6 +1758,35 @@ class TestRequestPathPlaceholders:
                 }},
             ))
 
+    def test_transport_ref_carrying_a_sigil_is_rejected(self):
+        """`transport_ref` is looked up verbatim as a key in the connector's
+        `transports` map. Nothing resolves it, so a `${...}` in it is not a
+        late-bound transport name — it is a name no connector can declare, and
+        the failure surfaces at dispatch with the braces still in it."""
+        with pytest.raises(ValidationError, match=r"\[RULE-SHRD-006\].*transport_ref"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {
+                        "method": "GET",
+                        "path": "/v1/transactions",
+                        "transport_ref": "${connection.parameters.transport}",
+                    },
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    def test_a_literal_transport_ref_parses(self):
+        ep = parse_endpoint(_minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/transactions",
+                            "transport_ref": "secondary"},
+                "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+            }},
+        ))
+        assert ep.operations.read.request.transport_ref == "secondary"
+
     def test_sigil_inside_a_path_params_ref_is_not_the_reported_defect(self):
         """A `ref` is a dotted lookup, not a template: nothing interpolates a
         `${...}` sitting inside one, so RULE-SHRD-006 is not what a `ref` under

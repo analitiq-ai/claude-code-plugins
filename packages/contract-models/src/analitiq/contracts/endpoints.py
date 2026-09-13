@@ -3165,6 +3165,19 @@ def _validate_param_wiring(
     allow_from_input: bool,
 ) -> None:
     """Validate from_param/from_input usage and request-binding location rules."""
+    # `transport_ref` is a key into the connector's `transports` map, looked up
+    # by the text the document carries. Nothing resolves it, so a `${...}` in
+    # it is not a late-bound transport name — it is a name no connector can
+    # declare, and the lookup fails at dispatch with the braces still in it.
+    if request.transport_ref is not None and TEMPLATE_SIGIL in request.transport_ref:
+        raise violation(
+            "RULE-SHRD-006",
+            "transport-ref-has-value-expression",
+            f"request.transport_ref is {request.transport_ref!r}, which carries "
+            "a ${...} value-expression sigil; transport_ref is a literal name "
+            "the sibling connector.json declares in `transports`, resolved by "
+            "nothing (spec: §Transport Selection)"
+        )
     # Reject malformed expression dicts (e.g. `{from_param: "x", "rogue": 1}`)
     # at their actual location before the per-binding walks. Without this,
     # the singleton check would fall through to recursion and the user would
