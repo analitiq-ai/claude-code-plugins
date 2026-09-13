@@ -47,6 +47,15 @@ jobs:
           ref: main
           path: _reviewer
 
+      # Several of these PRs were squash-merged, so their head commit was
+      # never actually an ancestor of main — a fresh clone (this checkout)
+      # simply doesn't have that object. GitHub still serves it by SHA for
+      # a while after the branch is deleted (confirmed manually before
+      # writing this), so fetch it explicitly rather than assuming the
+      # root checkout above already has it.
+      - name: Fetch this PR's head commit by SHA (may be orphaned by a squash merge)
+        run: git fetch origin "${{ matrix.pr.head }}"
+
       - name: Use the round-1 pre-built diff (identical input, tools are the only variable)
         run: cp ".bench/diffs/pr${{ matrix.pr.num }}.diff" /tmp/diff.txt
 
