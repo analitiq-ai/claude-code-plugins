@@ -5805,7 +5805,7 @@
    "artifact_kinds": [
     "any"
    ],
-   "validator": "analitiq.contracts.shared.rules::HeaderMergeRules._headers_no_null_or_empty_value",
+   "validator": "analitiq.contracts.shared.rules::NoNullOrEmptyHeaderValues._headers_no_null_or_empty_value",
    "enforcement_location": null,
    "owners": [
     "engine",
@@ -5816,7 +5816,8 @@
     "HttpTransport",
     "TransportDefaults",
     "_RequestBase",
-    "AuthOperationTemplate"
+    "AuthOperationTemplate",
+    "PostAuthOperationRequest"
    ],
    "fields": [],
    "mechanism": null,

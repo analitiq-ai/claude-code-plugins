@@ -205,7 +205,28 @@ def _resolves_to_null_or_empty(value: Any) -> bool:
     return False
 
 
-class HeaderMergeRules:
+class NoNullOrEmptyHeaderValues:
+    """A block that declares HTTP headers.
+
+    Enforces RULE-SHRD-010 alone, needing only `self.headers` — so a model
+    that declares headers but no removal list (`PostAuthOperationRequest`) can
+    mix this in directly rather than taking on `HeaderMergeRules`' other
+    validator, which would fail at construction over a `headers_remove` field
+    the model does not have.
+    """
+
+    @model_validator(mode="after")
+    def _headers_no_null_or_empty_value(self):
+        headers = self.headers
+        if not headers:
+            return self
+        bad = sorted(name for name, value in headers.items() if _resolves_to_null_or_empty(value))
+        if bad:
+            raise violation("RULE-SHRD-010", "header-value-null-or-empty", f"names={bad!r}")
+        return self
+
+
+class HeaderMergeRules(NoNullOrEmptyHeaderValues):
     """A block that both declares HTTP headers and names headers to remove.
 
     Enforces RULE-HTTP-001 and RULE-SHRD-010 for every such block — a request,
@@ -230,16 +251,6 @@ class HeaderMergeRules:
         )
         if overlap:
             raise violation("RULE-HTTP-001", "header-set-and-removed", f"overlap={overlap!r}")
-        return self
-
-    @model_validator(mode="after")
-    def _headers_no_null_or_empty_value(self):
-        headers = self.headers
-        if not headers:
-            return self
-        bad = sorted(name for name, value in headers.items() if _resolves_to_null_or_empty(value))
-        if bad:
-            raise violation("RULE-SHRD-010", "header-value-null-or-empty", f"names={bad!r}")
         return self
 
 
