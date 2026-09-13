@@ -56,6 +56,28 @@ reference field (a connection naming no connector, a stream slot with no
 connection refs match on their base form, so a `{id}_v{n}` versioned ref resolves
 the document that declares the bare `{id}` (connector identities match whole).
 
+## Path-free document sets
+
+`check_coverage` and the pipeline-builder plugin's own bundle assembly both
+resolve a document's siblings by reading real files off a filesystem path. A
+consumer with no local filesystem to put those files on — a hosted validator
+wrapping this package as a remote tool, registry CI, any caller handed
+document content directly — cannot use either route: it has the documents'
+content in hand, never a directory they can be read from.
+
+`analitiq.validator.document_set` fixes the contract such a consumer calls
+instead, ahead of building it: its types and signatures are exported from
+this package today; every function currently raises `NotImplementedError`.
+`packages/validator/tests/test_document_set.py` is the fixture corpus that
+fixes what an implementation must satisfy, `xfail` until each case's function
+is built. Read that module and that test file for the contract itself — it is
+not restated here.
+
+The contract is deliberately narrow: a `DocumentSet` never carries a directory
+to read from, and its keys are never resolved against a filesystem — the offline
+guarantee stated above for single-document validation, extended to a set of
+documents instead of one.
+
 ## Install
 
 ```bash
