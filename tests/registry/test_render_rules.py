@@ -279,9 +279,25 @@ def test_an_empty_string_validator_is_refused_not_treated_as_null(registry):
     from `null` the schema distinguishes. A truthiness check on `validator`
     would let it skip the format check, skip the enforcement_location
     conflict check, compile an empty-string validator into `rules.json`, and
-    report the rule as unmechanized instead of refusing it."""
+    report the rule as unmechanized instead of refusing it.
+
+    Asserts on `''` — the value the format check names — rather than the
+    substring `validator`, which also appears in the enforcement_location
+    conflict check's own message and so cannot tell the two refusals apart:
+    a truthiness regression at the format check alone trips that OTHER
+    check instead (BASELINE already carries an `enforcement_location`) and
+    this test would still see the word `validator` in the refusal and pass."""
     _write(registry, validator='""')
-    assert "validator" in _refusal(registry)
+    assert "''" in _refusal(registry)
+
+
+def test_an_empty_string_symbol_is_refused_not_treated_as_null(registry):
+    """The same defect class as the validator test above, on `symbol` —
+    `RuleRecord` had it too: `symbol: ""` skipped both the dotted-format
+    check and the mechanism-pairing check that exists specifically to
+    refuse a `symbol` on a mechanism that takes none."""
+    _write(registry, symbol='""', mechanism="pattern")
+    assert "''" in _refusal(registry)
 
 
 def test_a_validator_naming_a_source_path_is_refused(registry):

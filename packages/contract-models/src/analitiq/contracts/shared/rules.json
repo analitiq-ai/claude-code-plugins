@@ -1169,7 +1169,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1181,7 +1181,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Naming a strategy and shipping one are separate edits in separate files, so the pair drifts easily: an author who renames the entry-point class, or who copies a strategy id from a connector whose package they did not copy, leaves a document that validates and a connection that finds no strategy at all. The registry of built-in strategies is the engine's and `strategy` is an open string here, so an unregistered id passes every check and fails the first time discovery runs against a real connection.\n",
+   "rationale": "Naming a strategy and shipping one are separate edits in separate files, so the pair drifts easily: an author who renames the entry-point class, or who copies a strategy id from a connector whose package they did not copy, leaves a document that validates and, if a registered discovery mechanism keyed by this id exists for the connector's kind, a connection that finds none at discovery time. `strategy` is an open string here regardless, so an unregistered id passes every check this repo runs.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1270,7 +1270,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1282,7 +1282,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine reads the declaration instead of probing the live database, so an absent block is not a request for defaults — every write mode is refused at handshake, and the connector reads as finished right up until someone tries to write through it. The field is deliberately optional on `DatabaseConnector` so a partial document still validates, and the refusal happens against a live system this repo never sees.\n",
+   "rationale": "The engine reads the declaration instead of probing the live database, so an absent block is not a request for defaults, and the connector reads as finished right up until someone tries to write through it. The field is deliberately optional on `DatabaseConnector` so a partial document still validates. Known enforcement gap: no located engine mechanism refuses every write mode outright for a connector shipping no `sql_capabilities` at all — the class-level role checks that exist grade the CDK's own kind-default classes against `Readable`/`Writable`, not a per-connector declaration this document carries, so what actually happens against a live system this repo never sees is not confirmed.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1490,7 +1490,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1502,7 +1502,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Capability comes from the protocol the class in `connector.py` satisfies rather than from a flag in the document, so the two artifacts can disagree without either looking wrong on its own: the class advertises writes, the engine finds no declaration, and every write mode is refused at handshake long after the connector was signed off. Known enforcement gap: no contract model sees `connector.py`, so nothing here can tell a write-capable connector from a discovery-only one and the field stays optional.\n",
+   "rationale": "Capability comes from the protocol the class in `connector.py` satisfies rather than from a flag in the document, so the two artifacts can disagree without either looking wrong on its own: the class advertises writes and the document declares no `sql_capabilities`. Known enforcement gap: no contract model sees `connector.py`, so nothing here can tell a write-capable connector from a discovery-only one and the field stays optional; no located engine mechanism checks the disagreement either — the class-level role checks that exist grade the CDK's own kind-default classes against `Readable`/`Writable` at class-definition time, not this connector's own declared block against its own class, so what a live write attempt actually does is not confirmed.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2175,7 +2175,7 @@
     "database-endpoint"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -2188,7 +2188,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine adds its own bookkeeping columns to any table it creates, so declaring one puts the same column in the DDL twice and the first run fails at table creation. The trap is the mirror case: a source table the engine itself created carries those columns as ordinary discovered columns, so copying the source's list forward reproduces them without anyone deciding to. The synthetic names belong to the engine rather than to the contract, and the column model accepts any non-empty name, so nothing in the document can recognise them — the collision appears when the table is created.\n",
+   "rationale": "The engine adds its own bookkeeping columns to any table it creates. Known enforcement gap, and not the loud one it sounds like: for the write handler's main audit column, declaring it ahead of time is not a collision the engine raises on — the handler finds its own column already present and silently skips adding a second one, so the document's mistake costs nothing visible and the column's true origin (engine-synthesised, not authored) goes unrecorded. Only the keyless-insert audit column collides loudly, and only for that one stream shape. The trap is the mirror case either way: a source table the engine itself created carries these columns as ordinary discovered columns, so copying the source's list forward reproduces them without anyone deciding to, and the column model accepts any non-empty name, so nothing in the document can recognise them as synthetic.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5283,7 +5283,7 @@
     "connector-package"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5293,7 +5293,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine has no built-in TLS interpretation for any driver — the CDK base dialect raises for every mode — so the declaration is inert on its own and the connection fails at connect. The verification hook is the other half of the pair because a driver that quietly negotiates a plain session would otherwise satisfy a TLS-promising mode with no encryption at all. The `tls` block is JSON this repo validates while the hooks are dialect methods it never sees, so the mismatch is caught in the engine at connect time rather than anywhere here.\n",
+   "rationale": "The engine has no built-in TLS interpretation for any driver — the CDK base dialect raises for every mode — so declaring `tls` with no connect-argument hook implemented is inert on its own and the connection fails at connect. The verification hook is the other half of the pair because a driver that quietly negotiates a plain session would otherwise satisfy a TLS-promising mode with no encryption at all, and that half is the actual known enforcement gap: a missing verification hook is only logged at INFO level, not raised, so the connection succeeds unverified and the exact silent-plaintext-session risk this half of the rule exists to close is the one case nothing catches. The `tls` block is JSON this repo validates while the hooks are dialect methods it never sees.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6457,7 +6457,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The model bounds the mode to the contract's write vocabulary, but which of those an endpoint actually implements is a fact in the endpoint document the stream only references — so a mode the provider has no operation for validates locally and has nothing to execute. The vocabulary being closed is what makes this easy to miss: an author picks a member, the validator accepts it, and the narrowing that mattered was never in view. Catching a violation means opening the referenced endpoint and reading which write operations it declares.\n",
+   "rationale": "The model bounds the mode to the contract's write vocabulary, but which of those an endpoint actually implements is a fact in the endpoint document the stream only references — so a mode the provider has no operation for validates locally, with the narrowing that mattered never in view. The vocabulary being closed is what makes this easy to miss: an author picks a member and the validator accepts it. The engine refuses it at schema-handshake time, before any batch write: resolving the mode against the endpoint's declared write operations finds none and the run is refused as a per-stream schema-configuration defect rather than attempted.\n",
    "status": "active",
    "superseded_by": null
   },

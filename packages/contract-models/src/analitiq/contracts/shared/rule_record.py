@@ -365,7 +365,10 @@ class RuleRecord:
                     "dotted.module::Symbol — bind the module that is imported "
                     "(analitiq.contracts.x::Symbol), never a path to a file"
                 )
-        if self.symbol:
+        if self.symbol is not None:
+            # `is not None`, not truthiness — the same reason as `validator`
+            # above: an authored `symbol: ""` is a non-null, malformed value,
+            # not the same state as `null`.
             dotted, separator, _ = self.symbol.partition("::")
             if not separator or not all(
                 part.isidentifier() for part in dotted.split(".")
@@ -374,7 +377,7 @@ class RuleRecord:
                     f"symbol {self.symbol!r} is not "
                     "dotted.module::NAME — name the constant that is imported"
                 )
-        if self.symbol and self.mechanism not in SYMBOL_MECHANISMS:
+        if self.symbol is not None and self.mechanism not in SYMBOL_MECHANISMS:
             self._fail(
                 "symbol names the constant a `pattern` or `reserved_names` "
                 f"rule is about; this record's mechanism is {self.mechanism!r}"
