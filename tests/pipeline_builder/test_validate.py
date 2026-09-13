@@ -406,12 +406,19 @@ def test_cli_direction_with_non_type_map_entity_is_a_usage_error():
 def test_diagnostics_for_requires_direction_with_type_map_entity(tmp_path):
     # The guard raises before the document is ever read, so a path that
     # names no real file still proves it.
-    with pytest.raises(ValueError, match="direction is required"):
+    with pytest.raises(ValueError, match="direction must be"):
         V.diagnostics_for("type-map", tmp_path / "type-map-read.json")
 
 
+def test_diagnostics_for_rejects_an_unsupported_direction_value(tmp_path):
+    # Membership, not just presence: a non-null value outside {read, write}
+    # must not slip past the guard into _TYPE_MAP_FILENAMES[direction].
+    with pytest.raises(ValueError, match="direction must be"):
+        V.diagnostics_for("type-map", tmp_path / "type-map-read.json", direction="bogus")
+
+
 def test_diagnostics_for_rejects_direction_with_non_type_map_entity(tmp_path):
-    with pytest.raises(ValueError, match="invalid otherwise"):
+    with pytest.raises(ValueError, match="direction is invalid"):
         V.diagnostics_for("connection", tmp_path / "connection.json", direction="read")
 
 
