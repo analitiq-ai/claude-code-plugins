@@ -895,8 +895,8 @@ def test_bundle_findings_crash_unrelated_to_exclusion_does_not_mislabel_it(tmp_p
     ), diag["findings"]  # the exclusion was an ordinary error, not caused by that crash
 
 
-def test_bundle_endpoint_filename_crash_preserves_endpoint_and_siblings(tmp_path, monkeypatch):
-    # a crash in one endpoint's filename gate must not cost that endpoint its
+def test_bundle_endpoint_grading_crash_preserves_endpoint_and_siblings(tmp_path, monkeypatch):
+    # a crash grading one endpoint document must not cost that endpoint its
     # place in the bundle passed to the referential check, nor the remaining
     # endpoints and the connection's trailing type-map check the per-connection
     # guard would otherwise discard as one shared unit
@@ -907,15 +907,14 @@ def test_bundle_endpoint_filename_crash_preserves_endpoint_and_siblings(tmp_path
                         "database_object": build_database_object(None, "public", "customers")}
     _write(tmp_path, f"connections/postgresql/definition/endpoints/{second_eid}.json", second_endpoint)
 
-    import analitiq.validator as validator_module
-    original = validator_module.endpoint_filename_findings
+    original = V._endpoint_findings
 
-    def boom(endpoint, filename):
-        if filename == f"{EID}.json":
+    def boom(endpoint, document_path):
+        if document_path.name == f"{EID}.json":
             raise TypeError("simulated crash")
-        return original(endpoint, filename)
+        return original(endpoint, document_path)
 
-    monkeypatch.setattr(validator_module, "endpoint_filename_findings", boom)
+    monkeypatch.setattr(V, "_endpoint_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
@@ -1337,3 +1336,19 @@ def test_cli_main_type_map_entities(tmp_path, capsys):
     rc = V.main(["--entity", "type-map", "--direction", "write", "--document", str(path)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 0 and out["passed"], out
+
+
+def test_bundle_grades_a_connection_scoped_endpoint_document(tmp_path):
+    # A connection-scoped endpoint reaching the bundle used to be graded by the
+    # filename gate alone, so every rule its own document settles — the contract
+    # model included — went unenforced on the one route an author actually runs.
+    # The same file validated on its own was rejected; the bundle passed it.
+    doc = _build_bundle(tmp_path)
+    ep_path = tmp_path / f"connections/postgresql/definition/endpoints/{EID}.json"
+    ep = json.loads(ep_path.read_text())
+    ep["not_a_declared_field"] = "x"
+    ep_path.write_text(json.dumps(ep))
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"], diag["findings"]
+    assert any(f.get("severity") == "error" and f.get("path") == "/not_a_declared_field"
+               for f in diag["findings"]), diag["findings"]

@@ -352,12 +352,9 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     whether that exclusion came from an actual crash (worth its own labeled
     finding) or an already-reported ordinary read error (which needs no second,
     misleading one)."""
-    # The engine locates a connection-scoped endpoint by its filename stem, so a file
-    # named other than <endpoint_id>.json won't resolve at runtime. validate_document
-    # gates this for a stem-addressed file, but validate_pipeline_bundle takes a
-    # filename-less dict — so run the published gate here, where the names are known.
-    from analitiq.validator import endpoint_filename_findings
-
+    # `validate_pipeline_bundle` takes filename-less dicts, so every check that
+    # needs a name — the engine locates a connection-scoped endpoint by its
+    # filename stem — is run here, per file, where the names are known.
     findings: list[dict] = []
     complete = True
     crashed = False
@@ -421,19 +418,26 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                         if ep_outcome.crashed or endpoint is None:
                             complete = False
                             continue
+                        # Grade the document the same way validating this one
+                        # file on its own does — every rule it settles alone,
+                        # not just the filename. It runs BEFORE the bundle keys
+                        # below are set on it: the endpoint models forbid
+                        # unknown keys, so a `connection_id`/`scope` supplied
+                        # here would come back as the author's error. Files
+                        # here are stem-addressed by construction (globbed from
+                        # definition/endpoints/), so the filename gate inside
+                        # applies directly and is not called separately. Its own
+                        # guard: a crash costs these findings, never the
+                        # endpoint's place in the bundle, which the lines below
+                        # still give it.
+                        with _contained(findings, ep_site):
+                            findings.extend(_endpoint_findings(endpoint, ep_json))
                         # Endpoint documents omit connection_id (server-managed); supply the
                         # owning connection's id so the bundle's endpoint-ref check can resolve
                         # connection-scoped references.
                         endpoint.setdefault("connection_id", connection_id)
                         endpoint.setdefault("scope", "connection")
                         endpoints.append(endpoint)
-                        # files here are stem-addressed by construction (globbed from
-                        # definition/endpoints/), so the published filename gate applies
-                        # directly. The gate is its own guard too, run LAST: the
-                        # endpoint is already in the bundle by this point, so a crash
-                        # here costs only this one finding, not the bundle's completeness.
-                        with _contained(findings, ep_site):
-                            findings.extend(endpoint_filename_findings(endpoint, ep_json.name))
             if outcome.crashed:
                 crashed = True
             if outcome.crashed or conn is None:
