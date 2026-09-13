@@ -14,8 +14,26 @@ Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which self-registers its detector→validator
 pairs with the core dispatch registry — a new kind is a new module registering
 the same way, without touching `_core`. The public surface is re-exported here.
+
+`document_set` declares the path-free document-set API's types and
+signatures ahead of their implementation — every function it exports
+currently raises `NotImplementedError`; see that module's docstring and
+`__all__` below for what it contributes to this package's surface.
 """
 from ._core import finding, finding_costs_a_pass, main, validate_document
+from .document_set import (
+    DocumentSet,
+    DocumentSetValue,
+    Entity,
+    Finding,
+    FindingsEnvelope,
+    ValidationEnvelope,
+    diagnostics,
+    resolve_type_map_gaps,
+    validate_connector_tree,
+    validate_pipeline_tree,
+    validate_tree,
+)
 from . import connectors  # noqa: F401  — imported for its self-registration side effect
 from . import pipelines  # noqa: F401  — imported for its self-registration side effect
 from . import connections  # noqa: F401  — imported for its self-registration side effect
@@ -47,6 +65,17 @@ __all__ = [
     "finding_costs_a_pass",
     "main",
     "validate_document",
+    "DocumentSet",
+    "DocumentSetValue",
+    "Entity",
+    "Finding",
+    "FindingsEnvelope",
+    "ValidationEnvelope",
+    "diagnostics",
+    "resolve_type_map_gaps",
+    "validate_connector_tree",
+    "validate_pipeline_tree",
+    "validate_tree",
     "check_coverage",
     "endpoint_filename_findings",
     "is_stem_addressed_endpoint_path",
