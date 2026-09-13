@@ -1144,7 +1144,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "engine",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1156,7 +1156,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The binding is the only path by which connection state reaches the DSN, so a shape outside the grammar does not degrade into a literal — it resolves to nothing and the DSN renders with a hole where the host or the credential belonged. `DsnBinding.value` is typed `Any`, and the only thing the models read inside it is the leading scope of each ref and placeholder (RULE-CTOR-057), so an object outside the grammar carries no token to check and passes — the failure surfaces when the engine builds the DSN.\n",
+   "rationale": "The binding is the only path by which connection state reaches the DSN. `DsnBinding.value` is typed `Any`, and the only thing the models read inside it is the leading scope of each ref and placeholder (RULE-CTOR-057), so an object outside the grammar carries no token to check and passes. Known enforcement gap, and narrower than it looks: the resolver's fallback for an unrecognised shape is to return the value unchanged rather than reject it, so a bare scalar (`5432` in place of `{\"literal\": 5432}`) is not a hole at all — `raw` encoding stringifies it identically to the grammar form, and the connection succeeds. Only a shape that resolves to something the DSN template genuinely cannot render (an unbacked ref, a mapping with no matching key) produces the hole the rest of this rationale describes.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1366,7 +1366,7 @@
     "connector"
    ],
    "validator": null,
-   "enforcement_location": "unenforced",
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1376,7 +1376,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Discovery output is connection-scoped, so a hand-authored endpoint in the release describes whichever database the author happened to look at and no user's connection: nothing consumes it, and it invites the next author to maintain it in step with a set of endpoints the runtime regenerates anyway. Nothing inspects a database connector's release for files it should not contain — the coverage walk only enumerates `endpoints/` for `api` connectors, so an endpoint shipped beside `connector.json` is never looked at.\n",
+   "rationale": "Discovery output is connection-scoped, so a hand-authored endpoint in the release describes whichever database the author happened to look at and no user's connection: nothing consumes it, and it invites the next author to maintain it in step with a set of endpoints the runtime regenerates anyway. Nothing inspects a database connector's release for files it should not contain — the coverage walk only enumerates `endpoints/` for `api` connectors, so an endpoint shipped beside `connector.json` is never looked at. Catching a violation means looking at the release's file list, not at any document — the same recourse `RULE-DBEP-006` names for a hand-authored database endpoint specifically; this is the general form, for any endpoint shape, of that same release-scope mistake.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4630,7 +4630,7 @@
     "pipeline"
    ],
    "validator": null,
-   "enforcement_location": "unenforced",
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4642,7 +4642,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Every permutation validates identically and the runtime is free to ignore the order entirely, so an array arranged to mean \"load the dimensions before the facts\" produces wrong results non-deterministically, and nothing can tell that arrangement from an arbitrary one. The second half of the rule carries as much weight as the first: a user told the order is meaningful will go on authoring against a guarantee that does not exist, long after the document that misled them is forgotten.\n",
+   "rationale": "Every permutation validates identically and the runtime is free to ignore the order entirely, so an array arranged to mean \"load the dimensions before the facts\" produces wrong results non-deterministically, and nothing — including a reviewer reading the document alone — can tell that arrangement from an arbitrary one; only asking the author what they intended can. The second half of the rule is squarely a reviewer's to catch: whatever documentation or UI text a plugin presents to the user about a pipeline is readable, and a reviewing agent checks it for a promise this ordering does not keep.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4917,7 +4917,7 @@
     "connector-package"
    ],
    "validator": null,
-   "enforcement_location": "external-ci",
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4927,7 +4927,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A declaration with no hook behind it is inert: the CDK base raises for every unimplemented hook, so the connector validates clean here and dies at connect or at the first write. The declaration is JSON this repo checks and the hooks are Python it never opens, and the hook names and signatures are engine-owned — the CDK is the authority and this repo can pin nothing about it. The CDK conformance kit run by registry CI is what catches a missing or mis-signed hook, after the plugin has already returned the package.\n",
+   "rationale": "A declaration with no hook behind it is inert: the CDK base raises for most unimplemented hooks, so the connector validates clean here and dies at connect or at the first write. The declaration is JSON this repo checks and the hooks are Python it never opens, and the hook names and signatures are engine-owned — the CDK is the authority and this repo can pin nothing about it. Known enforcement gap for at least one required hook: `RULE-PKG-021` already establishes that a missing post-connect TLS verification hook is only logged at INFO, not raised, so the CDK conformance kit's raise-on-missing-hook behavior does not cover every hook this rule requires — the connection succeeds unverified rather than dying, for exactly that one case.\n",
    "status": "active",
    "superseded_by": null
   },

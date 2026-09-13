@@ -6,16 +6,20 @@ tier: shape
 severity: error
 scopes: [connector]
 validator: null
-enforcement_location: engine
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 targets: [DsnBinding]
 rationale: >
-  The binding is the only path by which connection state reaches the DSN, so
-  a shape outside the grammar does not degrade into a literal — it resolves
-  to nothing and the DSN renders with a hole where the host or the credential
-  belonged. `DsnBinding.value` is typed `Any`, and the only thing the models
-  read inside it is the leading scope of each ref and placeholder
-  (RULE-CTOR-057), so an object outside the grammar carries no token to check
-  and passes — the failure surfaces when the engine builds the DSN.
+  The binding is the only path by which connection state reaches the DSN.
+  `DsnBinding.value` is typed `Any`, and the only thing the models read
+  inside it is the leading scope of each ref and placeholder (RULE-CTOR-057),
+  so an object outside the grammar carries no token to check and passes.
+  Known enforcement gap, and narrower than it looks: the resolver's fallback
+  for an unrecognised shape is to return the value unchanged rather than
+  reject it, so a bare scalar (`5432` in place of `{"literal": 5432}`) is not
+  a hole at all — `raw` encoding stringifies it identically to the grammar
+  form, and the connection succeeds. Only a shape that resolves to something
+  the DSN template genuinely cannot render (an unbacked ref, a mapping with
+  no matching key) produces the hole the rest of this rationale describes.
 status: active
 superseded_by: null
