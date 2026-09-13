@@ -689,6 +689,23 @@ def test_a_document_that_fails_to_parse_skips_the_referential_pass(validator):
         result["findings"]
 
 
+def test_a_document_that_never_materializes_also_skips_the_referential_pass(validator):
+    """The other of `_VirtualFS`'s two crash layers: a key whose own value
+    could not even be turned into JSON text (a cyclic structure) never reaches
+    `_validate_tree_document` at all — `_normalize_documents` reports it
+    directly. That must cost the bundle the same completeness gate a
+    parse-time crash does, since either way the connection dropped out of the
+    bundle just the same."""
+    cyclic: dict = {}
+    cyclic["self"] = cyclic
+    documents = _pipeline_tree_documents()
+    documents = {**documents, "connections/postgresql/connection.json": cyclic}
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "internal-error" for f in result["findings"]), result["findings"]
+    assert not any(f.get("message_id") == "connection-ref-unresolved" for f in result["findings"]), \
+        result["findings"]
+
+
 # ---------------------------------------------------------------------------
 # Entity override — end-to-end: validate_document(entity=...) dispatches
 # straight to the named kind, bypassing shape auto-detection; diagnostics on a

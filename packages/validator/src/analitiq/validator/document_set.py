@@ -540,18 +540,24 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     walking those same keys (their presence is how a subtree is discovered at
     all).
 
-    When any bundle member fails to parse, the referential pass
+    When any bundle member is missing or broken — a pipeline/stream/connection/
+    connection-endpoint key that is `known` but never materialized (crashed in
+    `_normalize_documents`), or one that materialized but failed to parse
+    (crashed in `_validate_tree_document`) — the referential pass
     (`validate_pipeline_bundle`) is skipped entirely for this call, keeping
     only the `internal-error` finding(s) already collected for the member(s)
-    that failed — mirroring `plugins/analitiq-pipeline-builder/scripts/
+    responsible — mirroring `plugins/analitiq-pipeline-builder/scripts/
     validate.py`'s own `complete`/`crashed` gate: the published bundle
-    validator has no way to tell "excluded here because it failed to parse"
-    from "genuinely missing", so running it against a bundle this incomplete
-    risks reporting a reference as broken that the parse failure, not the
-    author, made unresolvable. `_connector_endpoint_ref_findings`
-    (RULE-STRM-043) is a plugin-local aid rather than a referential check the
-    published bundle validator owns, and runs regardless, the same way the
-    plugin's own connector-endpoint-ref check does.
+    validator has no way to tell "excluded here because it's broken" from
+    "genuinely missing", so running it against a bundle this incomplete risks
+    reporting a reference as broken that the missing/broken member, not the
+    author, made unresolvable. Both crash layers cost the bundle the same way
+    because they leave it in the same state — one member short — regardless of
+    which of `_VirtualFS`'s two stages caught it.
+    `_connector_endpoint_ref_findings` (RULE-STRM-043) is a plugin-local aid
+    rather than a referential check the published bundle validator owns, and
+    runs regardless, the same way the plugin's own connector-endpoint-ref
+    check does.
     """
     fs, findings = _normalize_documents(documents)
 
@@ -566,7 +572,7 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
                 and any(f["path"].startswith(f"connectors/{slug}/definition/") for slug in connector_slugs))
     ]
 
-    any_document_failed_to_parse = False
+    bundle_is_incomplete = False
 
     pipeline_doc: Any = None
     slug = None
@@ -578,7 +584,9 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
             pipeline_doc, doc_findings = _validate_tree_document(fs, primary_key)
             findings.extend(doc_findings)
             if pipeline_doc is None:
-                any_document_failed_to_parse = True
+                bundle_is_incomplete = True
+        else:
+            bundle_is_incomplete = True
         # A second (or further) pipelines/<slug>/pipeline.json is not silently
         # ignored: only `primary_key` (the first in sorted key order) becomes
         # this tree's pipeline, and each other match is named so its author
@@ -595,33 +603,42 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     streams: list[Any] = []
     if slug is not None:
         stream_prefix = f"pipelines/{slug}/streams/"
-        for key in fs.direct_json_children(stream_prefix):
+        for key in fs.known_json_children(stream_prefix):
+            if not fs.materialized(key):
+                bundle_is_incomplete = True
+                continue
             suffix = key[len(stream_prefix):]
             doc, doc_findings = _validate_tree_document(fs, key)
             findings.extend(_at_site(f"streams/{suffix}", doc_findings))
             if doc is None:
-                any_document_failed_to_parse = True
+                bundle_is_incomplete = True
             else:
                 streams.append(doc)
 
     connections: list[Any] = []
     endpoints: list[Any] = []
-    for key in sorted(k for k in fs.known_keys if _CONNECTION_DOC_RE.match(k) and fs.materialized(k)):
+    for key in sorted(k for k in fs.known_keys if _CONNECTION_DOC_RE.match(k)):
+        if not fs.materialized(key):
+            bundle_is_incomplete = True
+            continue
         conn_slug = _CONNECTION_DOC_RE.match(key).group(1)
         doc, doc_findings = _validate_tree_document(fs, key)
         findings.extend(_at_site(key, doc_findings))
         if doc is None:
-            any_document_failed_to_parse = True
+            bundle_is_incomplete = True
         connection_id_value = doc.get("connection_id") if isinstance(doc, dict) else None
         if isinstance(doc, dict):
             connections.append(doc)
 
         ep_prefix = f"connections/{conn_slug}/definition/endpoints/"
-        for ep_key in fs.direct_json_children(ep_prefix):
+        for ep_key in fs.known_json_children(ep_prefix):
+            if not fs.materialized(ep_key):
+                bundle_is_incomplete = True
+                continue
             ep_doc, ep_findings = _validate_tree_document(fs, ep_key)
             findings.extend(_at_site(ep_key, ep_findings))
             if ep_doc is None:
-                any_document_failed_to_parse = True
+                bundle_is_incomplete = True
             elif isinstance(ep_doc, dict):
                 entry = {**ep_doc}
                 entry.setdefault("connection_id", connection_id_value)
@@ -649,7 +666,7 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
         "connectors": sorted(connector_identities),
         "endpoints": endpoints,
     }
-    if not any_document_failed_to_parse:
+    if not bundle_is_incomplete:
         require_runnable = isinstance(pipeline_doc, dict) and pipeline_doc.get("status") == "active"
         findings.extend(validate_pipeline_bundle(bundle, require_runnable=require_runnable))
 

@@ -89,19 +89,30 @@ class _VirtualFS:
             key=lambda k: k.split("/"),
         )
 
-    def direct_json_children(self, prefix: str) -> list[str]:
-        """Every materialized key directly under `prefix` (exactly one further
-        path segment) ending in `.json` — the flat, one-level `*.json` listing
-        `_connector_endpoint_sets` and `validate_pipeline_tree`'s stream/
-        endpoint scans each need, factored once so the filter isn't
-        hand-written at every call site."""
+    def known_json_children(self, prefix: str) -> list[str]:
+        """Every known key directly under `prefix` (exactly one further path
+        segment) ending in `.json`, whether or not it materialized — the flat,
+        one-level `*.json` listing `_connector_endpoint_sets` and
+        `validate_pipeline_tree`'s stream/connection-endpoint scans each need,
+        factored once so the filter isn't hand-written at every call site. A
+        caller that must tell "known but crashed during materialization" apart
+        from "materialized cleanly" — `validate_pipeline_tree`'s own bundle
+        completeness gate — reads `materialized()` itself over this list
+        rather than have that case silently excluded, the way
+        `direct_json_children` excludes it for a caller that doesn't need to
+        know."""
         return [
             key for key in sorted(self.known_keys)
             if key.startswith(prefix)
             and "/" not in key[len(prefix):]
             and key.endswith(".json")
-            and self.materialized(key)
         ]
+
+    def direct_json_children(self, prefix: str) -> list[str]:
+        """`known_json_children(prefix)`, filtered to the keys that actually
+        materialized — for a caller that treats a materialization crash the
+        same as no file being there at all."""
+        return [key for key in self.known_json_children(prefix) if self.materialized(key)]
 
 
 class VirtualPath:
