@@ -989,6 +989,12 @@ def test_present_schema_url_is_clean(make_doc, schema_url, validator):
     assert not any(f.get("rule") == "RULE-SHRD-003" for f in findings), findings
 
 
+@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
+def test_null_schema_url_is_not_reported_as_omitted(make_doc, schema_url, validator):
+    findings = validator.validate_document(make_doc(schema_url=None))
+    assert not any(f.get("rule") == "RULE-SHRD-003" for f in findings), findings
+
+
 # --- Database endpoint id = slug+hash8 (shared analitiq.contracts.endpoint_identity SSOT) ---
 
 DB = "https://schemas.analitiq.ai/database-endpoint/latest.json"

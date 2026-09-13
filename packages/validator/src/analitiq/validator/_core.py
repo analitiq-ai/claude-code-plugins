@@ -261,7 +261,7 @@ def _missing_schema_url_findings(doc: Any) -> list[dict]:
     value as a structural `error`, so this only needs to catch OMISSION — the
     raw document declaring no `$schema` at all.
     """
-    if not isinstance(doc, dict) or doc.get("$schema"):
+    if not isinstance(doc, dict) or "$schema" in doc:
         return []
     return [finding(
         rule="RULE-SHRD-003",
