@@ -1,0 +1,61 @@
+name: Agentic model bench (throwaway)
+
+# Round 2 of the model bench: same 5 PRs, same 3 models, same pre-built
+# diffs as round 1 (.bench/diffs/*.diff) — the only variable this time is
+# tool access (read_file/grep/list_files), to isolate whether tools change
+# what a model finds. review.sh's real GitHub side effects (an eyes
+# reaction, a failure comment) are pointed at a dedicated sink issue
+# (analitiq-ai/.github#10), never at the PRs being benchmarked.
+
+on:
+  push:
+    branches: [chore/model-bench-throwaway]
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [moonshotai/kimi-k2.6, z-ai/glm-5.3-flash, moonshotai/kimi-k3]
+        pr:
+          - { num: 258, head: decdc9be6349e50f7662c0767fdc8339299b0d3c }
+          - { num: 248, head: 4340e0086572d7cc1ab89b53eb9cbdfb461492a8 }
+          - { num: 256, head: 43d6fa7313e5109eb93688359de03eae6767effc }
+          - { num: 270, head: fee11c84fd38860f49fb5bf1e860a60e54aec246 }
+          - { num: 260, head: 405416b23f111d1383071068650b8b6d937f6984 }
+    runs-on: ubuntu-latest
+    env:
+      OR_KEY: ${{ secrets.OPEN_ROUTER_KEY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MODEL: ${{ matrix.model }}
+      REPO: analitiq-ai/.github
+      PR: 10
+      COMMENT_ID: 5651688946
+      PR_HEAD: ${{ matrix.pr.head }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout review scripts
+        uses: actions/checkout@v4
+        with:
+          repository: analitiq-ai/.github
+          ref: main
+          path: _reviewer
+
+      - name: Use the round-1 pre-built diff (identical input, tools are the only variable)
+        run: cp ".bench/diffs/pr${{ matrix.pr.num }}.diff" /tmp/diff.txt
+
+      - name: Run the actual agentic review.sh
+        run: bash _reviewer/.github/scripts/review.sh full
+
+      - name: Upload result
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentic-pr${{ matrix.pr.num }}-${{ strategy.job-index }}
+          path: /tmp/out.json
+          retention-days: 3
