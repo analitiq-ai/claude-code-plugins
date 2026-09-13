@@ -81,6 +81,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import os
 from pathlib import Path
 
 from _bootstrap import ensure_deps_or_reexec
@@ -222,14 +223,26 @@ def _model_findings(entity: str, doc) -> list[dict]:
         ]
 
 
+def _authored_path(document_path: Path) -> Path:
+    """The document's path made absolute WITHOUT following any symlink on it.
+
+    The published validator reads the authored layout off the path it is given
+    — RULE-PKG-031 off `doc_path.name`, and the directories above it to decide
+    whether that name is one the engine will ever resolve; a type map's
+    direction off its basename. Every one of those is a fact about where the
+    author put the file, so following a link to wherever its bytes really live
+    grades a layout nobody wrote: a symlinked endpoint is re-graded under its
+    target's basename, and a symlinked `endpoints/` directory takes the file
+    out of the layout the gate recognises, which fails open. `abspath`
+    normalizes lexically, so it gives the validator an absolute path — which it
+    needs, to find a sibling `connector.json` — while leaving the authored
+    shape intact."""
+    return Path(os.path.abspath(document_path))
+
+
 def _endpoint_findings(doc, document_path: Path) -> list[dict]:
     from analitiq.validator import validate_document
-    # Resolve the parent but keep the authored basename, the same way
-    # `_type_map_findings` does: the published validator reads RULE-PKG-031 off
-    # `doc_path.name` and gates it on the two directories above, so a full
-    # resolve() would follow a symlinked endpoint to a differently-named target
-    # and drop the gate on the file the engine will actually look for.
-    return validate_document(doc, doc_path=document_path.parent.resolve() / document_path.name)
+    return validate_document(doc, doc_path=_authored_path(document_path))
 
 
 def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
@@ -255,10 +268,7 @@ def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
             f"{expected} must be a top-level JSON array of rules, got "
             f"{type(doc).__name__}.")]
     from analitiq.validator import validate_document
-    # Resolve the parent but keep the authored basename: the published validator
-    # derives direction from `doc_path.name`, and a full resolve() would follow a
-    # symlinked map to a differently-named target and silently re-grade it.
-    findings = validate_document(doc, doc_path=document_path.parent.resolve() / document_path.name)
+    findings = validate_document(doc, doc_path=_authored_path(document_path))
     if direction == "write":
         # The published write-vocabulary coverage warning presumes a CONNECTOR
         # write map, which must cover the full canonical vocabulary. A connection
@@ -393,13 +403,17 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
             with _contained(findings, f"streams/{p.name}") as outcome:
                 doc = _read_bundle_member(p, findings)
                 if doc is not None:
+                    streams.append(doc)
                     # Grade it as the document it is, not only as a member of
                     # the bundle: the referential checks below read a stream's
                     # refs and never its shape, so an unbundled member would
                     # otherwise be graded on this route and a bundled one not.
-                    findings.extend(_at_site(f"streams/{p.name}",
-                                             _model_findings("stream", doc)))
-                    streams.append(doc)
+                    # Its own guard, like the endpoint branch below: a crash
+                    # here costs these findings, never the stream's place in
+                    # the bundle, which the append above already gave it.
+                    with _contained(findings, f"streams/{p.name}"):
+                        findings.extend(_at_site(f"streams/{p.name}",
+                                                 _model_findings("stream", doc)))
             if outcome.crashed:
                 crashed = True
             if outcome.crashed or doc is None:
@@ -422,9 +436,15 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
             with _contained(findings, f"connections/{conn_json.parent.name}") as outcome:
                 conn = _read_bundle_member(conn_json, findings)
                 if conn is not None:
-                    findings.extend(_at_site(f"connections/{conn_json.parent.name}/connection.json",
-                                             _model_findings("connection", conn)))
                     connections.append(conn)
+                    conn_site = f"connections/{conn_json.parent.name}/connection.json"
+                    # Own guard, same reason as the stream and endpoint
+                    # branches: a crash grading this connection's shape must
+                    # not take the connection — and every endpoint under it —
+                    # out of the bundle the referential pass reads.
+                    with _contained(findings, conn_site):
+                        findings.extend(_at_site(conn_site,
+                                                 _model_findings("connection", conn)))
                     connection_id = conn.get("connection_id")
                     for ep_json in sorted((conn_json.parent / "definition" / "endpoints").glob("*.json")):
                         # One endpoint is its own independently-decidable unit, same
