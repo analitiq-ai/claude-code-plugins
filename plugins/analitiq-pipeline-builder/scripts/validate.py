@@ -224,7 +224,12 @@ def _model_findings(entity: str, doc) -> list[dict]:
 
 def _endpoint_findings(doc, document_path: Path) -> list[dict]:
     from analitiq.validator import validate_document
-    return validate_document(doc, doc_path=document_path.resolve())
+    # Resolve the parent but keep the authored basename, the same way
+    # `_type_map_findings` does: the published validator reads RULE-PKG-031 off
+    # `doc_path.name` and gates it on the two directories above, so a full
+    # resolve() would follow a symlinked endpoint to a differently-named target
+    # and drop the gate on the file the engine will actually look for.
+    return validate_document(doc, doc_path=document_path.parent.resolve() / document_path.name)
 
 
 def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
@@ -353,8 +358,8 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     finding) or an already-reported ordinary read error (which needs no second,
     misleading one)."""
     # `validate_pipeline_bundle` takes filename-less dicts, so every check that
-    # needs a name — the engine locates a connection-scoped endpoint by its
-    # filename stem — is run here, per file, where the names are known.
+    # needs a name — RULE-PKG-031, on where an endpoint document ships — is run
+    # here, per file, where the names are known.
     findings: list[dict] = []
     complete = True
     crashed = False
@@ -377,6 +382,11 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
             with _contained(findings, f"streams/{p.name}") as outcome:
                 doc = _read_bundle_member(p, findings)
                 if doc is not None:
+                    # Grade it as the document it is, not only as a member of
+                    # the bundle: the referential checks below read a stream's
+                    # refs and never its shape, so an unbundled member would
+                    # otherwise be graded on this route and a bundled one not.
+                    findings.extend(_model_findings("stream", doc))
                     streams.append(doc)
             if outcome.crashed:
                 crashed = True
@@ -400,6 +410,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
             with _contained(findings, f"connections/{conn_json.parent.name}") as outcome:
                 conn = _read_bundle_member(conn_json, findings)
                 if conn is not None:
+                    findings.extend(_model_findings("connection", conn))
                     connections.append(conn)
                     connection_id = conn.get("connection_id")
                     for ep_json in sorted((conn_json.parent / "definition" / "endpoints").glob("*.json")):

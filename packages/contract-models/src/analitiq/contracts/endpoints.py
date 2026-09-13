@@ -3184,16 +3184,24 @@ def _validate_param_wiring(
     # string search so a `literal` payload or a `function.map` table — data
     # the resolver never touches — cannot trip this on a grammar-valid
     # document.
-    for kind, s in iter_expression_strings(request.path_params):
-        if kind == "template" and TEMPLATE_SIGIL in s:
-            raise violation(
-                "RULE-SHRD-006",
-                "path-params-has-value-expression",
-                f"request.path_params contains {s!r}, which carries a "
-                "${...} value-expression sigil; path_params is authored "
-                "only as `{from_param}`/`{from_input}` bindings, never "
-                "templates (spec: §Request Parameter Binding)"
-            )
+    # Per key, not over the map as a whole: the remedy is to rewrite one
+    # binding, and a document with several path params gives the author
+    # nowhere to start from a message naming only the offending string.
+    for name, binding in (request.path_params or {}).items():
+        for kind, s in iter_expression_strings(binding):
+            # `ref` strings are left to the singleton-binding check below,
+            # which rejects the whole form with the remedy for it. Reporting a
+            # sigil inside one first would name a defect the author cannot act
+            # on without first being told that a `ref` does not belong here.
+            if kind == "template" and TEMPLATE_SIGIL in s:
+                raise violation(
+                    "RULE-SHRD-006",
+                    "path-params-has-value-expression",
+                    f"request.path_params[{name!r}] is {s!r}, which carries a "
+                    "${...} value-expression sigil; path_params is authored "
+                    "only as `{from_param}`/`{from_input}` bindings, never "
+                    "templates (spec: §Request Parameter Binding)"
+                )
 
     # `path_params` is a from_input site on WRITE operations only: a REST
     # write addresses one record by its own key (`PATCH /contacts/{id}`), and the

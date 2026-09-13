@@ -770,7 +770,7 @@ def test_flatten_api_locator(validator):
     assert f("/customers/v2/orders") == "customers__v2__orders"  # every segment IN ORDER (no hoist)
     assert f("/customers") == "customers"
     # A mixed segment ({id}-{slug}) is NOT a pure path-param -> not dropped, so it
-    # does NOT collide with the pure-param sibling (Codex P3).
+    # does NOT collide with the pure-param sibling.
     assert f("/orders/{id}-{slug}") != f("/orders/{id}")
     assert "{" in f("/orders/{id}-{slug}")   # kept -> later flagged non-charset-safe
     assert f("/orders/{id}") == "orders"     # pure param dropped
@@ -820,7 +820,7 @@ def test_endpoint_locator_non_derivable_path_errors(validator):
 
 def test_coverage_non_dict_endpoint_file_no_crash(tmp_path, connector_base, validator):
     # A JSON-array endpoint file is a recorded model error, NOT a generic
-    # "validator bug" crash from the coverage walk calling .get() on a list (Codex P3).
+    # "validator bug" crash from the coverage walk calling .get() on a list.
     (tmp_path / "endpoints").mkdir(parents=True)
     (tmp_path / "connector.json").write_text(json.dumps(connector_base))
     (tmp_path / "type-map-read.json").write_text(
@@ -903,8 +903,7 @@ def test_keyset_non_null_initial_is_clean(initial, validator):
 def test_coverage_flags_keyset_explicit_null_initial(tmp_path, connector_base, validator):
     # End-to-end through the connector-package route (check_coverage's sibling-
     # endpoint loop), not just the standalone single-document route: the two
-    # walk different code paths, and only the standalone one used to call
-    # `_keyset_initial_null_findings` (Codex P2).
+    # walk different code paths and must reach the same verdict.
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"v1__records.json": _keyset_endpoint(initial=None)})
@@ -914,26 +913,30 @@ def test_coverage_flags_keyset_explicit_null_initial(tmp_path, connector_base, v
 
 def test_check_coverage_and_standalone_route_agree_on_shared_per_endpoint_checks(
         tmp_path, connector_base, validator):
-    # check_coverage's sibling-endpoint loop and the standalone _validate_api_endpoint
-    # route each assemble their own list of per-endpoint-document checks. They must
-    # report the same shared-rule findings for the same document — the two lists have
-    # drifted before (RULE-ENDP-044, Codex P2; see test_coverage_flags_keyset_explicit_
-    # null_initial above) and nothing but this parity test would catch it happening again.
+    # check_coverage's sibling-endpoint loop and the standalone
+    # _validate_api_endpoint route each reach `_api_endpoint_document_findings`
+    # from a different caller. Everything that function decides must come back
+    # identical, so this compares the two sets rather than asserting a named
+    # pair is in both: a check wired into one caller and not the other shows up
+    # as a set difference whatever rule it grades.
     ep_doc = _keyset_endpoint(initial=None, transport_ref="bogus")
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"v1__records.json": ep_doc})
 
-    coverage_findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
-    coverage_rules = {f.get("rule") for f in coverage_findings}
+    def _graded(findings):
+        return {(f.get("rule"), f.get("message_id"), f.get("kind")) for f in findings}
 
+    coverage_findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
     standalone_findings = validator.validate_document(
         ep_doc, doc_path=tmp_path / "endpoints" / "v1__records.json")
-    standalone_rules = {f.get("rule") for f in standalone_findings}
 
-    shared_rules = {"RULE-ENDP-044", "RULE-ENDP-047"}
-    assert shared_rules <= coverage_rules, coverage_findings
-    assert shared_rules <= standalone_rules, standalone_findings
+    # The tree is a clean connector whose single endpoint carries the defects,
+    # so neither route has anything of its own to add: equality both ways, not
+    # a subset, so a check wired into either caller alone shows up here.
+    assert _graded(coverage_findings), coverage_findings
+    assert _graded(coverage_findings) == _graded(standalone_findings), (
+        coverage_findings, standalone_findings)
 
 
 # --- RULE-SHRD-003: every authored document must declare `$schema` ------------
@@ -1017,9 +1020,15 @@ def test_present_schema_url_is_clean(make_doc, schema_url, validator):
 
 
 @pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
-def test_null_schema_url_is_not_reported_as_omitted(make_doc, schema_url, validator):
+def test_null_schema_url_reports_the_same_as_omission(make_doc, schema_url, validator):
+    # `$schema: null` is what every one of these models types as optional, so
+    # nothing structural rejects it — and a document spelling the absence as a
+    # null names no contract exactly as one leaving the key out does.
     findings = validator.validate_document(make_doc(schema_url=None))
-    assert not any(f.get("rule") == "RULE-SHRD-003" for f in findings), findings
+    hits = [f for f in findings if f.get("rule") == "RULE-SHRD-003"]
+    assert len(hits) == 1, findings
+    assert hits[0]["severity"] == "warning"
+    assert hits[0]["path"] == "/$schema"
 
 
 # --- Database endpoint id = slug+hash8 (shared analitiq.contracts.endpoint_identity SSOT) ---
@@ -1570,9 +1579,9 @@ def test_cli_missing_arg_exit2(validator_cli):
 
 def test_kindless_connector_still_reports_a_missing_schema_url(validator):
     # `Connector.schema_url` is optional, so RULE-SHRD-003 is the only thing
-    # that reports its omission. Routing a connector-shaped dict to the model
-    # alone because it lacks `kind` dropped that check on the one document
-    # most likely to be missing `$schema` too.
+    # that reports its omission — and a connector-shaped dict with no `kind` is
+    # the document most likely to be missing `$schema` too, so the route that
+    # claims it must carry the check as well as the model.
     doc = {"connector_id": "x", "transports": {}, "connection_contract": {},
            "default_transport": "m"}
     findings = validator.validate_document(doc)

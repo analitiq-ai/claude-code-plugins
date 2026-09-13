@@ -772,7 +772,7 @@ def test_endpoint_route_crash_before_validate_document_contained(tmp_path, monke
     original_resolve = Path.resolve
 
     def boom(self, *a, **kw):
-        if self == p:
+        if self == p.parent:
             raise OSError("cannot resolve")
         return original_resolve(self, *a, **kw)
 
@@ -1338,11 +1338,46 @@ def test_cli_main_type_map_entities(tmp_path, capsys):
     assert rc == 0 and out["passed"], out
 
 
+def test_bundle_grades_a_symlinked_endpoint_by_its_authored_name(tmp_path):
+    # RULE-PKG-031 is about where the engine will look for the file, which is
+    # the name the connection directory carries — not the name of whatever the
+    # entry points at. Resolving the whole path hands the gate the target's
+    # basename, and a misnamed endpoint reads clean.
+    doc = _build_bundle(tmp_path)
+    ep_dir = tmp_path / "connections/postgresql/definition/endpoints"
+    ep_path = ep_dir / f"{EID}.json"
+    store = tmp_path / "shared"
+    store.mkdir()
+    target = store / f"{EID}.json"
+    target.write_text(ep_path.read_text())
+    ep_path.unlink()
+    (ep_dir / "wrong-name.json").symlink_to(target)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"], diag["findings"]
+    assert any(f.get("rule") == "RULE-PKG-031" for f in diag["findings"]), diag["findings"]
+
+
+@pytest.mark.parametrize("member", ["connections/postgresql/connection.json",
+                                    "pipelines/p/streams/orders.json"])
+def test_bundle_grades_every_member_as_the_document_it_is(tmp_path, member):
+    # The referential checks read a member's refs, never its shape, so a
+    # bundled connection or stream would be graded by nothing on the route
+    # that assembles it while the same file validated alone was rejected.
+    doc = _build_bundle(tmp_path)
+    path = tmp_path / member
+    body = json.loads(path.read_text())
+    body["not_a_declared_field"] = "x"
+    path.write_text(json.dumps(body))
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"], diag["findings"]
+    assert any(f.get("severity") == "error" and f.get("path") == "/not_a_declared_field"
+               for f in diag["findings"]), diag["findings"]
+
+
 def test_bundle_grades_a_connection_scoped_endpoint_document(tmp_path):
-    # A connection-scoped endpoint reaching the bundle used to be graded by the
-    # filename gate alone, so every rule its own document settles — the contract
-    # model included — went unenforced on the one route an author actually runs.
-    # The same file validated on its own was rejected; the bundle passed it.
+    # An endpoint in the bundle is graded by every rule its own document
+    # settles, the contract model included — not by the filename gate alone.
+    # A file the single-document route rejects cannot pass here.
     doc = _build_bundle(tmp_path)
     ep_path = tmp_path / f"connections/postgresql/definition/endpoints/{EID}.json"
     ep = json.loads(ep_path.read_text())

@@ -256,19 +256,22 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
 
 def _missing_schema_url_findings(doc: Any) -> list[dict]:
     """RULE-SHRD-003 gate, shared by every kind whose contract leaves `$schema`
-    optional (connection, stream, pipeline, connector): each of those models
-    types the field as a `Literal`/pattern that already rejects a present-but-wrong
-    value as a structural `error`, so this only needs to catch OMISSION — the
-    raw document declaring no `$schema` at all.
+    optional (connection, stream, pipeline, connector). The rule asks for the
+    published canonical URL, and each of those models types the field as a
+    `Literal`/pattern that rejects any other STRING as a structural `error`.
+    What the annotation admits is the absence of a value — the key left out, or
+    the key present holding `null`, both of which those models type as optional.
+    Neither names a contract, so both are reported here as the same defect: a
+    document a reader, an editor or a migration cannot place.
     """
-    if not isinstance(doc, dict) or "$schema" in doc:
+    if not isinstance(doc, dict) or doc.get("$schema") is not None:
         return []
     return [finding(
         rule="RULE-SHRD-003",
         message_id="schema-url-missing",
         kind="fail",
         path="/$schema",
-        message="document omits `$schema`; declare it with the published canonical URL for this family.",
+        message="document declares no `$schema`; declare it with the published canonical URL for this family.",
     )]
 
 

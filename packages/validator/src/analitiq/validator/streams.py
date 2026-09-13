@@ -7,8 +7,8 @@ rule (endpoint-ref shape, unique destinations, the authored-top-level guard)
 offline, no schema fetch, no drift. There is no cross-file or referential check a
 stream document needs in isolation — its wiring within an assembled run is checked
 by the pipeline-bundle kind. The one check the model cannot carry is
-RULE-SHRD-003 (`$schema` omission is a `warning`, and a `@model_validator`
-rejection always surfaces as `error`), so this kind registers a combined
+RULE-SHRD-003, which reports a `warning` — a severity no `@model_validator` can
+carry (`rules/SCHEMA.md`, `validator`) — so this kind registers a combined
 validator.
 
 At import this module registers its detector -> validator pair with the core

@@ -6,9 +6,9 @@ This module registers TWO kinds:
 1. **`pipeline` document** — validated wholly against its contract model
    (`PipelineInput`, the source of the published `pipeline` JSON Schema):
    `TypeAdapter(...).validate_python` enforces structure and every cross-field
-   rule offline. The one check the model cannot carry is RULE-SHRD-003
-   (`$schema` omission is a `warning`, and a `@model_validator` rejection
-   always surfaces as `error`), so it registers a combined validator.
+   rule offline. The one check the model cannot carry is RULE-SHRD-003, which
+   reports a `warning` — a severity no `@model_validator` can carry
+   (`rules/SCHEMA.md`, `validator`) — so it registers a combined validator.
 
 2. **pipeline bundle** — cross-document referential integrity across an assembled
    run (pipeline + streams + connections + connectors + endpoints).

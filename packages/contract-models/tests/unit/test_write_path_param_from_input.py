@@ -401,7 +401,10 @@ class TestPathParamBindingNotRegressed:
         # slot that never resolves one — RULE-SHRD-006 names that defect
         # before the generic "must be a {from_param} expression" shape check
         # is ever reached.
-        with pytest.raises(ValidationError, match=r"\[RULE-SHRD-006\]"):
+        with pytest.raises(
+            ValidationError,
+            match=r"\[RULE-SHRD-006\].*request\.path_params\['id'\]",
+        ):
             parse_endpoint(_api_payload({"insert": _write_op(
                 path_params={"id": {"template": "${record.id}"}},
             )}))

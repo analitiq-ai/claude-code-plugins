@@ -796,11 +796,12 @@ def _endpoint_locator_findings(ep_doc: Any) -> list[dict]:
 
 
 def _keyset_initial_null_findings(ep_doc: Any) -> list[dict]:
-    """Gate: RULE-ENDP-044 — a keyset pagination block must omit `initial`
-    when there is no first-page key, and must not spell that absence as an
-    explicit null. Omission is how the block says "send no keyset on the
-    first request"; a null is a value, so a document writing one is claiming
-    a first-page key that happens to be null."""
+    """Gate for RULE-ENDP-044, reached from both api-endpoint routes.
+
+    Everything the rule asks and why is the record's; this walks down to the
+    `keyset` block by `isinstance` at every step, so a malformed document
+    falls through here rather than crashing on behalf of a rule it cannot
+    grade."""
     if not isinstance(ep_doc, dict):
         return []
     operations = ep_doc.get("operations")
@@ -908,10 +909,10 @@ def _api_endpoint_document_findings(
     the connector `transports` its `transport_ref` sites resolve against.
 
     Defined once and called from both `check_coverage`'s sibling-endpoint loop
-    and the standalone `_validate_api_endpoint` route — the two used to keep
-    independent call lists, and one of them silently missed
-    `_keyset_initial_null_findings` (RULE-ENDP-044) until a review caught it.
-    What stays outside this function is route-specific: `check_coverage`'s
+    and the standalone `_validate_api_endpoint` route: a document's findings are
+    a property of the document, not of the call that reached it, and two
+    independently maintained call lists cannot hold that. What stays outside
+    this function is route-specific: `check_coverage`'s
     cross-sibling duplicate-`endpoint_id` and native/arrow-type coverage
     checks, and `_validate_api_endpoint`'s resolution of `transports` from a
     sibling `connector.json` it does not already have in hand."""
@@ -1280,9 +1281,11 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     # Each api-endpoint document goes through the checks shared with
     # `check_coverage`'s sibling-endpoint loop; `transports` is None wherever
     # the branches above could not resolve it, and RULE-ENDP-047 stays silent
-    # there rather than reporting on an unresolved comparison — the
-    # `sibling_findings` above already say why. The filename rides along so the
-    # locating half of those checks reads the same on both routes.
+    # there rather than reporting on an unresolved comparison. Silence is the
+    # whole answer only when the document declares no `transport_ref` at all —
+    # every other way of arriving here with `transports` unresolved has already
+    # appended the `notApplicable` naming which one it was. The filename rides
+    # along so the locating half of those checks reads the same on both routes.
     findings = _api_endpoint_document_findings(
         doc, transports, filename=doc_path.name if doc_path is not None else "")
     findings.extend(sibling_findings)

@@ -10,12 +10,14 @@ validator: "analitiq.validator._core::_missing_schema_url_findings"
 owners: [connector-plugin, pipeline-plugin]
 targets: [ConnectionAuthored, StreamAuthored, PipelineAuthored, ConnectorBase]
 rationale: >
-  Where the contract leaves the field optional a present-but-wrong value is
+  Where the contract leaves the field optional a present-but-wrong *string* is
   already rejected structurally — each of these models types `$schema` either
   as a `Literal` naming its family's published URL or, where a family is
   authored against more than one published host, as a pattern constrained to
-  the shared `schemas.analitiq.<tld>` form — so the one gap is omission, a
-  plain mechanical comparison: the key is absent or it is not. Checked in
+  the shared `schemas.analitiq.<tld>` form. What optional means is that those
+  annotations also admit no value at all, and that is the gap: the key left
+  out and the key present holding `null` both name no contract, so both are a
+  plain mechanical comparison against one. Checked in
   `analitiq.validator` rather than by a `@model_validator` on each model
   itself: this rule's declared severity is `warning`, and a model-level
   refusal always surfaces as an `error`-severity finding regardless of what a

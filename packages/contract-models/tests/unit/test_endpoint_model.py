@@ -1758,6 +1758,28 @@ class TestRequestPathPlaceholders:
                 }},
             ))
 
+    def test_sigil_inside_a_path_params_ref_is_not_the_reported_defect(self):
+        """A `ref` is a dotted lookup, not a template: nothing interpolates a
+        `${...}` sitting inside one, so RULE-SHRD-006 is not what a `ref` under
+        `path_params` gets rejected for. The defect is the `ref` itself — the
+        slot takes only `{from_param}`/`{from_input}` — and reporting the sigil
+        instead would hand the author a remedy that leaves the document just as
+        broken."""
+        with pytest.raises(ValidationError) as excinfo:
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {
+                        "method": "GET",
+                        "path": "/v1/{account_id}/transactions",
+                        "path_params": {"account_id": {"ref": "connection.selections.${account_id}"}},
+                    },
+                    "params": {"account_id": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.account_id"}}},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+        assert "RULE-SHRD-006" not in str(excinfo.value), str(excinfo.value)
+
     def test_camel_case_placeholder_rejected(self):
         """The placeholder is the document's slot, so the provider's spelling
         of the value does not travel into `path` with the path it was copied
