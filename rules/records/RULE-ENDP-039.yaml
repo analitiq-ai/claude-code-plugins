@@ -6,7 +6,7 @@ statement: >
   produces the key's value.
 tier: shape
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Idempotency.location"
 owners: [connector-plugin, engine]
 targets: [Idempotency]

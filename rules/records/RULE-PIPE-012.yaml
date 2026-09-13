@@ -4,7 +4,7 @@ statement: >
   document in the run assembled from it.
 tier: reference
 severity: error
-scopes: [pipeline]
+artifact_kinds: [pipeline]
 validator: "analitiq.validator.pipelines::_check_connections_present"
 owners: [pipeline-plugin, engine]
 rationale: >

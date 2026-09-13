@@ -4,7 +4,7 @@ statement: >
   source reports it, with no case-folding, quoting or other normalisation.
 tier: reference
 severity: error
-scopes: [database-endpoint]
+artifact_kinds: [database-endpoint]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin, engine]

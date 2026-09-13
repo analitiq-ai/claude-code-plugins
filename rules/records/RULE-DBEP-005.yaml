@@ -4,7 +4,7 @@ statement: >
   actually has, and MUST invent none the system lacks.
 tier: choice
 severity: error
-scopes: [database-endpoint]
+artifact_kinds: [database-endpoint]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin, engine]

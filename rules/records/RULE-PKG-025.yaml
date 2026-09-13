@@ -5,7 +5,7 @@ statement: >
   connector will run.
 tier: process
 severity: warning
-scopes: [connector]
+artifact_kinds: [connector]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin]

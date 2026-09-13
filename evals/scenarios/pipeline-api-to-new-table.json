@@ -47,7 +47,7 @@
     },
     {
       "glob": "connections/*/definition/endpoints/*.json",
-      "entity": "database_endpoint"
+      "entity": "database-endpoint"
     }
   ],
   "docs": {

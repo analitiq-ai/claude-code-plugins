@@ -19,10 +19,10 @@ authoring the connection-scoped maps that close it.
 
 ## Files
 
-| Direction | File | Validates as entity |
+| Direction | File | Validates as entity `type-map` with |
 |---|---|---|
-| native → Arrow | `connections/<connection-slug>/definition/type-map-read.json` | `type_map_read` |
-| Arrow → native DDL | `connections/<connection-slug>/definition/type-map-write.json` | `type_map_write` |
+| native → Arrow | `connections/<connection-slug>/definition/type-map-read.json` | `--direction read` |
+| Arrow → native DDL | `connections/<connection-slug>/definition/type-map-write.json` | `--direction write` |
 
 The rule shape (exact/regex `match`, matcher vs rendered key per direction,
 `${name}` captures) is identical to the connector's own maps — the connector

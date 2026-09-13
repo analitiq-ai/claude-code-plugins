@@ -5,7 +5,7 @@ statement: >
   handle can be derived from.
 tier: reference
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.validator.connectors::_endpoint_locator_findings"
 owners: [connector-plugin, engine]
 targets: [ApiEndpointDoc]

@@ -4,7 +4,7 @@ statement: >
   version-stripped base id.
 tier: reference
 severity: error
-scopes: [pipeline]
+artifact_kinds: [pipeline]
 validator: "analitiq.validator.pipelines::_check_connection_version_conflicts"
 owners: [pipeline-plugin, engine]
 rationale: >

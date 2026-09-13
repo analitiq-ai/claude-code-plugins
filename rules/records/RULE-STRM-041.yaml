@@ -4,7 +4,7 @@ statement: >
   `field`/`operator` pair.
 tier: coherence
 severity: error
-scopes: [stream]
+artifact_kinds: [stream]
 validator: "analitiq.contracts.stream::StreamSource._validate_no_duplicate_api_filter_landings"
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]

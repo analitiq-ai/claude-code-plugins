@@ -4,7 +4,7 @@ statement: >
   header with a value that resolves to null or empty is not a deletion.
 tier: shape
 severity: error
-scopes: [any]
+artifact_kinds: [any]
 validator: "analitiq.contracts.shared.rules::HeaderMergeRules._headers_no_null_or_empty_value"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [HttpTransport, TransportDefaults, _RequestBase, AuthOperationTemplate]

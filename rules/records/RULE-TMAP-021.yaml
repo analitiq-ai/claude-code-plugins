@@ -4,7 +4,7 @@ statement: >
   document already froze for the native_type it matches.
 tier: reference
 severity: error
-scopes: [type-map]
+artifact_kinds: [type-map]
 validator: null
 enforcement_location: unenforced
 owners: [pipeline-plugin, engine]

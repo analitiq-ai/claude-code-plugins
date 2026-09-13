@@ -6,7 +6,7 @@ statement: >
   field.
 tier: choice
 severity: warning
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin]

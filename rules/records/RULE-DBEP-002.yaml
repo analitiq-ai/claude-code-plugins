@@ -4,7 +4,7 @@ statement: >
   ordinal MUST differ from every other's.
 tier: coherence
 severity: error
-scopes: [database-endpoint]
+artifact_kinds: [database-endpoint]
 validator: "analitiq.contracts.endpoints::DatabaseEndpointDoc._ordinal_positions_unique"
 owners: [pipeline-plugin, engine]
 targets: [DatabaseEndpointDoc]

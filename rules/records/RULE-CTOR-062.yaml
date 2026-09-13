@@ -4,7 +4,7 @@ statement: >
   using the vocabulary `ResourceDiscoveryImplementation` declares.
 tier: shape
 severity: error
-scopes: [connector]
+artifact_kinds: [connector]
 validator: "analitiq.contracts.connector::ResourceDiscoveryImplementation.type"
 owners: [connector-plugin, engine]
 targets: [ResourceDiscoveryImplementation]

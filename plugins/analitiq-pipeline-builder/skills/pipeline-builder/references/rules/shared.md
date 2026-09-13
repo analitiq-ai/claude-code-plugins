@@ -8,7 +8,7 @@ contract source compiles it. Prose cites a rule by id
 (`RULE-CTOR-037`) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 
-Scope: every rule this plugin owns whose artifact kind has no file of its own in this set, plus the rules that bind every authored document. For a document of one of those kinds, this file is the whole of what this plugin's rules ask of it; a document whose kind has its own file needs only that file, even where a rule graded for it also appears here under another of its kinds.
+Covers: every rule this plugin owns whose artifact kind has no file of its own in this set, plus the rules that bind every authored document. For a document of one of those kinds, this file is the whole of what this plugin's rules ask of it; a document whose kind has its own file needs only that file, even where a rule graded for it also appears here under another of its kinds.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
 all hold: 10 of the 20 below have no validator, so nothing rejects

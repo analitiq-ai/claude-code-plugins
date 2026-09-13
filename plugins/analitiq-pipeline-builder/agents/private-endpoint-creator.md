@@ -144,7 +144,7 @@ One invocation runs exactly one mode.
      "mode": "create-endpoints",
      "outputs": [
        {
-         "entity": "database_endpoint",
+         "entity": "database-endpoint",
          "directory_slug": "<endpoint_id>",
          "document": { /* the endpoint JSON, $schema + endpoint_id set */ },
          "secondary_files": [],

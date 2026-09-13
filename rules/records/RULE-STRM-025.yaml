@@ -4,7 +4,7 @@ statement: >
   declares in its supported set.
 tier: reference
 severity: error
-scopes: [stream]
+artifact_kinds: [stream]
 validator: null
 enforcement_location: engine
 owners: [pipeline-plugin, engine]

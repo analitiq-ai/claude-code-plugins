@@ -4,7 +4,7 @@ statement: >
   accepts; the contract constrains the wrapper alone.
 tier: shape
 severity: error
-scopes: [pipeline]
+artifact_kinds: [pipeline]
 validator: null
 enforcement_location: unenforced
 owners: [pipeline-plugin, engine]

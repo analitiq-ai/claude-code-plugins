@@ -4,7 +4,7 @@ statement: >
   earlier-resolving rules leave uncovered.
 tier: shape
 severity: error
-scopes: [type-map]
+artifact_kinds: [type-map]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin, engine]

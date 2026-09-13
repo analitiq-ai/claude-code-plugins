@@ -5,7 +5,7 @@ statement: >
   declares.
 tier: shape
 severity: error
-scopes: [connector]
+artifact_kinds: [connector]
 validator: "analitiq.contracts.connector::ResourceDiscoveryTriggers.list_resources"
 owners: [connector-plugin, engine]
 targets: [ResourceDiscoveryTriggers]

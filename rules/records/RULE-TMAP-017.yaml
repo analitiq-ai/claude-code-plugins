@@ -5,7 +5,7 @@ statement: >
   literal Arrow types.
 tier: shape
 severity: warning
-scopes: [type-map]
+artifact_kinds: [type-map]
 validator: "analitiq.validator.connectors::_write_vocabulary_findings"
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

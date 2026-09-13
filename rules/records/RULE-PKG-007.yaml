@@ -7,7 +7,7 @@ statement: >
   resolves.
 tier: reference
 severity: error
-scopes: [connector-package]
+artifact_kinds: [connector-package]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, engine]

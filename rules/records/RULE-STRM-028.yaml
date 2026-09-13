@@ -4,7 +4,7 @@ statement: >
   declared type exactly, its parameters included.
 tier: reference
 severity: error
-scopes: [stream]
+artifact_kinds: [stream]
 validator: null
 enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
