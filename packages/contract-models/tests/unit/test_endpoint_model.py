@@ -1719,6 +1719,45 @@ class TestRequestPathPlaceholders:
                 }},
             ))
 
+    def test_dollar_brace_template_in_path_params_rejected(self):
+        """`path_params` is authored only as `{from_param}`/`{from_input}`
+        singleton bindings — a bare `${...}` string dropped in as a value is
+        not that shape, whatever a resolver would do with it."""
+        with pytest.raises(ValidationError, match="RULE-SHRD-006"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {
+                        "method": "GET",
+                        "path": "/v1/{account_id}/transactions",
+                        "path_params": {"account_id": "${account_id}"},
+                    },
+                    "params": {"account_id": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.account_id"}}},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    def test_dollar_brace_inside_path_params_literal_not_flagged_as_template(self):
+        """A `${...}`-shaped string sitting inside a `literal` value is opaque
+        data the resolver never inspects — the RULE-SHRD-006 template-sigil
+        check must not fire on it. The document is still rejected, but for the
+        actual defect: a `literal` payload is not a `{from_param}`/
+        `{from_input}` binding, so `path_params` has nothing to substitute
+        `{account_id}` with."""
+        with pytest.raises(ValidationError, match=r"must be a `\{from_param: <name>\}` expression"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {
+                        "method": "GET",
+                        "path": "/v1/{account_id}/transactions",
+                        "path_params": {"account_id": {"literal": "${not-a-template}"}},
+                    },
+                    "params": {"account_id": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.account_id"}}},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
     def test_camel_case_placeholder_rejected(self):
         """The placeholder is the document's slot, so the provider's spelling
         of the value does not travel into `path` with the path it was copied

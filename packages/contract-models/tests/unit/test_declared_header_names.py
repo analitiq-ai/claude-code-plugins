@@ -170,6 +170,13 @@ REMOVAL_BLOCKS = [
     ("WriteRequest", WriteRequest, {"method": "POST", "path": "/v1/x"}),
 ]
 
+#: The blocks RULE-SHRD-010 (a header value that resolves null/empty) covers.
+#: Wider than REMOVAL_BLOCKS: that rule reads only `headers`, so a post-auth
+#: request is bound by it despite having no `headers_remove` to name.
+NULL_VALUE_BLOCKS = REMOVAL_BLOCKS + [
+    ("PostAuthOperationRequest", PostAuthOperationRequest, {"path": "/t"}),
+]
+
 
 @pytest.mark.parametrize("name", NOT_HEADER_NAMES)
 @pytest.mark.parametrize("label, model, kwargs", REMOVAL_BLOCKS)
@@ -184,6 +191,40 @@ def test_a_removal_naming_no_header_name_is_refused(name, label, model, kwargs):
 @pytest.mark.parametrize("label, model, kwargs", REMOVAL_BLOCKS)
 def test_a_removal_naming_a_header_parses(label, model, kwargs):
     assert model(**kwargs, headers_remove=["Accept"]).headers_remove == ["Accept"]
+
+
+@pytest.mark.parametrize("value", [None, "", {"literal": None}, {"literal": ""}])
+@pytest.mark.parametrize("label, model, kwargs", NULL_VALUE_BLOCKS)
+def test_a_header_declared_null_or_empty_is_refused(label, model, kwargs, value):
+    # RULE-SHRD-010: a null value merges as skip-override (the inherited
+    # value survives untouched) and an empty string merges and reaches the
+    # wire empty — neither is the deletion `headers_remove` states.
+    with pytest.raises(ValidationError) as exc:
+        model(**kwargs, headers={"Accept": value})
+    assert "RULE-SHRD-010" in str(exc.value)
+
+
+@pytest.mark.parametrize("label, model, kwargs", NULL_VALUE_BLOCKS)
+def test_a_header_declared_with_an_ordinary_value_parses(label, model, kwargs):
+    assert model(**kwargs, headers={"Accept": "application/json"}).headers == {
+        "Accept": "application/json"
+    }
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"ref": "connection.parameters.token"},
+        {"template": "Bearer ${connection.parameters.token}"},
+    ],
+)
+@pytest.mark.parametrize("label, model, kwargs", NULL_VALUE_BLOCKS)
+def test_a_header_declared_as_an_unresolved_expression_is_untouched_by_shrd_010(
+    label, model, kwargs, value
+):
+    # Out of scope: what a `ref`/`template` resolves to is not knowable here,
+    # so this rule only catches what an author wrote down directly.
+    assert model(**kwargs, headers={"Accept": value}).headers == {"Accept": value}
 
 
 @pytest.mark.parametrize("name", ["Accept", "X-Api-Key", "content-type-ish"])

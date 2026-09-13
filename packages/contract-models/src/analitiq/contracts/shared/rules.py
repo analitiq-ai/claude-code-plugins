@@ -28,7 +28,7 @@ from typing import Any, Callable
 
 from pydantic import model_validator
 
-from analitiq.contracts.value_expression import header_name_key
+from analitiq.contracts.value_expression import _EXPRESSION_KEYS, header_name_key
 
 from .rule_record import RuleRecord, load_records
 
@@ -186,13 +186,54 @@ def find_duplicates(seq: Any, key: Callable[[Any], Any] | None = None) -> list:
 # --- Rules binding several models -------------------------------------------
 
 
-class HeaderMergeRules:
+def _resolves_to_null_or_empty(value: Any) -> bool:
+    """Whether an authored header value is void rather than removed.
+
+    A bare JSON `null` or empty string is exactly that regardless of wrapping
+    — `{"literal": ...}` unwraps to what it holds and nothing else. Any other
+    object form (`{ref}`, `{template}`, a function call) resolves to something
+    this repo cannot see until the engine runs it, so it is not this rule's
+    business — RULE-SHRD-010 only catches what an author wrote down directly.
+    """
+    if value is None or value == "":
+        return True
+    if isinstance(value, dict):
+        keys = set(_EXPRESSION_KEYS) & set(value)
+        if len(keys) == 1 and "literal" in keys:
+            literal = value["literal"]
+            return literal is None or literal == ""
+    return False
+
+
+class NoNullOrEmptyHeaderValues:
+    """A block that declares HTTP headers.
+
+    Enforces RULE-SHRD-010 alone, needing only `self.headers` — so a model
+    that declares headers but no removal list (`PostAuthOperationRequest`) can
+    mix this in directly rather than taking on `HeaderMergeRules`' other
+    validator, which would fail at construction over a `headers_remove` field
+    the model does not have.
+    """
+
+    @model_validator(mode="after")
+    def _headers_no_null_or_empty_value(self):
+        headers = self.headers
+        if not headers:
+            return self
+        bad = sorted(name for name, value in headers.items() if _resolves_to_null_or_empty(value))
+        if bad:
+            raise violation("RULE-SHRD-010", "header-value-null-or-empty", f"names={bad!r}")
+        return self
+
+
+class HeaderMergeRules(NoNullOrEmptyHeaderValues):
     """A block that both declares HTTP headers and names headers to remove.
 
-    Enforces RULE-HTTP-001 for every such block — a request, an auth operation
-    template, a transport, and the transport defaults all resolve headers the
-    same way, so they can all contradict themselves the same way. Mixed in
-    rather than repeated: one check, and a model gains it by inheriting.
+    Enforces RULE-HTTP-001 and RULE-SHRD-010 for every such block — a request,
+    an auth operation template, a transport, and the transport defaults all
+    resolve headers the same way, so they can all get the same two things
+    wrong. Mixed in rather than repeated: each check is written once, and a
+    model gains it by inheriting.
     """
 
     @model_validator(mode="after")

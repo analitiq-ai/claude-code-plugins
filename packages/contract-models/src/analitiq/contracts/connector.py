@@ -33,6 +33,7 @@ from pydantic import (
 from analitiq.contracts.shared.rules import (
     DeclaredHeaderNames,
     HeaderMergeRules,
+    NoNullOrEmptyHeaderValues,
     violation,
 )
 from analitiq.contracts.shared.common import (
@@ -638,7 +639,7 @@ class ConnectionContractValidation(StrictModel):
 
 
 class PostAuthOperationRequest(
-    ValueExpressionScopes, DeclaredHeaderNames, StrictModel
+    ValueExpressionScopes, NoNullOrEmptyHeaderValues, DeclaredHeaderNames, StrictModel
 ):
     """Request template used by `options_request` / `discovery_request` to populate
     a post-auth output. Spec: §Post-Auth Outputs.

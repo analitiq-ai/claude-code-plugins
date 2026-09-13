@@ -3175,6 +3175,26 @@ def _validate_param_wiring(
     _validate_expression_shapes(request.query, "request.query")
     _validate_expression_shapes(getattr(request, "body", None), "request.body")
 
+    # `path_params` is documented and authored only as `{from_param}` /
+    # `{from_input}` singleton bindings (spec: §Request Parameter Binding) —
+    # it has no `${...}` template form of its own, so a sigil surviving an
+    # otherwise grammar-valid expression here is not a misscoped expression
+    # (RULE-ENDP-033), it is content outside what this slot is authored to
+    # carry. Walked with `iter_expression_strings` rather than a blind
+    # string search so a `literal` payload or a `function.map` table — data
+    # the resolver never touches — cannot trip this on a grammar-valid
+    # document.
+    for kind, s in iter_expression_strings(request.path_params):
+        if kind == "template" and TEMPLATE_SIGIL in s:
+            raise violation(
+                "RULE-SHRD-006",
+                "path-params-has-value-expression",
+                f"request.path_params contains {s!r}, which carries a "
+                "${...} value-expression sigil; path_params is authored "
+                "only as `{from_param}`/`{from_input}` bindings, never "
+                "templates (spec: §Request Parameter Binding)"
+            )
+
     # `path_params` is a from_input site on WRITE operations only: a REST
     # write addresses one record by its own key (`PATCH /contacts/{id}`), and the
     # id lives in the record, not in a declared param. On a read there is no
