@@ -4,7 +4,7 @@ statement: >
   connections service owns and fills from the connector's post-auth discovery.
 tier: process
 severity: error
-scopes: [connection]
+artifact_kinds: [connection]
 validator: null
 enforcement_location: platform-save
 owners: [pipeline-plugin, engine]

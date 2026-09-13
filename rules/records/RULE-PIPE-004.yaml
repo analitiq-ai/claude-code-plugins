@@ -4,7 +4,7 @@ statement: >
   stream.
 tier: coherence
 severity: error
-scopes: [pipeline]
+artifact_kinds: [pipeline]
 validator: "analitiq.contracts.pipelines.config::PipelineAuthored._check_active_requires_streams"
 owners: [pipeline-plugin]
 targets: [PipelineAuthored]

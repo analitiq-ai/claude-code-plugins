@@ -4,7 +4,7 @@ statement: >
   trailing whitespace.
 tier: shape
 severity: error
-scopes: [any]
+artifact_kinds: [any]
 validator: "analitiq.contracts.connector::ConnectorBase._validate_tags_field"
 owners: [connector-plugin, pipeline-plugin]
 targets: [ConnectorBase, ConnectionAuthored, StreamAuthored, PipelineAuthored, _EndpointBase]

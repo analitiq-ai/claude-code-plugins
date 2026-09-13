@@ -4,7 +4,7 @@ statement: >
   as a failure, and MUST NOT carry `error` under any other status.
 tier: coherence
 severity: error
-scopes: [data-sync-run-status]
+artifact_kinds: [data-sync-run-status]
 validator: "analitiq.contracts.pipelines.data_sync::PipelineRunStatusData._error_matches_status"
 owners: [engine]
 targets: [PipelineRunStatusData]

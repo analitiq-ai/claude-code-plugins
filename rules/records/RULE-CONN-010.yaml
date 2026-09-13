@@ -5,7 +5,7 @@ statement: >
   plugin emits.
 tier: reference
 severity: error
-scopes: [connection]
+artifact_kinds: [connection]
 validator: null
 enforcement_location: unenforced
 owners: [pipeline-plugin, engine]

@@ -4,7 +4,7 @@ statement: >
   declares.
 tier: shape
 severity: error
-scopes: [stream]
+artifact_kinds: [stream]
 validator: "analitiq.contracts.stream::ValidationRule.type"
 owners: [pipeline-plugin, engine]
 targets: [ValidationRule]

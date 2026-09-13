@@ -96,7 +96,7 @@ def _write(root: Path, rel: str, doc: dict | list) -> Path:
 
 @pytest.mark.parametrize("entity,doc", [
     ("connection", CONN_PG), ("connection", CONN_WISE),
-    ("pipeline", PIPELINE), ("stream", STREAM), ("database_endpoint", DB_ENDPOINT),
+    ("pipeline", PIPELINE), ("stream", STREAM), ("database-endpoint", DB_ENDPOINT),
 ])
 def test_valid_single_document(tmp_path, entity, doc):
     diag = V.diagnostics_for(entity, _write(tmp_path, f"{entity}.json", doc))
@@ -116,14 +116,14 @@ def test_valid_single_document(tmp_path, entity, doc):
                         "write": {"mode": "upsert", "conflict_keys": [["id"]]}}]},
      "contract-model"),
     # database endpoint whose id is not the derived handle
-    ("database_endpoint",
+    ("database-endpoint",
      {"$schema": f"{H}/database-endpoint/latest.json", "endpoint_id": "public_orders",
       "database_object": DBOBJ, "columns": [{"name": "id", "native_type": "bigint", "arrow_type": "Int64"}]},
      "RULE-DBEP-011"),
 ])
 def test_invalid_single_document(tmp_path, entity, doc, validator_id):
     # `connection`/`stream` route through this adapter's own local model check
-    # (a `validator` category); `database_endpoint` is forwarded unchanged from
+    # (a `validator` category); `database-endpoint` is forwarded unchanged from
     # the published `analitiq.validator` (a `rule` id) — one assertion covers
     # both without the test needing to know which.
     diag = V.diagnostics_for(entity, _write(tmp_path, f"{entity}.json", doc))
@@ -447,9 +447,9 @@ def test_bundle_non_dict_sibling(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Connection-scoped type maps: the two type_map_* entities plus the bundle's
-# file-level checks. Rule *content* findings come from the published validator;
-# the adapter owns only the filename gates.
+# Connection-scoped type maps: the "type-map" entity's two --direction values
+# plus the bundle's file-level checks. Rule *content* findings come from the
+# published validator; the adapter owns only the filename gates.
 # ---------------------------------------------------------------------------
 
 TYPE_MAP_READ = [
@@ -460,8 +460,8 @@ TYPE_MAP_READ = [
 ]
 # Deliberately direction-ASYMMETRIC: the regex rule's canonical is a matcher
 # pattern, which is a contract-model error under read grading — so the "valid as
-# type_map_write" assertions below pin that the adapter actually grades in the
-# write direction (a regression to the read default would fail them). An
+# --direction write" assertions below pin that the adapter actually grades in
+# the write direction (a regression to the read default would fail them). An
 # exact-rule-only fixture validates clean under either direction and pins nothing.
 TYPE_MAP_WRITE = [
     {"match": "exact", "arrow_type": "Json", "native_type": "JSONB"},
@@ -470,27 +470,27 @@ TYPE_MAP_WRITE = [
 ]
 
 
-@pytest.mark.parametrize("entity,fname,doc", [
-    ("type_map_read", "type-map-read.json", TYPE_MAP_READ),
-    ("type_map_write", "type-map-write.json", TYPE_MAP_WRITE),
+@pytest.mark.parametrize("direction,fname,doc", [
+    ("read", "type-map-read.json", TYPE_MAP_READ),
+    ("write", "type-map-write.json", TYPE_MAP_WRITE),
 ])
-def test_valid_type_map_entity(tmp_path, entity, fname, doc):
-    diag = V.diagnostics_for(entity, _write(tmp_path, fname, doc))
+def test_valid_type_map_entity(tmp_path, direction, fname, doc):
+    diag = V.diagnostics_for("type-map", _write(tmp_path, fname, doc), direction=direction)
     assert diag["passed"], diag["findings"]
 
 
 def test_type_map_entity_rejects_wrong_filename(tmp_path):
     # the engine loads the maps by exact filename; the gate must fire ALONE — a
     # misnamed file's content would otherwise be graded in the wrong direction
-    diag = V.diagnostics_for("type_map_read", _write(tmp_path, "type-map.json", TYPE_MAP_READ))
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", TYPE_MAP_READ), direction="read")
     assert not diag["passed"]
     assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
     assert "type-map-read.json" in diag["findings"][0]["message"]
 
 
 def test_type_map_entity_direction_mismatch_is_caught(tmp_path):
-    # a write-shaped map under the read entity fails the filename gate, not the model
-    diag = V.diagnostics_for("type_map_write", _write(tmp_path, "type-map-read.json", TYPE_MAP_WRITE))
+    # a write-shaped map under --direction read fails the filename gate, not the model
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", TYPE_MAP_WRITE), direction="write")
     assert not diag["passed"]
     assert any(f.get("validator") == "connection-type-map" for f in diag["findings"]), diag["findings"]
 
@@ -500,7 +500,7 @@ def test_type_map_entity_direction_mismatch_is_caught(tmp_path):
     [{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}],  # lowercase canonical fails the Arrow pattern
 ])
 def test_invalid_type_map_content(tmp_path, doc):
-    diag = V.diagnostics_for("type_map_read", _write(tmp_path, "type-map-read.json", doc))
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", doc), direction="read")
     assert not diag["passed"]
     assert any(f.get("rule") is None and f.get("kind") == "fail" for f in diag["findings"]), diag["findings"]
 
@@ -554,7 +554,7 @@ def test_type_map_entity_rejects_non_array(tmp_path):
     # a dict under a load-bearing type-map filename must fail HERE: the published
     # dispatch detects by shape, so a stray connection document would otherwise be
     # graded as a connection and pass clean while the engine's loader chokes
-    diag = V.diagnostics_for("type_map_read", _write(tmp_path, "type-map-read.json", CONN_PG))
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", CONN_PG), direction="read")
     assert not diag["passed"]
     assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
     assert "JSON array" in diag["findings"][0]["message"]
@@ -564,7 +564,7 @@ def test_connection_write_map_filters_connector_vocabulary_warning(tmp_path):
     # the published RULE-TMAP-017 warning presumes a connector's
     # full-vocabulary write map; a gap-only connection map never satisfies it by
     # design, so the adapter filters it — for the entity run and the bundle alike
-    diag = V.diagnostics_for("type_map_write", _write(tmp_path, "type-map-write.json", TYPE_MAP_WRITE))
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-write.json", TYPE_MAP_WRITE), direction="write")
     assert diag["passed"], diag["findings"]
     assert not any(f.get("rule") == "RULE-TMAP-017" for f in diag["findings"])
 
@@ -737,7 +737,7 @@ def test_endpoint_route_crash_before_validate_document_contained(tmp_path, monke
     # the import and doc_path.resolve() ahead of validate_document's own
     # internal guard are not themselves guarded by it — a failure there (e.g.
     # a path that cannot resolve) must still produce Diagnostics on stdout
-    p = _write(tmp_path, "database_endpoint.json", DB_ENDPOINT)
+    p = _write(tmp_path, "database-endpoint.json", DB_ENDPOINT)
     original_resolve = Path.resolve
 
     def boom(self, *a, **kw):
@@ -746,7 +746,7 @@ def test_endpoint_route_crash_before_validate_document_contained(tmp_path, monke
         return original_resolve(self, *a, **kw)
 
     monkeypatch.setattr(Path, "resolve", boom)
-    rc = V.main(["--entity", "database_endpoint", "--document", str(p)])
+    rc = V.main(["--entity", "database-endpoint", "--document", str(p)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
     assert any(f.get("validator") == "adapter-crash" for f in out["findings"]), out["findings"]
@@ -785,10 +785,10 @@ def test_type_map_entity_crash_preserves_legacy_finding_and_sibling_direction(tm
 
     original = V._type_map_findings
 
-    def boom(entity, doc_, document_path):
-        if entity == "type_map_read":
+    def boom(direction, doc_, document_path):
+        if direction == "read":
             raise TypeError("simulated crash")
-        return original(entity, doc_, document_path)
+        return original(direction, doc_, document_path)
 
     monkeypatch.setattr(V, "_type_map_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
@@ -1244,9 +1244,9 @@ VALIDATOR_AGENT = ROOT / "agents" / "pipeline-schema-validator.md"
 # The `entity` input bullet, located by the backticked field name that opens it
 # and closed by the next top-level bullet. Lexical throughout: the anchor is an
 # identifier `validate.py` owns (it is the CLI flag), and the verdict below is
-# handed to `V.ENTITIES` — no sentence is read.
+# handed to `V.PIPELINE_ENTITIES` — no sentence is read.
 _ENTITY_BULLET = re.compile(r"^- `entity`.*?(?=^- |\Z)", re.M | re.S)
-_TICKED = re.compile(r"`([a-z_]+)`")
+_TICKED = re.compile(r"`([a-z-]+)`")
 
 
 def test_validator_agent_states_the_adapter_entity_vocabulary():
@@ -1258,8 +1258,8 @@ def test_validator_agent_states_the_adapter_entity_vocabulary():
     shows up in any other gate, because the contract is unchanged either way.
 
     The expected set is `{entity}` — the field's own name, which is what
-    locates the bullet — plus whatever `ENTITIES` currently holds, so adding an
-    entity to the adapter fails here until the agent learns it.
+    locates the bullet — plus whatever `PIPELINE_ENTITIES` currently holds, so
+    adding an entity to the adapter fails here until the agent learns it.
 
     One site this cannot reach: the same file's frontmatter `description`, which
     paraphrases the vocabulary in running English ("database-endpoint",
@@ -1274,21 +1274,36 @@ def test_validator_agent_states_the_adapter_entity_vocabulary():
     assert bullet, (
         f"{VALIDATOR_AGENT.name}: no '- `entity`' input bullet — the file was "
         "restructured, and this guard is now reading nothing")
-    assert set(_TICKED.findall(bullet.group(0))) == {"entity", *V.ENTITIES}, (
+    assert set(_TICKED.findall(bullet.group(0))) == {"entity", *V.PIPELINE_ENTITIES}, (
         f"{VALIDATOR_AGENT.name}'s `entity` input no longer names exactly "
-        f"validate.py's ENTITIES ({', '.join(V.ENTITIES)}). Update the bullet, "
-        "then update the two prose sites this guard does not read: this same "
-        "file's frontmatter `description`, which names the entities in English "
-        "so the orchestrator routes to it, and the entity names in "
-        "skills/pipeline-builder/SKILL.md (phase 5's type-map writes, and Edit "
-        "mode's referenced-closure step)."
+        f"validate.py's PIPELINE_ENTITIES ({', '.join(V.PIPELINE_ENTITIES)}). "
+        "Update the bullet, then update the two prose sites this guard does not "
+        "read: this same file's frontmatter `description`, which names the "
+        "entities in English so the orchestrator routes to it, and the entity "
+        "names in skills/pipeline-builder/SKILL.md (phase 5's type-map writes, "
+        "and Edit mode's referenced-closure step)."
     )
+
+
+def test_pipeline_entities_are_a_document_artifact_kind_subset():
+    """Pins `PIPELINE_ENTITIES` — hardcoded in validate.py rather than imported,
+    so `--entity`'s `choices=` survives a fresh end-user environment where the
+    self-install bootstrap has not yet run — to the contract's own restricted
+    vocabulary, so the two cannot drift apart member by member."""
+    from analitiq.contracts.shared.rule_record import DOCUMENT_ARTIFACT_KINDS
+
+    assert set(V.PIPELINE_ENTITIES) <= set(DOCUMENT_ARTIFACT_KINDS)
+    # connector / api-endpoint are the connector-builder plugin's own document
+    # kinds; this adapter's entity vocabulary is everything else that denotes
+    # one concrete document.
+    assert set(V.PIPELINE_ENTITIES) == set(DOCUMENT_ARTIFACT_KINDS) - {"connector", "api-endpoint"}
 
 
 def test_cli_main_type_map_entities(tmp_path, capsys):
     # the agents drive the CLI, and diagnostics_for-level routing keys off
-    # _TYPE_MAP_FILENAMES — only this pins that ENTITIES exposes the new entities
+    # _TYPE_MAP_FILENAMES — only this pins that PIPELINE_ENTITIES exposes the
+    # new entity plus the --direction split
     path = _write(tmp_path, "type-map-write.json", TYPE_MAP_WRITE)
-    rc = V.main(["--entity", "type_map_write", "--document", str(path)])
+    rc = V.main(["--entity", "type-map", "--direction", "write", "--document", str(path)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 0 and out["passed"], out

@@ -4,8 +4,8 @@
 The rules are `rules/records/*.yaml`, compiled by `render_rules.py` and read
 here through `all_rules()`. That registry is the source of truth; this script
 only *renders* it — into `OUTPUT_DIRS`, split by the artifact a rule's
-`scopes` bind — so agents have offline-readable files to cite instead of
-hand-restating rules in prose.
+`artifact_kinds` bind — so agents have offline-readable files to cite instead
+of hand-restating rules in prose.
 
 Tiers render as separate sections because a tier says what kind of obligation a
 rule is, which is what tells an agent how to go about satisfying it. What
@@ -58,12 +58,12 @@ os.environ.setdefault("DOMAIN", "analitiq.ai")
 #: rule an agent here has to know is rendered here because the record says so,
 #: and nothing downstream has to check that a citation resolved.
 #:
-#: `scopes` deliberately does NOT decide THAT. Scope is which artifact a rule
-#: grades; ownership is who has to know it, and the two differ exactly where it
-#: matters: the connector plugin never authors a database endpoint, but its
-#: `resource_discovery` produces one, so a database-endpoint rule whose record
-#: names this plugin binds an author there.
-#: Scope decides only WHICH FILE inside the set the rule lands in.
+#: `artifact_kinds` deliberately does NOT decide THAT. It is which artifact a
+#: rule grades; ownership is who has to know it, and the two differ exactly
+#: where it matters: the connector plugin never authors a database endpoint,
+#: but its `resource_discovery` produces one, so a database-endpoint rule
+#: whose record names this plugin binds an author there.
+#: `artifact_kinds` decides only WHICH FILE inside the set the rule lands in.
 OUTPUT_DIRS = {
     "connector-plugin": (
         REPO_ROOT / "plugins" / "analitiq-connector-builder"
@@ -75,12 +75,13 @@ OUTPUT_DIRS = {
     ),
 }
 
-#: Scopes owning fewer than this many rules in a plugin do not get their own
-#: file. A one-rule document is a file an agent has to find, open and close to
-#: learn one thing, and the Contents section of the set has to carry its name
-#: — cost with no navigation benefit. They fold into `shared.md` instead, which
-#: also absorbs any scope this renderer has never seen, so a new SCOPES member
-#: surfaces in a file rather than vanishing.
+#: Artifact kinds owning fewer than this many rules in a plugin do not get
+#: their own file. A one-rule document is a file an agent has to find, open
+#: and close to learn one thing, and the Contents section of the set has to
+#: carry its name — cost with no navigation benefit. They fold into
+#: `shared.md` instead, which also absorbs any kind this renderer has never
+#: seen, so a new ARTIFACT_KINDS member surfaces in a file rather than
+#: vanishing.
 BUCKET_FLOOR = 5
 SHARED_BUCKET = "shared"
 
@@ -177,24 +178,24 @@ def _load_rules(owner: str) -> list:
 def buckets(owner: str) -> dict[str, list]:
     """The plugin's owned rules, split into the files they render into.
 
-    Placement is by `scopes`, the artifact kinds a rule grades, because that is
-    what decides which document a reader is holding when they need it. A rule
-    naming two kinds lands in both files: it binds both authors, and a reader
-    of either must be able to satisfy their document from one file.
+    Placement is by `artifact_kinds`, the artifact kinds a rule grades, because
+    that is what decides which document a reader is holding when they need it.
+    A rule naming two kinds lands in both files: it binds both authors, and a
+    reader of either must be able to satisfy their document from one file.
 
     `any` is not a bucket — it is appended to every file, so no file is a
     partial answer for the document it names. Buckets under `BUCKET_FLOOR`
-    fold into `shared`, which also takes any scope with no bucket of its own,
-    so a new SCOPES member surfaces somewhere instead of vanishing.
+    fold into `shared`, which also takes any kind with no bucket of its own,
+    so a new ARTIFACT_KINDS member surfaces somewhere instead of vanishing.
     """
     rules = _load_rules(owner)
     universal = sorted(
-        (r for r in rules if ANY_SCOPE in r.scopes), key=lambda r: r.id
+        (r for r in rules if ANY_SCOPE in r.artifact_kinds), key=lambda r: r.id
     )
 
     by_scope: dict[str, list] = {}
     for rule in rules:
-        for scope in rule.scopes:
+        for scope in rule.artifact_kinds:
             if scope != ANY_SCOPE:
                 by_scope.setdefault(scope, []).append(rule)
 
@@ -384,7 +385,7 @@ def _tier_section(tier: str, rules: list, models: dict) -> list[str]:
         cells = [
             r.id,
             _cell(r.statement),
-            " ".join(f"`{s}`" for s in r.scopes),
+            " ".join(f"`{s}`" for s in r.artifact_kinds),
             r.severity,
             # `mechanized` is derived from `validator`, so this column cannot
             # disagree with what actually rejects a violation. A rule with no
@@ -463,8 +464,8 @@ def render_all(owner: str) -> dict[Path, str]:
     if missing:
         raise ValueError(
             f"{owner}: {len(missing)} owned rule(s) reach no file — {missing}. "
-            "Every owned rule must render somewhere; check SCOPES against the "
-            "bucket map."
+            "Every owned rule must render somewhere; check ARTIFACT_KINDS against "
+            "the bucket map."
         )
     return rendered
 

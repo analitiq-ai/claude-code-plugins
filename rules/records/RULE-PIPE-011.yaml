@@ -5,7 +5,7 @@ statement: >
   the same stream twice.
 tier: reference
 severity: error
-scopes: [pipeline]
+artifact_kinds: [pipeline]
 validator: "analitiq.validator.pipelines::_check_stream_refs"
 owners: [pipeline-plugin, engine]
 rationale: >

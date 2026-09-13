@@ -4,7 +4,7 @@ statement: >
   connection scope refers to a database endpoint only.
 tier: reference
 severity: error
-scopes: [stream]
+artifact_kinds: [stream]
 validator: null
 enforcement_location: unenforced
 owners: [pipeline-plugin, engine]

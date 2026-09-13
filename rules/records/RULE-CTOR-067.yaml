@@ -4,7 +4,7 @@ statement: >
   one without the other MUST be rejected.
 tier: coherence
 severity: error
-scopes: [connector]
+artifact_kinds: [connector]
 validator: "analitiq.contracts.connector::ErrorMap._key_attrs_and_codes_together"
 owners: [engine, connector-plugin]
 targets: [ErrorMap]

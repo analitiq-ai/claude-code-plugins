@@ -4,7 +4,7 @@ statement: >
   with a declared resolution scope.
 tier: shape
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::TemplateFilterLanding._placeholders_qualified"
 owners: [connector-plugin]
 rationale: >

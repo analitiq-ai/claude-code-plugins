@@ -4,7 +4,7 @@ statement: >
   substitution into a path is the `{name}` placeholders `path_params` binds.
 tier: shape
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::_RequestBase._validate"
 owners: [connector-plugin, engine]
 targets: [_RequestBase]

@@ -5,7 +5,7 @@ statement: >
   own `content_type` field.
 tier: shape
 severity: error
-scopes: [any]
+artifact_kinds: [any]
 validator: "analitiq.contracts.shared.rules::DeclaredHeaderNames._no_content_type_header"
 owners: [connector-plugin, engine]
 targets:

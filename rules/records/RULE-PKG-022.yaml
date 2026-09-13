@@ -4,7 +4,7 @@ statement: >
   certificate-verification mode resolves with an empty CA certificate.
 tier: shape
 severity: error
-scopes: [connector-package]
+artifact_kinds: [connector-package]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, engine]

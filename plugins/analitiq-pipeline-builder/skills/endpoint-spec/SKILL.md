@@ -101,7 +101,7 @@ Every authored document must:
    never a hand-authored slug — see `spec-database-object.md`
    §Derived `endpoint_id`.
 3. Preserve identifier strings verbatim from introspection (`RULE-DBEP-009`).
-4. Pass validation (the `pipeline-schema-validator`, entity `database_endpoint`)
+4. Pass validation (the `pipeline-schema-validator`, entity `database-endpoint`)
    with zero error findings. The `endpoint_id` must equal the handle the
    contract's derivation produces from the verbatim `database_object`
    (`RULE-DBEP-011`).

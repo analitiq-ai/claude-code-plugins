@@ -4,7 +4,7 @@ statement: >
   MUST satisfy the schema node that declares it.
 tier: coherence
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.validator.connectors::_embedded_schema_example_findings"
 owners: [connector-plugin, engine]
 rationale: >

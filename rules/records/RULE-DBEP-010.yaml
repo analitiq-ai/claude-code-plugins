@@ -4,7 +4,7 @@ statement: >
   namespace discovery returned.
 tier: reference
 severity: error
-scopes: [database-endpoint]
+artifact_kinds: [database-endpoint]
 validator: null
 enforcement_location: unenforced
 owners: [pipeline-plugin, engine]

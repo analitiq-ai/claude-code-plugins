@@ -4,7 +4,7 @@ statement: >
   MUST be `active`.
 tier: reference
 severity: error
-scopes: [pipeline]
+artifact_kinds: [pipeline]
 validator: "analitiq.validator.pipelines::_check_pipeline_active"
 owners: [pipeline-plugin, engine]
 rationale: >

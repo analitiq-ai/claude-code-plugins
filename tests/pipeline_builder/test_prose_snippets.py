@@ -535,19 +535,15 @@ def _grading_entity(marker: Marker, label: str) -> str:
         assert marker.rule in rules, (
             f"{label}: '<!-- invalid: {marker.rule} -->' names no rule in the "
             "rule registry — a dangling id pins nothing.")
-        # Boundary translation: the registry spells resources hyphenated
-        # (database-endpoint), the validator adapter spells entities with
-        # underscores (database_endpoint). Without it, a hyphenated resource
-        # would surface as a misdirecting KeyError deeper in the splice.
         # A rule may bind more than one artifact kind; a snippet grades ONE
-        # document, so resolve to the scope that names a hosted entity.
-        scopes = rules[marker.rule].scopes
-        hosted = [s for s in scopes if s.replace("-", "_") in ENTITY_SKILL]
+        # document, so resolve to the kind that names a hosted entity.
+        kinds = rules[marker.rule].artifact_kinds
+        hosted = [k for k in kinds if k in ENTITY_SKILL]
         assert len(hosted) < 2, (
             f"{label}: '<!-- invalid: {marker.rule} -->' binds {hosted}, so "
             "which document this block grades is ambiguous — use a 'validate:' "
             "marker naming the one the block carries.")
-        entity = (hosted[0] if hosted else scopes[0]).replace("-", "_")
+        entity = hosted[0] if hosted else kinds[0]
     else:
         entity = marker.entity
     assert entity in ENTITY_SKILL, (
@@ -705,23 +701,19 @@ def test_invalid_disposition_requires_the_failure(tmp_path):
             '{"schedule": {"type": "manual"}}', "synthetic", tmp_path)
 
 
-def test_invalid_disposition_translates_hyphenated_registry_resources():
-    """The registry spells resources hyphenated; the validator adapter spells
-    entities with underscores. `_grading_entity` must translate at that
-    boundary — the failure for an unhosted entity is then the actionable
-    membership assertion naming the underscore spelling, never a misdirecting
-    KeyError on the hyphenated one."""
+def test_invalid_disposition_fails_loudly_for_an_artifact_kind_with_no_host():
+    """A rule whose sole artifact kind has no bundled host example must fail
+    the actionable membership assertion in `_grading_entity`, not resolve to
+    some other kind or raise a misdirecting KeyError deeper in the splice."""
     from analitiq.contracts.shared.rules import all_rules
-    # Single-scope only: a rule binding a hosted scope too would resolve to
+    # Single-kind only: a rule binding a hosted kind too would resolve to
     # that one in `_grading_entity` and never reach the assertion under test.
     rule = next(
         (r for r in all_rules()
-         if len(r.scopes) == 1 and "-" in r.scopes[0]
-         and r.scopes[0].replace("-", "_") not in HOST_EXAMPLE),
+         if len(r.artifact_kinds) == 1 and r.artifact_kinds[0] not in HOST_EXAMPLE),
         None)
-    if rule is None:  # every hyphenated resource gained a host: real blocks cover it
-        pytest.skip("no hyphenated-resource rule without a host in the registry")
+    if rule is None:  # every artifact kind gained a host: real blocks cover it
+        pytest.skip("no unhosted-artifact-kind rule in the registry")
     marker = _parse_marker(f"<!-- invalid: {rule.id} -->")
-    with pytest.raises(AssertionError,
-                       match=re.escape(repr(rule.scopes[0].replace("-", "_")))):
+    with pytest.raises(AssertionError, match=re.escape(repr(rule.artifact_kinds[0]))):
         _grading_entity(marker, "synthetic")

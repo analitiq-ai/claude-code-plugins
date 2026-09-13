@@ -594,13 +594,13 @@ def _grading_entity(marker: Marker, label: str) -> str:
         # gate can validate. Two of them is an ambiguous marker — a defect to
         # report rather than a coin to flip. None falls through to the
         # membership assertion below, which already says what to do instead.
-        scopes = rules[marker.rule].scopes
-        hosted = [s for s in scopes if s in ENTITY_SCHEMA]
+        kinds = rules[marker.rule].artifact_kinds
+        hosted = [s for s in kinds if s in ENTITY_SCHEMA]
         assert len(hosted) < 2, (
             f"{label}: '<!-- invalid: {marker.rule} -->' binds {hosted}, so "
             "which document this block grades is ambiguous — use a 'validate:' "
             "marker naming the one the block carries.")
-        entity = hosted[0] if hosted else scopes[0]
+        entity = hosted[0] if hosted else kinds[0]
     else:
         entity = marker.entity
     assert entity in ENTITY_SCHEMA, (
@@ -778,7 +778,7 @@ def _endpoint_rule() -> str:
     # the registry losing every api-endpoint-only rule is the defect to report.
     return next(  # skipcq: PTC-W0063
         r.id for r in all_rules()
-        if [s for s in r.scopes if s in ENTITY_SCHEMA] == ["api-endpoint"]
+        if [s for s in r.artifact_kinds if s in ENTITY_SCHEMA] == ["api-endpoint"]
     )
 
 
@@ -812,7 +812,7 @@ def test_invalid_disposition_rejects_a_resource_with_no_document():
     from analitiq.contracts.shared.rules import all_rules
     rule = next(
         (r for r in all_rules()
-         if not any(s in ENTITY_SCHEMA for s in r.scopes)), None)
+         if not any(s in ENTITY_SCHEMA for s in r.artifact_kinds)), None)
     if rule is None:  # every scope gained a document: real blocks cover it
         pytest.skip("no rule scoped outside the published documents")
     with pytest.raises(AssertionError, match="cannot validate as a document"):

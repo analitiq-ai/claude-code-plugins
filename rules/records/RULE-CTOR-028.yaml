@@ -5,7 +5,7 @@ statement: >
   instantiating the connector supplies instead.
 tier: choice
 severity: error
-scopes: [connector]
+artifact_kinds: [connector]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin]

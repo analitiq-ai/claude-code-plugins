@@ -4,7 +4,7 @@ statement: >
   API-filter operator vocabulary.
 tier: shape
 severity: error
-scopes: [api-endpoint]
+artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation.filters"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [ReadOperation]

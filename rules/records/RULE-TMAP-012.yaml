@@ -5,7 +5,7 @@ statement: >
   rewritten.
 tier: process
 severity: error
-scopes: [type-map]
+artifact_kinds: [type-map]
 validator: null
 enforcement_location: unenforced
 owners: [pipeline-plugin]

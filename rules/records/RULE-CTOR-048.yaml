@@ -4,7 +4,7 @@ statement: >
   transport family the same connector declares in `transports`.
 tier: coherence
 severity: error
-scopes: [connector]
+artifact_kinds: [connector]
 validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, engine]

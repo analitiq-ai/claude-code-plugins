@@ -5,7 +5,7 @@ statement: >
   `secret_refs`.
 tier: coherence
 severity: error
-scopes: [connection]
+artifact_kinds: [connection]
 validator: "analitiq.contracts.connection::ConnectionStoredMaps._validate_no_secret_keys"
 owners: [pipeline-plugin]
 targets: [ConnectionStoredMaps]

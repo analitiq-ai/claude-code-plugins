@@ -4,7 +4,7 @@ statement: >
   in the referenced endpoint's read operation `filters` map.
 tier: reference
 severity: error
-scopes: [stream]
+artifact_kinds: [stream]
 validator: null
 enforcement_location: unenforced
 owners: [pipeline-plugin, engine]

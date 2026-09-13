@@ -95,7 +95,11 @@ OWNERS = ("engine", "connector-plugin", "pipeline-plugin")
 #: also fills used to have to over-claim `any` or pick one kind and silently
 #: miss the other author. Plural is also what lets the rendered reference fan a
 #: rule out to every agent it binds without any record naming an agent.
-SCOPES = (
+#:
+#: This is the sole vocabulary naming an artifact kind. It also backs any
+#: runtime call site that names one kind rather than a rule's set of them —
+#: see :data:`DOCUMENT_ARTIFACT_KINDS` for that restricted view.
+ARTIFACT_KINDS = (
     "connector",
     "connector-package",
     "api-endpoint",
@@ -108,6 +112,18 @@ SCOPES = (
     # published contract surface even though neither plugin authors one.
     "data-sync-run-status",
     "any",
+)
+
+#: `ARTIFACT_KINDS`, restricted to members that denote one concrete, authorable
+#: document. A rule record legitimately needs the wider vocabulary above —
+#: `any` binds every document at once, `connector-package` grades a directory
+#: layout rather than a single document, `data-sync-run-status` is a server
+#: response neither plugin authors — but a call site naming exactly one kind of
+#: document a plugin dispatches on (the pipeline-builder's validation adapter,
+#: for instance) never means one of those three. Derived rather than a second
+#: hand-typed tuple, so the two cannot drift apart member by member.
+DOCUMENT_ARTIFACT_KINDS = tuple(
+    kind for kind in ARTIFACT_KINDS if kind not in ("any", "connector-package", "data-sync-run-status")
 )
 
 #: Which shape device a shape rule is ABOUT — not merely which one the
@@ -209,11 +225,11 @@ class RuleRecord:
     statement: str
     tier: str
     severity: str
-    #: Every artifact kind the rule binds, from :data:`SCOPES`. A list because a
-    #: rule can grade more than one kind of document, and the rendered reference
-    #: is split by scope: a scalar here would decide, silently, which of two
-    #: authors never meets the rule.
-    scopes: tuple[str, ...]
+    #: Every artifact kind the rule binds, from :data:`ARTIFACT_KINDS`. A list
+    #: because a rule can grade more than one kind of document, and the
+    #: rendered reference is split by artifact kind: a scalar here would
+    #: decide, silently, which of two authors never meets the rule.
+    artifact_kinds: tuple[str, ...]
     rationale: str
     #: What applies it: `dotted.module::Symbol.attr`, naming the module that is
     #: imported so the value means the same thing here as it does wherever this
@@ -261,7 +277,7 @@ class RuleRecord:
     #: The fields a record authors as a YAML list and this class holds as a
     #: tuple. Normalized here rather than by each loader, so a caller that
     #: hands over a list gets a record that is still frozen and comparable.
-    _SEQUENCES = ("scopes", "owners", "targets", "fields")
+    _SEQUENCES = ("artifact_kinds", "owners", "targets", "fields")
 
     def __post_init__(self) -> None:
         for name in self._SEQUENCES:
@@ -321,21 +337,22 @@ class RuleRecord:
             self._fail(
                 f"unknown mechanism {self.mechanism!r}; expected one of {MECHANISMS}"
             )
-        if not self.scopes:
-            self._fail(f"name the artifact kind(s) this rule binds — from {SCOPES}")
-        unknown = [s for s in self.scopes if s not in SCOPES]
+        if not self.artifact_kinds:
+            self._fail(f"name the artifact kind(s) this rule binds — from {ARTIFACT_KINDS}")
+        unknown = [s for s in self.artifact_kinds if s not in ARTIFACT_KINDS]
         if unknown:
-            self._fail(f"unknown scope(s) {unknown}; expected from {SCOPES}")
-        if len(set(self.scopes)) != len(self.scopes):
+            self._fail(f"unknown artifact kind(s) {unknown}; expected from {ARTIFACT_KINDS}")
+        if len(set(self.artifact_kinds)) != len(self.artifact_kinds):
             # A repeat renders the rule into the same file twice. Cheap to
             # refuse here, invisible in a diff of the rendered reference.
-            self._fail(f"scopes repeats an entry: {list(self.scopes)}")
-        if "any" in self.scopes and len(self.scopes) > 1:
+            self._fail(f"artifact_kinds repeats an entry: {list(self.artifact_kinds)}")
+        if "any" in self.artifact_kinds and len(self.artifact_kinds) > 1:
             # `any` already means every authored document, so naming it beside
             # a specific kind states a narrower claim the renderer will ignore.
             self._fail(
-                f"scopes names 'any' beside {[s for s in self.scopes if s != 'any']} — "
-                "'any' already covers every authored document; drop one or the other"
+                f"artifact_kinds names 'any' beside "
+                f"{[s for s in self.artifact_kinds if s != 'any']} — 'any' already "
+                "covers every authored document; drop one or the other"
             )
         if not self.owners:
             self._fail(f"name who applies this rule — one or more of {OWNERS}")

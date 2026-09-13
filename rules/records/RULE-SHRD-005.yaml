@@ -4,7 +4,7 @@ statement: >
   identity is encoded into one, and none is parsed back out of one.
 tier: process
 severity: error
-scopes: [any]
+artifact_kinds: [any]
 validator: null
 enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin]

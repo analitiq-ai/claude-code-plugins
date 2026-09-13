@@ -4,7 +4,7 @@ statement: >
   entry addresses.
 tier: coherence
 severity: error
-scopes: [stream]
+artifact_kinds: [stream]
 validator: "analitiq.contracts.stream::StreamAuthored._destinations_unique"
 owners: [pipeline-plugin]
 targets: [StreamAuthored]
