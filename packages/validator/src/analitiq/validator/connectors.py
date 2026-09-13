@@ -53,6 +53,7 @@ from ._core import (
     finding,
     register_kind,
     _bounded,
+    _missing_schema_url_findings,
     _model_findings,
     _run_guarded,
 )
@@ -794,6 +795,38 @@ def _endpoint_locator_findings(ep_doc: Any) -> list[dict]:
     return []
 
 
+def _keyset_initial_null_findings(ep_doc: Any) -> list[dict]:
+    """Gate: RULE-ENDP-044 — a keyset pagination block must omit `initial`
+    when there is no first-page key, and must not spell that absence as an
+    explicit null. Omission is how the block says "send no keyset on the
+    first request"; a null is a value, so a document writing one is claiming
+    a first-page key that happens to be null."""
+    if not isinstance(ep_doc, dict):
+        return []
+    operations = ep_doc.get("operations")
+    if not isinstance(operations, dict):
+        return []
+    read = operations.get("read")
+    if not isinstance(read, dict):
+        return []
+    pagination = read.get("pagination")
+    if not isinstance(pagination, dict) or pagination.get("type") != "keyset":
+        return []
+    keyset = pagination.get("keyset")
+    if not isinstance(keyset, dict) or "initial" not in keyset:
+        return []
+    if keyset["initial"] is None:
+        return [finding(
+            rule="RULE-ENDP-044",
+            message_id="keyset-initial-explicit-null", kind="fail",
+            path="/operations/read/pagination/keyset/initial",
+            message=(
+                "operations.read.pagination.keyset.initial is explicitly null; "
+                "omit the field to say there is no first-page key, rather than "
+                "spelling that absence as a null value."))]
+    return []
+
+
 # --- Database endpoint id gate ---------------------------------------------------
 # A database `endpoint_id` is a derived handle over the verbatim `database_object`,
 # NOT authored freely: `slug(schema)__slug(table)[__slug(catalog)]__<hash8>`. The
@@ -867,6 +900,33 @@ def endpoint_filename_findings(ep_doc: Any, filename: str) -> list[dict]:
                 f"it must be named {expected!r} (the engine locates endpoints/{{endpoint_id}}.json)."),
         )]
     return []
+
+
+def _api_endpoint_document_findings(
+        ep_doc: Any, transports: Any, *, filename: str = "") -> list[dict]:
+    """The checks a single api-endpoint document must pass on its own, given
+    the connector `transports` its `transport_ref` sites resolve against.
+
+    Defined once and called from both `check_coverage`'s sibling-endpoint loop
+    and the standalone `_validate_api_endpoint` route — the two used to keep
+    independent call lists, and one of them silently missed
+    `_keyset_initial_null_findings` (RULE-ENDP-044) until a review caught it.
+    What stays outside this function is route-specific: `check_coverage`'s
+    cross-sibling duplicate-`endpoint_id` and native/arrow-type coverage
+    checks, and `_validate_api_endpoint`'s resolution of `transports` from a
+    sibling `connector.json` it does not already have in hand."""
+    findings = _model_findings(ep_doc, _API_ENDPOINT_ADAPTER)
+    findings.extend(_endpoint_locator_findings(ep_doc))
+    if filename:
+        findings.extend(endpoint_filename_findings(ep_doc, filename))
+    if isinstance(ep_doc, dict):
+        findings.extend(_embedded_schema_findings(ep_doc, label=filename))
+        findings.extend(_keyset_initial_null_findings(ep_doc))
+        findings.extend(_run_guarded(_embedded_schema_example_findings, ep_doc,
+                                     filename, crash_label="embedded schema example grading",
+                                     rule="RULE-ENDP-063"))
+        findings.extend(_endpoint_transport_ref_findings(ep_doc, transports, label=filename))
+    return findings
 
 
 def is_stem_addressed_endpoint_path(doc_path: Path) -> bool:
@@ -1059,10 +1119,9 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             findings.extend(load)
             continue
         # Each sibling endpoint is a full api-endpoint document — validate it
-        # with the model (annotations, markers, wiring) and check its filename.
-        findings.extend(_model_findings(ep_doc, _API_ENDPOINT_ADAPTER))
-        findings.extend(endpoint_filename_findings(ep_doc, ep_path.name))
-        findings.extend(_endpoint_locator_findings(ep_doc))
+        # with the checks shared with the standalone single-document route.
+        findings.extend(_api_endpoint_document_findings(
+            ep_doc, doc.get("transports"), filename=ep_path.name))
         ep_id = ep_doc.get("endpoint_id") if isinstance(ep_doc, dict) else None
         if isinstance(ep_id, str) and ep_id:
             if ep_id in seen_ids:
@@ -1080,15 +1139,6 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             # skip the coverage walk (it calls `.get()` and would crash, replacing
             # the actionable findings with a generic "validator bug" via _run_guarded).
             continue
-        findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
-        findings.extend(_run_guarded(_embedded_schema_example_findings, ep_doc,
-                                     ep_path.name, crash_label="embedded schema example grading",
-                                     rule="RULE-ENDP-063"))
-        # Cross-file: the endpoint's transport_ref sites resolve against THIS
-        # connector's `transports` — checkable only here, where both documents
-        # are in hand.
-        findings.extend(_endpoint_transport_ref_findings(
-            ep_doc, doc.get("transports"), label=ep_path.name))
         # The rendering is the one check here that needs the sibling map; a map
         # that did not load skips it, and the connector-level warning says so.
         if isinstance(read_doc, list):
@@ -1129,18 +1179,15 @@ _WRITE_MAP_ADAPTER = TypeAdapter(TypeMapWriteDoc)
 
 def _validate_connector(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
     findings = _model_findings(doc, _CONNECTOR_ADAPTER)
+    findings += _missing_schema_url_findings(doc)
     findings += check_coverage(doc, doc_path)
     return findings
 
 
 def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    findings = _model_findings(doc, _API_ENDPOINT_ADAPTER)
-    findings += _endpoint_locator_findings(doc)
+    transports: Any = None
+    sibling_findings: list[dict] = []
     if isinstance(doc, dict):
-        findings += _embedded_schema_findings(doc)
-        findings += _run_guarded(_embedded_schema_example_findings, doc,
-                                 crash_label="embedded schema example grading",
-                                 rule="RULE-ENDP-063")
         # RULE-ENDP-047 is cross-document: it needs the sibling connector.json's
         # `transports`, which only `check_coverage` has. Say so rather than
         # returning a silent clean pass — an author validating a single
@@ -1181,11 +1228,10 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
                 connector_doc, load_findings = _load_json_sibling(
                     sibling, rule=None, message_id="sibling-connector-unreadable",
                 )
-                findings.extend(load_findings)
+                sibling_findings.extend(load_findings)
             transports = connector_doc.get("transports") if isinstance(connector_doc, dict) else None
             if isinstance(transports, dict):
-                findings.extend(_endpoint_transport_ref_findings(
-                    doc, transports, label=doc_path.name if doc_path else ""))
+                pass  # resolved: _api_endpoint_document_findings checks it below.
             elif connector_doc is not None:
                 # Connector found, but its `transports` is missing or not an
                 # object. `_endpoint_transport_ref_findings` returns [] there —
@@ -1195,7 +1241,7 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
                 # an endpoint whose `transport_ref` resolves to nothing. Say what
                 # could not be checked and why. notApplicable, not fail: the
                 # check knows exactly which rule it would grade (RULE-ENDP-047).
-                findings.append(finding(
+                sibling_findings.append(finding(
                     rule="RULE-ENDP-047",
                     message_id="transport-ref-check-skipped-no-transports",
                     kind="notApplicable", path="/",
@@ -1209,7 +1255,7 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
                 # Branching on `connector_doc is None` alone said "not
                 # reachable", contradicting the parse error emitted beside it
                 # under the same id.
-                findings.append(finding(
+                sibling_findings.append(finding(
                     rule="RULE-ENDP-047",
                     message_id="transport-ref-check-skipped-unparseable",
                     kind="notApplicable", path="/",
@@ -1219,7 +1265,7 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
                         "`transports` could not be read. Fix the error reported "
                         "above and re-run.")))
             else:
-                findings.append(finding(
+                sibling_findings.append(finding(
                     rule="RULE-ENDP-047",
                     message_id="transport-ref-check-skipped-no-sibling",
                     kind="notApplicable", path="/",
@@ -1228,6 +1274,13 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
                         "connector.json was reachable from this document's path, so "
                         "its `transports` could not be read. Validate the connector "
                         "to resolve it.")))
+    # Each api-endpoint document goes through the checks shared with
+    # `check_coverage`'s sibling-endpoint loop; `transports` is None wherever
+    # the branches above could not resolve it, and RULE-ENDP-047 stays silent
+    # there rather than reporting on an unresolved comparison — the
+    # `sibling_findings` above already say why.
+    findings = _api_endpoint_document_findings(doc, transports)
+    findings.extend(sibling_findings)
     if doc_path is not None:
         findings += endpoint_filename_findings(doc, doc_path.name)
     return findings

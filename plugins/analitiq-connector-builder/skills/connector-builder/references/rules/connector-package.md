@@ -11,7 +11,7 @@ build, a restated rule rots in silence.
 Covers: every rule this plugin owns that binds a **`connector-package`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 32 of the 44 below have no validator, so nothing rejects
+all hold: 31 of the 44 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
@@ -56,7 +56,7 @@ than edited.
 | RULE-PKG-023 | A connector's write direction MUST live in `type-map-write.json`: the package ships no Python type-rendering table, and a `render_column_type` override exists only for logic the map's rules cannot express, delegating every other type back to the map. | `connector-package` | warning | — | — |
 | RULE-PKG-034 | A connector MUST NOT keep its own record of which batches it has already written; record identity is content-derived and the stage relation's name is engine-owned and deterministic, and together they are the whole idempotency mechanism. | `connector-package` | error | — | — |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
-| RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
+| RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | validator | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | validator | — |
 | RULE-SHRD-010 | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. | `any` | error | validator | — |
 | RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |

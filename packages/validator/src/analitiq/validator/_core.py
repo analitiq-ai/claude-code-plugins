@@ -10,9 +10,11 @@ This module owns the parts that are independent of any particular artifact kind:
   under, defined once so the DOMAIN dance is not reimplemented per kind;
 - the KIND-VALIDATOR REGISTRY and `_dispatch()`/`validate_document()` driver — a
   per-kind module (e.g. `connectors`) contributes a `(detector, validator_fn)`
-  pair; `_dispatch` consults the registry rather than hard-coding any kind's
-  branches, so a new kind is *register, done*. A kind whose
-  entire validity is its contract model registers via `register_model_kind()`;
+  pair via `register_kind()`; `_dispatch` consults the registry rather than
+  hard-coding any kind's branches, so a new kind is *register, done*. A kind
+  whose validity is its contract model plus the `$schema`-omission check
+  registers via `register_model_and_schema_kind()` instead of hand-writing
+  that combination;
 - `_bounded()` — the one width every borrowed diagnostic is clipped to, so a
   finding is bounded the same way whichever route the text arrived by;
 - `_run_guarded()` — a crash in one check becomes a single `notApplicable`
@@ -62,18 +64,6 @@ _KIND_REGISTRY: list[tuple[Callable[[Any], bool], _Validator]] = []
 def register_kind(detector: Callable[[Any], bool], validator: _Validator) -> None:
     """Append a `(detector, validator_fn)` pair to the dispatch registry."""
     _KIND_REGISTRY.append((detector, validator))
-
-
-def register_model_kind(detector: Callable[[Any], bool], adapter: TypeAdapter) -> None:
-    """Register a single-document kind whose entire validity is its contract model.
-
-    A kind with no cross-file or referential checks — the contract model IS the
-    whole validity story — needs only `_model_findings(doc, adapter)` under the
-    per-kind `(doc, doc_path, schema_url)` signature. Packaging that here lets such
-    a module supply just its detector and adapter, so the trivial validator is
-    defined once rather than reimplemented per kind.
-    """
-    register_kind(detector, lambda doc, doc_path=None, schema_url=None: _model_findings(doc, adapter))
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +252,39 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
                 message=err["msg"],
             ))
         return findings
+
+
+def _missing_schema_url_findings(doc: Any) -> list[dict]:
+    """RULE-SHRD-003 gate, shared by every kind whose contract leaves `$schema`
+    optional (connection, stream, pipeline, connector): each of those models
+    types the field as a `Literal`/pattern that already rejects a present-but-wrong
+    value as a structural `error`, so this only needs to catch OMISSION — the
+    raw document declaring no `$schema` at all.
+    """
+    if not isinstance(doc, dict) or "$schema" in doc:
+        return []
+    return [finding(
+        rule="RULE-SHRD-003",
+        message_id="schema-url-missing",
+        kind="fail",
+        path="/$schema",
+        message="document omits `$schema`; declare it with the published canonical URL for this family.",
+    )]
+
+
+def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: TypeAdapter) -> None:
+    """Register a single-document kind whose entire validity is its contract model
+    plus the RULE-SHRD-003 `$schema`-omission check.
+
+    A kind with no further cross-file or referential checks needs only
+    `_model_findings(doc, adapter) + _missing_schema_url_findings(doc)` under the
+    per-kind `(doc, doc_path, schema_url)` signature. Packaging that here lets
+    such a module supply just its detector and adapter, so the combination is
+    defined once rather than reimplemented per kind.
+    """
+    def _validate(doc: Any, doc_path: Path | None = None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+        return _model_findings(doc, adapter) + _missing_schema_url_findings(doc)
+    register_kind(detector, _validate)
 
 
 # ---------------------------------------------------------------------------

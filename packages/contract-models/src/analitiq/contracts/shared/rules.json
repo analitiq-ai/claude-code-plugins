@@ -3542,8 +3542,8 @@
    "artifact_kinds": [
     "api-endpoint"
    ],
-   "validator": null,
-   "enforcement_location": "unenforced",
+   "validator": "analitiq.validator.connectors::_keyset_initial_null_findings",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -3554,7 +3554,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Omission is how the block says \"send no keyset on the first request\"; a null is a value, so a document writing one is claiming a first-page key that happens to be null. Today the two behave alike, which is exactly why it goes unnoticed and why it is not yet a broken run — but the document has lost the distinction, and it stays lost until something needs it: a provider whose first key genuinely is null, or a stricter reading of the field. Known enforcement gap: `Keyset.initial` admits null as an ordinary value, so the refusal RULE-ENDP-031 makes for namespace fields has no counterpart here — nothing yet forbids the explicit null the way that precedent already forbids it for namespace fields.\n",
+   "rationale": "Omission is how the block says \"send no keyset on the first request\"; a null is a value, so a document writing one is claiming a first-page key that happens to be null. Today the two behave alike, which is exactly why it goes unnoticed and why it is not yet a broken run — but the document has lost the distinction, and it stays lost until something needs it: a provider whose first key genuinely is null, or a stricter reading of the field. Checked in `analitiq.validator` rather than by a `@model_validator` on `Keyset` itself: this rule's declared severity is `warning`, and a model-level refusal always surfaces as an `error`-severity finding regardless of what a record declares, so a `warning`-severity rule must be a validator check instead.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5630,18 +5630,23 @@
    "artifact_kinds": [
     "any"
    ],
-   "validator": null,
-   "enforcement_location": "unenforced",
+   "validator": "analitiq.validator._core::_missing_schema_url_findings",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
    ],
-   "targets": [],
+   "targets": [
+    "ConnectionAuthored",
+    "StreamAuthored",
+    "PipelineAuthored",
+    "ConnectorBase"
+   ],
    "fields": [],
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Where the contract leaves the field optional an omission validates cleanly, so requiring it everywhere is a plugin house rule no validator expresses. A presence check is a plain mechanical comparison — the field is absent or it is not the family's published `Literal` URL — so nothing about catching the omission needs a human judgment call; it is simply a check nothing here runs today. Without it a reviewer, an editor's live validation and any future migration all have to guess which contract the document was authored against, and it silently reads as belonging to whatever is current. Nothing breaks the day it is omitted, which is precisely why the omission survives.\n",
+   "rationale": "Where the contract leaves the field optional a present-but-wrong value is already rejected structurally — each of these models types `$schema` either as a `Literal` naming its family's published URL or, where a family is authored against more than one published host, as a pattern constrained to the shared `schemas.analitiq.<tld>` form — so the one gap is omission, a plain mechanical comparison: the key is absent or it is not. Checked in `analitiq.validator` rather than by a `@model_validator` on each model itself: this rule's declared severity is `warning`, and a model-level refusal always surfaces as an `error`-severity finding regardless of what a record declares, so a `warning`-severity rule must be a validator check instead. Without it a reviewer, an editor's live validation and any future migration all have to guess which contract the document was authored against, and it silently reads as belonging to whatever is current.\n",
    "status": "active",
    "superseded_by": null
   },

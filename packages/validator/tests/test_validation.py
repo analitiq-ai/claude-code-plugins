@@ -12,8 +12,12 @@ from pathlib import Path
 
 import pytest
 
+from analitiq.contracts.connection import CONNECTION_SCHEMA_URL
+from analitiq.contracts.connector import CONNECTOR_SCHEMA_URL
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
 from analitiq.contracts.endpoints import _REFUSED_REFERENCE_KEYWORDS
+from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
+from analitiq.contracts.stream import STREAM_SCHEMA_URL
 from analitiq.validator.connectors import (
     _DATABASE_KINDS,
     _READ_MAP_FILENAME,
@@ -836,6 +840,186 @@ def test_coverage_flags_endpoint_id_locator_mismatch(tmp_path, connector_base, v
                 {"widgets.json": ep})
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert any(e.get("rule") == "RULE-ENDP-046" for e in errors)
+
+
+# --- RULE-ENDP-044: a keyset block must omit `initial`, never spell it null -----
+
+def _keyset_endpoint(initial=..., transport_ref=...):
+    keyset = {"param": "after", "order_by_field": "id"}
+    if initial is not ...:
+        keyset["initial"] = initial
+    request = {
+        "method": "GET", "path": "/v1/records",
+        "query": {"after": {"from_param": "after"}},
+    }
+    if transport_ref is not ...:
+        request["transport_ref"] = transport_ref
+    return {
+        "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+        "endpoint_id": "v1__records",
+        "operations": {
+            "read": {
+                "request": request,
+                "params": {
+                    "after": {"in": "query", "type": "string", "required": False,
+                              "controlled_by": "pagination"},
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {
+                        "$schema": "https://json-schema.org/draft/2020-12/schema",
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                        },
+                    },
+                },
+                "pagination": {
+                    "type": "keyset",
+                    "keyset": keyset,
+                    "stop_when": {"empty": {"ref": "response.records"}},
+                },
+            },
+        },
+    }
+
+
+def test_keyset_explicit_null_initial_warns(validator):
+    findings = validator.validate_document(_keyset_endpoint(initial=None))
+    hits = [f for f in findings if f.get("rule") == "RULE-ENDP-044"]
+    assert hits, findings
+    assert hits[0]["kind"] == "fail"
+    assert hits[0]["severity"] == "warning"
+    assert hits[0]["path"] == "/operations/read/pagination/keyset/initial"
+
+
+@pytest.mark.parametrize("initial", [..., "abc123", 0])
+def test_keyset_non_null_initial_is_clean(initial, validator):
+    findings = validator.validate_document(_keyset_endpoint(initial=initial))
+    assert not any(f.get("rule") == "RULE-ENDP-044" for f in findings), findings
+
+
+def test_coverage_flags_keyset_explicit_null_initial(tmp_path, connector_base, validator):
+    # End-to-end through the connector-package route (check_coverage's sibling-
+    # endpoint loop), not just the standalone single-document route: the two
+    # walk different code paths, and only the standalone one used to call
+    # `_keyset_initial_null_findings` (Codex P2).
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+                {"v1__records.json": _keyset_endpoint(initial=None)})
+    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    assert any(f.get("rule") == "RULE-ENDP-044" for f in findings), findings
+
+
+def test_check_coverage_and_standalone_route_agree_on_shared_per_endpoint_checks(
+        tmp_path, connector_base, validator):
+    # check_coverage's sibling-endpoint loop and the standalone _validate_api_endpoint
+    # route each assemble their own list of per-endpoint-document checks. They must
+    # report the same shared-rule findings for the same document — the two lists have
+    # drifted before (RULE-ENDP-044, Codex P2; see test_coverage_flags_keyset_explicit_
+    # null_initial above) and nothing but this parity test would catch it happening again.
+    ep_doc = _keyset_endpoint(initial=None, transport_ref="bogus")
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+                {"v1__records.json": ep_doc})
+
+    coverage_findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    coverage_rules = {f.get("rule") for f in coverage_findings}
+
+    standalone_findings = validator.validate_document(
+        ep_doc, doc_path=tmp_path / "endpoints" / "v1__records.json")
+    standalone_rules = {f.get("rule") for f in standalone_findings}
+
+    shared_rules = {"RULE-ENDP-044", "RULE-ENDP-047"}
+    assert shared_rules <= coverage_rules, coverage_findings
+    assert shared_rules <= standalone_rules, standalone_findings
+
+
+# --- RULE-SHRD-003: every authored document must declare `$schema` ------------
+
+def _connection_doc(schema_url=...):
+    doc = {"connector_id": "stripe"}
+    if schema_url is not ...:
+        doc["$schema"] = schema_url
+    return doc
+
+
+def _stream_doc(schema_url=...):
+    doc = {
+        "pipeline_id": "b4904c77-0a4a-4a8d-a768-4a8b5f2f2414",
+        "source": {
+            "endpoint_ref": {
+                "scope": "connector",
+                "connection_id": "11111111-1111-4111-8111-111111111111_v1",
+                "endpoint_id": "transfers",
+            }
+        },
+        "destinations": [
+            {
+                "endpoint_ref": {
+                    "scope": "connector",
+                    "connection_id": "22222222-2222-4222-8222-222222222222_v1",
+                    "endpoint_id": "orders",
+                },
+                "write": {"mode": "insert"},
+            }
+        ],
+    }
+    if schema_url is not ...:
+        doc["$schema"] = schema_url
+    return doc
+
+
+def _pipeline_doc(schema_url=...):
+    doc = {
+        "connections": {
+            "source": "11111111-1111-4111-8111-111111111111_v1",
+            "destinations": ["22222222-2222-4222-8222-222222222222_v1"],
+        }
+    }
+    if schema_url is not ...:
+        doc["$schema"] = schema_url
+    return doc
+
+
+def _connector_doc(schema_url=...):
+    doc = json.loads((CORPUS / "valid_connector.json").read_text())
+    if schema_url is ...:
+        del doc["$schema"]
+    else:
+        doc["$schema"] = schema_url
+    return doc
+
+
+_SHRD_003_FAMILIES = [
+    (_connection_doc, CONNECTION_SCHEMA_URL),
+    (_stream_doc, STREAM_SCHEMA_URL),
+    (_pipeline_doc, PIPELINE_SCHEMA_URL),
+    (_connector_doc, CONNECTOR_SCHEMA_URL),
+]
+
+
+@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
+def test_missing_schema_url_warns(make_doc, schema_url, validator):
+    findings = validator.validate_document(make_doc(schema_url=...))
+    hits = [f for f in findings if f.get("rule") == "RULE-SHRD-003"]
+    assert hits, findings
+    assert hits[0]["kind"] == "fail"
+    assert hits[0]["severity"] == "warning"
+    assert hits[0]["path"] == "/$schema"
+
+
+@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
+def test_present_schema_url_is_clean(make_doc, schema_url, validator):
+    findings = validator.validate_document(make_doc(schema_url=schema_url))
+    assert not any(f.get("rule") == "RULE-SHRD-003" for f in findings), findings
+
+
+@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
+def test_null_schema_url_is_not_reported_as_omitted(make_doc, schema_url, validator):
+    findings = validator.validate_document(make_doc(schema_url=None))
+    assert not any(f.get("rule") == "RULE-SHRD-003" for f in findings), findings
 
 
 # --- Database endpoint id = slug+hash8 (shared analitiq.contracts.endpoint_identity SSOT) ---
