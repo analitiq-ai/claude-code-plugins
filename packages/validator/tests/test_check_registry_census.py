@@ -168,6 +168,19 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "a structural precondition rejected the entry before any rule-specific "
         "check could run: the materialized text could not even be parsed as "
         "JSON, let alone dispatched to a kind whose rules could apply"),
+    ("analitiq.validator.document_set::_connector_endpoint_sets", "internal-error"): (
+        "a structural precondition rejected the entry before any rule-specific "
+        "check could run: an embedded connector's endpoint file could not even "
+        "be parsed as JSON, let alone graded for RULE-STRM-043"),
+    ("analitiq.validator.document_set::validate_connector_tree", "missing-connector-document"): (
+        "a structural precondition on the document set's own shape — no root "
+        "connector.json key at all — rejected before any rule-specific check "
+        "of a document that does not exist could run"),
+    ("analitiq.validator.document_set::validate_pipeline_tree", "ignored-pipeline-document"): (
+        "a structural precondition on the document set's own shape — more than "
+        "one pipelines/<slug>/pipeline.json — names the document(s) this call "
+        "never validates as the tree's pipeline, before any rule-specific check "
+        "of one could run"),
     ("analitiq.validator.document_set::resolve_type_map_gaps", "type-map-unreadable"): (
         "a structural precondition — the map is not readable as a JSON array "
         "at all — rejected before any rule-specific check of its rows could "

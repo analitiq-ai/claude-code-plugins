@@ -8,12 +8,12 @@ those checks.
 `connectors._validate_api_endpoint` all read a document's siblings through
 `doc_path`: `.parent`, `__truediv__`, `.is_file()`, `.is_dir()`, `.read_text()`,
 `.rglob("*.json")`, `.relative_to()`, `.name`, `.as_posix()`, `.resolve()`, and
-ordering/hashing (`sorted(...)`, set membership). `VirtualPath` implements
-exactly that subset over `_VirtualFS`, so none of those checks needs to change
-to run over a `DocumentSet`.
+ordering (`sorted(...)`). `VirtualPath` implements exactly that subset over
+`_VirtualFS`, so none of those checks needs to change to run over a
+`DocumentSet`.
 
-`_VirtualFS` normalizes a `DocumentSet` once into three layers, kept apart
-because they answer different questions:
+`_VirtualFS` normalizes a `DocumentSet` once into layers, kept apart because
+they answer different questions:
 
 - `known_keys` — every key whose own key syntax and value TYPE passed
   validation, kept even when turning its value into text later crashed. A
@@ -66,14 +66,42 @@ class _VirtualFS:
             return self.objects[key]
         return json.loads(self.texts[key])
 
+    def materialized(self, key: str) -> bool:
+        """Whether `key` has content a document can actually be read from —
+        `texts` and `objects` are populated together for every key
+        `_normalize_documents` accepts, so a key present in `known_keys` but
+        absent from `texts` is exactly one whose materialization itself
+        crashed."""
+        return key in self.texts
+
     def glob_json(self, dir_key: str) -> list[str]:
         """Every known key under `dir_key` ending in `.json`, at any depth —
-        matching `Path.rglob("*.json")`, the only pattern any caller uses."""
+        matching `Path.rglob("*.json")`, the only pattern any caller uses.
+        Sorted by path-part tuple, matching `pathlib.Path`'s ordering (which
+        compares parts, not the raw string) rather than raw-string order — the
+        two disagree whenever a `-` (0x2D) and a `/` (0x2F) compete at the same
+        position, e.g. `"a-b.json"` sorts before `"a/z.json"` as a path but
+        after it as a string."""
         prefix = f"{dir_key}/" if dir_key else ""
         return sorted(
-            k for k in self.known_keys
-            if k != dir_key and k.startswith(prefix) and k.endswith(".json")
+            (k for k in self.known_keys
+             if k != dir_key and k.startswith(prefix) and k.endswith(".json")),
+            key=lambda k: k.split("/"),
         )
+
+    def direct_json_children(self, prefix: str) -> list[str]:
+        """Every materialized key directly under `prefix` (exactly one further
+        path segment) ending in `.json` — the flat, one-level `*.json` listing
+        `_connector_endpoint_sets` and `validate_pipeline_tree`'s stream/
+        endpoint scans each need, factored once so the filter isn't
+        hand-written at every call site."""
+        return [
+            key for key in sorted(self.known_keys)
+            if key.startswith(prefix)
+            and "/" not in key[len(prefix):]
+            and key.endswith(".json")
+            and self.materialized(key)
+        ]
 
 
 class VirtualPath:
@@ -117,8 +145,13 @@ class VirtualPath:
             yield VirtualPath(self._fs, key)
 
     def relative_to(self, other: "VirtualPath") -> "VirtualPath":
+        if self._key == other._key:
+            # Matches `pathlib.Path`: `Path('a/b').relative_to('a/b') ==
+            # Path('.')`, and `""` is this type's own empty/`.`-equivalent key
+            # (see `is_dir`'s and `parent`'s root case).
+            return VirtualPath(self._fs, "")
         prefix = f"{other._key}/" if other._key else ""
-        if self._key == other._key or not self._key.startswith(prefix):
+        if not self._key.startswith(prefix):
             raise ValueError(f"{self._key!r} is not relative to {other._key!r}")
         return VirtualPath(self._fs, self._key[len(prefix):])
 
@@ -132,7 +165,9 @@ class VirtualPath:
         return isinstance(other, VirtualPath) and self._fs is other._fs and self._key == other._key
 
     def __lt__(self, other: "VirtualPath") -> bool:
-        return self._key < other._key
+        # Path-part comparison, matching `pathlib.Path`'s ordering — see
+        # `_VirtualFS.glob_json`'s docstring for why raw-string order diverges.
+        return self._key.split("/") < other._key.split("/")
 
     def __hash__(self) -> int:
         return hash((id(self._fs), self._key))

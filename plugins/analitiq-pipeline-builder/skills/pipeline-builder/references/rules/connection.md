@@ -74,7 +74,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-CONN-009 | A connection MUST NOT carry a secret value; an input the connector routes to secret storage is authored as a pointer in `secret_refs`. | `connection` | error | — |
 | RULE-CONN-010 | A `sidecar:` pointer MUST name an entry in a credentials file keyed by connection-contract input name, never a key of the env-var-keyed template the plugin emits. | `connection` | error | — |
 | RULE-CONN-011 | A connection's `connector_id` MUST resolve to a connector present in the run the connection is assembled into. | `connection` | error | validator |
-| RULE-CONN-012 | A connection's scoped type-map documents MUST NOT use the pre-split type-map.json filename; the engine reads the read direction only from type-map-read.json and the write direction only from type-map-write.json. | `connection` | error | validator |
+| RULE-CONN-012 | A connection's scoped type-map documents MUST NOT use the pre-split type-map.json filename; use type-map-read.json and type-map-write.json instead. | `connection` | error | validator |
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 

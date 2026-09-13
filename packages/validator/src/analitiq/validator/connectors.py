@@ -1379,7 +1379,7 @@ register_kind(
     _validate_kindless_connector,
 )
 
-# `Entity` names each of these four kinds directly, for `validate_document`'s
+# `Entity` names each of these kinds directly, for `validate_document`'s
 # explicit-kind override (`document_set.diagnostics`'s single-document route).
 register_entity("connector", _validate_connector)
 register_entity("api-endpoint", _validate_api_endpoint)

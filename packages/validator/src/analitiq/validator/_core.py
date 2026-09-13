@@ -62,7 +62,7 @@ _KIND_REGISTRY: list[tuple[Callable[[Any], bool], _Validator]] = []
 
 #: Every named `Entity` this package can validate directly, bypassing
 #: `_KIND_REGISTRY`'s shape auto-detection — populated by `register_entity`,
-#: one call per per-kind module alongside its `register_kind`/
+#: one call per kind-module alongside its `register_kind`/
 #: `register_model_and_schema_kind` call, never dispatched from a record (see
 #: this repo's drift policy on the rule registry).
 _ENTITY_VALIDATORS: dict[str, _Validator] = {}
