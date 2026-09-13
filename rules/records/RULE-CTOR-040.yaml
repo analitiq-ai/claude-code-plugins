@@ -1,7 +1,7 @@
 id: RULE-CTOR-040
 statement: >
-  A `database` connector that supports writing MUST declare its
-  `sql_capabilities` block, which the contract leaves optional.
+  A `database` connector MUST declare its `sql_capabilities` block, which the
+  contract leaves optional.
 tier: shape
 severity: error
 scopes: [connector]
