@@ -838,6 +838,61 @@ def test_coverage_flags_endpoint_id_locator_mismatch(tmp_path, connector_base, v
     assert any(e.get("rule") == "RULE-ENDP-046" for e in errors)
 
 
+# --- RULE-ENDP-044: a keyset block must omit `initial`, never spell it null -----
+
+def _keyset_endpoint(initial=...):
+    keyset = {"param": "after", "order_by_field": "id"}
+    if initial is not ...:
+        keyset["initial"] = initial
+    return {
+        "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+        "endpoint_id": "v1__records",
+        "operations": {
+            "read": {
+                "request": {
+                    "method": "GET", "path": "/v1/records",
+                    "query": {"after": {"from_param": "after"}},
+                },
+                "params": {
+                    "after": {"in": "query", "type": "string", "required": False,
+                              "controlled_by": "pagination"},
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {
+                        "$schema": "https://json-schema.org/draft/2020-12/schema",
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                        },
+                    },
+                },
+                "pagination": {
+                    "type": "keyset",
+                    "keyset": keyset,
+                    "stop_when": {"empty": {"ref": "response.records"}},
+                },
+            },
+        },
+    }
+
+
+def test_keyset_explicit_null_initial_warns(validator):
+    findings = validator.validate_document(_keyset_endpoint(initial=None))
+    hits = [f for f in findings if f.get("rule") == "RULE-ENDP-044"]
+    assert hits, findings
+    assert hits[0]["kind"] == "fail"
+    assert hits[0]["severity"] == "warning"
+    assert hits[0]["path"] == "/operations/read/pagination/keyset/initial"
+
+
+@pytest.mark.parametrize("initial", [..., "abc123", 0])
+def test_keyset_non_null_initial_is_clean(initial, validator):
+    findings = validator.validate_document(_keyset_endpoint(initial=initial))
+    assert not any(f.get("rule") == "RULE-ENDP-044" for f in findings), findings
+
+
 # --- Database endpoint id = slug+hash8 (shared analitiq.contracts.endpoint_identity SSOT) ---
 
 DB = "https://schemas.analitiq.ai/database-endpoint/latest.json"

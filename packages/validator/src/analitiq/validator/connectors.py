@@ -794,6 +794,38 @@ def _endpoint_locator_findings(ep_doc: Any) -> list[dict]:
     return []
 
 
+def _keyset_initial_null_findings(ep_doc: Any) -> list[dict]:
+    """Gate: RULE-ENDP-044 — a keyset pagination block must omit `initial`
+    when there is no first-page key, and must not spell that absence as an
+    explicit null. Omission is how the block says "send no keyset on the
+    first request"; a null is a value, so a document writing one is claiming
+    a first-page key that happens to be null."""
+    if not isinstance(ep_doc, dict):
+        return []
+    operations = ep_doc.get("operations")
+    if not isinstance(operations, dict):
+        return []
+    read = operations.get("read")
+    if not isinstance(read, dict):
+        return []
+    pagination = read.get("pagination")
+    if not isinstance(pagination, dict) or pagination.get("type") != "keyset":
+        return []
+    keyset = pagination.get("keyset")
+    if not isinstance(keyset, dict) or "initial" not in keyset:
+        return []
+    if keyset["initial"] is None:
+        return [finding(
+            rule="RULE-ENDP-044",
+            message_id="keyset-initial-explicit-null", kind="fail",
+            path="/operations/read/pagination/keyset/initial",
+            message=(
+                "operations.read.pagination.keyset.initial is explicitly null; "
+                "omit the field to say there is no first-page key, rather than "
+                "spelling that absence as a null value."))]
+    return []
+
+
 # --- Database endpoint id gate ---------------------------------------------------
 # A database `endpoint_id` is a derived handle over the verbatim `database_object`,
 # NOT authored freely: `slug(schema)__slug(table)[__slug(catalog)]__<hash8>`. The
@@ -1138,6 +1170,7 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     findings += _endpoint_locator_findings(doc)
     if isinstance(doc, dict):
         findings += _embedded_schema_findings(doc)
+        findings += _keyset_initial_null_findings(doc)
         findings += _run_guarded(_embedded_schema_example_findings, doc,
                                  crash_label="embedded schema example grading",
                                  rule="RULE-ENDP-063")
