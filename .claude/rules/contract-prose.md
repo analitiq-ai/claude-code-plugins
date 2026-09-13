@@ -75,13 +75,16 @@ description is what an author reads, the waiver is what an auditor counts.
 `_RequestBase.transport_ref` is the worked example. Its NAME half —
 `transport_ref` resolving to a declared transport — is enforced cross-document
 by the validator's `endpoint-transport-ref` check. Its ORIGIN half — every URL
-a request produces landing on that transport's origin — is enforced nowhere,
-and the description says so rather than implying a guarantee.
+a request produces landing on that transport's origin — is enforced by the
+engine at run time, never by this contract or by `analitiq-validator`, and the
+description says so rather than implying a guarantee it does not make.
 
 A softened disclaimer trips the hash pin, and the pin says only that the words
 moved — whether the promise is still honest is the re-affirming reader's
-verdict. `test_endpoint_transport_ref.py` pins the unenforced *behaviour*, so it
-is what tells you the day the gap closes and the disclaimer must go.
+verdict. `test_endpoint_transport_ref.py`'s `TestOriginContainmentIsAValidatorBlindSpot`
+pins that this validator stays blind to the ORIGIN half, so it is what tells
+you the day this contract or the validator starts checking it and the
+disclaimer must change.
 
 ## Never restate a value
 
