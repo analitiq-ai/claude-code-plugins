@@ -114,20 +114,22 @@ is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 {counts}
 """
 
-#: What the file's grades line says, per bucket. The wording is per-bucket
+#: What the file's coverage line says, per bucket. The wording is per-bucket
 #: because "every rule binding the document you are authoring" is only true
 #: for a real artifact bucket — `shared` is a remainder, and saying otherwise
 #: would tell an author their file is complete for a document it does not
-#: cover.
+#: cover. Labeled "Covers:", not "Grades:" — the rendered table already uses
+#: "Grades" for the column naming the artifact kinds a rule binds, and this
+#: line's subject is the file, not a rule.
 ARTIFACT_KIND_LINE = (
-    "Grades: every rule this plugin owns that binds {article} **`{bucket}`** "
+    "Covers: every rule this plugin owns that binds {article} **`{bucket}`** "
     "document, "
     "plus the rules that bind every authored document. If you are authoring "
     "one, this file is the whole of what you must satisfy — no other rule file "
     "in this set applies to it."
 )
 SHARED_LINE = (
-    "Grades: every rule this plugin owns whose artifact kind has no file of "
+    "Covers: every rule this plugin owns whose artifact kind has no file of "
     "its own in this set, plus the rules that bind every authored document. "
     "For a document of one of those kinds, this file is the whole of what "
     "this plugin's rules ask of it; a document whose kind has its own file "

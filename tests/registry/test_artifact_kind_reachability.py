@@ -2,7 +2,7 @@
 
 The defect class this closes: a rule whose statement binds one artifact's
 author while its `artifact_kinds` name another, so the reference renders it
-into a file that author never opens — and the per-artifact-kind "Grades:"
+into a file that author never opens — and the per-artifact-kind "Covers:"
 headers tell them no other file applies. Without this comparison, each
 instance is only ever found by a person reading one record.
 
@@ -29,6 +29,8 @@ from _pins import require_contract_models
 
 require_contract_models("analitiq.contracts")
 
+from analitiq.contracts.shared.rule_record import ARTIFACT_KINDS, DOCUMENT_ARTIFACT_KINDS  # noqa: E402
+
 
 def _roots() -> dict[str, tuple[type, ...]]:
     from analitiq.contracts import connection, connector, endpoints, stream, type_map
@@ -50,18 +52,14 @@ def _roots() -> dict[str, tuple[type, ...]]:
     }
 
 
-#: Artifact kinds deliberately given no document root: `connector-package` is
-#: a repository layout no model renders, `any` binds every document by fiat,
-#: and `data-sync-run-status` describes a wire payload whose schema is
-#: hand-maintained outside the model tree. Derived from the contract's own
-#: document/non-document partition rather than a second hand-typed set, so
-#: the two cannot drift apart member by member (`no-drift-surfaces.md`). This
-#: derives from `DOCUMENT_ARTIFACT_KINDS`, never from `_roots()` — a new
-#: ARTIFACT_KINDS member the contract classifies as a document lands outside
-#: UNROOTED regardless of whether `_roots()` has caught up, so the partition
-#: test below still refuses it until a root is wired in.
-from analitiq.contracts.shared.rule_record import ARTIFACT_KINDS, DOCUMENT_ARTIFACT_KINDS
-
+#: Artifact kinds deliberately given no document root — the contract's own
+#: document/non-document partition; `DOCUMENT_ARTIFACT_KINDS` owns which kinds
+#: those are and why. Derived rather than a second hand-typed set, so the two
+#: cannot drift apart member by member (`no-drift-surfaces.md`). This derives
+#: from `DOCUMENT_ARTIFACT_KINDS`, never from `_roots()` — a new ARTIFACT_KINDS
+#: member the contract classifies as a document lands outside UNROOTED
+#: regardless of whether `_roots()` has caught up, so the partition test below
+#: still refuses it until a root is wired in.
 UNROOTED = set(ARTIFACT_KINDS) - set(DOCUMENT_ARTIFACT_KINDS)
 
 #: Records whose statement semantically narrows a structurally wider reach —

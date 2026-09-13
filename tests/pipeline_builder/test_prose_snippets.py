@@ -657,6 +657,14 @@ def test_pointerless_fragment_must_validate_standalone(tmp_path):
             marker, '{"display_name": "decayed"}', "synthetic", tmp_path)
 
 
+def test_parse_marker_accepts_a_hyphenated_entity():
+    """`ENTITY_SKILL` names hyphenated entities (`database-endpoint`); a marker
+    naming one must parse, or the annotation convention cannot express the
+    renamed vocabulary at all."""
+    marker = _parse_marker("<!-- validate: database-endpoint -->")
+    assert marker == Marker("validate", "database-endpoint", None, None)
+
+
 def test_placeholder_accounting_is_pinned():
     collected: dict[tuple[str, str], set[str]] = {}
     for key in sorted(DISCOVERED):

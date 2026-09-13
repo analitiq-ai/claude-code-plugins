@@ -391,28 +391,28 @@ def test_cli_usage_error(tmp_path):
     assert excinfo.value.code == 2
 
 
-def test_cli_type_map_entity_without_direction_is_a_usage_error(tmp_path):
+def test_cli_type_map_entity_without_direction_is_a_usage_error():
     with pytest.raises(SystemExit) as excinfo:
         V.main(["--entity", "type-map", "--document", "x.json"])
     assert excinfo.value.code == 2
 
 
-def test_cli_direction_with_non_type_map_entity_is_a_usage_error(tmp_path):
+def test_cli_direction_with_non_type_map_entity_is_a_usage_error():
     with pytest.raises(SystemExit) as excinfo:
         V.main(["--entity", "connection", "--direction", "read", "--document", "x.json"])
     assert excinfo.value.code == 2
 
 
 def test_diagnostics_for_requires_direction_with_type_map_entity(tmp_path):
-    p = _write(tmp_path, "type-map-read.json", [])
-    with pytest.raises(ValueError):
-        V.diagnostics_for("type-map", p)
+    # The guard raises before the document is ever read, so a path that
+    # names no real file still proves it.
+    with pytest.raises(ValueError, match="direction is required"):
+        V.diagnostics_for("type-map", tmp_path / "type-map-read.json")
 
 
 def test_diagnostics_for_rejects_direction_with_non_type_map_entity(tmp_path):
-    p = _write(tmp_path, "connection.json", {})
-    with pytest.raises(ValueError):
-        V.diagnostics_for("connection", p, direction="read")
+    with pytest.raises(ValueError, match="invalid otherwise"):
+        V.diagnostics_for("connection", tmp_path / "connection.json", direction="read")
 
 
 def test_endpoint_id_helper(capsys):
