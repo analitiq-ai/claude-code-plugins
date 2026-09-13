@@ -7,15 +7,19 @@ tier: reference
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   A declaration with no hook behind it is inert: the CDK base raises for
-  every unimplemented hook, so the connector validates clean here and dies
+  most unimplemented hooks, so the connector validates clean here and dies
   at connect or at the first write. The declaration is JSON this repo
   checks and the hooks are Python it never opens, and the hook names and
   signatures are engine-owned — the CDK is the authority and this repo can
-  pin nothing about it. The CDK conformance kit run by registry CI is what
-  catches a missing or mis-signed hook, after the plugin has already
-  returned the package.
+  pin nothing about it. Known enforcement gap for at least one required
+  hook: `RULE-PKG-021` already establishes that a missing post-connect TLS
+  verification hook is only logged at INFO, not raised, so the CDK
+  conformance kit's raise-on-missing-hook behavior does not cover every hook
+  this rule requires — the connection succeeds unverified rather than
+  dying, for exactly that one case.
 status: active
 superseded_by: null

@@ -49,7 +49,7 @@ than edited.
 | RULE-CTOR-024 | A connector's `auth` block MUST carry only the children declared by the union branch its `type` selects, so a child belonging to a different auth type is rejected rather than ignored. | `connector` | error | validator | — |
 | RULE-CTOR-025 | An auth operation slot MUST hold an `AuthOperationTemplate`, which admits only the request fields that model names and rejects any other key. | `connector` | error | validator | — |
 | RULE-CTOR-035 | A DSN binding's `value` MUST take one of the forms the value-expression grammar defines, since the runtime resolves it at connection time. | `connector` | error | — | — |
-| RULE-CTOR-040 | A `database` connector MUST declare its `sql_capabilities` block, which the contract leaves optional and the engine requires before it will run any write mode. | `connector` | error | — | — |
+| RULE-CTOR-040 | A `database` connector MUST declare its `sql_capabilities` block, which the contract leaves optional. | `connector` | error | — | — |
 | RULE-CTOR-055 | A DSN `template` MUST NOT contain `${...}` value-expression syntax; a substitution point is a `{name}` placeholder declared in `bindings`. | `connector` | error | validator | — |
 | RULE-CTOR-056 | A connection condition's `present` MUST be the JSON boolean `true`, never a number or string that stands in for it. | `connector` | error | validator | — |
 | RULE-CTOR-057 | In a connector field a runtime resolves, every ref and every `${...}` template placeholder MUST lead with one of the resolution scopes the contract declares. | `connector` | error | validator | — |

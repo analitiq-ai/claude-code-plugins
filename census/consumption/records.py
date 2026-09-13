@@ -32,6 +32,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from analitiq.contracts.shared.rule_record import IN_FORCE_STATUSES
 from census.consumption.reachability import classify, reachable_models
 
 __all__ = [
@@ -45,11 +46,13 @@ __all__ = [
 
 _PREFIX = "analitiq.contracts."
 
-#: The statuses under which a record binds authors, per the lifecycle
-#: `rules/SCHEMA.md` defines: a deprecated rule still binds while authors
-#: are moved off it, so its rationale is still graded here; a draft is not
-#: yet in force and a retired record no longer states an obligation.
-_BINDING_STATUSES = frozenset({"active", "deprecated"})
+#: The statuses under which a record binds authors — the same lifecycle
+#: question `RuleRecord`'s own `enforcement_location` requirement asks, so
+#: this derives from its `IN_FORCE_STATUSES` rather than repeating it: a
+#: deprecated rule still binds while authors are moved off it, so its
+#: rationale is still graded here; a draft is not yet in force and a retired
+#: record no longer states an obligation.
+_BINDING_STATUSES = frozenset(IN_FORCE_STATUSES)
 
 
 def load_rules() -> tuple[dict[str, Any], ...]:
@@ -58,6 +61,12 @@ def load_rules() -> tuple[dict[str, Any], ...]:
     The compiled copy rather than the YAML records, so this census needs no
     YAML parser and can never read a registry the compiler refused;
     ``render_rules.py check`` holds the copy fresh.
+
+    The import stays inside this function, deferred rather than hoisted
+    alongside `IN_FORCE_STATUSES` above: a test exercising an empty or
+    all-retired registry monkeypatches `rule_record.RULES_PATH` and needs
+    this name resolved fresh from that module at call time, not captured
+    once at import time.
     """
     from analitiq.contracts.shared.rule_record import RULES_PATH
 
@@ -81,7 +90,7 @@ def rationale_sha256(rationale: str) -> str:
 def governed_unread(
     manifest: dict[str, Any], rules: tuple[dict[str, Any], ...]
 ) -> dict[str, tuple[str, ...]]:
-    """Per binding record (active or deprecated), the unread fields its ``targets``/``fields`` govern.
+    """Per binding record (`_BINDING_STATUSES`), the unread fields its ``targets``/``fields`` govern.
 
     A target names a model class bare (``Param``), and binds through the
     MRO the way the registry defines ``targets``: it is matched against the

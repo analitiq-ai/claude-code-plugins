@@ -23,6 +23,8 @@ from analitiq.contracts.shared import common
 from analitiq.contracts.shared.rules import all_rules
 from analitiq.contracts.shared.rule_record import (
     DESCRIPTIVE_TIER,
+    ENFORCEMENT_LOCATIONS,
+    IN_FORCE_STATUSES,
     MECHANISMS,
     OWNERS,
     RETIRED_BEFORE_THE_REGISTRY,
@@ -129,6 +131,65 @@ def test_bound_rules_name_a_real_enforcer():
         enforcer = _enforcer_name(rule)
         missing = [t for t in rule.targets if not _carries(MODEL_INDEX[t], enforcer)]
         assert not missing, f"{rule.id}: enforcer {enforcer!r} missing on {missing}"
+
+
+def test_every_active_unenforced_rule_names_an_enforcement_location():
+    """`validator: null` on a record whose `status` is in `IN_FORCE_STATUSES`
+    must name where the obligation is actually checked — `RuleRecord` already
+    refuses this at construction, so a record failing this in the loaded
+    registry would have failed to load at all; this is the registry-level
+    restatement the sibling tests in this file make for every other required
+    axis."""
+    missing = [
+        r.id for r in all_rules()
+        if not r.validator and r.enforcement_location is None
+        and r.status in IN_FORCE_STATUSES
+    ]
+    assert not missing, f"unenforced, in-force rules with no enforcement_location: {missing}"
+
+
+def test_every_enforcement_location_is_used():
+    """Non-vacuity, the same shape as `test_every_severity_is_used`: a member
+    of the vocabulary nothing chooses is a distinction the schema draws and the
+    registry does not need."""
+    used = {r.enforcement_location for r in all_rules() if r.enforcement_location}
+    assert used == set(ENFORCEMENT_LOCATIONS), (
+        f"enforcement locations no rule uses: {sorted(set(ENFORCEMENT_LOCATIONS) - used)}"
+    )
+
+
+def test_enforcement_location_is_refused_beside_a_validator():
+    """A non-null `validator` already answers where the rule is enforced —
+    `RuleRecord` refuses a record naming both, since a second answer here is a
+    second place the two could disagree."""
+    with pytest.raises(ValueError) as exc:
+        RuleRecord(
+            id="RULE-TEST-001",
+            statement="A connector MUST be versioned by git tag.",
+            tier=SHAPE_TIER,
+            severity="error",
+            scopes=("connector",),
+            rationale="—",
+            owners=("connector-plugin",),
+            validator="analitiq.contracts.shared.rule_record::RuleRecord",
+            enforcement_location="engine",
+        )
+    assert "enforcement_location" in str(exc.value) and "validator" in str(exc.value)
+
+
+def test_enforcement_location_rejects_an_unknown_member():
+    with pytest.raises(ValueError) as exc:
+        RuleRecord(
+            id="RULE-TEST-001",
+            statement="A connector MUST be versioned by git tag.",
+            tier=SHAPE_TIER,
+            severity="error",
+            scopes=("connector",),
+            rationale="—",
+            owners=("connector-plugin",),
+            enforcement_location="somewhere-else",
+        )
+    assert "unknown enforcement_location" in str(exc.value)
 
 
 def _runs_as_pydantic_validator(cls: type[BaseModel], member: str) -> bool:

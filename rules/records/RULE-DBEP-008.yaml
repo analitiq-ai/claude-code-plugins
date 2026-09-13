@@ -7,16 +7,24 @@ tier: process
 severity: error
 scopes: [database-endpoint]
 validator: null
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [Column, DatabaseEndpointDoc]
 rationale: >
-  The engine adds its own bookkeeping columns to any table it creates, so
-  declaring one puts the same column in the DDL twice and the first run fails
-  at table creation. The trap is the mirror case: a source table the engine
-  itself created carries those columns as ordinary discovered columns, so
-  copying the source's list forward reproduces them without anyone deciding to.
-  The synthetic names belong to the engine rather than to the contract, and the
-  column model accepts any non-empty name, so nothing in the document can
-  recognise them — the collision appears when the table is created.
+  The engine adds its own bookkeeping columns to any table it creates. Known
+  enforcement gap, and not the loud one it sounds like: for the write
+  handler's main audit column, declaring it ahead of time is not a collision
+  the engine raises on — the handler finds its own column already present and
+  silently skips adding a second one, so the document's mistake costs nothing
+  visible and the column's true origin (engine-synthesised, not authored)
+  goes unrecorded. Only the keyless-insert audit column collides loudly, and
+  only for that one stream shape. The trap is the mirror case either way: a
+  source table the engine itself created carries these columns as ordinary
+  discovered columns, so copying the source's list forward reproduces them
+  without anyone deciding to, and the column model accepts any non-empty
+  name, so nothing in the document can recognise them as synthetic. Rated
+  `unenforced` as a whole rather than `engine`: the ordinary column, the
+  case that actually happens (an author declaring or mirroring the audit
+  column), is the silent one.
 status: active
 superseded_by: null

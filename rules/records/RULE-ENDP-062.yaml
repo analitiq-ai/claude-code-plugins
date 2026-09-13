@@ -8,6 +8,7 @@ tier: choice
 severity: warning
 scopes: [api-endpoint]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin]
 targets: [WriteInput]
 rationale: >

@@ -8,16 +8,20 @@ tier: shape
 severity: error
 scopes: [connector]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin, engine]
 targets: [DatabaseTls]
 rationale: >
   The TLS slots are untyped value-expression carriers, so a driver object or a
-  path parked in one is a well-formed document: it resolves to something the
-  dialect was never written to interpret, and the failure arrives at connect as
-  a driver error naming nothing the author wrote. The instinct is strong
-  because every driver's own documentation shows exactly such an object.
-  Nothing here can see it — the fields are typed open precisely so the mode
-  vocabulary can stay the connector's own, and no validator resolves an
-  expression offline.
+  path parked in one is a well-formed document. The engine does refuse a
+  resolved value that is not a plain string before it reaches the connector
+  package's dialect, which closes the case an author reaches for most often:
+  copying the object every driver's own documentation shows. It cannot close
+  the quieter half — a plain string that is nonetheless the wrong content, a
+  filesystem path where the mode vocabulary is expected, or a fragment of code
+  serialized as text — because the fields are typed open precisely so the mode
+  vocabulary can stay the connector's own, and no generic check can tell a
+  legitimate mode string from a wrong one without knowing that connector's
+  driver semantics.
 status: active
 superseded_by: null

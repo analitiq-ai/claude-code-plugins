@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [connection]
 validator: null
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [ConnectionAuthored, ConnectionInput]
 rationale: >
@@ -15,7 +16,12 @@ rationale: >
   filed into the wrong map is a perfectly well-formed document holding a value
   nothing will ever read. Catching it means opening the connector's
   `connection_contract` beside the connection, which no single-document
-  validation run does; the gap surfaces at connect time, when the engine looks
-  for the value in the map the contract named and finds it absent.
+  validation run does. Known enforcement gap for a required input with no
+  default: the gap surfaces at connect time, when the engine looks for the
+  value in the map the contract named and finds it absent. It does not
+  surface at all for an optional input with a declared default, or for a
+  post-auth output a later step can still collect — the engine finds the
+  correct map's entry absent, as an optional field legitimately can be, uses
+  the default or waits, and the misfiled value sits unread and unflagged.
 status: active
 superseded_by: null

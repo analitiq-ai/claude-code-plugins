@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [pipeline]
 validator: null
+enforcement_location: platform-save
 owners: [pipeline-plugin, engine]
 targets: [PipelineConnections]
 rationale: >

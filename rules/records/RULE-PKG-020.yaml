@@ -7,6 +7,7 @@ tier: process
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   Determinism is what makes a retry self-healing: the same batch reuses the

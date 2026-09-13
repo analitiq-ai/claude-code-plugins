@@ -7,16 +7,24 @@ tier: reference
 severity: error
 scopes: [stream]
 validator: null
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]
 rationale: >
   The authoritative spelling lives in the source endpoint document, which
-  the stream model never sees, and both the contract and the engine compare
-  the strings literally — so a name that differs only in case or whitespace
-  is a perfectly valid document naming nothing. Normalizing is the natural
-  reflex, because the identifiers that arrive from introspection often look
-  untidy and because most tooling folds case for the author; here folding it
-  is what breaks the reference. Catching a violation means comparing the
-  string byte for byte against the endpoint document.
+  the stream model never sees — the same gap `RULE-STRM-022` names for field
+  references generally, and this rule is that check's exact-spelling case.
+  Where the engine resolves a name by exact key lookup — an API filter's
+  field or its cursor field against the endpoint's declared operation —
+  exactness rides along with existence, since a case or whitespace
+  difference already fails as unresolved. A SQL source's selected columns,
+  filter fields and pagination order-by field are never compared against
+  the endpoint's declared columns at all, so a spelling difference there is
+  whatever the database's own identifier-folding does with it — silently
+  accepted on a case-insensitive engine, a rejected query on a
+  case-sensitive one. Normalizing is the natural reflex, because the
+  identifiers that arrive from introspection often look untidy and because
+  most tooling folds case for the author; here folding it is what breaks
+  the reference on the paths nothing else checks.
 status: active
 superseded_by: null

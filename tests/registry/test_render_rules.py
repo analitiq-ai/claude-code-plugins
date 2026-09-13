@@ -54,6 +54,7 @@ BASELINE = {
     "severity": "error",
     "scopes": "[connector]",
     "validator": "null",
+    "enforcement_location": "unenforced",
     "owners": "[connector-plugin]",
     "rationale": "Stated here because the corpus needs a record to mutate.",
     "status": "active",
@@ -238,9 +239,81 @@ def test_a_value_outside_its_closed_vocabulary_is_refused(registry, field):
     assert "no_such_value" in _refusal(registry)
 
 
+def test_a_record_naming_no_validator_and_no_enforcement_location_is_refused(registry):
+    """The exact mistake a contributor makes: an unenforced record that never
+    says where the obligation is actually checked. The baseline's `validator`
+    is already `null`; dropping `enforcement_location` too is what makes this
+    refused rather than accepted."""
+    _write(registry, enforcement_location=None)
+    assert "enforcement_location" in _refusal(registry)
+
+
+def test_a_draft_record_needs_no_enforcement_location(registry):
+    """A `draft` names no obligation yet, so the field the requirement above
+    exists for has nothing to answer."""
+    _write(registry, enforcement_location=None, status="draft")
+    assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
+
+
+def test_a_deprecated_record_still_needs_an_enforcement_location(registry):
+    """`deprecated` still binds an author while they move off it — the same
+    requirement as `active`, not the `draft` exemption."""
+    _write(registry, enforcement_location=None, status="deprecated")
+    assert "enforcement_location" in _refusal(registry)
+
+
+def test_enforcement_location_may_be_set_on_a_draft_record(registry):
+    """The requirement is a floor, not a ceiling: pre-declaring the answer on
+    a not-yet-active record is permitted, only never required."""
+    _write(registry, status="draft")
+    assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
+
+
 def test_a_validator_that_is_not_a_binding_is_refused(registry):
     _write(registry, validator='"ConnectorBase._validate"')
     assert "validator" in _refusal(registry)
+
+
+def test_an_empty_string_validator_is_refused_not_treated_as_null(registry):
+    """`validator: ""` is a non-null, malformed binding — a different state
+    from `null` the schema distinguishes. A truthiness check on `validator`
+    would let it skip the format check, skip the enforcement_location
+    conflict check, compile an empty-string validator into `rules.json`, and
+    report the rule as unmechanized instead of refusing it.
+
+    Asserts on `''` — the value the format check names — rather than the
+    substring `validator`, which also appears in the enforcement_location
+    conflict check's own message and so cannot tell the two refusals apart:
+    a truthiness regression at the format check alone trips that OTHER
+    check instead (BASELINE already carries an `enforcement_location`) and
+    this test would still see the word `validator` in the refusal and pass."""
+    _write(registry, validator='""')
+    assert "''" in _refusal(registry)
+
+
+def test_an_empty_string_symbol_is_refused_not_treated_as_null(registry):
+    """The same defect class as the validator test above, on `symbol` —
+    `RuleRecord` had it too: `symbol: ""` skipped both the dotted-format
+    check and the mechanism-pairing check that exists specifically to
+    refuse a `symbol` on a mechanism that takes none."""
+    _write(registry, symbol='""', mechanism="pattern")
+    assert "''" in _refusal(registry)
+
+
+def test_a_non_string_validator_is_refused_cleanly(registry):
+    """`validator: false` (or any non-null, non-string YAML scalar) must
+    fail with a named refusal, not an uncaught `AttributeError` from calling
+    `.partition()` on a bool — `load_registry()` only catches `TypeError`
+    and `ValueError`, so anything else aborts the whole render instead of
+    reporting which record is malformed."""
+    _write(registry, validator="false")
+    assert "not a string" in _refusal(registry)
+
+
+def test_a_non_string_symbol_is_refused_cleanly(registry):
+    """The same defect class as the validator test above, on `symbol`."""
+    _write(registry, symbol="0", mechanism="pattern")
+    assert "not a string" in _refusal(registry)
 
 
 def test_a_validator_naming_a_source_path_is_refused(registry):
@@ -335,22 +408,26 @@ def test_a_validator_outside_the_published_namespace_is_refused(registry):
     here, so the namespace is what keeps a binding pointing at code this repo
     owns.
     """
-    _write(registry, validator='"os.path::join"')
+    _write(registry, validator='"os.path::join"', enforcement_location=None)
     assert "outside" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_module_is_refused(registry):
-    _write(registry, validator=f'"{CONTRACTS}.no_such_module::Thing"')
+    _write(registry, validator=f'"{CONTRACTS}.no_such_module::Thing"', enforcement_location=None)
     assert "no_such_module" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_class_is_refused(registry):
-    _write(registry, validator=f'"{CONTRACTS}.connector::NoSuchModel"')
+    _write(registry, validator=f'"{CONTRACTS}.connector::NoSuchModel"', enforcement_location=None)
     assert "NoSuchModel" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_member_is_refused(registry):
-    _write(registry, validator=f'"{CONTRACTS}.connector::ConnectorBase._no_such_method"')
+    _write(
+        registry,
+        validator=f'"{CONTRACTS}.connector::ConnectorBase._no_such_method"',
+        enforcement_location=None,
+    )
     assert "_no_such_method" in _refusal(registry)
 
 
@@ -361,7 +438,11 @@ def test_a_validator_naming_an_inherited_member_is_refused(registry):
     an enforcer it certainly does not, so the lint would report a live rule for
     one nothing applies.
     """
-    _write(registry, validator=f'"{CONTRACTS}.connector::ConnectorBase.dict"')
+    _write(
+        registry,
+        validator=f'"{CONTRACTS}.connector::ConnectorBase.dict"',
+        enforcement_location=None,
+    )
     assert "dict" in _refusal(registry)
 
 
@@ -374,13 +455,18 @@ def test_a_validator_naming_a_real_enforcer_is_accepted(registry):
     _write(
         registry,
         validator=f'"{CONTRACTS}.connector::ConnectorBase._default_transport_declared"',
+        enforcement_location=None,
     )
     assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
 
 
 def test_a_validator_naming_a_model_field_is_accepted(registry):
     """A shape rule binds the field carrying its `Literal` or pattern."""
-    _write(registry, validator=f'"{CONTRACTS}.connector::SqlBulkLoad.sqlalchemy"')
+    _write(
+        registry,
+        validator=f'"{CONTRACTS}.connector::SqlBulkLoad.sqlalchemy"',
+        enforcement_location=None,
+    )
     assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
 
 

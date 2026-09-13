@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [stream]
 validator: null
+enforcement_location: engine
 owners: [pipeline-plugin, engine]
 targets: [IncrementalReplication, FullRefreshReplication]
 rationale: >
@@ -14,7 +15,11 @@ rationale: >
   cannot narrow to it — every method in the contract validates against every
   API source. The asymmetry is the trap: a database endpoint declares no
   such set, so an author who has been reading database endpoints has no
-  reason to expect one to exist. Catching a violation means opening the
-  referenced endpoint's read operation and reading the set.
+  reason to expect one to exist. The engine closes the gap this rule scopes
+  to: at read-plan time, before the first request, it resolves the stream's
+  selected method against the endpoint's declared `read.replication.supported_methods`
+  and refuses the run if it is absent — the read-side mirror of the write-mode
+  check `RULE-STRM-024` performs. No equivalent vocabulary exists for database
+  sources, which is exactly why the rule is scoped to API sources only.
 status: active
 superseded_by: null

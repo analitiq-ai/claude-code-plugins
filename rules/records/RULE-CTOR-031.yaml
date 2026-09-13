@@ -8,6 +8,7 @@ tier: choice
 severity: error
 scopes: [connector]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin, engine]
 rationale: >
   Depth is the intuitive reading and the wrong one: a system with a database
@@ -18,6 +19,9 @@ rationale: >
   outside the connection's default. Whether one connection reaches across
   catalogs is an external fact no document declares, and the discovery half
   the rule obliges is only a strategy id, so nothing here can tell a wrong
-  level from a right one.
+  level from a right one. Catching a violation means knowing, from the target
+  system's own documentation, whether one connection can address across its
+  catalogs, and comparing that fact to the level declared here — the same
+  vendor-level judgment `RULE-CTOR-030` names for hierarchy depth.
 status: active
 superseded_by: null

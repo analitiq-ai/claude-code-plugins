@@ -6,17 +6,21 @@ tier: reference
 severity: error
 scopes: [stream]
 validator: null
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [Filter]
 rationale: >
   The `filters` map lives on the endpoint document, which is not part of the
-  stream, so no in-process check can compare a stream's filter against it —
-  a connector-scoped (API) endpoint document is never carried by the
+  stream, so no in-process check here can compare a stream's filter against
+  it — a connector-scoped (API) endpoint document is never carried by the
   pipeline bundle the local validator resolves against, only
-  connection-scoped ones are — and resolution happens server-side when the
-  stream is saved. Two failures hide behind one string until then: a field
-  the map does not carry at all, and a field the map carries with no entry
-  for this operator, which is a parameter the runtime owns (RULE-ENDP-002)
-  or an operator the map simply never declared for that field.
+  connection-scoped ones are. The engine narrows only half of what this rule
+  requires, at read-plan time: it refuses a filter naming a field with no
+  params-map entry at all, but that lookup is keyed on field name alone, with
+  no operator dimension, so a field declared for one operator and filtered
+  with a different one passes identically to a genuine match and goes out on
+  the wire as whatever the provider does with an operator it never declared
+  support for — a parameter the runtime owns (RULE-ENDP-002) or an operator
+  the map simply never declared for that field.
 status: active
 superseded_by: null

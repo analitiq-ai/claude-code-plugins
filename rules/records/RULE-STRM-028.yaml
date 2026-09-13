@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [stream]
 validator: null
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [AssignmentTarget]
 rationale: >

@@ -6,6 +6,7 @@ tier: reference
 severity: error
 scopes: [connector]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   That slug is the connector's identity in three places at once — the
@@ -16,6 +17,11 @@ rationale: >
   directory is invisible to a single-document validation run: no contract
   model sees the path, and the validator resolves siblings relative to
   whatever path it was handed rather than comparing that path's name to
-  `connector_id`, so only registry CI can compare the two.
+  `connector_id`. Known enforcement gap at registry CI too, for the same
+  reason `RULE-PKG-002`'s repository-root layout is: every documented CI
+  step (the wheel build, entry-point resolution, the conformance kit) reaches
+  the package through its installed distribution, never the release
+  directory's own name, so a rename that leaves the document, package
+  mapping and entry points internally consistent passes every one of them.
 status: active
 superseded_by: null

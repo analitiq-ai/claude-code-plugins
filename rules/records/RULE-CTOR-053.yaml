@@ -6,6 +6,7 @@ tier: reference
 severity: warning
 scopes: [connector, api-endpoint]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin]
 targets: [FunctionExpression, LookupDerived, ConnectionContractInput]
 rationale: >

@@ -8,6 +8,7 @@ tier: shape
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   The engine owns the staged write plan and executes the text the renderers
@@ -15,8 +16,11 @@ rationale: >
   own connection writes outside that transaction, so a failure later in the
   cycle no longer rolls back. It is a tempting shortcut precisely because a
   renderer often needs a fact about the live database. The method bodies
-  live in `connector.py`, which no contract model reads, so a renderer that
-  performs I/O is caught by the CDK conformance kit at registry CI or not
-  until a run.
+  live in `connector.py`, which no contract model reads. The CDK conformance
+  kit's rendering tier calls these hooks directly and asserts on the
+  returned statement text, but injects no live connection and instruments no
+  I/O, so a renderer that opens its own connection anyway passes there
+  unnoticed and is caught only incidentally, by whatever unrelated failure
+  its out-of-transaction write eventually causes in a real run.
 status: active
 superseded_by: null

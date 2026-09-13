@@ -8,6 +8,7 @@ tier: reference
 severity: error
 scopes: [connector]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   Every stored reference to a connector is that slug — connections,

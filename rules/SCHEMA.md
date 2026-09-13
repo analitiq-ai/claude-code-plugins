@@ -33,6 +33,7 @@ this registry exists to remove (`.claude/rules/no-drift-surfaces.md`).
 | `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it, except that a rule a pydantic validator applies is always `error`: that enforcer can only reject the document, so a lower cost on the record is one no document ever pays. `test_a_rule_bound_to_a_pydantic_validator_costs_an_error` in `packages/contract-models/tests/unit/test_rule_registry.py` pins it. Whether a change to this field moves the packages' major version is decided by `.claude/rules/validator-verdict-stability.md`, which is also where a finding's own severity is confined to `error` \| `warning` regardless of what a record declares. Once a check derives a `fail` finding's severity from the violated record rather than a literal at the call site (see Findings, below), a call site naming its own severity becomes a second copy of a fact this field already owns. |
 | `scopes` | yes | The artifact kinds it binds, as a list from the vocabulary `SCOPES` declares in `analitiq.contracts.shared.rule_record` — each member names the kind of document whose author the rule binds, plus `any` for the rules that bind every authored document. A list because a rule can grade more than one kind, and the generated reference is split by scope: a scalar scope makes it decide, silently, which of two authors never meets the rule. `any` may not appear beside a named kind — it already covers every document — and an entry may not repeat. It is not derived from the published resources and does not track them: `connector-package` is a repository an author lays out and no resource renders, `type-map` covers both a read map and a write map, and several published resources have no member because no rule has needed one. A member is added when a rule does. Scopes decide which FILE of a plugin's generated reference set the rule lands in; who the rule is rendered *to* is `owners`. |
 | `validator` | no | What applies it: `dotted.module::Symbol.attr`. It names the module that is **imported**, under `analitiq.`, never a path to a file standing in for one — the record ships in `rules.json`, where a repo path resolves for nobody, and a path is checked by slicing rather than by importing, so one that never existed passes. The module half must be a dotted identifier chain, which is how a path is refused whatever it ends in. It lands in one of two packages, decided by how much the check must see: a rule one document settles alone is a `@model_validator` in `contract-models`, and a rule needing a second document in hand is a check in `validator`, bound to the function that emits the finding. An enforcer that reports `warning` is a check in `validator` whatever it needs to see: a `@model_validator` can only reject, so it cannot carry a severity below `error` (`.claude/rules/validator-verdict-stability.md`). Lint-resolved by import, so a renamed validator fails the build instead of leaving a record claiming an enforcement it lost. `null` when nothing does. |
+| `enforcement_location` | see below | Where a `null` `validator` leaves off: not what enforces the rule, but where. Required when `validator` is `null` and `status` is `active` or `deprecated`; refused when `validator` is set, since a non-null `validator` already answers the question. See the section below. |
 | `owners` | yes | Who applies the rule and decides a change to it, as a list of `engine`, `connector-plugin`, `pipeline-plugin`. More than one is normal: a type map is authored by both plugins and executed by the engine. |
 | `targets` | no | Every model class the rule binds, matched against the whole MRO. Wider than `validator`, which names one representative symbol: a rule over a discriminated union lists every branch, and a rule with no validator still names the models it governs. Read by the enforcer census and the reachability tests, which require every one to carry the member `validator` names. |
 | `fields` | no | The model fields a shape rule's `mechanism` rides on, so the rendered reference can print the members off the live model instead of restating them. Resolved against the target, so a renamed field fails the build. |
@@ -121,14 +122,12 @@ nothing" is a verdict someone writes down rather than a silence nobody reviews;
 
 ## `enforcement_location` — where a `null` validator leaves off
 
-Not yet a field `RuleRecord` accepts, the way `status: draft` names a record
-written down but not yet in force. Once it is, it is required whenever
-`validator` is `null` **and** `status` is `active` or `deprecated` — a record
-currently binding an author. A `draft` names no obligation yet and a `retired`
-names one no longer live, so neither has anywhere to check, and this field
-does not force one on them. It closes the question `validator` leaves open for
-every record that does bind: not *what* rejects a violation, but *where* the
-obligation is checked at all.
+Required whenever `validator` is `null` **and** `status` is `active` or
+`deprecated` — a record currently binding an author. A `draft` names no
+obligation yet and a `retired` names one no longer live, so neither has
+anywhere to check, and this field does not force one on them. It closes the
+question `validator` leaves open for every record that does bind: not *what*
+rejects a violation, but *where* the obligation is checked at all.
 
 | `enforcement_location` | Means |
 |---|---|

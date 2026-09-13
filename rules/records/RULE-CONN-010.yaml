@@ -7,6 +7,7 @@ tier: reference
 severity: error
 scopes: [connection]
 validator: null
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [ConnectionAuthored, ConnectionInput]
 rationale: >
@@ -16,8 +17,12 @@ rationale: >
   of the environment — while a sidecar file is read by the engine directly and
   keyed by the same contract input name that keys `secret_refs`. Alone among
   the pointer schemes, `sidecar:` constrains nothing after its prefix, so a
-  pointer aimed at the wrong file validates cleanly and fails only when the
-  engine resolves it at connect time, with an error about a missing entry
-  rather than a mismatched file.
+  pointer aimed at the wrong file validates cleanly. Known enforcement gap:
+  the engine checks only that the named key is present in the sidecar file,
+  never that it is the correct contract-input name — a pointer naming the
+  wrong key resolves without complaint whenever the sidecar file happens to
+  carry an entry under that name too (the env-var template's own key
+  spelling, say), and fails with a missing-entry error only when it does not.
+  Neither outcome is the engine checking the agreement this rule states.
 status: active
 superseded_by: null

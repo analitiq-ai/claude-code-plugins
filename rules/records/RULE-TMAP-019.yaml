@@ -6,6 +6,7 @@ tier: reference
 severity: warning
 scopes: [type-map]
 validator: null
+enforcement_location: authoring-practice
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   A dialect that overrides the column-type renderer takes the family off the

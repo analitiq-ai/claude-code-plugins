@@ -7,6 +7,7 @@ tier: process
 severity: error
 scopes: [connector, stream]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   Authoring one produces an artifact that passes every check here and can
@@ -15,6 +16,10 @@ rationale: >
   half-authored connector left in the registry says the opposite. Which
   kinds the engine executes is engine state no artifact here tracks: the
   contract models accept every declared kind, so this is plugin policy that
-  an engine release retires with nobody editing the prose.
+  an engine release retires with nobody editing the prose. Known enforcement
+  gap: nothing here or downstream refuses a declared kind the engine no
+  longer executes — closing it would take the engine publishing its
+  supported-kind set the way it already publishes the Arrow type grammar,
+  which does not exist for connector kinds today.
 status: active
 superseded_by: null

@@ -6,16 +6,19 @@ tier: reference
 severity: error
 scopes: [stream]
 validator: null
+enforcement_location: engine
 owners: [pipeline-plugin, engine]
 targets: [ApiWrite]
 rationale: >
   The model bounds the mode to the contract's write vocabulary, but which of
   those an endpoint actually implements is a fact in the endpoint document
   the stream only references — so a mode the provider has no operation for
-  validates locally and has nothing to execute. The vocabulary being closed
-  is what makes this easy to miss: an author picks a member, the validator
-  accepts it, and the narrowing that mattered was never in view. Catching a
-  violation means opening the referenced endpoint and reading which write
-  operations it declares.
+  validates locally, with the narrowing that mattered never in view. The
+  vocabulary being closed is what makes this easy to miss: an author picks
+  a member and the validator accepts it. The engine refuses it at
+  schema-handshake time, before any batch write: resolving the mode against
+  the endpoint's declared write operations finds none and the run is
+  refused as a per-stream schema-configuration defect rather than
+  attempted.
 status: active
 superseded_by: null

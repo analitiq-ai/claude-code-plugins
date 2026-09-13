@@ -7,15 +7,20 @@ tier: coherence
 severity: error
 scopes: [connector]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 targets: [DsnBinding]
 rationale: >
-  Pre-encoding is the instinct of anyone who has hand-built a DSN, and it
-  fails in the most expensive way: the double-encoded DSN is still
-  well-formed, so the connection is attempted and rejected as a bad
-  credential rather than as a malformed URL, sending the author after the
-  secret instead of the binding. A pre-encoded value is also a perfectly
-  well-formed value expression, so nothing here can see it — the second
-  encoding exists only in the DSN the runtime renders at connection time.
+  Pre-encoding is the instinct of anyone who has hand-built a DSN. A
+  pre-encoded value is a perfectly well-formed value expression, so nothing
+  here can see it — the second encoding exists only in the DSN the runtime
+  renders at connection time. Known enforcement gap, and not a reliable one
+  even there: the runtime's encoding function treats letters, digits and a
+  handful of punctuation marks as already-safe, so a value built only from
+  those — many real passwords and tokens among them — encodes to itself, and
+  double-encoding it is a no-op the connection survives. Only a value
+  containing a character the function actually transforms doubles that
+  transformation into a credential the server rejects, read as a bad secret
+  rather than a bad binding.
 status: active
 superseded_by: null

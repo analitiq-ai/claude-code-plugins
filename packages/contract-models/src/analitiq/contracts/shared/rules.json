@@ -10,6 +10,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectionContractInput._options_offer_the_enum",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -33,6 +34,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectionContractInput._default_is_an_enum_member",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -57,6 +59,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectionContractInput._consistency",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -81,6 +84,7 @@
     "connection"
    ],
    "validator": "analitiq.contracts.connection::ConnectionStoredMaps._validate_no_secret_keys",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -104,6 +108,7 @@
     "connection"
    ],
    "validator": null,
+   "enforcement_location": "platform-save",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -129,6 +134,7 @@
     "connection"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -141,7 +147,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "One routing rule covers every connector and every auth type, and the routing target is declared in the connector document rather than in the connection — a connection carries no view of the contract it instantiates. So a value filed into the wrong map is a perfectly well-formed document holding a value nothing will ever read. Catching it means opening the connector's `connection_contract` beside the connection, which no single-document validation run does; the gap surfaces at connect time, when the engine looks for the value in the map the contract named and finds it absent.\n",
+   "rationale": "One routing rule covers every connector and every auth type, and the routing target is declared in the connector document rather than in the connection — a connection carries no view of the contract it instantiates. So a value filed into the wrong map is a perfectly well-formed document holding a value nothing will ever read. Catching it means opening the connector's `connection_contract` beside the connection, which no single-document validation run does. Known enforcement gap for a required input with no default: the gap surfaces at connect time, when the engine looks for the value in the map the contract named and finds it absent. It does not surface at all for an optional input with a declared default, or for a post-auth output a later step can still collect — the engine finds the correct map's entry absent, as an optional field legitimately can be, uses the default or waits, and the misfiled value sits unread and unflagged.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -154,6 +160,7 @@
     "connection"
    ],
    "validator": null,
+   "enforcement_location": "platform-save",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -179,6 +186,7 @@
     "connection"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -204,6 +212,7 @@
     "connection"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -229,6 +238,7 @@
     "connection"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -241,7 +251,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The plugin's credentials template and a sidecar credentials file look alike and resolve nothing alike. The template is keyed by env-var name and is read by nothing — the user exports it, and `env:` pointers pick the values up out of the environment — while a sidecar file is read by the engine directly and keyed by the same contract input name that keys `secret_refs`. Alone among the pointer schemes, `sidecar:` constrains nothing after its prefix, so a pointer aimed at the wrong file validates cleanly and fails only when the engine resolves it at connect time, with an error about a missing entry rather than a mismatched file.\n",
+   "rationale": "The plugin's credentials template and a sidecar credentials file look alike and resolve nothing alike. The template is keyed by env-var name and is read by nothing — the user exports it, and `env:` pointers pick the values up out of the environment — while a sidecar file is read by the engine directly and keyed by the same contract input name that keys `secret_refs`. Alone among the pointer schemes, `sidecar:` constrains nothing after its prefix, so a pointer aimed at the wrong file validates cleanly. Known enforcement gap: the engine checks only that the named key is present in the sidecar file, never that it is the correct contract-input name — a pointer naming the wrong key resolves without complaint whenever the sidecar file happens to carry an entry under that name too (the env-var template's own key spelling, say), and fails with a missing-entry error only when it does not. Neither outcome is the engine checking the agreement this rule states.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -254,6 +264,7 @@
     "connection"
    ],
    "validator": "analitiq.validator.pipelines::_check_connection_connector_refs",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -276,6 +287,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectorBase._default_transport_declared",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -300,6 +312,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::PostAuthOutput._mode_consistency",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -324,6 +337,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ResourceDiscoveryImplementation._entrypoint_matches_type",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -348,6 +362,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::AdbcTransport._require_dsn_or_kwargs",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -372,6 +387,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectorBase._transport_refs_resolvable",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -396,6 +412,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -420,6 +437,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -444,6 +462,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -467,6 +486,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -490,6 +510,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::FileConnector._validate_no_post_auth_contract",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -515,6 +536,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::UrlTemplateDsn._validate_placeholder_bindings",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -539,6 +561,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectionConditionPredicate._exactly_one_operator",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -562,6 +585,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::SqlStageCapabilities._dedicated_schema_matches_scope",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -586,6 +610,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::WriteUnit._at_least_one_bound",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -610,6 +635,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::SqlBulkLoad._null_is_not_a_mechanism",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -634,6 +660,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::AdbcTransport.driver",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -660,6 +687,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::SqlBulkLoad.sqlalchemy",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -687,6 +715,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::DsnBinding.encoding",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -713,6 +742,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ResourceDiscovery.produces",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -739,6 +769,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ResourceDiscoveryTriggers.list_resources",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -766,6 +797,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectionContractInput.source",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -795,6 +827,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::PostAuthOutput.mode",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -823,6 +856,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectorBase.connector_id",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -849,6 +883,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ApiKeyAuth",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -881,6 +916,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::AuthOperationTemplate",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -905,6 +941,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin"
    ],
@@ -926,6 +963,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin"
    ],
@@ -947,6 +985,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin"
    ],
@@ -968,6 +1007,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin"
    ],
@@ -989,6 +1029,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1011,6 +1052,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1020,7 +1062,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Depth is the intuitive reading and the wrong one: a system with a database sitting above the schema still has no addressable catalog when one connection cannot reach across it, and declaring one anyway makes the engine qualify statements the system will not accept — while under-declaring a genuinely addressable catalog strands every object outside the connection's default. Whether one connection reaches across catalogs is an external fact no document declares, and the discovery half the rule obliges is only a strategy id, so nothing here can tell a wrong level from a right one.\n",
+   "rationale": "Depth is the intuitive reading and the wrong one: a system with a database sitting above the schema still has no addressable catalog when one connection cannot reach across it, and declaring one anyway makes the engine qualify statements the system will not accept — while under-declaring a genuinely addressable catalog strands every object outside the connection's default. Whether one connection reaches across catalogs is an external fact no document declares, and the discovery half the rule obliges is only a strategy id, so nothing here can tell a wrong level from a right one. Catching a violation means knowing, from the target system's own documentation, whether one connection can address across its catalogs, and comparing that fact to the level declared here — the same vendor-level judgment `RULE-CTOR-030` names for hierarchy depth.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1033,6 +1075,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin"
    ],
@@ -1054,6 +1097,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin"
    ],
@@ -1075,6 +1119,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1086,7 +1131,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Pre-encoding is the instinct of anyone who has hand-built a DSN, and it fails in the most expensive way: the double-encoded DSN is still well-formed, so the connection is attempted and rejected as a bad credential rather than as a malformed URL, sending the author after the secret instead of the binding. A pre-encoded value is also a perfectly well-formed value expression, so nothing here can see it — the second encoding exists only in the DSN the runtime renders at connection time.\n",
+   "rationale": "Pre-encoding is the instinct of anyone who has hand-built a DSN. A pre-encoded value is a perfectly well-formed value expression, so nothing here can see it — the second encoding exists only in the DSN the runtime renders at connection time. Known enforcement gap, and not a reliable one even there: the runtime's encoding function treats letters, digits and a handful of punctuation marks as already-safe, so a value built only from those — many real passwords and tokens among them — encodes to itself, and double-encoding it is a no-op the connection survives. Only a value containing a character the function actually transforms doubles that transformation into a credential the server rejects, read as a bad secret rather than a bad binding.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1099,6 +1144,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1110,7 +1156,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The binding is the only path by which connection state reaches the DSN, so a shape outside the grammar does not degrade into a literal — it resolves to nothing and the DSN renders with a hole where the host or the credential belonged. `DsnBinding.value` is typed `Any`, and the only thing the models read inside it is the leading scope of each ref and placeholder (RULE-CTOR-057), so an object outside the grammar carries no token to check and passes — the failure surfaces when the engine builds the DSN.\n",
+   "rationale": "The binding is the only path by which connection state reaches the DSN. `DsnBinding.value` is typed `Any`, and the only thing the models read inside it is the leading scope of each ref and placeholder (RULE-CTOR-057), so an object outside the grammar carries no token to check and passes. Known enforcement gap, and narrower than it looks: the resolver's fallback for an unrecognised shape is to return the value unchanged rather than reject it, so a bare scalar (`5432` in place of `{\"literal\": 5432}`) is not a hole at all — `raw` encoding stringifies it identically to the grammar form, and the connection succeeds. Only a shape that resolves to something the DSN template genuinely cannot render (an unbacked ref, a mapping with no matching key) produces the hole the rest of this rationale describes.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1123,6 +1169,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1134,7 +1181,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Naming a strategy and shipping one are separate edits in separate files, so the pair drifts easily: an author who renames the entry-point class, or who copies a strategy id from a connector whose package they did not copy, leaves a document that validates and a connection that finds no strategy at all. The registry of built-in strategies is the engine's and `strategy` is an open string here, so an unregistered id passes every check and fails the first time discovery runs against a real connection.\n",
+   "rationale": "Naming a strategy and shipping one are separate edits in separate files, so the pair drifts easily: an author who renames the entry-point class, or who copies a strategy id from a connector whose package they did not copy, leaves a document that validates. `strategy` is an open string here, so an unregistered id passes every check this repo runs. Known enforcement gap: the engine's SQL discovery path implements schema/table/column discovery directly, with no `resource_discovery`-strategy registry anywhere in its source, so an unregistered id is not merely uninspected by anything here — nothing located in the engine reads this field either.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1148,6 +1195,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -1158,7 +1206,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Authoring one produces an artifact that passes every check here and can never run, and the refusal is what tells the user the gap is platform support rather than something they can fix in their document — a half-authored connector left in the registry says the opposite. Which kinds the engine executes is engine state no artifact here tracks: the contract models accept every declared kind, so this is plugin policy that an engine release retires with nobody editing the prose.\n",
+   "rationale": "Authoring one produces an artifact that passes every check here and can never run, and the refusal is what tells the user the gap is platform support rather than something they can fix in their document — a half-authored connector left in the registry says the opposite. Which kinds the engine executes is engine state no artifact here tracks: the contract models accept every declared kind, so this is plugin policy that an engine release retires with nobody editing the prose. Known enforcement gap: nothing here or downstream refuses a declared kind the engine no longer executes — closing it would take the engine publishing its supported-kind set the way it already publishes the Arrow type grammar, which does not exist for connector kinds today.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1171,6 +1219,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1183,7 +1232,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Authors reach for a chain — fetch the account, then use its id to fetch the tenant domain — and the block gives no way to express one: the engine decides dispatch order at connect time, so a dependent output may resolve against a value that does not exist yet and the connection activates with that field silently empty. A chain is indistinguishable in the document from independent entries, so catching it means reading every entry's refs against every other entry's key.\n",
+   "rationale": "Authors reach for a chain — fetch the account, then use its id to fetch the tenant domain — and the block gives no way to express one: the engine decides dispatch order at connect time, so a dependent output may resolve against a value that does not exist yet and the connection activates with that field silently empty. A chain is indistinguishable in the document from independent entries, so catching it means comparing every entry's refs against every other entry's key. Known enforcement gap: that comparison is a check over the entries this one document already carries, not a vendor fact, and nothing in this repo's model validation performs it yet.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1196,6 +1245,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1213,13 +1263,14 @@
   },
   {
    "id": "RULE-CTOR-040",
-   "statement": "A `database` connector MUST declare its `sql_capabilities` block, which the contract leaves optional and the engine requires before it will run any write mode.\n",
+   "statement": "A `database` connector MUST declare its `sql_capabilities` block, which the contract leaves optional.\n",
    "tier": "shape",
    "severity": "error",
    "scopes": [
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1231,7 +1282,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine reads the declaration instead of probing the live database, so an absent block is not a request for defaults — every write mode is refused at handshake, and the connector reads as finished right up until someone tries to write through it. The field is deliberately optional on `DatabaseConnector` so a partial document still validates, and the refusal happens against a live system this repo never sees.\n",
+   "rationale": "The engine reads the declaration instead of probing the live database, so an absent block is not a request for defaults, and the connector reads as finished right up until someone tries to write through it. The field is deliberately optional on `DatabaseConnector` so a partial document still validates. The engine's schema-handshake path checks the parsed capabilities before any write RPC, for every write mode, and raises a schema-configuration error when none were declared — a write-capable connector shipping no `sql_capabilities` fails loudly and deterministically at handshake time, never silently at the write itself.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1244,6 +1295,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1268,6 +1320,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1277,7 +1330,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "That slug is the connector's identity in three places at once — the registry path the contract builds, the entry-point name the engine resolves the connector class by, and the directory itself — so a directory renamed for readability detaches the package from the document describing it and the engine silently falls back to the generic class for the kind. The directory is invisible to a single-document validation run: no contract model sees the path, and the validator resolves siblings relative to whatever path it was handed rather than comparing that path's name to `connector_id`, so only registry CI can compare the two.\n",
+   "rationale": "That slug is the connector's identity in three places at once — the registry path the contract builds, the entry-point name the engine resolves the connector class by, and the directory itself — so a directory renamed for readability detaches the package from the document describing it and the engine silently falls back to the generic class for the kind. The directory is invisible to a single-document validation run: no contract model sees the path, and the validator resolves siblings relative to whatever path it was handed rather than comparing that path's name to `connector_id`. Known enforcement gap at registry CI too, for the same reason `RULE-PKG-002`'s repository-root layout is: every documented CI step (the wheel build, entry-point resolution, the conformance kit) reaches the package through its installed distribution, never the release directory's own name, so a rename that leaves the document, package mapping and entry points internally consistent passes every one of them.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1290,6 +1343,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1312,6 +1366,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1321,7 +1376,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Discovery output is connection-scoped, so a hand-authored endpoint in the release describes whichever database the author happened to look at and no user's connection: nothing consumes it, and it invites the next author to maintain it in step with a set of endpoints the runtime regenerates anyway. Nothing inspects a database connector's release for files it should not contain — the coverage walk only enumerates `endpoints/` for `api` connectors, so an endpoint shipped beside `connector.json` is never looked at.\n",
+   "rationale": "Discovery output is connection-scoped, so a hand-authored endpoint in the release describes whichever database the author happened to look at and no user's connection: nothing consumes it, and it invites the next author to maintain it in step with a set of endpoints the runtime regenerates anyway. Nothing inspects a database connector's release for files it should not contain — the coverage walk only enumerates `endpoints/` for `api` connectors, so an endpoint shipped beside `connector.json` is never looked at. Catching a violation means looking at the release's file list, not at any document — the same recourse `RULE-DBEP-006` names for a hand-authored database endpoint specifically; this is the general form, for any endpoint shape, of that same release-scope mistake.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1334,6 +1389,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -1357,6 +1413,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1382,6 +1439,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin"
    ],
@@ -1406,6 +1464,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1431,6 +1490,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1442,7 +1502,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Capability comes from the protocol the class in `connector.py` satisfies rather than from a flag in the document, so the two artifacts can disagree without either looking wrong on its own: the class advertises writes, the engine finds no declaration, and every write mode is refused at handshake long after the connector was signed off. Known enforcement gap: no contract model sees `connector.py`, so nothing here can tell a write-capable connector from a discovery-only one and the field stays optional.\n",
+   "rationale": "Capability comes from the protocol the class in `connector.py` satisfies rather than from a flag in the document, so the two artifacts can disagree without either looking wrong on its own: the class advertises writes and the document declares no `sql_capabilities`. No contract model sees `connector.py`, so nothing here can tell a write-capable connector from a discovery-only one before a run, and the field stays optional — but the engine's schema-handshake path treats every write mode alike: it checks the parsed capabilities before any write RPC and raises a schema-configuration error when none were declared, so a class dispatched to write with no declared `sql_capabilities` fails loudly and deterministically at handshake time.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1455,6 +1515,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1479,6 +1540,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1503,6 +1565,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1528,6 +1591,7 @@
     "api-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin"
    ],
@@ -1553,6 +1617,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1577,6 +1642,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::UrlTemplateDsn._reject_template_expressions",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -1600,6 +1666,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectionConditionPredicate._present_is_strictly_boolean",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -1623,6 +1690,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ValueExpressionScopes._expressions_qualified",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -1653,6 +1721,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ErrorMap.codes",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -1680,6 +1749,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::SqlCapabilities.catalog",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -1708,6 +1778,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::SqlStageCapabilities.scope",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -1735,6 +1806,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::TransportDefaults.transport_type",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -1761,6 +1833,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ResourceDiscoveryImplementation.type",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -1787,6 +1860,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1798,7 +1872,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The TLS slots are untyped value-expression carriers, so a driver object or a path parked in one is a well-formed document: it resolves to something the dialect was never written to interpret, and the failure arrives at connect as a driver error naming nothing the author wrote. The instinct is strong because every driver's own documentation shows exactly such an object. Nothing here can see it — the fields are typed open precisely so the mode vocabulary can stay the connector's own, and no validator resolves an expression offline.\n",
+   "rationale": "The TLS slots are untyped value-expression carriers, so a driver object or a path parked in one is a well-formed document. The engine does refuse a resolved value that is not a plain string before it reaches the connector package's dialect, which closes the case an author reaches for most often: copying the object every driver's own documentation shows. It cannot close the quieter half — a plain string that is nonetheless the wrong content, a filesystem path where the mode vocabulary is expected, or a fragment of code serialized as text — because the fields are typed open precisely so the mode vocabulary can stay the connector's own, and no generic check can tell a legitimate mode string from a wrong one without knowing that connector's driver semantics.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1811,6 +1885,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ConnectorBase",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -1835,6 +1910,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ValueExpressionScopes._expressions_well_formed",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -1865,6 +1941,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::HttpTransport._base_url_declares_no_credentials",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -1891,6 +1968,7 @@
     "connector"
    ],
    "validator": "analitiq.contracts.connector::ErrorMap._key_attrs_and_codes_together",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -1915,6 +1993,7 @@
     "database-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::DatabaseEndpointDoc._column_names_unique",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -1939,6 +2018,7 @@
     "database-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::DatabaseEndpointDoc._ordinal_positions_unique",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -1963,6 +2043,7 @@
     "database-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::DatabaseEndpointDoc._primary_keys_name_columns",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -1987,6 +2068,7 @@
     "database-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -2012,6 +2094,7 @@
     "database-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin",
@@ -2037,6 +2120,7 @@
     "database-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -2063,6 +2147,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin",
@@ -2090,6 +2175,7 @@
     "database-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -2102,7 +2188,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine adds its own bookkeeping columns to any table it creates, so declaring one puts the same column in the DDL twice and the first run fails at table creation. The trap is the mirror case: a source table the engine itself created carries those columns as ordinary discovered columns, so copying the source's list forward reproduces them without anyone deciding to. The synthetic names belong to the engine rather than to the contract, and the column model accepts any non-empty name, so nothing in the document can recognise them — the collision appears when the table is created.\n",
+   "rationale": "The engine adds its own bookkeeping columns to any table it creates. Known enforcement gap, and not the loud one it sounds like: for the write handler's main audit column, declaring it ahead of time is not a collision the engine raises on — the handler finds its own column already present and silently skips adding a second one, so the document's mistake costs nothing visible and the column's true origin (engine-synthesised, not authored) goes unrecorded. Only the keyless-insert audit column collides loudly, and only for that one stream shape. The trap is the mirror case either way: a source table the engine itself created carries these columns as ordinary discovered columns, so copying the source's list forward reproduces them without anyone deciding to, and the column model accepts any non-empty name, so nothing in the document can recognise them as synthetic. Rated `unenforced` as a whole rather than `engine`: the ordinary column, the case that actually happens (an author declaring or mirroring the audit column), is the silent one.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2115,6 +2201,7 @@
     "database-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin",
@@ -2141,6 +2228,7 @@
     "database-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -2166,6 +2254,7 @@
     "database-endpoint"
    ],
    "validator": "analitiq.validator.connectors::_database_endpoint_locator_findings",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -2189,6 +2278,7 @@
     "database-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin",
@@ -2216,6 +2306,7 @@
     "database-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin",
@@ -2243,6 +2334,7 @@
     "data-sync-run-status"
    ],
    "validator": "analitiq.contracts.pipelines.data_sync::PipelineRunStatusData._error_matches_status",
+   "enforcement_location": null,
    "owners": [
     "engine"
    ],
@@ -2266,6 +2358,7 @@
     "data-sync-run-status"
    ],
    "validator": "analitiq.contracts.pipelines.data_sync::PublicRunError._message_matches_code",
+   "enforcement_location": null,
    "owners": [
     "engine"
    ],
@@ -2289,6 +2382,7 @@
     "data-sync-run-status"
    ],
    "validator": "analitiq.contracts.pipelines.data_sync::PipelineRunStatusData.status",
+   "enforcement_location": null,
    "owners": [
     "engine"
    ],
@@ -2314,6 +2408,7 @@
     "data-sync-run-status"
    ],
    "validator": "analitiq.contracts.pipelines.data_sync::PublicRunError.code",
+   "enforcement_location": null,
    "owners": [
     "engine"
    ],
@@ -2339,6 +2434,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::_RequestBase._validate",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -2362,6 +2458,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2388,6 +2485,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::Param._validate",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2412,6 +2510,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::Replication._reject_mixed_cursor_forms",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -2435,6 +2534,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ResponseExtraction._validate",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2459,6 +2559,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WriteInput._validate",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2483,6 +2584,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -2506,6 +2608,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -2530,6 +2633,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -2554,6 +2658,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2578,6 +2683,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2602,6 +2708,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2626,6 +2733,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2650,6 +2758,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -2675,6 +2784,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2699,6 +2809,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2723,6 +2834,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2747,6 +2859,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::Operations._at_least_one",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -2770,6 +2883,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::Operations._conflict_keys_by_mode",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -2793,6 +2907,7 @@
     "database-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ColumnFieldSpec._validate_container_shape",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -2818,6 +2933,7 @@
     "database-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::Column._validate_container_shape",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -2843,6 +2959,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2868,6 +2985,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2892,6 +3010,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2917,6 +3036,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2941,6 +3061,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ResponseExtraction._validate",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2966,6 +3087,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -2991,6 +3113,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3015,6 +3138,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WriteResponse._metadata_keys",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3041,6 +3165,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WriteResponse._reject_record_count",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3072,6 +3197,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.endpoints::DatabaseObject._reject_explicit_null_namespaces",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -3097,6 +3223,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3122,6 +3249,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3147,6 +3275,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3172,6 +3301,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3197,6 +3327,7 @@
     "database-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::_EndpointBase.endpoint_id",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -3222,6 +3353,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::PredicateEq",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -3257,6 +3389,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::Replication.supported_methods",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3283,6 +3416,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::Idempotency.location",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3309,6 +3443,7 @@
     "api-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -3334,6 +3469,7 @@
     "api-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "connector-plugin"
@@ -3345,7 +3481,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The transport is where the connection's origin, its auth and its TLS settings are declared, so a URL that leaves that origin either arrives without the credentials the request needs or carries them to a host the connection never named. The half of containment that checks the transport *name* is settled at author time; this half is not. `request.path` is an open string and a followed next-page link comes from the provider's own response, so where a URL actually lands is decided only when the engine builds the request — and the engine as it stands opens one session at connect time and refuses a link that leaves that origin, which `_RequestBase.transport_ref`'s description already declares unenforced by the contract. Catching a violation means reading every URL-producing site in the document against the sibling connector's transports.\n",
+   "rationale": "The transport is where the connection's origin, its auth and its TLS settings are declared, so a URL that leaves that origin either arrives without the credentials the request needs or carries them to a host the connection never named. The half of containment that checks the transport *name* is settled at author time; the origin half is settled at run time by the engine itself: it resolves the transport an operation actually names through `transport_ref` — the default and a named non-default alike — separately for each operation, and checks every URL that operation's request produces, including a followed next-page link, against that resolved transport's own declared origin on both the read and the write path, refusing one that lands anywhere else. Because the check runs against the transport actually selected for the request rather than a single fixed one, a non-default `transport_ref` is covered the same way the default is.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3358,6 +3494,7 @@
     "api-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -3383,6 +3520,7 @@
     "database-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -3405,6 +3543,7 @@
     "api-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin"
    ],
@@ -3415,7 +3554,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Omission is how the block says \"send no keyset on the first request\"; a null is a value, so a document writing one is claiming a first-page key that happens to be null. Today the two behave alike, which is exactly why it goes unnoticed and why it is not yet a broken run — but the document has lost the distinction, and it stays lost until something needs it: a provider whose first key genuinely is null, or a stricter reading of the field. Nothing catches it: `Keyset.initial` admits null as an ordinary value, so the refusal RULE-ENDP-031 makes for namespace fields has no counterpart here, and seeing the mistake means reading the pagination block knowing that omission is the intended spelling.\n",
+   "rationale": "Omission is how the block says \"send no keyset on the first request\"; a null is a value, so a document writing one is claiming a first-page key that happens to be null. Today the two behave alike, which is exactly why it goes unnoticed and why it is not yet a broken run — but the document has lost the distinction, and it stays lost until something needs it: a provider whose first key genuinely is null, or a stricter reading of the field. Known enforcement gap: `Keyset.initial` admits null as an ordinary value, so the refusal RULE-ENDP-031 makes for namespace fields has no counterpart here — nothing yet forbids the explicit null the way that precedent already forbids it for namespace fields.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3428,6 +3567,7 @@
     "api-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -3452,6 +3592,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.validator.connectors::_endpoint_locator_findings",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3476,6 +3617,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.validator.connectors::_endpoint_transport_ref_findings",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3498,6 +3640,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.validator.connectors::_embedded_schema_findings",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3520,6 +3663,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::TemplateExpression._placeholders_qualified",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -3541,6 +3685,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::Param.location",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3568,6 +3713,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::GetReadRequest.method",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3595,6 +3741,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WriteRequest.method",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3621,6 +3768,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::Operations.write",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3647,6 +3795,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::Param.controlled_by",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3673,6 +3822,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation.filters",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -3700,6 +3850,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::SingleCursorMapping.format",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3727,6 +3878,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::WindowCursorMapping.format",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3755,6 +3907,7 @@
     "api-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin"
    ],
@@ -3778,6 +3931,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::_RequestBase._validate",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -3803,6 +3957,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::_RequestBase._validate",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -3828,6 +3983,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::_RequestBase._validate",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3854,6 +4010,7 @@
     "api-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin"
    ],
@@ -3877,6 +4034,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.validator.connectors::_embedded_schema_example_findings",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3899,6 +4057,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ResponseExtraction._validate",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3924,6 +4083,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ResponseExtraction._validate",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3950,6 +4110,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -3975,6 +4136,7 @@
     "api-endpoint"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -3999,6 +4161,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -4025,6 +4188,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::TemplateFilterLanding._placeholders_qualified",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin"
    ],
@@ -4046,6 +4210,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -4072,6 +4237,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -4098,6 +4264,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -4124,6 +4291,7 @@
     "api-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ResponseExtraction._validate",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -4150,6 +4318,7 @@
     "any"
    ],
    "validator": "analitiq.contracts.shared.rules::HeaderMergeRules._headers_not_both_set_and_removed",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -4177,6 +4346,7 @@
     "any"
    ],
    "validator": "analitiq.contracts.shared.rules::DeclaredHeaderNames._no_content_length_header",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -4206,6 +4376,7 @@
     "any"
    ],
    "validator": "analitiq.contracts.shared.rules::DeclaredHeaderNames._no_content_type_header",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -4235,6 +4406,7 @@
     "pipeline"
    ],
    "validator": "analitiq.contracts.pipelines.config::PipelineConnections._destinations_unique",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -4258,6 +4430,7 @@
     "pipeline"
    ],
    "validator": "analitiq.contracts.pipelines.config::Schedule._validate_schedule_fields",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -4281,6 +4454,7 @@
     "pipeline"
    ],
    "validator": "analitiq.contracts.pipelines.config::PipelineAuthored._validate_streams_unique_base",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -4304,6 +4478,7 @@
     "pipeline"
    ],
    "validator": "analitiq.contracts.pipelines.config::PipelineAuthored._check_active_requires_streams",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -4327,6 +4502,7 @@
     "pipeline"
    ],
    "validator": "analitiq.contracts.pipelines.config::Schedule.type",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -4352,6 +4528,7 @@
     "pipeline"
    ],
    "validator": "analitiq.contracts.pipelines.config::Schedule.type",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -4378,6 +4555,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4402,6 +4580,7 @@
     "pipeline"
    ],
    "validator": null,
+   "enforcement_location": "platform-save",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4426,6 +4605,7 @@
     "pipeline"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4450,6 +4630,7 @@
     "pipeline"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4461,7 +4642,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Every permutation validates identically and the runtime is free to ignore the order entirely, so an array arranged to mean \"load the dimensions before the facts\" produces wrong results non-deterministically, and nothing can tell that arrangement from an arbitrary one. The second half of the rule carries as much weight as the first: a user told the order is meaningful will go on authoring against a guarantee that does not exist, long after the document that misled them is forgotten.\n",
+   "rationale": "Every permutation validates identically and the runtime is free to ignore the order entirely, so an array arranged to mean \"load the dimensions before the facts\" produces wrong results non-deterministically, and nothing — including a reviewer reading the document alone — can tell that arrangement from an arbitrary one; only asking the author what they intended can. The second half of the rule is squarely a reviewer's to catch: whatever documentation or UI text a plugin presents to the user about a pipeline is readable, and a reviewing agent checks it for a promise this ordering does not keep.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4474,6 +4655,7 @@
     "pipeline"
    ],
    "validator": "analitiq.validator.pipelines::_check_stream_refs",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4496,6 +4678,7 @@
     "pipeline"
    ],
    "validator": "analitiq.validator.pipelines::_check_connections_present",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4518,6 +4701,7 @@
     "pipeline"
    ],
    "validator": "analitiq.validator.pipelines::_check_connection_version_conflicts",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4540,6 +4724,7 @@
     "pipeline"
    ],
    "validator": "analitiq.validator.pipelines::_check_pipeline_active_gate",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4562,6 +4747,7 @@
     "pipeline"
    ],
    "validator": "analitiq.contracts.pipelines.config::Schedule._validate_timezone",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -4585,6 +4771,7 @@
     "pipeline"
    ],
    "validator": "analitiq.contracts.pipelines.config::PipelineAuthored.status",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4611,6 +4798,7 @@
     "pipeline"
    ],
    "validator": "analitiq.contracts.pipelines.config::Logging.log_level",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4637,6 +4825,7 @@
     "pipeline"
    ],
    "validator": "analitiq.validator.pipelines::_check_pipeline_id",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4659,6 +4848,7 @@
     "pipeline"
    ],
    "validator": "analitiq.validator.pipelines::_check_pipeline_active",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4681,6 +4871,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4703,6 +4894,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4712,7 +4904,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine imports a connector through a package name mapped onto that root, so a nested source directory, or a definition document loose at the root, produces a wheel whose module path the entry point cannot resolve — the connector is installed and unreachable. The layout is a directory tree on disk, not a document any contract model parses; registry CI's `pip wheel --no-deps .` build is the first thing that sees whether the root is actually the package, well after the connector was authored.\n",
+   "rationale": "The engine resolves a connector's class through the entry point its installed distribution declares, never by walking the repository tree, so a conventional nested source layout (`src/<package>/`, mapped correctly in `pyproject.toml`) builds a wheel with the same importable module and the same entry points a flat-root layout would — indistinguishable to everything downstream. The layout is a directory tree on disk, not a document any contract model parses. Known enforcement gap: registry CI's `pip wheel --no-deps .` build and every conformance-kit check reach the package only through its installed entry points, so none of them can see whether the repository root itself was the package or a wrapper around one.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4725,6 +4917,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4734,7 +4927,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A declaration with no hook behind it is inert: the CDK base raises for every unimplemented hook, so the connector validates clean here and dies at connect or at the first write. The declaration is JSON this repo checks and the hooks are Python it never opens, and the hook names and signatures are engine-owned — the CDK is the authority and this repo can pin nothing about it. The CDK conformance kit run by registry CI is what catches a missing or mis-signed hook, after the plugin has already returned the package.\n",
+   "rationale": "A declaration with no hook behind it is inert: the CDK base raises for most unimplemented hooks, so the connector validates clean here and dies at connect or at the first write. The declaration is JSON this repo checks and the hooks are Python it never opens, and the hook names and signatures are engine-owned — the CDK is the authority and this repo can pin nothing about it. Known enforcement gap for at least one required hook: `RULE-PKG-021` already establishes that a missing post-connect TLS verification hook is only logged at INFO, not raised, so the CDK conformance kit's raise-on-missing-hook behavior does not cover every hook this rule requires — the connection succeeds unverified rather than dying, for exactly that one case.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4747,6 +4940,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4756,7 +4950,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine owns the staged write plan and executes the text the renderers return, inside the transaction it is managing; a renderer that opens its own connection writes outside that transaction, so a failure later in the cycle no longer rolls back. It is a tempting shortcut precisely because a renderer often needs a fact about the live database. The method bodies live in `connector.py`, which no contract model reads, so a renderer that performs I/O is caught by the CDK conformance kit at registry CI or not until a run.\n",
+   "rationale": "The engine owns the staged write plan and executes the text the renderers return, inside the transaction it is managing; a renderer that opens its own connection writes outside that transaction, so a failure later in the cycle no longer rolls back. It is a tempting shortcut precisely because a renderer often needs a fact about the live database. The method bodies live in `connector.py`, which no contract model reads. The CDK conformance kit's rendering tier calls these hooks directly and asserts on the returned statement text, but injects no live connection and instruments no I/O, so a renderer that opens its own connection anyway passes there unnoticed and is caught only incidentally, by whatever unrelated failure its out-of-transaction write eventually causes in a real run.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4769,6 +4963,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin"
    ],
@@ -4790,6 +4985,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4812,6 +5008,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4821,7 +5018,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine discovers each direction by looking the connector up in that direction's group, so registering one leaves the connector simply absent when a pipeline points the other way — an omission no error names. This is where the both-directions principle becomes concrete for a database connector, and it is easy to lose when the driving request was one-directional. Registry CI inspects the built wheel's entry points, which is after the plugin has authored and returned a half connector; nothing in this repo sees `pyproject.toml`.\n",
+   "rationale": "The engine discovers each direction by looking the connector up in that direction's group, so registering one leaves the connector simply absent when a pipeline points the other way — an omission no error names. This is where the both-directions principle becomes concrete for a database connector, and it is easy to lose when the driving request was one-directional. The CDK conformance kit resolves whichever of the two entry-point groups is present and only objects when both are present and resolve to different classes — it never requires both to be present, so a connector registered under just one group passes conformance clean. Nothing in this repo sees `pyproject.toml` either, so no mechanism, at registry CI or here, actually checks that both groups are registered.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4834,6 +5031,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin"
    ],
@@ -4855,6 +5053,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "external-ci",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4877,6 +5076,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4886,7 +5086,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Depending only on the CDK is what keeps connectors independently releasable: importing another connector couples two release trains, and importing an engine inverts the dependency the whole architecture rests on. Either import also drags a package the engine environment does not install into a wheel that installs cleanly. The temptation is real — a wire-compatible system looks like a one-line import away, which is why MariaDB ships its own copy of the mysql-shaped dialect instead. Imports live in Python no contract model parses; the CDK conformance kit is what would catch the reach, and only after the package is pushed to registry CI.\n",
+   "rationale": "Depending only on the CDK is what keeps connectors independently releasable: importing another connector couples two release trains, and importing an engine inverts the dependency the whole architecture rests on. Either import also drags a package the engine environment does not install into a wheel that installs cleanly. The temptation is real — a wire-compatible system looks like a one-line import away, which is why MariaDB ships its own copy of the mysql-shaped dialect instead. Imports live in Python no contract model parses. Known enforcement gap: the CDK conformance kit audits the loaded class's method and attribute surface through runtime introspection, never `connector.py`'s source text or import statements, so a forbidden import that adds no extra class attribute — and installs cleanly, which a package already present in the engine's own environment always does — is invisible to every check the kit runs.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4899,6 +5099,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "external-ci",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4921,6 +5122,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "external-ci",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4943,6 +5145,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4965,6 +5168,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "external-ci",
    "owners": [
     "engine",
     "connector-plugin"
@@ -4987,6 +5191,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "external-ci",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5009,6 +5214,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "external-ci",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5031,6 +5237,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5053,6 +5260,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5075,6 +5283,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5084,7 +5293,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine has no built-in TLS interpretation for any driver — the CDK base dialect raises for every mode — so the declaration is inert on its own and the connection fails at connect. The verification hook is the other half of the pair because a driver that quietly negotiates a plain session would otherwise satisfy a TLS-promising mode with no encryption at all. The `tls` block is JSON this repo validates while the hooks are dialect methods it never sees, so the mismatch is caught in the engine at connect time rather than anywhere here.\n",
+   "rationale": "The engine has no built-in TLS interpretation for any driver — the CDK base dialect raises for every mode — so declaring `tls` with no connect-argument hook implemented is inert on its own and the connection fails at connect. The verification hook is the other half of the pair because a driver that quietly negotiates a plain session would otherwise satisfy a TLS-promising mode with no encryption at all, and that half is the actual known enforcement gap: a missing verification hook is only logged at INFO level, not raised, so the connection succeeds unverified and the exact silent-plaintext-session risk this half of the rule exists to close is the one case nothing catches. The `tls` block is JSON this repo validates while the hooks are dialect methods it never sees. Rated `unenforced` as a whole rather than `engine`: the vocabulary has no member for \"one obligation, one enforced half and one silent half,\" and the silent half is the one this rule exists to close.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5097,6 +5306,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5119,6 +5329,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5141,6 +5352,7 @@
     "connector"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin"
    ],
@@ -5162,6 +5374,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5184,6 +5397,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5193,7 +5407,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The vocabulary is the system's own, researched from the driver's docs and never translated, so nothing derives one half from the other — the author holding both in mind at once is the only link. A declared mode the dialect does not handle reaches the CDK base and raises at connect for whichever user selects it; a mode the dialect handles but the input never offers is dead code standing in for a gap in the enum. The mode set is authored into `connector.json` while its interpretation lives in the package's dialect hook, no validator opens the dialect, and the contract's TLS block is deliberately vocabulary-agnostic.\n",
+   "rationale": "The vocabulary is the system's own, researched from the driver's docs and never translated, so nothing derives one half from the other — the author holding both in mind at once, against what the driver's docs actually document, is the only link, and no mechanical comparison stands in for that reading. A declared mode the dialect does not handle reaches the CDK base and raises at connect for whichever user selects it; a mode the dialect handles but the input never offers is dead code standing in for a gap in the enum. The mode set is authored into `connector.json` while its interpretation lives in the package's dialect hook, no validator opens the dialect, and the contract's TLS block is deliberately vocabulary-agnostic.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5206,6 +5420,7 @@
     "connector-package"
    ],
    "validator": "analitiq.validator.connectors::check_coverage",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -5228,6 +5443,7 @@
     "connector-package"
    ],
    "validator": "analitiq.validator.connectors::endpoint_filename_findings",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -5251,6 +5467,7 @@
     "connector-package"
    ],
    "validator": "analitiq.validator.connectors::check_coverage",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -5273,6 +5490,7 @@
     "connector-package"
    ],
    "validator": "analitiq.validator.connectors::check_coverage",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -5295,6 +5513,7 @@
     "connector-package"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin"
@@ -5317,6 +5536,7 @@
     "connector-package"
    ],
    "validator": "analitiq.validator.connectors::check_coverage",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
@@ -5339,6 +5559,7 @@
     "any"
    ],
    "validator": "analitiq.contracts.shared.common::RetryErrorHandlingBase._validate_retry_fields",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -5363,6 +5584,7 @@
     "any"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin",
@@ -5386,6 +5608,7 @@
     "any"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -5408,6 +5631,7 @@
     "any"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -5417,7 +5641,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Where the contract leaves the field optional an omission validates cleanly, so requiring it everywhere is a plugin house rule no validator expresses. It earns that status because the URL is the only thing in the document that says which contract it was authored against: without it a reviewer, an editor's live validation and any future migration all have to guess, and the document silently reads as belonging to whatever is current. Nothing breaks the day it is omitted, which is precisely why the omission survives.\n",
+   "rationale": "Where the contract leaves the field optional an omission validates cleanly, so requiring it everywhere is a plugin house rule no validator expresses. A presence check is a plain mechanical comparison — the field is absent or it is not the family's published `Literal` URL — so nothing about catching the omission needs a human judgment call; it is simply a check nothing here runs today. Without it a reviewer, an editor's live validation and any future migration all have to guess which contract the document was authored against, and it silently reads as belonging to whatever is current. Nothing breaks the day it is omitted, which is precisely why the omission survives.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5430,6 +5654,7 @@
     "any"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -5452,6 +5677,7 @@
     "any"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -5474,6 +5700,7 @@
     "any"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -5487,7 +5714,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The resolver substitutes into the strings it is handed and nothing else, so outside the fields that refuse a placeholder structurally an out-of-place `${...}` validates cleanly and is simply never expanded — the braces go out on the wire inside a URL, a DSN or a header, and the failure comes back as a provider error naming nothing the author wrote. The idiom is seductive because it works two fields over. Which slots resolve is the grammar's to say, so the only way to check one is to look it up there.\n",
+   "rationale": "The resolver substitutes into the strings it is handed and nothing else, so outside the fields that refuse a placeholder structurally an out-of-place `${...}` validates cleanly and is simply never expanded — the braces go out on the wire inside a URL, a DSN or a header, and the failure comes back as a provider error naming nothing the author wrote. The idiom is seductive because it works two fields over. `_RequestBase.path` and `UrlTemplateDsn.template` already reject the sigil structurally, so the same mechanism — a field-level check against the grammar's own record of which fields resolve a template — could close the remaining fields; nothing here does that sweep yet. Which slots resolve is the grammar's to say, so the only way to check one today is to look it up there.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5500,6 +5727,7 @@
     "any"
    ],
    "validator": null,
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "connector-plugin",
@@ -5523,6 +5751,7 @@
     "any"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin",
@@ -5546,6 +5775,7 @@
     "any"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -5571,6 +5801,7 @@
     "any"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -5598,6 +5829,7 @@
     "any"
    ],
    "validator": "analitiq.contracts.connector::ConnectorBase._validate_display_name_field",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -5626,6 +5858,7 @@
     "any"
    ],
    "validator": "analitiq.contracts.connector::ConnectorBase._validate_tags_field",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -5654,6 +5887,7 @@
     "any"
    ],
    "validator": "analitiq.contracts.shared.common::RetryErrorHandlingBase.strategy",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -5680,6 +5914,7 @@
     "any"
    ],
    "validator": "analitiq.contracts.shared.common::StrictModel",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -5707,6 +5942,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::StreamAuthored._destinations_unique",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -5734,6 +5970,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::StreamMapping._assignment_targets_unique",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -5757,6 +5994,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::ConnectionEndpointRef._derive_or_verify_endpoint_id",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -5782,6 +6020,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::Filter._validate_value_presence",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -5805,6 +6044,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::PipeExpression._validate_positional_grammar",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -5829,6 +6069,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::ArrowFieldSpec._validate_container_shape",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -5856,6 +6097,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::ConstantValue._validate_container_shape",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -5879,6 +6121,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::ValidationRule._validate_value_for_rule",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -5902,6 +6145,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::AssignmentTarget._validate_container_shape",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -5925,6 +6169,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::StreamSource._validate_filter_operator_scope",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -5949,6 +6194,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::StreamSource._validate_database_only_read_features",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -5973,6 +6219,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::StreamMapping._validate_rule_fields_resolve",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -5996,6 +6243,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::DatabaseKeylessWrite",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -6021,6 +6269,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::FullRefreshReplication",
+   "enforcement_location": null,
    "owners": [
     "pipeline-plugin"
    ],
@@ -6045,6 +6294,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "pipeline-plugin"
    ],
@@ -6066,6 +6316,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6090,6 +6341,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6115,6 +6367,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6126,7 +6379,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The value field is deliberately typed open so each rule type can carry its own payload — a bound, a regex, a range object, a list of admitted values — and that openness is what leaves the shape unchecked: a rule whose payload is the wrong kind validates here and fails only when the rule runs against a record, mid-transfer, on data the author is not looking at. The presence check `RULE-STRM-009` settles only whether a payload is present, so an author who reads a clean validation as confirmation of the payload has read too much into it. Catching a violation means reading each rule's value against the meaning of its type in the stream spec.\n",
+   "rationale": "The value field is deliberately typed open so each rule type can carry its own payload — a bound, a regex, a range object, a list of admitted values — and that openness is what leaves the shape unchecked: a rule whose payload is the wrong kind validates here, and what happens when the rule runs against a record, mid-transfer, depends on which kind it is. A `range` payload of the wrong shape raises there, reliably; the others do not: a wrong-shaped `pattern` payload can still interpolate into a syntactically valid, silently-wrong regex, and a wrong-shaped `in_list` payload can iterate into a value set with no error rather than raising. The presence check `RULE-STRM-009` settles only whether a payload is present, so an author who reads a clean validation as confirmation of the payload has read too much into it. Catching a violation means reading each rule's value against the meaning of its type in the stream spec.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6139,6 +6392,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6153,7 +6407,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The declaring endpoint document is not part of the stream, so no in-process check can resolve a name — the local validator proves only that a name is well-formed, and resolution happens server-side when the stream is saved. That gap is wide: a projection, a filter, a cursor, a pagination order key, a mapping target and a conflict key are all just strings until then, and a typo in any of them reads as a registry rejection long after the document looked clean. Catching one before that means reading the name back against the endpoint document that declares it, or back to the user rather than guessing it.\n",
+   "rationale": "The declaring endpoint document is not part of the stream, so no in-process check can resolve a name — the local validator proves only that a name is well-formed. What resolves it at run time is uneven, not reliable across the names this rule covers: for an API source the engine checks a filter's field and the cursor field against the endpoint's declared operation before the first request, but a SQL source never compares its selected columns, a filter field or the pagination order-by field against the endpoint's actual columns, and a mapping's destination target is the worst case — an unmatched `target.path` is not an error at all, the field is silently dropped from the write. A typo therefore surfaces, where it surfaces, as an ordinary database or provider error unrelated to this rule, or as data quietly missing from the destination. Catching one before that means reading the name back against the endpoint document that declares it, or back to the user rather than guessing it.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6166,6 +6420,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6177,7 +6432,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The authoritative spelling lives in the source endpoint document, which the stream model never sees, and both the contract and the engine compare the strings literally — so a name that differs only in case or whitespace is a perfectly valid document naming nothing. Normalizing is the natural reflex, because the identifiers that arrive from introspection often look untidy and because most tooling folds case for the author; here folding it is what breaks the reference. Catching a violation means comparing the string byte for byte against the endpoint document.\n",
+   "rationale": "The authoritative spelling lives in the source endpoint document, which the stream model never sees — the same gap `RULE-STRM-022` names for field references generally, and this rule is that check's exact-spelling case. Where the engine resolves a name by exact key lookup — an API filter's field or its cursor field against the endpoint's declared operation — exactness rides along with existence, since a case or whitespace difference already fails as unresolved. A SQL source's selected columns, filter fields and pagination order-by field are never compared against the endpoint's declared columns at all, so a spelling difference there is whatever the database's own identifier-folding does with it — silently accepted on a case-insensitive engine, a rejected query on a case-sensitive one. Normalizing is the natural reflex, because the identifiers that arrive from introspection often look untidy and because most tooling folds case for the author; here folding it is what breaks the reference on the paths nothing else checks.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6190,6 +6445,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6201,7 +6457,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The model bounds the mode to the contract's write vocabulary, but which of those an endpoint actually implements is a fact in the endpoint document the stream only references — so a mode the provider has no operation for validates locally and has nothing to execute. The vocabulary being closed is what makes this easy to miss: an author picks a member, the validator accepts it, and the narrowing that mattered was never in view. Catching a violation means opening the referenced endpoint and reading which write operations it declares.\n",
+   "rationale": "The model bounds the mode to the contract's write vocabulary, but which of those an endpoint actually implements is a fact in the endpoint document the stream only references — so a mode the provider has no operation for validates locally, with the narrowing that mattered never in view. The vocabulary being closed is what makes this easy to miss: an author picks a member and the validator accepts it. The engine refuses it at schema-handshake time, before any batch write: resolving the mode against the endpoint's declared write operations finds none and the run is refused as a per-stream schema-configuration defect rather than attempted.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6214,6 +6470,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6226,7 +6483,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The declared support set lives in the connector's api-endpoint document, which the stream model cannot read, so the stream-side vocabulary check cannot narrow to it — every method in the contract validates against every API source. The asymmetry is the trap: a database endpoint declares no such set, so an author who has been reading database endpoints has no reason to expect one to exist. Catching a violation means opening the referenced endpoint's read operation and reading the set.\n",
+   "rationale": "The declared support set lives in the connector's api-endpoint document, which the stream model cannot read, so the stream-side vocabulary check cannot narrow to it — every method in the contract validates against every API source. The asymmetry is the trap: a database endpoint declares no such set, so an author who has been reading database endpoints has no reason to expect one to exist. The engine closes the gap this rule scopes to: at read-plan time, before the first request, it resolves the stream's selected method against the endpoint's declared `read.replication.supported_methods` and refuses the run if it is absent — the read-side mirror of the write-mode check `RULE-STRM-024` performs. No equivalent vocabulary exists for database sources, which is exactly why the rule is scoped to API sources only.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6239,6 +6496,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6250,7 +6508,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The `filters` map lives on the endpoint document, which is not part of the stream, so no in-process check can compare a stream's filter against it — a connector-scoped (API) endpoint document is never carried by the pipeline bundle the local validator resolves against, only connection-scoped ones are — and resolution happens server-side when the stream is saved. Two failures hide behind one string until then: a field the map does not carry at all, and a field the map carries with no entry for this operator, which is a parameter the runtime owns (RULE-ENDP-002) or an operator the map simply never declared for that field.\n",
+   "rationale": "The `filters` map lives on the endpoint document, which is not part of the stream, so no in-process check here can compare a stream's filter against it — a connector-scoped (API) endpoint document is never carried by the pipeline bundle the local validator resolves against, only connection-scoped ones are. The engine narrows only half of what this rule requires, at read-plan time: it refuses a filter naming a field with no params-map entry at all, but that lookup is keyed on field name alone, with no operator dimension, so a field declared for one operator and filtered with a different one passes identically to a genuine match and goes out on the wire as whatever the provider does with an operator it never declared support for — a parameter the runtime owns (RULE-ENDP-002) or an operator the map simply never declared for that field.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6263,6 +6521,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6287,6 +6546,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6311,6 +6571,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "engine",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6322,7 +6583,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Omitting the block is a policy choice, not an absence: it falls back to reading everything each run, which only a source that supports full refresh can do. Endpoint capability is invisible to the stream document, so the correctness of the default is decided by an artifact the model cannot read and the rejection lands server-side. That makes the omission the most attractive wrong answer — it is shorter, it validates, and it requires the author to know nothing. Where full-refresh support is not established, authoring an explicit policy is what removes the guess; catching a violation otherwise means reading the endpoint's declared read capability.\n",
+   "rationale": "Omitting the block is a policy choice, not an absence: it falls back to reading everything each run, which only a source that supports full refresh can do. Endpoint capability is invisible to the stream document, so the correctness of the default is decided by an artifact the model cannot read, and this is the one case a database source cannot violate — every database read is treated as capable of full refresh, with no declared vocabulary to fail against. Where it is violable, on an API source, the engine's read-plan check closes it deliberately: an omitted block folds into the same `full_refresh` default an explicit selection would produce, before the same `supported_methods` guard `RULE-STRM-025` names runs against it, precisely so the one stream shape that skips authoring a method is not the one shape that skips the check.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6335,6 +6596,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6346,7 +6608,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The field is a fallback identity hint, and both halves of the condition are outside the stream: the endpoint's own primary-key metadata sits in a document the stream only references, and whether identity is needed at all is decided by the destination's write mode in a third one. Declared against an endpoint that already carries keys, it is a second source of truth for record identity that can disagree; omitted where an API source feeds a conflict-resolving write, it leaves the transfer with no identity at all, since an API endpoint document has none to inherit. Catching either means reading the source endpoint and the destination's write mode together.\n",
+   "rationale": "The field is a fallback identity hint, and both halves of the condition are outside the stream: the endpoint's own primary-key metadata sits in a document the stream only references, and whether identity is needed at all is decided by the destination's write mode in a third one. Declared against an endpoint that already carries keys, it is a second source of truth for record identity that can disagree; omitted where an API source feeds a conflict-resolving write, it leaves the transfer with no identity at all, since an API endpoint document has none to inherit. Neither half is refused anywhere: the engine reads `primary_keys` as a plain optional list and falls back to a synthetic whole-record hash when it is empty, on both the read and the write side, so an omission that needed real identity does not fail the run — it silently derives a weaker one. Catching either means reading the source endpoint and the destination's write mode together.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6359,6 +6621,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6371,7 +6634,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Whether the referenced endpoint is an API or a database one is a fact in that endpoint's own document, and the ref model can only require that a connection-scoped ref carry a database object — which an author can invent for an API endpoint and satisfy. The scopes differ in how the endpoint is pinned, the connector version for one and a per-connection snapshot for the other, and no snapshot-hashing spec exists for API endpoints yet, so the combination names a pinning mechanism that has not been defined. Refusing to author it is the only check there is; catching a violation afterwards means reading the referenced endpoint's kind.\n",
+   "rationale": "Whether the referenced endpoint is an API or a database one is a fact in that endpoint's own document, and the ref model can only require that a connection-scoped ref carry a database object — which an author can invent for an API endpoint and satisfy. Only half of this is caught: the platform materializes every connection-scoped ref at stream-save time and rejects one that resolves to a non-database connector, but a connector-scoped ref is never resolved against the referenced endpoint's own kind anywhere, so an author can point one at a database endpoint and the document is accepted. The scopes also differ in how the endpoint is pinned, the connector version for one and a per-connection snapshot for the other, and no snapshot-hashing spec exists for API endpoints yet, so extending the existing save-time check to the connector-scope direction is a live, closeable gap rather than an undefined mechanism.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6384,6 +6647,7 @@
     "stream"
    ],
    "validator": "analitiq.validator.pipelines::_check_stream_parent_pipeline",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6406,6 +6670,7 @@
     "stream"
    ],
    "validator": "analitiq.validator.pipelines::_check_stream_connection_roles",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6428,6 +6693,7 @@
     "stream"
    ],
    "validator": "analitiq.validator.pipelines::_check_connection_scoped_endpoints",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6450,6 +6716,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::StreamAuthored.status",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6476,6 +6743,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::Filter.operator",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6502,6 +6770,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::ValidationRule.type",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6528,6 +6797,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::ApiWrite.mode",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6556,6 +6826,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6582,6 +6853,7 @@
     "stream"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6608,6 +6880,7 @@
     "stream"
    ],
    "validator": "analitiq.contracts.stream::StreamSource._validate_no_duplicate_api_filter_landings",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6634,6 +6907,7 @@
     "stream"
    ],
    "validator": "analitiq.validator.pipelines::_check_stream_endpoint_targets",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6656,6 +6930,7 @@
     "type-map"
    ],
    "validator": "analitiq.contracts.type_map::TypeMapReadExactRule._check",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -6681,6 +6956,7 @@
     "type-map"
    ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -6706,6 +6982,7 @@
     "type-map"
    ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -6730,6 +7007,7 @@
     "type-map"
    ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -6754,6 +7032,7 @@
     "type-map"
    ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -6778,6 +7057,7 @@
     "type-map"
    ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -6803,6 +7083,7 @@
     "type-map"
    ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -6827,6 +7108,7 @@
     "type-map"
    ],
    "validator": "analitiq.contracts.type_map::TypeMapWriteExactRule._check",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -6852,6 +7134,7 @@
     "type-map"
    ],
    "validator": "analitiq.contracts.type_map::TypeMapWriteRegexRule._check",
+   "enforcement_location": null,
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -6876,6 +7159,7 @@
     "type-map"
    ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -6901,6 +7185,7 @@
     "type-map"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin",
@@ -6924,6 +7209,7 @@
     "type-map"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "pipeline-plugin"
    ],
@@ -6945,6 +7231,7 @@
     "type-map"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -6968,6 +7255,7 @@
     "type-map"
    ],
    "validator": "analitiq.validator.connectors::_type_map_rule_warnings",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -6993,6 +7281,7 @@
     "type-map"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -7006,7 +7295,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Case handling belongs to the reader, and the reader normalizes only on the read side — so an author who learned that casing does not matter learns it from the direction where it genuinely does not. How loudly the mistake fails then depends on the rule kind: a mis-cased `exact` arrow_type is rejected outright by the Arrow type pattern, while a mis-cased `regex` arrow_type is structurally a valid pattern, validates with no findings at all, and simply never fires — leaving the family to hard-error at stream configuration, long after the map was reviewed.\n",
+   "rationale": "Case handling belongs to the reader, and the reader normalizes only on the read side — so an author who learned that casing does not matter learns it from the direction where it genuinely does not. A mis-cased `exact` arrow_type is rejected outright by the Arrow type pattern; a mis-cased `regex` arrow_type is structurally a valid pattern, validates with no findings at all, and simply never fires. Known enforcement gap for that case: whether it ever hard-errors depends on map order and on whether the family it silently fails to match is ever actually written — a later rule matching first, or the family simply never occurring in synced data, lets the mis-cased rule sit unfired and unnoticed indefinitely.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7019,6 +7308,7 @@
     "type-map"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -7031,7 +7321,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "This is the read side's capture-backing obligation with the keys swapped, and the swap is the trap — the placeholders move to `native_type` and the captures to `arrow_type`, so a rule copied across directions keeps both in the wrong place and still parses. An unbacked placeholder is never substituted, so the engine raises during type mapping, before any DDL is emitted, on a destination table that may already exist. Only the read direction's backing is checked here; the write correspondence is first exercised when the engine renders DDL, which no document in this repo holds.\n",
+   "rationale": "This is the read side's capture-backing obligation with the keys swapped, and the swap is the trap — the placeholders move to `native_type` and the captures to `arrow_type`, so a rule copied across directions keeps both in the wrong place and still parses. Only the read direction's backing is checked here; the write correspondence is first exercised when the engine renders DDL, which no document in this repo holds — and, first-match-wins being what it is, only if this rule is the one that actually matches and no earlier rule shadows it. A rule an author never sees fire, because it is shadowed or its Arrow family never occurs in synced data, carries an unbacked placeholder indefinitely with nothing ever reaching it to raise.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7044,6 +7334,7 @@
     "type-map"
    ],
    "validator": "analitiq.validator.connectors::_write_vocabulary_findings",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",
@@ -7067,6 +7358,7 @@
     "type-map"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "connector-plugin",
@@ -7090,6 +7382,7 @@
     "type-map"
    ],
    "validator": null,
+   "enforcement_location": "authoring-practice",
    "owners": [
     "engine",
     "connector-plugin",
@@ -7113,6 +7406,7 @@
     "type-map"
    ],
    "validator": null,
+   "enforcement_location": "unenforced",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -7138,6 +7432,7 @@
     "type-map"
    ],
    "validator": "analitiq.validator.connectors::_type_map_rule_warnings",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin",

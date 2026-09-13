@@ -8,6 +8,7 @@ tier: shape
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   A side table of committed batches is the natural thing to reach for when a

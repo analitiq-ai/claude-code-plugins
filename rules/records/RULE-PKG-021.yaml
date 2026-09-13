@@ -8,15 +8,22 @@ tier: reference
 severity: error
 scopes: [connector-package]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   The engine has no built-in TLS interpretation for any driver — the CDK
-  base dialect raises for every mode — so the declaration is inert on its
-  own and the connection fails at connect. The verification hook is the
-  other half of the pair because a driver that quietly negotiates a plain
-  session would otherwise satisfy a TLS-promising mode with no encryption
-  at all. The `tls` block is JSON this repo validates while the hooks are
-  dialect methods it never sees, so the mismatch is caught in the engine at
-  connect time rather than anywhere here.
+  base dialect raises for every mode — so declaring `tls` with no
+  connect-argument hook implemented is inert on its own and the connection
+  fails at connect. The verification hook is the other half of the pair
+  because a driver that quietly negotiates a plain session would otherwise
+  satisfy a TLS-promising mode with no encryption at all, and that half is
+  the actual known enforcement gap: a missing verification hook is only
+  logged at INFO level, not raised, so the connection succeeds unverified
+  and the exact silent-plaintext-session risk this half of the rule exists
+  to close is the one case nothing catches. The `tls` block is JSON this
+  repo validates while the hooks are dialect methods it never sees. Rated
+  `unenforced` as a whole rather than `engine`: the vocabulary has no member
+  for "one obligation, one enforced half and one silent half," and the
+  silent half is the one this rule exists to close.
 status: active
 superseded_by: null

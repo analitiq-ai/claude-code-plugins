@@ -6,17 +6,22 @@ tier: reference
 severity: error
 scopes: [stream]
 validator: null
+enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [ConnectionEndpointRef, ConnectorEndpointRef]
 rationale: >
   Whether the referenced endpoint is an API or a database one is a fact in
   that endpoint's own document, and the ref model can only require that a
   connection-scoped ref carry a database object — which an author can invent
-  for an API endpoint and satisfy. The scopes differ in how the endpoint is
-  pinned, the connector version for one and a per-connection snapshot for
-  the other, and no snapshot-hashing spec exists for API endpoints yet, so
-  the combination names a pinning mechanism that has not been defined.
-  Refusing to author it is the only check there is; catching a violation
-  afterwards means reading the referenced endpoint's kind.
+  for an API endpoint and satisfy. Only half of this is caught: the platform
+  materializes every connection-scoped ref at stream-save time and rejects
+  one that resolves to a non-database connector, but a connector-scoped ref
+  is never resolved against the referenced endpoint's own kind anywhere, so
+  an author can point one at a database endpoint and the document is
+  accepted. The scopes also differ in how the endpoint is pinned, the
+  connector version for one and a per-connection snapshot for the other, and
+  no snapshot-hashing spec exists for API endpoints yet, so extending the
+  existing save-time check to the connector-scope direction is a live,
+  closeable gap rather than an undefined mechanism.
 status: active
 superseded_by: null

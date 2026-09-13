@@ -5,6 +5,7 @@ tier: process
 severity: info
 scopes: [connector]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin]
 rationale: >
   Every later version is computed as a bump from the previous release by the

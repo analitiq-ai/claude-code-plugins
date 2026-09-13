@@ -7,6 +7,7 @@ tier: reference
 severity: warning
 scopes: [connector]
 validator: null
+enforcement_location: unenforced
 owners: [connector-plugin, engine]
 rationale: >
   Discovery output is connection-scoped, so a hand-authored endpoint in the
@@ -16,6 +17,9 @@ rationale: >
   Nothing inspects a database connector's release for files it should not
   contain — the coverage walk only enumerates `endpoints/` for `api`
   connectors, so an endpoint shipped beside `connector.json` is never looked
-  at.
+  at. Catching a violation means looking at the release's file list, not at
+  any document — the same recourse `RULE-DBEP-006` names for a hand-authored
+  database endpoint specifically; this is the general form, for any endpoint
+  shape, of that same release-scope mistake.
 status: active
 superseded_by: null
