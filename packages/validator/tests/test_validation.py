@@ -1559,3 +1559,44 @@ def test_cli_unreadable_document_exit1(tmp_path, validator_cli):
 def test_cli_missing_arg_exit2(validator_cli):
     r = validator_cli.run()
     assert r.returncode == 2
+
+
+# --- One document, one verdict, whichever route reaches it --------------------
+# A document's findings are a property of the document, not of the call that
+# produced them. Two routes reach an api-endpoint — `check_coverage`'s
+# sibling-endpoint loop and the standalone single-document route — and two
+# reach a connector-shaped dict, with and without its `kind`. Each pair must
+# agree.
+
+def test_kindless_connector_still_reports_a_missing_schema_url(validator):
+    # `Connector.schema_url` is optional, so RULE-SHRD-003 is the only thing
+    # that reports its omission. Routing a connector-shaped dict to the model
+    # alone because it lacks `kind` dropped that check on the one document
+    # most likely to be missing `$schema` too.
+    doc = {"connector_id": "x", "transports": {}, "connection_contract": {},
+           "default_transport": "m"}
+    findings = validator.validate_document(doc)
+    assert any(f.get("rule") == "RULE-SHRD-003" for f in findings), findings
+
+
+def test_endpoint_findings_name_the_file_on_both_routes(tmp_path, connector_base, validator):
+    # RULE-ENDP-048's message locates the offending schema, and inside a
+    # connector that location is only useful with the filename on it. The
+    # standalone route has the filename in hand — it takes `doc_path` — so it
+    # must spell the location the same way the coverage route does.
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["read"]["response"]["schema"]["minItems"] = "notanumber"
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+                {"widgets.json": ep})
+
+    via_connector = [f for f in validator.validate_document(
+        connector_base, doc_path=tmp_path / "connector.json")
+        if f.get("rule") == "RULE-ENDP-048"]
+    via_endpoint = [f for f in validator.validate_document(
+        ep, doc_path=tmp_path / "endpoints" / "widgets.json")
+        if f.get("rule") == "RULE-ENDP-048"]
+
+    assert via_connector and via_endpoint, (via_connector, via_endpoint)
+    assert "widgets.json" in via_connector[0]["message"], via_connector[0]
+    assert "widgets.json" in via_endpoint[0]["message"], via_endpoint[0]

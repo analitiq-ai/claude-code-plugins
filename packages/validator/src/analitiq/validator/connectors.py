@@ -1230,59 +1230,62 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
                 )
                 sibling_findings.extend(load_findings)
             transports = connector_doc.get("transports") if isinstance(connector_doc, dict) else None
-            if isinstance(transports, dict):
-                pass  # resolved: _api_endpoint_document_findings checks it below.
-            elif connector_doc is not None:
-                # Connector found, but its `transports` is missing or not an
-                # object. `_endpoint_transport_ref_findings` returns [] there —
-                # correct at the CONNECTOR-anchored call site, where the
-                # connector's own model error already stands. Here the connector
-                # model never runs, so returning [] would report a clean pass on
-                # an endpoint whose `transport_ref` resolves to nothing. Say what
-                # could not be checked and why. notApplicable, not fail: the
-                # check knows exactly which rule it would grade (RULE-ENDP-047).
-                sibling_findings.append(finding(
-                    rule="RULE-ENDP-047",
-                    message_id="transport-ref-check-skipped-no-transports",
-                    kind="notApplicable", path="/",
-                    message=(
-                        f"transport_ref {declared_refs!r} not checked: the sibling "
-                        "connector.json was read but declares no usable `transports` "
-                        "object, so there was nothing to resolve the name against. "
-                        "Validate the connector to see why.")))
-            elif sibling_exists:
-                # The file IS there and WAS read — it just did not parse.
-                # Branching on `connector_doc is None` alone said "not
-                # reachable", contradicting the parse error emitted beside it
-                # under the same id.
-                sibling_findings.append(finding(
-                    rule="RULE-ENDP-047",
-                    message_id="transport-ref-check-skipped-unparseable",
-                    kind="notApplicable", path="/",
-                    message=(
-                        f"transport_ref {declared_refs!r} not checked: the sibling "
-                        f"connector.json at {sibling} could not be parsed, so its "
-                        "`transports` could not be read. Fix the error reported "
-                        "above and re-run.")))
-            else:
-                sibling_findings.append(finding(
-                    rule="RULE-ENDP-047",
-                    message_id="transport-ref-check-skipped-no-sibling",
-                    kind="notApplicable", path="/",
-                    message=(
-                        f"transport_ref {declared_refs!r} not checked: no sibling "
-                        "connector.json was reachable from this document's path, so "
-                        "its `transports` could not be read. Validate the connector "
-                        "to resolve it.")))
+            # `transports` resolved: RULE-ENDP-047 is graded against it by
+            # `_api_endpoint_document_findings` below. What is left to report
+            # here is the cases where it could not be resolved, each naming
+            # which one happened.
+            if not isinstance(transports, dict):
+                if connector_doc is not None:
+                    # Connector found, but its `transports` is missing or not an
+                    # object. `_endpoint_transport_ref_findings` returns [] there —
+                    # correct at the CONNECTOR-anchored call site, where the
+                    # connector's own model error already stands. Here the connector
+                    # model never runs, so returning [] would report a clean pass on
+                    # an endpoint whose `transport_ref` resolves to nothing. Say what
+                    # could not be checked and why. notApplicable, not fail: the
+                    # check knows exactly which rule it would grade (RULE-ENDP-047).
+                    sibling_findings.append(finding(
+                        rule="RULE-ENDP-047",
+                        message_id="transport-ref-check-skipped-no-transports",
+                        kind="notApplicable", path="/",
+                        message=(
+                            f"transport_ref {declared_refs!r} not checked: the sibling "
+                            "connector.json was read but declares no usable `transports` "
+                            "object, so there was nothing to resolve the name against. "
+                            "Validate the connector to see why.")))
+                elif sibling_exists:
+                    # The file IS there and WAS read — it just did not parse.
+                    # Branching on `connector_doc is None` alone said "not
+                    # reachable", contradicting the parse error emitted beside it
+                    # under the same id.
+                    sibling_findings.append(finding(
+                        rule="RULE-ENDP-047",
+                        message_id="transport-ref-check-skipped-unparseable",
+                        kind="notApplicable", path="/",
+                        message=(
+                            f"transport_ref {declared_refs!r} not checked: the sibling "
+                            f"connector.json at {sibling} could not be parsed, so its "
+                            "`transports` could not be read. Fix the error reported "
+                            "above and re-run.")))
+                else:
+                    sibling_findings.append(finding(
+                        rule="RULE-ENDP-047",
+                        message_id="transport-ref-check-skipped-no-sibling",
+                        kind="notApplicable", path="/",
+                        message=(
+                            f"transport_ref {declared_refs!r} not checked: no sibling "
+                            "connector.json was reachable from this document's path, so "
+                            "its `transports` could not be read. Validate the connector "
+                            "to resolve it.")))
     # Each api-endpoint document goes through the checks shared with
     # `check_coverage`'s sibling-endpoint loop; `transports` is None wherever
     # the branches above could not resolve it, and RULE-ENDP-047 stays silent
     # there rather than reporting on an unresolved comparison — the
-    # `sibling_findings` above already say why.
-    findings = _api_endpoint_document_findings(doc, transports)
+    # `sibling_findings` above already say why. The filename rides along so the
+    # locating half of those checks reads the same on both routes.
+    findings = _api_endpoint_document_findings(
+        doc, transports, filename=doc_path.name if doc_path is not None else "")
     findings.extend(sibling_findings)
-    if doc_path is not None:
-        findings += endpoint_filename_findings(doc, doc_path.name)
     return findings
 
 
@@ -1333,8 +1336,11 @@ def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None =
 def _validate_kindless_connector(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
     # A dict carrying connector sentinels but no `kind` is a connector missing
     # its discriminator — hand it to the model so the missing `kind` is reported
-    # (rather than silently passing as "unrecognized").
-    return _model_findings(doc, _CONNECTOR_ADAPTER)
+    # (rather than silently passing as "unrecognized"). `$schema` is optional on
+    # the connector model, so RULE-SHRD-003 is the only thing reporting its
+    # omission; the kind-bearing route runs it, and which route a document
+    # reaches must not decide what it is told.
+    return _model_findings(doc, _CONNECTOR_ADAPTER) + _missing_schema_url_findings(doc)
 
 
 # Registration order mirrors the original dispatch precedence: connector,
