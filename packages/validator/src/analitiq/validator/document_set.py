@@ -143,12 +143,9 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     Called directly by a caller that already knows `documents` is a pipeline
     bundle — this module never inspects a document set's shape to decide what
     kind of thing it is; the caller (or the wire-schema wrapper in front of
-    it) declares that before this function is ever reached. There are
-    exactly two package kinds, connector and pipeline, each with its own
-    entry point here (`validate_connector_tree`, this function); neither
-    guesses which kind it was handed, so there is no third, detecting entry
-    point over the two, and no `ambiguous-layout` / `unrecognized-layout`
-    finding either function can report.
+    it) declares that before this function is ever reached. Neither this
+    function nor `validate_connector_tree` guesses which package kind it was
+    handed, so there is no detecting entry point over them.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
@@ -169,23 +166,25 @@ def validate_doc(
     `diagnostics_for()`, whose explicit `entity` argument this keeps, and
     folding in that plugin's separate `type_map_gaps.py` CLI, since a type map
     is a document like any other this module validates rather than a third
-    kind of thing alongside "document" and "package". This module validates
-    exactly those two: a package is validated by `validate_connector_tree` or
-    `validate_pipeline_tree`, whichever the caller declares it is sending;
-    everything else, type maps included, comes through here.
+    kind of thing alongside "document" and "package". A package is validated
+    by `validate_connector_tree` or `validate_pipeline_tree`, whichever the
+    caller declares it is sending; everything else, type maps included,
+    comes through here.
 
     Ordinary document mode (`probes` omitted, the default): dispatches `doc`
-    to `analitiq.validator.validate_document(doc, entity=entity,
-    schema_url=schema_url)` and wraps the returned findings list in a
-    `ValidationEnvelope` (`{"passed": finding_costs_a_pass`-reduction,
-    "findings": ...}`), the same wrapping the plugin's own `diagnostics_for`
-    already does over `validate_document`'s list result today. This route
-    never inspects `doc`'s shape to decide anything about `probes`/
-    `direction` — the two modes below are selected only by whether the
-    caller passed `probes`, never by sniffing `doc` itself, so there is no
-    shape-guessing anywhere in this function. (What a wire caller sends to
-    select a mode, once this is wrapped by a published schema, is that
-    wrapper's concern, not this function's.)
+    to `analitiq.validator.validate_document`, passing `schema_url` through,
+    and wraps the returned findings list in a `ValidationEnvelope`
+    (`{"passed": finding_costs_a_pass`-reduction, "findings": ...}`), the
+    same wrapping the plugin's own `diagnostics_for` already does over
+    `validate_document`'s list result today. `validate_document` takes no
+    `entity` parameter today — how `entity` reaches its own document-kind
+    detection through this route, if at all, is implementation, not fixed by
+    this signature. This route never inspects `doc`'s shape to decide
+    anything about `probes`/`direction` — the two modes below are selected
+    only by whether the caller passed `probes`, never by sniffing `doc`
+    itself, so there is no shape-guessing anywhere in this function. (What a
+    wire caller sends to select a mode, once this is wrapped by a published
+    schema, is that wrapper's concern, not this function's.)
 
     Type-map gap-resolution mode (`probes` given): the path-free form of
     `type_map_gaps.py`'s own probe resolution. `doc` is then one or more
@@ -212,8 +211,8 @@ def validate_doc(
     resolved; never costs a pass). A run in which every probe resolved
     reports a `ValidationEnvelope` with `passed: True` and an empty
     `findings` list — this mode reports through the same envelope shape as
-    every other call to this function, never the bare `{"findings"}` shape
-    `type_map_gaps.py`'s own CLI used to reason about internally.
+    every other call to this function, never a bare `{"findings"}` shape
+    with no `passed` key.
 
     This is a deliberate divergence from `type_map_gaps.py`'s own
     `_load_rules`, which raises `ValueError` on exactly the same two

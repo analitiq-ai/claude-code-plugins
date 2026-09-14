@@ -434,6 +434,39 @@ def test_gap_resolution_falls_through_to_a_later_map_for_a_probe_the_first_does_
     assert result == {"passed": True, "findings": []}, result
 
 
+@_xfail("validate_doc")
+def test_gap_resolution_missing_direction_reports_invalid_direction(validator):
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.validate_doc(doc=maps, probes=["STRING"])
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-direction"]
+    assert result["findings"][0]["kind"] == "fail"
+    assert result["findings"][0]["severity"] == "error"
+    assert "direction" not in result["findings"][0]
+
+
+@_xfail("validate_doc")
+def test_gap_resolution_bad_direction_value_reports_invalid_direction(validator):
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.validate_doc(doc=maps, direction="sideways", probes=["STRING"])
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-direction"]
+    assert "direction" not in result["findings"][0]
+
+
+@_xfail("validate_doc")
+def test_validate_doc_with_document_set_shaped_doc_and_no_probes_uses_ordinary_mode(validator):
+    # `doc` here is shaped exactly like the DocumentSet gap-resolution mode
+    # takes (path-like keys, list-of-rule values) but `probes` is omitted —
+    # mode selection must still land on ordinary document mode, proving it
+    # reads only whether `probes` was passed, never `doc`'s own shape.
+    doc = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    expected_findings = validator.validate_document(doc)
+    expected = {"passed": not any(validator.finding_costs_a_pass(f) for f in expected_findings),
+                "findings": expected_findings}
+    assert json.dumps(validator.validate_doc(doc)) == json.dumps(expected)
+
+
 # ---------------------------------------------------------------------------
 # Key handling.
 # ---------------------------------------------------------------------------
@@ -499,8 +532,8 @@ def test_one_invalid_key_does_not_block_validating_the_rest(validator):
 # Value handling, shared by every function below that takes a DocumentSet
 # (validate_connector_tree's and validate_pipeline_tree's `documents`,
 # validate_doc's `doc` in its type-map gap-resolution mode) — exercised once,
-# through validate_connector_tree, since all three share this one contract
-# for what a DocumentSet's values may be.
+# through validate_connector_tree, since they share one contract for what a
+# DocumentSet's values may be.
 # ---------------------------------------------------------------------------
 
 @_xfail("validate_connector_tree")
@@ -533,9 +566,7 @@ def test_invalid_value_applies_to_gap_resolution_maps_too(validator):
 # here that inspects a document set's shape to decide whether it is a
 # connector package or a pipeline bundle — a caller (or the wire-schema
 # wrapper in front of this module) already knows which it is sending and
-# calls validate_connector_tree or validate_pipeline_tree directly. Neither
-# function can report an ambiguous-layout or unrecognized-layout finding,
-# because neither runs a detection step that could produce one.
+# calls validate_connector_tree or validate_pipeline_tree directly.
 # ---------------------------------------------------------------------------
 
 @_xfail("validate_connector_tree")
@@ -621,12 +652,12 @@ def test_embedded_package_crash_is_isolated_to_its_subtree_prefix(validator):
 # ---------------------------------------------------------------------------
 # validate_doc, ordinary document mode (`probes` omitted) — dispatches to
 # validate_document, wrapping its result in one ValidationEnvelope shape.
-# This module validates exactly two things: a document (validate_doc) and a
-# package, which is either a connector package (validate_connector_tree) or a
-# pipeline bundle (validate_pipeline_tree) — there is no auto-detecting
-# function that guesses which one a caller meant, at either level. A caller
-# (or the wire-schema wrapper in front of this module) already knows which it
-# is sending and calls the matching function directly.
+# A document is validated by validate_doc; a package is validated by
+# validate_connector_tree or validate_pipeline_tree, whichever the caller
+# declares it is sending — there is no auto-detecting function that guesses
+# which one a caller meant, at either level. A caller (or the wire-schema
+# wrapper in front of this module) already knows which it is sending and
+# calls the matching function directly.
 # ---------------------------------------------------------------------------
 
 @_xfail("validate_doc")
