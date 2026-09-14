@@ -181,27 +181,38 @@ def _normalize_documents(documents: DocumentSet) -> tuple[_VirtualFS, list[dict]
     """Normalize a raw `DocumentSet` into a `_VirtualFS` plus the findings the
     normalization pass itself produces — `invalid-key`/`invalid-value` (via
     `_key_and_value_findings`), `internal-error` for a value whose
-    materialization into text crashed (a cyclic structure, say), and
+    materialization into text crashed (a cyclic structure, say),
     `key-path-conflict` for a key that is simultaneously a document and a
-    directory prefix of another key. None of these describes a document's own
-    content, so none names a rule (`rules/SCHEMA.md`'s "no detector recognised
-    the document" case, generalized one level up to the document set's own
-    key/value shape).
+    directory prefix of another key, and `duplicate-key` for two distinct raw
+    keys that normalize to the same key. None of these describes a document's
+    own content, so none names a rule (`rules/SCHEMA.md`'s "no detector
+    recognised the document" case, generalized one level up to the document
+    set's own key/value shape).
 
-    Keys are processed in sorted order, not the caller's own insertion order,
-    so this pass's own findings never depend on how the caller happened to
-    build the mapping — the same guarantee `check_coverage`'s own
-    `sorted(...)` endpoint scan already gives the checks built on top of it.
+    Keys are processed in sorted order (by string form, so a raw key of any
+    type still sorts rather than crashing `_key_and_value_findings` never got
+    to grade), not the caller's own insertion order, so this pass's own
+    findings never depend on how the caller happened to build the mapping —
+    the same guarantee `check_coverage`'s own `sorted(...)` endpoint scan
+    already gives the checks built on top of it.
     """
     findings: list[dict] = []
     texts: dict[str, str] = {}
     objects: dict[str, Any] = {}
     known_keys: set[str] = set()
-    for raw_key in sorted(documents):
+    for raw_key in sorted(documents, key=str):
         value = documents[raw_key]
         key, kv_findings = _key_and_value_findings(raw_key, value)
         if key is None:
             findings.extend(kv_findings)
+            continue
+        if key in known_keys:
+            findings.append(finding(
+                message_id="duplicate-key", kind="fail", path=key,
+                message=(
+                    f"{raw_key!r} normalizes to {key!r}, which another key in "
+                    "this document set already denotes; two keys for one path "
+                    "leave which document is validated undefined.")))
             continue
         known_keys.add(key)
         try:
@@ -877,14 +888,15 @@ def resolve_type_map_gaps(
     actually intended, so this function reports the map defect(s) alone and
     leaves every probe unjudged rather than guessing.
 
-    `maps` is walked in sorted key order, not the caller's own insertion
-    order — the same precedent `_normalize_documents` already sets — so this
-    function's own findings never depend on how the caller happened to build
-    the mapping.
+    `maps` is walked in sorted key order (by string form, so a raw key of any
+    type still sorts rather than crashing `_key_and_value_findings` never got
+    to grade), not the caller's own insertion order — the same precedent
+    `_normalize_documents` already sets — so this function's own findings
+    never depend on how the caller happened to build the mapping.
     """
     findings: list[dict] = []
     rendered_maps: list[list] = []
-    for raw_key in sorted(maps):
+    for raw_key in sorted(maps, key=str):
         value = maps[raw_key]
         key, kv_findings = _key_and_value_findings(raw_key, value)
         if key is None:

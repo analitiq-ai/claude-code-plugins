@@ -164,6 +164,10 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "a structural precondition on the document set's own shape — one key "
         "is simultaneously a document and a directory prefix of another — "
         "rejected before any one document's content could be checked"),
+    ("analitiq.validator.document_set::_normalize_documents", "duplicate-key"): (
+        "a structural precondition on the document set's own shape — two "
+        "distinct raw keys normalize to the same key — rejected before any "
+        "one document's content could be checked"),
     ("analitiq.validator.document_set::_validate_tree_document", "internal-error"): (
         "a structural precondition rejected the entry before any rule-specific "
         "check could run: the materialized text could not even be parsed as "

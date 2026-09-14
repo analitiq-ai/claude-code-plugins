@@ -466,6 +466,21 @@ def test_invalid_keys_are_reported_not_raised(validator, bad_key):
     assert result["passed"] is False
 
 
+def test_two_keys_normalizing_to_the_same_key_report_a_finding(validator):
+    documents = _connector_tree_documents()
+    key = next(iter(documents))
+    documents[f"./{key}"] = documents[key]
+    result = validator.validate_tree(documents)
+    assert any(f["message_id"] == "duplicate-key" and f["path"] == key for f in result["findings"]), result
+    assert result["passed"] is False
+
+
+def test_non_string_key_is_reported_not_raised_by_the_sort(validator):
+    documents = {**_connector_tree_documents(), 1: {}}
+    result = validator.validate_tree(documents)
+    assert any(f["message_id"] == "invalid-key" and f["path"] == 1 for f in result["findings"]), result
+
+
 def test_key_that_is_both_document_and_directory_prefix_conflicts(validator):
     documents = {**_connector_tree_documents(), "endpoints/v1__records.json/extra.json": {}}
     result = validator.validate_tree(documents)
