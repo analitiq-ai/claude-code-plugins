@@ -186,14 +186,6 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "returned findings outright — found the materialized text could not "
         "even be parsed as JSON, let alone graded by the connector-tree "
         "validation pass whose result this lookup does not need"),
-    ("analitiq.validator.document_set::_connector_endpoint_sets", "endpoint-file-unreadable"): (
-        "a sibling endpoint file's read/parse failure precedes any rule "
-        "evaluation of its content — the same `message_id`"
-        " `connectors.py::check_coverage` reports for the identical failure "
-        "on the real-filesystem route, reached regardless of the connector's "
-        "kind and the only place a database/storage-kind connector's "
-        "endpoint-file parse crash is caught at all, since `check_coverage` "
-        "returns before reaching those kinds' endpoint files"),
     ("analitiq.validator.document_set::validate_connector_tree", "missing-connector-document"): (
         "a structural precondition on the document set's own shape — no root "
         "connector.json key at all — rejected before any rule-specific check "

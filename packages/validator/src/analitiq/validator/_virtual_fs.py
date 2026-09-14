@@ -103,9 +103,9 @@ class _VirtualFS:
     def known_json_children(self, prefix: str) -> list[str]:
         """Every known key directly under `prefix` (exactly one further path
         segment) ending in `.json`, whether or not it materialized — the flat,
-        one-level `*.json` listing `_connector_endpoint_sets` and
-        `validate_pipeline_tree`'s stream/connection-endpoint scans each need,
-        factored once so the filter isn't hand-written at every call site.
+        one-level `*.json` listing `validate_pipeline_tree`'s stream and
+        connection-endpoint scans each need, factored once so the filter
+        isn't hand-written at every call site.
         Every caller of this method resolves each key it returns through
         `document_set._resolved_member`, which excludes — rather than
         silently treats as absent — a key that is `known` but never

@@ -20,7 +20,6 @@ checks already call.
 """
 from __future__ import annotations
 
-import difflib
 import json
 import re
 from typing import Any, Literal, TypedDict, Union
@@ -30,7 +29,6 @@ from pydantic import ValidationError
 from ._core import _KIND_REGISTRY, finding, finding_costs_a_pass, validate_document
 from ._virtual_fs import VirtualPath, _VirtualFS, path_parts_key
 from .connectors import (
-    _LEGACY_MAP_FILENAME,
     _READ_MAP_ADAPTER,
     _READ_MAP_FILENAME,
     _WRITE_MAP_ADAPTER,
@@ -38,7 +36,7 @@ from .connectors import (
     _first_match_render,
     _render_arrow_type,
 )
-from .pipelines import _base_id, _iter_endpoint_refs, validate_pipeline_bundle
+from .pipelines import validate_pipeline_bundle
 
 #: The value half of a `DocumentSet` entry: text, raw bytes (decoded as UTF-8
 #: with a BOM stripped if present — no encoding-guessing), or a value already
@@ -348,41 +346,27 @@ def _resolved_member(
         fs: _VirtualFS, key: str, *, entity: str | None = None, validate: bool = True,
 ) -> tuple[dict | None, list[dict]]:
     """The one gate a document-set member — the pipeline document, a stream,
-    a connection, a connection- or connector-scoped endpoint, an embedded
-    connector's own identity document — must clear to be usable for
-    referential checking: `key` must materialize, parse without crashing,
-    and — every member this gate is used for is expected to be an object —
-    be a `dict`. Returns `(None, findings)` on any of those four ways to fail
-    (missing key, materialization crash, parse crash, wrong shape); a caller
-    collapses all four into its own single "this member is excluded" signal
-    rather than re-deriving which one happened.
+    a connection, a connection-scoped endpoint, an embedded connector's own
+    identity document — must clear to be usable for referential checking:
+    `key` must materialize, parse without crashing, and — every member this
+    gate is used for is expected to be an object — be a `dict`. Returns
+    `(None, findings)` on any of those four ways to fail (missing key,
+    materialization crash, parse crash, wrong shape); a caller collapses all
+    four into its own single "this member is excluded" signal rather than
+    re-deriving which one happened.
 
     `validate=True` (the default) resolves `key` through
     `_validate_tree_document`, so a member this call is itself the one place
     that checks its content also earns its model-validation findings.
     `validate=False` resolves it with the same materialize/parse isolation
-    but skips `validate_document` entirely, for two different reasons
-    depending on the caller:
-
-    - The two embedded-connector identity lookups (`_connector_endpoint_sets`
-      pulling a connector's own `connector_id`, and `validate_pipeline_tree`
-      doing the same) discard this function's returned findings outright
-      (`connector_doc, _ = _resolved_member(...)`), so nothing either call
-      does could ever double-report regardless of `validate`. Their reason is
-      simpler: the same `connector.json` this call would re-validate is
-      already validated (or its crash already reported) by the recursive
-      `validate_connector_tree` call over that connector's own subtree, so
-      validating it again here would only be redundant work whose result is
-      thrown away immediately.
-
-    `_connector_endpoint_sets`'s own endpoint-file scan does not call this
-    function: its parse-crash finding needs a `message_id` this repo already
-    uses for the identical failure on the real-filesystem route
-    (`endpoint-file-unreadable`, `connectors.py::check_coverage`), and a
-    literal `message_id` per call site is what
-    `test_check_registry_census.py`'s call-site census can attribute — a
-    `message_id` threaded through this shared function as a parameter would
-    read as a variable to that census's AST walk and escape it.
+    but skips `validate_document` entirely. Its one caller — the embedded
+    connector identity lookup that pulls a `connector_id` off a bundled
+    `connectors/<slug>/definition/connector.json` — discards this function's
+    returned findings outright (`connector_doc, _ = _resolved_member(...)`),
+    because that same document is already validated (or its crash already
+    reported) by the recursive `validate_connector_tree` call over that
+    connector's own subtree; validating it again here would be redundant work
+    whose result is thrown away immediately.
 
     A materialization crash is never reported by this function either way:
     `_normalize_documents` already named it.
@@ -500,178 +484,11 @@ _PIPELINE_DOC_RE = re.compile(r"^pipelines/([^/]+)/pipeline\.json$")
 _CONNECTION_DOC_RE = re.compile(r"^connections/([^/]+)/connection\.json$")
 
 
-def _connection_type_map_findings(fs: _VirtualFS, slug: str) -> list[dict]:
-    """RULE-CONN-012: a connection's own scoped type maps, checked the way a
-    connector's sibling type maps already are — the pre-split filename is
-    rejected outright, and each present direction is validated via the
-    single-document route (`_validate_tree_document`, entity-pinned to
-    `"type-map"` — the direction is already known from which of the two
-    filenames this loop is on, so shape auto-detection is bypassed rather
-    than relied on to notice a stray non-list value), so a parse crash here is
-    contained by that same mechanism rather than needing its own.
-
-    The write direction's coverage warning (RULE-TMAP-017) is filtered here
-    the same way it is beside a connector: that warning presumes a connector's
-    write map, which must cover the canonical vocabulary in full, while a
-    connection's own write map is gap-only by rule and would otherwise be
-    warned at for every connection ever authored.
-    """
-    site = f"connections/{slug}/definition"
-    findings: list[dict] = []
-    legacy_key = f"{site}/{_LEGACY_MAP_FILENAME}"
-    if legacy_key in fs.known_keys:
-        findings.append(finding(
-            rule="RULE-CONN-012",
-            message_id="legacy-type-map-filename", kind="fail", path=legacy_key,
-            message=(
-                f"sibling {_LEGACY_MAP_FILENAME} is the pre-split name; rename the "
-                f"read direction to {_READ_MAP_FILENAME} (and add {_WRITE_MAP_FILENAME} "
-                "for a connection whose connector kind renders a write direction).")))
-    for direction, filename in (("read", _READ_MAP_FILENAME), ("write", _WRITE_MAP_FILENAME)):
-        key = f"{site}/{filename}"
-        _, doc_findings = _validate_tree_document(fs, key, entity="type-map")
-        if direction == "write":
-            doc_findings = [f for f in doc_findings if f.get("rule") != "RULE-TMAP-017"]
-        findings.extend(_at_site(key, doc_findings))
-    return findings
-
-
-def _connector_endpoint_sets(
-        fs: _VirtualFS, connector_slugs: list[str]) -> tuple[dict[str, set[str]], list[dict]]:
-    """Map each embedded connector — by its subtree slug and its own
-    `connector_id` — to the endpoint ids it publishes, mirroring the plugin's
-    own `_connector_endpoint_sets`. Returns `(sets, findings)`: a connector
-    whose `definition/endpoints/` holds no usable `*.json`, OR whose
-    `definition/endpoints/` holds at least one KNOWN key (a file that
-    genuinely exists, as opposed to an `endpoint_ref` simply naming an id no
-    file ever claimed) that fails to materialize, parse, or shape correctly,
-    is omitted from `sets` in full rather than recorded with a partial set —
-    an incomplete set is exactly as unusable for the "does this connector
-    publish this id" question as an empty one, since either could be hiding
-    the very id a ref names. So its set reads as *unknown* rather than *no
-    endpoints* or *these endpoints only* — a ref against it is skipped rather
-    than warned at. A `*.json` that was never authored at all does not put its
-    connector in this state: `fs.known_json_children` never enumerates a key
-    that isn't there, so there is nothing for this loop to have failed to
-    resolve, and the connector's set is still recorded — correctly missing
-    that one id, the same as it would be missing any other id no file ever
-    claimed.
-
-    This walk runs over every embedded connector's `endpoints/*.json` files
-    regardless of `kind`, and for a `database`/`storage`-kind connector it is
-    the only one: `check_coverage` returns before reaching that kind's
-    endpoint files at all. So a crash reading one (materialization or parse)
-    is reported here rather than swallowed — with `endpoint-file-unreadable`,
-    the same `message_id` `connectors.py::check_coverage` already reports for
-    a sibling endpoint file's identical failure on the real-filesystem route,
-    parse-crash only (a materialization crash is `_normalize_documents`'s own
-    to name) — and a key that never resolves is excluded from `ids` outright
-    — the only alternative would be treating a broken file's name as a
-    published endpoint id regardless, which could wrongly resolve a stream's
-    `endpoint_ref` against a document that never actually validated. The
-    materialize/parse/shape check is inlined here rather than routed through
-    `_resolved_member`: nothing here validates a connector-scoped endpoint's
-    own model shape (that is out of scope for the `kind`s this walk exists
-    for), only whether it resolves to a `dict` an id can be read off — and
-    `_resolved_member`'s shared `internal-error` message_id would misclassify
-    the identical failure this function needs `endpoint-file-unreadable` for."""
-    sets: dict[str, set[str]] = {}
-    findings: list[dict] = []
-    for slug in connector_slugs:
-        ep_prefix = f"connectors/{slug}/definition/endpoints/"
-        ids: set[str] = set()
-        slug_is_incomplete = False
-        for key in fs.known_json_children(ep_prefix):
-            if not fs.materialized(key):
-                # Already reported by `_normalize_documents` as an
-                # `internal-error` when it first tried to turn this key's
-                # value into usable text.
-                slug_is_incomplete = True
-                continue
-            try:
-                ep_doc = fs.parsed(key)
-            except Exception as exc:  # noqa: BLE001 - isolate one endpoint file's crash
-                findings.append(finding(
-                    message_id="endpoint-file-unreadable", kind="fail", path=key,
-                    message=f"{key!r} could not be read or parsed ({type(exc).__name__}: {exc})."))
-                slug_is_incomplete = True
-                continue
-            if not isinstance(ep_doc, dict):
-                slug_is_incomplete = True
-                continue
-            suffix = key[len(ep_prefix):]
-            ids.add(suffix[:-len(".json")])
-            eid = ep_doc.get("endpoint_id")
-            if isinstance(eid, str) and eid:
-                ids.add(eid)
-        if slug_is_incomplete or not ids:
-            continue
-        keys = {slug}
-        connector_doc, _ = _resolved_member(
-            fs, f"connectors/{slug}/definition/connector.json", validate=False)
-        if connector_doc is not None:
-            cid = connector_doc.get("connector_id")
-            if isinstance(cid, str) and cid:
-                keys.add(cid)
-        for key in keys:
-            sets[key] = ids
-    return sets, findings
-
-
-def _connector_endpoint_ref_findings(streams: list, connections: list,
-                                     connector_endpoint_sets: dict[str, set[str]]) -> list[dict]:
-    """RULE-STRM-043: every connector-scoped stream endpoint_ref names an
-    endpoint its resolved connector actually publishes, mirroring the
-    plugin's own `_check_connector_endpoint_refs` — a warning, with a
-    closest-match alignment suggestion, never an error: a connector is a
-    trusted, version-pinned registry artifact, so a stale ref is realigned
-    rather than blocked on. Skipped when the connector's endpoint set is
-    unknown (an unresolved connection, or a connector whose own endpoints
-    could not be walked), so absence never reads as a false positive."""
-    conn_to_connector: dict[str, str] = {}
-    for conn in connections:
-        if not isinstance(conn, dict):
-            continue
-        cid, connector = conn.get("connection_id"), conn.get("connector_id")
-        if isinstance(cid, str) and isinstance(connector, str):
-            conn_to_connector[_base_id(cid)] = connector
-
-    findings: list[dict] = []
-    for path, ref in _iter_endpoint_refs(streams):
-        if ref.get("scope") != "connector":
-            continue
-        cid, eid = ref.get("connection_id"), ref.get("endpoint_id")
-        if not (isinstance(cid, str) and cid and isinstance(eid, str) and eid):
-            continue
-        connector = conn_to_connector.get(_base_id(cid))
-        if connector is None:
-            continue
-        endpoint_ids = connector_endpoint_sets.get(connector)
-        if not endpoint_ids:
-            continue
-        if eid in endpoint_ids:
-            continue
-        available = sorted(endpoint_ids)
-        case_match = next((e for e in available if e.lower() == eid.lower()), None)
-        close = difflib.get_close_matches(eid, available, n=1, cutoff=0.6)
-        suggestion = case_match or (close[0] if close else None)
-        hint = f" Did you mean {suggestion!r}?" if suggestion else ""
-        findings.append(finding(
-            rule="RULE-STRM-043",
-            message_id="connector-endpoint-ref-unresolved", kind="fail", path=path,
-            message=(
-                f"endpoint_id {eid!r} is not among connector {connector!r}'s published "
-                f"endpoints {available}.{hint} Align the stream's endpoint_ref to the "
-                "connector's endpoint name; the connector itself is not edited by this "
-                "check.")))
-    return findings
-
-
 def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     """Validate a pipeline bundle supplied as an in-memory `DocumentSet`
     instead of files on disk: the pipeline document, its sibling
     `streams/*.json`, and every `connections/*/connection.json` (plus their
-    scoped endpoints and type maps) — assembled the way `plugins/
+    scoped endpoints) — assembled the way `plugins/
     analitiq-pipeline-builder/scripts/validate.py`'s `_assemble_bundle`
     already does from a filesystem root, then checked for referential
     integrity.
@@ -724,12 +541,8 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     parent connection resolving — the two are independently gated bundle
     members, sharing only the `conn_slug` this function derives from the
     connection's own KEY (never its content) to locate them — so a connection
-    that fails to resolve still leaves its sibling endpoints and type maps
-    checked on their own terms.
-    `_connector_endpoint_ref_findings` (RULE-STRM-043) is a plugin-local aid
-    rather than a referential check the published bundle validator owns, and
-    runs regardless, the same way the plugin's own connector-endpoint-ref
-    check does.
+    that fails to resolve still leaves its sibling endpoints checked on their
+    own terms.
 
     `documents` itself must be a `dict`: see `_document_set_type_findings`.
     """
@@ -833,8 +646,6 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
             entry.setdefault("scope", "connection")
             endpoints.append(entry)
 
-        findings.extend(_connection_type_map_findings(fs, conn_slug))
-
     connector_identities = set(connector_slugs)
     for conn_slug in connector_slugs:
         prefix = f"connectors/{conn_slug}/definition/"
@@ -885,9 +696,6 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
                     "and still fail its own model validation, which this pass does not "
                     "re-check before reading the shapes it assumes.")))
 
-    endpoint_sets, endpoint_set_findings = _connector_endpoint_sets(fs, connector_slugs)
-    findings.extend(endpoint_set_findings)
-    findings.extend(_connector_endpoint_ref_findings(streams, connections, endpoint_sets))
     return _envelope(findings)
 
 

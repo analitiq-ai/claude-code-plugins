@@ -279,29 +279,6 @@
    "superseded_by": null
   },
   {
-   "id": "RULE-CONN-012",
-   "statement": "A connection's scoped type-map documents MUST NOT use the pre-split type-map.json filename; use type-map-read.json and type-map-write.json instead.\n",
-   "tier": "reference",
-   "severity": "error",
-   "artifact_kinds": [
-    "connection"
-   ],
-   "validator": "analitiq.validator.document_set::_connection_type_map_findings",
-   "enforcement_location": null,
-   "owners": [
-    "engine",
-    "pipeline-plugin"
-   ],
-   "targets": [],
-   "fields": [],
-   "mechanism": null,
-   "symbol": null,
-   "fixture_model": null,
-   "rationale": "A connector ships its type maps beside connector.json, and RULE-PKG-030 already rejects the pre-split filename there; a connection scopes its own type maps the identical way beside connection.json, and the engine reads them by the same split filenames, never the pre-split one, at either scope. Without this rule a connection carrying the old filename passes every check a connection document can make on its own — the filename is not a field on any model — and the map is silently unread at run time, which a connector's own coverage check would have caught wearing the connector's hat but nothing catches wearing the connection's.\n",
-   "status": "active",
-   "superseded_by": null
-  },
-  {
    "id": "RULE-CTOR-001",
    "statement": "A connector's default_transport MUST name a transport the same document declares.\n",
    "tier": "coherence",
@@ -6948,29 +6925,6 @@
    "symbol": null,
    "fixture_model": null,
    "rationale": "A source or destination slot with no `endpoint_ref` names no read or write target the engine can resolve at load — not a smaller obligation than naming the wrong one, since nothing here even attempts a target. A malformed slot is reported here rather than read as not applicable: the slot exists and is required to name one.\n",
-   "status": "active",
-   "superseded_by": null
-  },
-  {
-   "id": "RULE-STRM-043",
-   "statement": "A stream's connector-scoped endpoint_ref SHOULD name an endpoint the referenced connector actually publishes.\n",
-   "tier": "reference",
-   "severity": "warning",
-   "artifact_kinds": [
-    "stream"
-   ],
-   "validator": "analitiq.validator.document_set::_connector_endpoint_ref_findings",
-   "enforcement_location": null,
-   "owners": [
-    "engine",
-    "pipeline-plugin"
-   ],
-   "targets": [],
-   "fields": [],
-   "mechanism": null,
-   "symbol": null,
-   "fixture_model": null,
-   "rationale": "RULE-STRM-033/034 already resolve a connector-scoped ref's connection_id and a connection-scoped ref's endpoint document; what neither reaches is whether a connector-scoped endpoint_id names something the connector it resolves to actually ships, because that set lives in the connector's own bundled definition rather than in anything a pipeline bundle carries on its own. Warning, not error: a connector is a trusted, version-pinned registry artifact, and a stale ref there is an authoring mistake to realign rather than a defect that should block an otherwise-sound pipeline from being authored further.\n",
    "status": "active",
    "superseded_by": null
   },
