@@ -344,11 +344,32 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
     try:
         return fn(*args)
     except Exception as exc:  # noqa: BLE001 - last-resort guard
-        return [finding(
-            rule=rule, message_id="check-crashed", kind="notApplicable", path="",
-            message=(
-                f"{crash_label} crashed unexpectedly ({type(exc).__name__}: {exc}); "
-                "this is a validator bug — please report."))]
+        return [crash_finding(
+            message_id="check-crashed", doing=crash_label, path="", exc=exc, rule=rule)]
+
+
+def crash_finding(*, message_id: str, doing: str, path: str, exc: BaseException,
+                  rule: str | None = None) -> dict:
+    """The one shape a crash anywhere in this package reports as.
+
+    `notApplicable` for the reason `_run_guarded` gives, and one wording for
+    every site: `scripts/render_validator_claims.py` locates a crash finding by
+    that wording, so a second spelling of it would be a crash the claim probes
+    no longer see.
+
+    Rendering `exc` is itself guarded. A last-resort guard runs this from
+    inside its own `except`, where the exception is by definition one nothing
+    here knows anything about — including whether its `__str__` works — and a
+    crash report that crashes replaces the failure it was reporting.
+    """
+    try:
+        detail = f"{type(exc).__name__}: {exc}"
+    except Exception:  # noqa: BLE001 - see the docstring
+        detail = "unreportable"
+    return finding(
+        rule=rule, message_id=message_id, kind="notApplicable", path=path,
+        message=(f"{doing} crashed unexpectedly ({detail}); "
+                 "this is a validator bug — please report."))
 
 
 # ---------------------------------------------------------------------------

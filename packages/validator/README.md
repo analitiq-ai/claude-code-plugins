@@ -66,12 +66,14 @@ document content directly — cannot use either route: it has the documents'
 content in hand, never a directory they can be read from.
 
 `analitiq.validator.document_set` fixes the contract such a consumer calls
-instead, ahead of building it: its types and signatures are exported from
-this package today; every function currently raises `NotImplementedError`.
-`packages/validator/tests/test_document_set.py` is the fixture corpus that
-fixes what an implementation must satisfy, `xfail` until each case's function
-is built. Read that module and that test file for the contract itself — it is
-not restated here.
+instead. `validate_doc`'s type-map gap-resolution mode — probe a set of type
+maps for the native or Arrow types none of them render — is implemented;
+`validate_connector_tree`, `validate_pipeline_tree` and `validate_doc`'s
+ordinary document mode raise `NotImplementedError`, with their contract fixed
+ahead of the body. `packages/validator/tests/test_document_set.py` is the
+fixture corpus every route must satisfy, carrying an `xfail` marker on the
+cases whose route still raises. Read that module and that test file for the
+contract itself — it is not restated here.
 
 The contract is deliberately narrow: a `DocumentSet` never carries a directory
 to read from, and its keys are never resolved against a filesystem — the offline

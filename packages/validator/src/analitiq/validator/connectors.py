@@ -189,6 +189,13 @@ def _render_arrow_type(native_type: str, rules: list) -> str | None:
                                normalize=_normalize_native)
 
 
+def _render_native_type(arrow_type: str, rules: list) -> str | None:
+    """The write direction's counterpart to `_render_arrow_type`: which keys a
+    write rule matches on and renders from, stated once so a caller resolving a
+    write probe names this instead of repeating the pair."""
+    return _first_match_render(arrow_type, rules, "arrow_type", "native_type")
+
+
 # Collapse whitespace ONLY around Arrow separators — not inside identifiers.
 _ARROW_SEP_WS = re.compile(r"\s*([,()])\s*")
 
@@ -560,7 +567,7 @@ def _write_vocabulary_findings(rules: list) -> list[dict]:
     """Warn when a write map renders no rule for an Arrow family."""
     missing = [
         probe for probe in _WRITE_VOCABULARY_PROBES
-        if _first_match_render(probe, rules, "arrow_type", "native_type") is None
+        if _render_native_type(probe, rules) is None
     ]
     if not missing:
         return []
@@ -1197,18 +1204,17 @@ class _DirectionOps(NamedTuple):
     resolve: Callable[[str, list], str | None]
 
 
-#: Everything a type-map direction decides, keyed by the direction — the
-#: filename a map is load-bearing under, the model its content is checked
-#: against, and how a probe renders through its rules. Callers ask the
-#: direction what it implies instead of re-deriving each implication from a
-#: `direction == "read"` test of their own, so a third direction, or a change
-#: to what one of them implies, lands here rather than at every site that
-#: happens to branch on one.
+#: What a type-map direction is, for a caller holding the direction and
+#: nothing else: the filename a map is load-bearing under, the model its
+#: content is checked against, and the matcher a probe resolves through. A
+#: path-free caller has no filename to read a direction off and no sibling to
+#: compare against, so it asks here rather than carrying its own copy of which
+#: model and which matcher go with which direction. The checks in this module
+#: reach the same three facts from the document in front of them and do not
+#: need the table to find them.
 _DIRECTIONS: dict[str, _DirectionOps] = {
     "read": _DirectionOps(_READ_MAP_FILENAME, _READ_MAP_ADAPTER, _render_arrow_type),
-    "write": _DirectionOps(
-        _WRITE_MAP_FILENAME, _WRITE_MAP_ADAPTER,
-        lambda probe, rules: _first_match_render(probe, rules, "arrow_type", "native_type")),
+    "write": _DirectionOps(_WRITE_MAP_FILENAME, _WRITE_MAP_ADAPTER, _render_native_type),
 }
 
 
