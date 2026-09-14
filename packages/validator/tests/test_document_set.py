@@ -375,6 +375,7 @@ def test_gap_resolution_reports_invalid_map_with_its_direction(validator):
     # discriminator (and its arrow_type).
     result = validator.validate_doc(
         doc={"type-map-read.json": [{"native_type": "STRING"}]}, direction="read", probes=["STRING"])
+    assert result["passed"] is False
     invalid = [f for f in result["findings"] if f["message_id"] == "invalid-type-map"]
     assert len(invalid) == 1, result["findings"]
     assert invalid[0]["kind"] == "fail" and invalid[0]["severity"] == "error"
@@ -482,15 +483,34 @@ def test_validate_doc_with_document_set_shaped_doc_and_no_probes_uses_ordinary_m
 # ---------------------------------------------------------------------------
 # Key handling, shared by every function below that takes a DocumentSet
 # (validate_connector_tree's and validate_pipeline_tree's `documents`,
-# validate_doc's `doc` in its type-map gap-resolution mode) — exercised once,
-# through validate_connector_tree, since they share one contract for what a
-# DocumentSet's keys may be.
+# validate_doc's `doc` in its type-map gap-resolution mode). Normalization and
+# rejection (leading `./`, invalid keys, key/path conflicts) are exercised
+# through all three entry points below, since each could independently
+# mishandle the same input; validate_connector_tree's own coverage-specific
+# behavior (finding order, partial-failure isolation) is exercised there
+# alone — those aren't claims about the shared key contract.
 # ---------------------------------------------------------------------------
 
 @_xfail("validate_connector_tree")
 def test_leading_dot_slash_is_normalized_away(validator):
     with_prefix = validator.validate_connector_tree({f"./{k}": v for k, v in _connector_tree_documents().items()})
     without_prefix = validator.validate_connector_tree(_connector_tree_documents())
+    assert with_prefix == without_prefix
+
+
+@_xfail("validate_pipeline_tree")
+def test_leading_dot_slash_is_normalized_away_for_pipeline_tree(validator):
+    with_prefix = validator.validate_pipeline_tree({f"./{k}": v for k, v in _pipeline_tree_documents().items()})
+    without_prefix = validator.validate_pipeline_tree(_pipeline_tree_documents())
+    assert with_prefix == without_prefix
+
+
+@_xfail("validate_doc")
+def test_leading_dot_slash_is_normalized_away_for_gap_resolution_mode(validator):
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    with_prefix = validator.validate_doc(
+        doc={f"./{k}": v for k, v in maps.items()}, direction="read", probes=["STRING"])
+    without_prefix = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
     assert with_prefix == without_prefix
 
 
@@ -503,10 +523,45 @@ def test_invalid_keys_are_reported_not_raised(validator, bad_key):
     assert result["passed"] is False
 
 
+@pytest.mark.parametrize("bad_key", ["/pipelines/p/pipeline.json", "../pipeline.json", ""])
+@_xfail("validate_pipeline_tree")
+def test_invalid_keys_are_reported_not_raised_for_pipeline_tree(validator, bad_key):
+    documents = {**_pipeline_tree_documents(), bad_key: {}}
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "invalid-key" and f["path"] == bad_key for f in result["findings"])
+    assert result["passed"] is False
+
+
+@pytest.mark.parametrize("bad_key", ["/type-map-read.json", "../type-map-read.json", ""])
+@_xfail("validate_doc")
+def test_invalid_keys_are_reported_not_raised_for_gap_resolution_mode(validator, bad_key):
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], bad_key: []}
+    result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
+    assert any(f["message_id"] == "invalid-key" and f["path"] == bad_key for f in result["findings"])
+    assert result["passed"] is False
+
+
 @_xfail("validate_connector_tree")
 def test_key_that_is_both_document_and_directory_prefix_conflicts(validator):
     documents = {**_connector_tree_documents(), "endpoints/v1__records.json/extra.json": {}}
     result = validator.validate_connector_tree(documents)
+    assert any(f["message_id"] == "key-path-conflict" for f in result["findings"])
+
+
+@_xfail("validate_pipeline_tree")
+def test_key_that_is_both_document_and_directory_prefix_conflicts_for_pipeline_tree(validator):
+    documents = {**_pipeline_tree_documents(), "connectors/wise/definition/connector.json/extra.json": {}}
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "key-path-conflict" for f in result["findings"])
+
+
+@_xfail("validate_doc")
+def test_key_that_is_both_document_and_directory_prefix_conflicts_for_gap_resolution_mode(validator):
+    maps = {
+        "type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        "type-map-read.json/extra.json": [],
+    }
+    result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
     assert any(f["message_id"] == "key-path-conflict" for f in result["findings"])
 
 
@@ -547,9 +602,9 @@ def test_one_invalid_key_does_not_block_validating_the_rest(validator):
 # ---------------------------------------------------------------------------
 # Value handling, shared by every function below that takes a DocumentSet
 # (validate_connector_tree's and validate_pipeline_tree's `documents`,
-# validate_doc's `doc` in its type-map gap-resolution mode) — exercised once,
-# through validate_connector_tree, since they share one contract for what a
-# DocumentSet's values may be.
+# validate_doc's `doc` in its type-map gap-resolution mode) — exercised
+# through all three entry points below, since each could independently
+# mishandle the same input.
 # ---------------------------------------------------------------------------
 
 @_xfail("validate_connector_tree")
@@ -562,6 +617,26 @@ def test_bytes_value_is_decoded_as_utf8_with_bom_stripped(validator):
     assert bytes_result == text_result
 
 
+@_xfail("validate_pipeline_tree")
+def test_bytes_value_is_decoded_as_utf8_with_bom_stripped_for_pipeline_tree(validator):
+    documents = _pipeline_tree_documents()
+    text_result = validator.validate_pipeline_tree(documents)
+    as_bytes = dict(documents)
+    as_bytes["pipelines/p/pipeline.json"] = (
+        "﻿" + json.dumps(documents["pipelines/p/pipeline.json"])).encode("utf-8")
+    bytes_result = validator.validate_pipeline_tree(as_bytes)
+    assert bytes_result == text_result
+
+
+@_xfail("validate_doc")
+def test_bytes_value_is_decoded_as_utf8_with_bom_stripped_for_gap_resolution_mode(validator):
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    text_result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
+    as_bytes = {"type-map-read.json": ("﻿" + json.dumps(maps["type-map-read.json"])).encode("utf-8")}
+    bytes_result = validator.validate_doc(doc=as_bytes, direction="read", probes=["STRING"])
+    assert bytes_result == text_result
+
+
 @_xfail("validate_connector_tree")
 def test_non_str_bytes_object_value_is_invalid_not_raised(validator):
     documents = {**_connector_tree_documents(), "connector.json": 42}
@@ -571,10 +646,20 @@ def test_non_str_bytes_object_value_is_invalid_not_raised(validator):
     assert result["passed"] is False
 
 
+@_xfail("validate_pipeline_tree")
+def test_non_str_bytes_object_value_is_invalid_not_raised_for_pipeline_tree(validator):
+    documents = {**_pipeline_tree_documents(), "pipelines/p/pipeline.json": 42}
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "invalid-value" and f["path"] == "pipelines/p/pipeline.json"
+               for f in result["findings"])
+    assert result["passed"] is False
+
+
 @_xfail("validate_doc")
 def test_invalid_value_applies_to_gap_resolution_maps_too(validator):
     result = validator.validate_doc(doc={"type-map-read.json": 42}, direction="read", probes=["STRING"])
     assert any(f["message_id"] == "invalid-value" for f in result["findings"])
+    assert result["passed"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -591,10 +676,41 @@ def test_validate_connector_tree_validates_its_own_root_shape_directly(validator
     assert result["passed"] is True
 
 
+@_xfail("validate_connector_tree")
+def test_validate_connector_tree_reports_a_missing_root_document(validator):
+    documents = {k: v for k, v in _connector_tree_documents().items() if k != "connector.json"}
+    result = validator.validate_connector_tree(documents)
+    assert result["passed"] is False
+    assert any(f["message_id"] == "missing-package-root" and f["path"] == "connector.json"
+               for f in result["findings"])
+
+
+@_xfail("validate_connector_tree")
+def test_validate_connector_tree_reports_a_missing_root_document_for_an_empty_set(validator):
+    result = validator.validate_connector_tree({})
+    assert result["passed"] is False
+    assert any(f["message_id"] == "missing-package-root" for f in result["findings"])
+
+
 @_xfail("validate_pipeline_tree")
 def test_validate_pipeline_tree_validates_its_own_root_shape_directly(validator):
     result = validator.validate_pipeline_tree(_pipeline_tree_documents())
     assert result["passed"] is True
+
+
+@_xfail("validate_pipeline_tree")
+def test_validate_pipeline_tree_reports_a_missing_root_document(validator):
+    documents = {k: v for k, v in _pipeline_tree_documents().items() if k != "pipelines/p/pipeline.json"}
+    result = validator.validate_pipeline_tree(documents)
+    assert result["passed"] is False
+    assert any(f["message_id"] == "missing-package-root" for f in result["findings"])
+
+
+@_xfail("validate_pipeline_tree")
+def test_validate_pipeline_tree_reports_a_missing_root_document_for_an_empty_set(validator):
+    result = validator.validate_pipeline_tree({})
+    assert result["passed"] is False
+    assert any(f["message_id"] == "missing-package-root" for f in result["findings"])
 
 
 @_xfail("validate_pipeline_tree")

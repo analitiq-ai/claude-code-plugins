@@ -111,7 +111,12 @@ def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
     Called directly by a caller that already knows `documents` is a
     connector package — this module never inspects a document set's shape to
     decide what kind of thing it is; the caller (or the wire-schema wrapper
-    in front of it) declares that before this function is ever reached.
+    in front of it) declares that before this function is ever reached. That
+    declaration is not a promise this function takes on faith: a `documents`
+    with no `"connector.json"` key — the one document every other check here
+    needs to run at all — is reported as a `missing-package-root` finding
+    (`fail`/`error`, path `"connector.json"`) rather than validated as an
+    empty, trivially-passing package.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
@@ -147,7 +152,12 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     kind of thing it is; the caller (or the wire-schema wrapper in front of
     it) declares that before this function is ever reached. Neither this
     function nor `validate_connector_tree` guesses which package kind it was
-    handed, so there is no detecting entry point over them.
+    handed, so there is no detecting entry point over them. That declaration
+    is not a promise this function takes on faith either: a `documents` with
+    no key matching `pipelines/<slug>/pipeline.json` — the one document
+    every other check here needs to run at all — is reported as a
+    `missing-package-root` finding (`fail`/`error`) rather than validated as
+    an empty, trivially-passing bundle.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
