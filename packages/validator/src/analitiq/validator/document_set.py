@@ -68,6 +68,22 @@ Entity = Literal[
 ]
 
 
+class _Omitted:
+    """Sentinel default for `validate_doc`'s `probes` parameter, distinguishing
+    the argument being omitted entirely from a caller explicitly passing
+    `probes=None` — a plain `None` default cannot: both bind `probes` to the
+    same value. The two must differ here: passing `probes` at all, `None`
+    included, selects type-map gap-resolution mode below and is then rejected
+    as an invalid `probes` value (`None` is not a `list`), while omitting it
+    selects ordinary document mode."""
+
+    def __repr__(self) -> str:
+        return "<omitted>"
+
+
+_OMITTED: Any = _Omitted()
+
+
 class _FindingRequired(TypedDict):
     """`finding()` sets every key below unconditionally on every result it
     builds — see `Finding`."""
@@ -163,14 +179,28 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     it) declares that before this function is ever reached. Neither this
     function nor `validate_connector_tree` guesses which package kind it was
     handed, so there is no detecting entry point over them. That declaration
-    is not a promise this function takes on faith either: a `documents` with
-    no key matching `pipelines/<slug>/pipeline.json` — the one document
-    every other check here needs to run at all — is reported as a
-    `missing-package-root` finding (`fail`/`error`) rather than validated as
-    an empty, trivially-passing bundle. A pipeline-root document that is
+    is not a promise this function takes on faith either: unlike
+    `validate_connector_tree`'s fixed `"connector.json"` key, this route's
+    root is found by pattern — any key matching
+    `pipelines/<slug>/pipeline.json` — so it must also define what a
+    *pattern* root needs that a fixed key does not. No key matching that
+    pattern — the one document every other check here needs to run at all —
+    is reported as a `missing-package-root` finding (`fail`/`error`, path the
+    literal pattern `"pipelines/*/pipeline.json"`, mirroring how the
+    sibling's fixed key names itself) rather than validated as an empty,
+    trivially-passing bundle. More than one key matching the pattern is
+    rejected too, as its own `ambiguous-package-root` finding
+    (`fail`/`error`, path a sorted, comma-joined list of every matching key)
+    rather than one being picked by iteration order — the same silent-pick
+    hazard `normalized-key-collision` above exists to prevent, here extended
+    to a root a fixed key has no equivalent hazard for. Exactly one match is
+    required to reach any further check: a pipeline-root document that is
     present but does not itself validate as a pipeline document is rejected
-    the same way — its presence under that key is not, on its own, enough to
-    call the bundle valid.
+    the same way as a missing or ambiguous root — its presence under that key
+    is not, on its own, enough to call the bundle valid. Because the root is
+    found by matching rather than looked up directly, which key resolves it
+    must be independent of `documents`' iteration order the same way
+    `validate_connector_tree`'s own finding output already is.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
@@ -186,7 +216,7 @@ def validate_doc(
         schema_url: str | None = None,
         *,
         direction: Literal["read", "write"] | None = None,
-        probes: list[str] | None = None) -> ValidationEnvelope:
+        probes: list[str] | None = _OMITTED) -> ValidationEnvelope:
     """Validate one document — replacing the pipeline-builder plugin's private
     `diagnostics_for()`, whose explicit `entity` argument this keeps, and
     folding in that plugin's separate `type_map_gaps.py` CLI, since a type map
@@ -204,7 +234,12 @@ def validate_doc(
     `validate_document`'s list result today. `validate_document` takes no
     `entity` parameter today — how `entity` reaches its own document-kind
     detection through this route, if at all, is implementation, not fixed by
-    this signature.
+    this signature. Unlike `direction` and `probes` below, `entity` is
+    deliberately not given a dedicated runtime-rejection finding here: this
+    signature does not fix what `entity` does downstream at all, so it has no
+    basis of its own for calling any particular value "invalid" — that
+    verdict belongs wherever `entity` is actually consumed, not to this
+    parameter's type hint.
 
     `direction` still pairs with `entity` the way `diagnostics_for` already
     required in this mode: `entity == "type-map"` needs a `direction` to know
@@ -221,10 +256,15 @@ def validate_doc(
 
     This route never inspects `doc`'s shape to decide anything about
     `probes`/`direction` — the two modes below are selected only by whether
-    the caller passed `probes`, never by sniffing `doc` itself, so there is
-    no shape-guessing anywhere in this function. (What a wire caller sends to
-    select a mode, once this is wrapped by a published schema, is that
-    wrapper's concern, not this function's.)
+    the caller passed `probes` at all, never by sniffing `doc` itself, so
+    there is no shape-guessing anywhere in this function. Mode selection
+    reads whether the argument was passed, not what value it was passed:
+    `probes`'s default is a private sentinel, not `None`, so a caller passing
+    `probes=None` explicitly has already selected gap-resolution mode and
+    reaches the `invalid-probes` rejection below the same as any other
+    non-list value — only an omitted `probes` argument selects ordinary mode.
+    (What a wire caller sends to select a mode, once this is wrapped by a
+    published schema, is that wrapper's concern, not this function's.)
 
     Type-map gap-resolution mode (`probes` given): the path-free form of
     `type_map_gaps.py`'s own probe resolution. `doc` is then one or more
@@ -241,11 +281,13 @@ def validate_doc(
     would go there is the very thing rejected) rather than every non-`"read"`
     value being silently treated as `"write"`. `probes` gets the same
     treatment right after: `list[str]` is a type-checker-only promise too, and
-    a runtime `probes` that is not a list, or a list holding anything other
-    than a `str`, gets a single `invalid-probes` finding (`fail`/`error`, no
-    `direction` field), checked before `doc` is touched — mirroring the same
-    check `type_map_gaps.py`'s own CLI argument parsing runs before it ever
-    resolves a probe. `entity`/`schema_url` play no part in this mode.
+    a runtime `probes` that is not a list — `None` included, since only an
+    omitted `probes` argument selects ordinary mode instead of ever reaching
+    this check — or a list holding anything other than a `str`, gets a single
+    `invalid-probes` finding (`fail`/`error`, no `direction` field), checked
+    before `doc` is touched — mirroring the same check `type_map_gaps.py`'s
+    own CLI argument parsing runs before it ever resolves a probe.
+    `entity`/`schema_url` play no part in this mode.
 
     A `doc` with no key at all is rejected too, before any probe is resolved:
     `type_map_gaps.py`'s own `--map` is `required=True`, and an empty `doc`
@@ -253,39 +295,70 @@ def validate_doc(
     still report `passed: True` — silently treating "no map was supplied" the
     same as "the supplied maps have this gap". This mode reports a single
     `missing-type-map` finding instead (`fail`/`error`, no `direction`) and
-    resolves no probes.
+    resolves no probes. A `doc` that is not even a mapping — a `list`, a
+    `str`, anything with no keys to hold a map under — supplies no keyed maps
+    either, and is rejected the same way: one `missing-type-map` finding, no
+    probes resolved, checked before any key is read.
 
     Beyond the `invalid-direction`/`invalid-probes`/`missing-type-map`
     rejections above and the key/value hazards every `DocumentSet` route
     shares (`DocumentSet`/`DocumentSetValue` state them), this mode's own
     finding kinds are: `direction-filename-mismatch` (`fail`/`error`,
-    `direction` = this call's `direction` — a map keyed exactly
-    `"type-map-read.json"` or `"type-map-write.json"`, the two load-bearing
-    filenames `type_map_gaps.py`'s own CLI holds to their declared direction
-    because the read/write rule shape is otherwise identical enough that a
-    wrong-direction map resolves plausibly and wrongly rather than failing its
-    model, present under a call `direction` that contradicts it; checked
-    before that map's content is read, and that map excluded from resolution
-    the same way `type-map-unreadable` below is — a key other than those two
-    literal filenames carries no such expectation); `type-map-unreadable`
-    (`fail`/`error`, no `direction` — a map that is invalid JSON or not a
-    list, a failure prior to any direction-specific check); `invalid-type-map`
-    (`fail`/`error`, `direction` = this call's `direction` — a map that fails
-    its type-map model); `type-map-gap` (`informational`, no severity, no
-    rule, `direction` = this call's `direction` — a probe none of `doc`
-    resolved; never costs a pass). A run in which every probe resolved
-    reports a `ValidationEnvelope` with `passed: True` and an empty
-    `findings` list — this mode reports through the same envelope shape as
-    every other call to this function, never a bare `{"findings"}` shape
-    with no `passed` key.
+    `direction` = this call's `direction` — a map keyed under a load-bearing
+    filename for the *other* direction, present under a call `direction` that
+    contradicts it; checked before that map's content is read, and that map
+    excluded from resolution the same way `type-map-unreadable` below is). A
+    key's *load-bearing filename* is its final `/`-separated segment (a bare
+    key with no `/` is its own segment — this mode's own fixture keys, all
+    top-level, are), matched against `analitiq.validator.connectors`'s
+    `_READ_MAP_FILENAME`/`_WRITE_MAP_FILENAME`
+    (`"type-map-read.json"`/`"type-map-write.json"`) — the same two constants
+    `_validate_type_map` there already holds a sibling file's direction to,
+    so this mode names them rather than retyping the filenames as a second,
+    independently-spelled pair. A key whose final segment is neither constant
+    carries no such expectation and cannot mismatch.
 
-    This is a deliberate divergence from `type_map_gaps.py`'s own
-    `_load_rules`, which raises `ValueError` on exactly the same two
-    conditions (an unreadable map, a map failing its model) rather than
-    reporting them: a path-free caller has no filename to name in a raised
-    message the way the plugin's CLI does, and folding both conditions into
-    the same findings list this function already returns means a caller
-    checks one place for every way a probe run can come back incomplete.
+    This mode's own check diverges from `_validate_type_map`'s in one
+    respect, deliberately: `_validate_type_map` treats a name/direction
+    mismatch as ambiguity, not error — it defaults to `"read"` and reports an
+    informational `type-map-direction-defaulted` finding, never failing the
+    document. This mode instead mirrors `type_map_gaps.py`'s own CLI, whose
+    `load_bearing` check hard-fails the same mismatch before any map is even
+    read. The two are answering different questions:
+    `_validate_type_map` asks "what direction is this lone sibling file most
+    plausibly in", with no caller-declared direction to check it against;
+    this mode asks "does this caller-declared `direction` hold for every map
+    it was handed" — `type_map_gaps.py`'s own `--direction` question, which
+    has a declared direction to contradict and so has no ambiguous case to
+    default.
+
+    `type-map-unreadable` (`fail`/`error`, no `direction` — a map that is
+    invalid JSON or not a list, a failure prior to any direction-specific
+    check); `invalid-type-map` (`fail`/`error`, `direction` = this call's
+    `direction` — a map that fails its type-map model); `type-map-gap`
+    (`informational`, no severity, no rule, `direction` = this call's
+    `direction` — a probe none of `doc` resolved; never costs a pass);
+    `internal-error` (`fail`/`error`, no `direction` — one map's resolution
+    crashed; isolated to that map's key the same way
+    `validate_connector_tree`'s and `validate_pipeline_tree`'s own per-key
+    crash isolation works, so one bad map does not stop the rest of `doc`
+    from being resolved). A run in which every probe resolved reports a
+    `ValidationEnvelope` with `passed: True` and an empty `findings` list —
+    this mode reports through the same envelope shape as every other call to
+    this function, never a bare `{"findings"}` shape with no `passed` key.
+    This mode never raises: every failure above, `internal-error` included,
+    is a reported finding, the same guarantee
+    `validate_connector_tree`'s and `validate_pipeline_tree`'s own per-key
+    isolation make for a `DocumentSet`.
+
+    Reporting rather than raising is itself a deliberate divergence from
+    `type_map_gaps.py`'s own `_load_rules`, which raises `ValueError` on
+    `type-map-unreadable`'s and `invalid-type-map`'s two conditions (an
+    unreadable map, a map failing its model): a path-free caller has no
+    filename to name in a raised message the way the plugin's CLI does, and
+    folding both conditions into the same findings list this function already
+    returns means a caller checks one place for every way a probe run can
+    come back incomplete.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.

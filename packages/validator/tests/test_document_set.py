@@ -490,21 +490,50 @@ def test_gap_resolution_empty_doc_reports_missing_type_map(validator):
     assert [f["message_id"] for f in result["findings"]] == ["missing-type-map"]
 
 
+@pytest.mark.parametrize("bad_doc", [[], "not-a-mapping", 42])
+@_xfail("validate_doc")
+def test_gap_resolution_non_mapping_doc_reports_missing_type_map(validator, bad_doc):
+    result = validator.validate_doc(doc=bad_doc, direction="read", probes=["STRING"])
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["missing-type-map"]
+
+
+@_xfail("validate_doc")
+def test_gap_resolution_explicit_none_probes_selects_gap_resolution_mode(validator):
+    # probes=None is NOT the same as omitting probes: the default is a private
+    # sentinel, so an explicit None still selects gap-resolution mode and is
+    # rejected there as an invalid probes value (None is not a list) — proving
+    # the sentinel, not None itself, is what selects ordinary mode.
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.validate_doc(doc=maps, direction="read", probes=None)
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"]
+
+
 @_xfail("validate_doc")
 def test_gap_resolution_reports_a_read_filename_used_with_write_direction(validator):
-    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    # Scoped, not a bare top-level key: a match that only worked by comparing
+    # the whole key against the literal filename would silently pass this
+    # scoped key through unchecked, which is exactly the bug a prior round of
+    # this check shipped with. The key's final segment is still the
+    # load-bearing filename.
+    maps = {"connections/foo/type-map-read.json": [
+        {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.validate_doc(doc=maps, direction="write", probes=["Utf8"])
     assert result["passed"] is False
-    assert any(f["message_id"] == "direction-filename-mismatch" and f["path"] == "type-map-read.json"
+    assert any(f["message_id"] == "direction-filename-mismatch"
+               and f["path"] == "connections/foo/type-map-read.json"
                for f in result["findings"])
 
 
 @_xfail("validate_doc")
 def test_gap_resolution_reports_a_write_filename_used_with_read_direction(validator):
-    maps = {"type-map-write.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    maps = {"connections/foo/type-map-write.json": [
+        {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
     assert result["passed"] is False
-    assert any(f["message_id"] == "direction-filename-mismatch" and f["path"] == "type-map-write.json"
+    assert any(f["message_id"] == "direction-filename-mismatch"
+               and f["path"] == "connections/foo/type-map-write.json"
                for f in result["findings"])
 
 
@@ -654,6 +683,21 @@ def test_output_finding_order_is_independent_of_input_mapping_order(validator):
     assert forward == backward
 
 
+@_xfail("validate_pipeline_tree")
+def test_output_finding_order_is_independent_of_input_mapping_order_for_pipeline_tree(validator):
+    # The pipeline-tree root is resolved by pattern match over documents'
+    # keys, unlike the connector tree's fixed-key lookup — so this route has
+    # its own chance to let iteration order leak into which key resolves the
+    # root, or into finding order generally, and needs its own test proving
+    # it doesn't.
+    documents = _pipeline_tree_documents_with_two_findings()
+    forward = validator.validate_pipeline_tree(documents)
+    assert len(forward["findings"]) >= 2, forward  # non-vacuous: order genuinely matters below
+    reversed_documents = dict(reversed(list(documents.items())))
+    backward = validator.validate_pipeline_tree(reversed_documents)
+    assert forward == backward
+
+
 @_xfail("validate_connector_tree")
 def test_one_invalid_key_does_not_block_validating_the_rest(validator):
     documents = {
@@ -783,14 +827,16 @@ def test_validate_pipeline_tree_reports_a_missing_root_document(validator):
     documents = {k: v for k, v in _pipeline_tree_documents().items() if k != "pipelines/p/pipeline.json"}
     result = validator.validate_pipeline_tree(documents)
     assert result["passed"] is False
-    assert any(f["message_id"] == "missing-package-root" for f in result["findings"])
+    assert any(f["message_id"] == "missing-package-root" and f["path"] == "pipelines/*/pipeline.json"
+               for f in result["findings"])
 
 
 @_xfail("validate_pipeline_tree")
 def test_validate_pipeline_tree_reports_a_missing_root_document_for_an_empty_set(validator):
     result = validator.validate_pipeline_tree({})
     assert result["passed"] is False
-    assert any(f["message_id"] == "missing-package-root" for f in result["findings"])
+    assert any(f["message_id"] == "missing-package-root" and f["path"] == "pipelines/*/pipeline.json"
+               for f in result["findings"])
 
 
 @_xfail("validate_pipeline_tree")
@@ -801,6 +847,20 @@ def test_validate_pipeline_tree_rejects_a_present_but_wrong_kind_root(validator)
     documents = {**_pipeline_tree_documents(), "pipelines/p/pipeline.json": _CONNECTOR_WISE}
     result = validator.validate_pipeline_tree(documents)
     assert result["passed"] is False
+
+
+@_xfail("validate_pipeline_tree")
+def test_validate_pipeline_tree_reports_ambiguous_root_for_more_than_one_match(validator):
+    # Two keys both matching pipelines/<slug>/pipeline.json — resolving this
+    # by iteration order would be exactly the silent-pick hazard
+    # normalized-key-collision exists to prevent for a fixed key; a pattern
+    # root gets no exemption from that rule.
+    documents = {**_pipeline_tree_documents(), "pipelines/q/pipeline.json": _PIPELINE}
+    result = validator.validate_pipeline_tree(documents)
+    assert result["passed"] is False
+    assert any(f["message_id"] == "ambiguous-package-root"
+               and f["path"] == "pipelines/p/pipeline.json,pipelines/q/pipeline.json"
+               for f in result["findings"]), result["findings"]
 
 
 @_xfail("validate_pipeline_tree")
@@ -871,6 +931,22 @@ def test_embedded_package_crash_is_isolated_to_its_subtree_prefix(validator):
                for f in result["findings"]), result["findings"]
 
 
+@_xfail("validate_doc")
+def test_gap_resolution_map_crash_is_isolated_to_its_key(validator):
+    maps = {
+        "type-map-a.json": _cyclic_dict(),
+        "type-map-b.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+    }
+    result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
+    assert result["passed"] is False
+    crashed = [f for f in result["findings"] if f["path"] == "type-map-a.json"]
+    assert any(f["message_id"] == "internal-error" and f["kind"] == "fail" and f["severity"] == "error"
+               for f in crashed), result["findings"]
+    # The rest of doc was still resolved — the probe covered by the other map
+    # is not reported as a gap, proving that map was reached despite the crash.
+    assert not any(f["message_id"] == "type-map-gap" for f in result["findings"]), result["findings"]
+
+
 # ---------------------------------------------------------------------------
 # validate_doc, ordinary document mode (`probes` omitted) — dispatches to
 # validate_document, wrapping its result in one ValidationEnvelope shape.
@@ -889,6 +965,23 @@ def test_validate_doc_dispatches_to_validate_document(validator):
     expected = {"passed": not any(validator.finding_costs_a_pass(f) for f in expected_findings),
                 "findings": expected_findings}
     assert json.dumps(validator.validate_doc(document)) == json.dumps(expected)
+
+
+@_xfail("validate_doc")
+def test_ordinary_mode_forwards_schema_url_to_validate_document(validator):
+    # No doc_path in this path-free route, so schema_url is the only direction
+    # hint validate_document has for a type-map array's read/write model
+    # selection — passing it through must actually change that selection, not
+    # just be accepted and dropped.
+    type_map = [{"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}]
+    write_schema_url = f"{_H}/type-map-write/latest.json"
+    without = validator.validate_document(type_map)
+    with_url = validator.validate_document(type_map, schema_url=write_schema_url)
+    assert without != with_url  # non-vacuous: schema_url must change the outcome
+    expected = {"passed": not any(validator.finding_costs_a_pass(f) for f in with_url),
+                "findings": with_url}
+    result = validator.validate_doc(type_map, schema_url=write_schema_url)
+    assert json.dumps(result) == json.dumps(expected)
 
 
 @_xfail("validate_doc")
