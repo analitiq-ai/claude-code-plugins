@@ -524,6 +524,13 @@ def test_gap_resolution_reports_a_read_filename_used_with_write_direction(valida
     assert any(f["message_id"] == "direction-filename-mismatch"
                and f["path"] == "connections/foo/type-map-read.json"
                for f in result["findings"])
+    # The mismatched map is excluded from resolution, not merely flagged: an
+    # implementation that reports direction-filename-mismatch and still uses
+    # the map to resolve "Utf8" would pass the assertion above while
+    # violating the docstring's own exclusion claim — so the excluded probe
+    # must also surface as an unresolved type-map-gap.
+    assert any(f["message_id"] == "type-map-gap" and f["direction"] == "write"
+               for f in result["findings"])
 
 
 @_xfail("validate_doc")
@@ -534,6 +541,8 @@ def test_gap_resolution_reports_a_write_filename_used_with_read_direction(valida
     assert result["passed"] is False
     assert any(f["message_id"] == "direction-filename-mismatch"
                and f["path"] == "connections/foo/type-map-write.json"
+               for f in result["findings"])
+    assert any(f["message_id"] == "type-map-gap" and f["direction"] == "read"
                for f in result["findings"])
 
 
@@ -843,10 +852,18 @@ def test_validate_pipeline_tree_reports_a_missing_root_document_for_an_empty_set
 def test_validate_pipeline_tree_rejects_a_present_but_wrong_kind_root(validator):
     # pipelines/p/pipeline.json is present, so missing-package-root does not
     # fire — but its content is a model-valid connector document, not a
-    # pipeline one.
+    # pipeline one. _CONNECTOR_WISE also carries none of _PIPELINE's fields
+    # (pipeline_id, connections, streams), so swapping it in breaks this
+    # bundle's own referential checks (the stream's pipeline_id ref, the
+    # connections' connection-id refs) too — passed is False either way, so a
+    # bare passed-is-False assertion can't tell "the root's own content was
+    # rejected" apart from "something else in the bundle broke while an
+    # implementation silently accepted the root". The finding must be scoped
+    # to the root's own key.
     documents = {**_pipeline_tree_documents(), "pipelines/p/pipeline.json": _CONNECTOR_WISE}
     result = validator.validate_pipeline_tree(documents)
     assert result["passed"] is False
+    assert any(f["path"] == "pipelines/p/pipeline.json" for f in result["findings"]), result["findings"]
 
 
 @_xfail("validate_pipeline_tree")
