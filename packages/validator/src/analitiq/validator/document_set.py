@@ -35,7 +35,11 @@ DocumentSetValue = Union[str, bytes, dict, list]
 #: key, a key containing `..`, or the empty string is reported as an
 #: `invalid-key` finding rather than raised; two keys where one names both a
 #: document and a directory prefix of another (e.g. `"a/b.json"` alongside
-#: `"a/b.json/c.json"`) are reported as `key-path-conflict` instead. Every
+#: `"a/b.json/c.json"`) are reported as `key-path-conflict` instead; two
+#: distinct raw keys that normalize to the same canonical key — the collision
+#: leading-`./`-stripping can itself create, e.g. `"connector.json"` alongside
+#: `"./connector.json"` — are reported as `normalized-key-collision` rather
+#: than one silently overwriting the other by iteration order. Every
 #: function below that takes or produces a document set uses this one shape,
 #: so `validate_connector_tree`'s and `validate_pipeline_tree`'s `documents`
 #: and `validate_doc`'s `doc` (in its type-map gap-resolution mode) share one
@@ -116,7 +120,13 @@ def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
     with no `"connector.json"` key — the one document every other check here
     needs to run at all — is reported as a `missing-package-root` finding
     (`fail`/`error`, path `"connector.json"`) rather than validated as an
-    empty, trivially-passing package.
+    empty, trivially-passing package. A `"connector.json"` that is present but
+    does not itself validate as a connector document is rejected the same
+    way, not silently accepted as a trivially-passing package: `check_coverage`
+    itself returns no findings for a document missing a connector's sentinel
+    keys, so package-root validity cannot rest on coverage findings alone —
+    this route validates `"connector.json"`'s own content, not just its
+    presence.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
@@ -157,7 +167,10 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     no key matching `pipelines/<slug>/pipeline.json` — the one document
     every other check here needs to run at all — is reported as a
     `missing-package-root` finding (`fail`/`error`) rather than validated as
-    an empty, trivially-passing bundle.
+    an empty, trivially-passing bundle. A pipeline-root document that is
+    present but does not itself validate as a pipeline document is rejected
+    the same way — its presence under that key is not, on its own, enough to
+    call the bundle valid.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
@@ -226,12 +239,35 @@ def validate_doc(
     it while still passing `probes`) gets a single `invalid-direction`
     finding (`fail`/`error`, no `direction` field of its own — the value that
     would go there is the very thing rejected) rather than every non-`"read"`
-    value being silently treated as `"write"`. `entity`/`schema_url` play no
-    part in this mode.
+    value being silently treated as `"write"`. `probes` gets the same
+    treatment right after: `list[str]` is a type-checker-only promise too, and
+    a runtime `probes` that is not a list, or a list holding anything other
+    than a `str`, gets a single `invalid-probes` finding (`fail`/`error`, no
+    `direction` field), checked before `doc` is touched — mirroring the same
+    check `type_map_gaps.py`'s own CLI argument parsing runs before it ever
+    resolves a probe. `entity`/`schema_url` play no part in this mode.
 
-    Beyond the `invalid-direction` rejection above and the key/value hazards
-    every `DocumentSet` route shares (`DocumentSet`/`DocumentSetValue` state
-    them), this mode's own finding kinds are: `type-map-unreadable`
+    A `doc` with no key at all is rejected too, before any probe is resolved:
+    `type_map_gaps.py`'s own `--map` is `required=True`, and an empty `doc`
+    would otherwise report every probe as an informational `type-map-gap` and
+    still report `passed: True` — silently treating "no map was supplied" the
+    same as "the supplied maps have this gap". This mode reports a single
+    `missing-type-map` finding instead (`fail`/`error`, no `direction`) and
+    resolves no probes.
+
+    Beyond the `invalid-direction`/`invalid-probes`/`missing-type-map`
+    rejections above and the key/value hazards every `DocumentSet` route
+    shares (`DocumentSet`/`DocumentSetValue` state them), this mode's own
+    finding kinds are: `direction-filename-mismatch` (`fail`/`error`,
+    `direction` = this call's `direction` — a map keyed exactly
+    `"type-map-read.json"` or `"type-map-write.json"`, the two load-bearing
+    filenames `type_map_gaps.py`'s own CLI holds to their declared direction
+    because the read/write rule shape is otherwise identical enough that a
+    wrong-direction map resolves plausibly and wrongly rather than failing its
+    model, present under a call `direction` that contradicts it; checked
+    before that map's content is read, and that map excluded from resolution
+    the same way `type-map-unreadable` below is — a key other than those two
+    literal filenames carries no such expectation); `type-map-unreadable`
     (`fail`/`error`, no `direction` — a map that is invalid JSON or not a
     list, a failure prior to any direction-specific check); `invalid-type-map`
     (`fail`/`error`, `direction` = this call's `direction` — a map that fails

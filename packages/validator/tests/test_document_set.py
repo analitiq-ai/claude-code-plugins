@@ -468,6 +468,47 @@ def test_gap_resolution_bad_direction_short_circuits_before_doc_is_checked(valid
 
 
 @_xfail("validate_doc")
+def test_gap_resolution_non_list_probes_reports_invalid_probes(validator):
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.validate_doc(doc=maps, direction="read", probes="STRING")
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"]
+
+
+@_xfail("validate_doc")
+def test_gap_resolution_non_str_probe_element_reports_invalid_probes(validator):
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.validate_doc(doc=maps, direction="read", probes=[1, "STRING"])
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"]
+
+
+@_xfail("validate_doc")
+def test_gap_resolution_empty_doc_reports_missing_type_map(validator):
+    result = validator.validate_doc(doc={}, direction="read", probes=["STRING"])
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["missing-type-map"]
+
+
+@_xfail("validate_doc")
+def test_gap_resolution_reports_a_read_filename_used_with_write_direction(validator):
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.validate_doc(doc=maps, direction="write", probes=["Utf8"])
+    assert result["passed"] is False
+    assert any(f["message_id"] == "direction-filename-mismatch" and f["path"] == "type-map-read.json"
+               for f in result["findings"])
+
+
+@_xfail("validate_doc")
+def test_gap_resolution_reports_a_write_filename_used_with_read_direction(validator):
+    maps = {"type-map-write.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
+    assert result["passed"] is False
+    assert any(f["message_id"] == "direction-filename-mismatch" and f["path"] == "type-map-write.json"
+               for f in result["findings"])
+
+
+@_xfail("validate_doc")
 def test_validate_doc_with_document_set_shaped_doc_and_no_probes_uses_ordinary_mode(validator):
     # `doc` here is shaped exactly like the DocumentSet gap-resolution mode
     # takes (path-like keys, list-of-rule values) but `probes` is omitted —
@@ -563,6 +604,36 @@ def test_key_that_is_both_document_and_directory_prefix_conflicts_for_gap_resolu
     }
     result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
     assert any(f["message_id"] == "key-path-conflict" for f in result["findings"])
+
+
+@_xfail("validate_connector_tree")
+def test_normalized_key_collision_is_reported_not_silently_overwritten(validator):
+    # "connector.json" and "./connector.json" are distinct dict keys that both
+    # normalize to "connector.json" — a collision the ./-stripping itself
+    # creates, not one present in the raw input's own key set.
+    documents = {**_connector_tree_documents(), "./connector.json": {"kind": "database"}}
+    result = validator.validate_connector_tree(documents)
+    assert any(f["message_id"] == "normalized-key-collision" for f in result["findings"])
+    assert result["passed"] is False
+
+
+@_xfail("validate_pipeline_tree")
+def test_normalized_key_collision_is_reported_not_silently_overwritten_for_pipeline_tree(validator):
+    documents = {**_pipeline_tree_documents(), "./pipelines/p/pipeline.json": {"kind": "pipeline"}}
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "normalized-key-collision" for f in result["findings"])
+    assert result["passed"] is False
+
+
+@_xfail("validate_doc")
+def test_normalized_key_collision_is_reported_not_silently_overwritten_for_gap_resolution_mode(validator):
+    maps = {
+        "type-map.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        "./type-map.json": [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}],
+    }
+    result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
+    assert any(f["message_id"] == "normalized-key-collision" for f in result["findings"])
+    assert result["passed"] is False
 
 
 @_xfail("validate_connector_tree")
@@ -692,6 +763,15 @@ def test_validate_connector_tree_reports_a_missing_root_document_for_an_empty_se
     assert any(f["message_id"] == "missing-package-root" for f in result["findings"])
 
 
+@_xfail("validate_connector_tree")
+def test_validate_connector_tree_rejects_a_present_but_wrong_kind_root(validator):
+    # `connector.json` is present, so missing-package-root does not fire — but
+    # its content is a model-valid pipeline document, not a connector one.
+    documents = {**_connector_tree_documents(), "connector.json": _PIPELINE}
+    result = validator.validate_connector_tree(documents)
+    assert result["passed"] is False
+
+
 @_xfail("validate_pipeline_tree")
 def test_validate_pipeline_tree_validates_its_own_root_shape_directly(validator):
     result = validator.validate_pipeline_tree(_pipeline_tree_documents())
@@ -711,6 +791,16 @@ def test_validate_pipeline_tree_reports_a_missing_root_document_for_an_empty_set
     result = validator.validate_pipeline_tree({})
     assert result["passed"] is False
     assert any(f["message_id"] == "missing-package-root" for f in result["findings"])
+
+
+@_xfail("validate_pipeline_tree")
+def test_validate_pipeline_tree_rejects_a_present_but_wrong_kind_root(validator):
+    # pipelines/p/pipeline.json is present, so missing-package-root does not
+    # fire — but its content is a model-valid connector document, not a
+    # pipeline one.
+    documents = {**_pipeline_tree_documents(), "pipelines/p/pipeline.json": _CONNECTOR_WISE}
+    result = validator.validate_pipeline_tree(documents)
+    assert result["passed"] is False
 
 
 @_xfail("validate_pipeline_tree")
