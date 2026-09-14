@@ -462,10 +462,13 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
         "packages/validator/tests/test_document_set.py for the fixed contract.")
 
 
-def validate_doc(  # skipcq: PYL-W0613 — `entity` and `schema_url` are the fixed contract of ordinary document mode, which raises below; renaming them would change the keyword a caller passes
+def validate_doc(
         doc: Any,
-        entity: Entity | None = None,
-        schema_url: str | None = None,
+        # Named and typed here because they are ordinary document mode's
+        # contract — the keywords a caller passes — and that mode raises below
+        # rather than reading them.
+        entity: Entity | None = None,  # skipcq: PYL-W0613
+        schema_url: str | None = None,  # skipcq: PYL-W0613
         *,
         direction: Literal["read", "write"] | None = None,
         probes: list[str] | None = _OMITTED) -> ValidationEnvelope:

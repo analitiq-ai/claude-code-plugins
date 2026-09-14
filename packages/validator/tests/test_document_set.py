@@ -1241,10 +1241,12 @@ def test_gap_resolution_probe_crash_is_isolated_to_that_probe(validator, monkeyp
     # which is the behaviour under test either way.
     from analitiq.validator import connectors
 
-    def explode_on_one(probe, rules):
+    # `-> str | None` is the resolver protocol: the rendered counterpart type,
+    # or None where no rule matched. Every probe but the one that raises falls
+    # through to that None.
+    def explode_on_one(probe: str, rules: list) -> str | None:
         if probe == "STRING":
             raise RuntimeError("matcher cannot be run")
-        return None
 
     read = connectors._DIRECTIONS["read"]
     monkeypatch.setitem(connectors._DIRECTIONS, "read", read._replace(resolve=explode_on_one))
