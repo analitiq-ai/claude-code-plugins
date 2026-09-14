@@ -340,11 +340,13 @@ def _pipeline_tree_documents_with_extra_wise_endpoint() -> dict:
     """`_pipeline_tree_documents_with_two_findings` plus a second
     connector-scoped endpoint under `wise`'s subtree (`balances.json`), so
     excluding `transfers.json` leaves `wise`'s published-endpoint-id set
-    non-empty rather than empty. `_connector_endpoint_ref_findings` treats an
-    empty set as unknown and skips it (its own docstring), so a
-    single-endpoint connector can never demonstrate RULE-STRM-043 firing after
-    its one endpoint is excluded — the exclusion would just look identical to
-    "this connector's endpoints were never walked at all"."""
+    non-empty rather than empty — proving that a connector with at least one
+    still-resolvable endpoint is STILL dropped from the published sets once
+    any sibling endpoint fails to resolve, not only when every endpoint under
+    it does. Without this second endpoint, excluding the connector's only
+    endpoint always leaves the set empty either way, which could not tell
+    "any failure marks the whole connector unknown" apart from the weaker,
+    wrong "only an empty set marks it unknown"."""
     documents = _pipeline_tree_documents_with_two_findings()
     return {**documents, "connectors/wise/definition/endpoints/balances.json": _WISE_BALANCES_ENDPOINT}
 
@@ -829,25 +831,44 @@ def test_excluded_bundle_member_marks_the_bundle_incomplete(validator, member_ki
             result["findings"]
 
 
-@pytest.mark.parametrize("failure_mode", ["missing", "materialization-crash", "parse-crash", "wrong-shape"])
-def test_excluded_connector_scoped_endpoint_id_is_dropped_from_the_published_set(validator, failure_mode):
+@pytest.mark.parametrize("failure_mode,connector_endpoint_ref_should_warn", [
+    ("missing", True),
+    ("materialization-crash", False),
+    ("parse-crash", False),
+    ("wrong-shape", False),
+])
+def test_excluded_connector_scoped_endpoint_marks_the_whole_connector_unknown(
+        validator, failure_mode, connector_endpoint_ref_should_warn):
     """The sixth member kind is not gated by `bundle_is_incomplete` at all —
-    excluding a connector-scoped endpoint file only drops its id from
-    `_connector_endpoint_sets`'s own published-id set for that connector,
-    which RULE-STRM-043 (`connector-endpoint-ref-unresolved`) then reports the
-    stream's `transfers` ref against as unresolved. Every failure mode is
-    reachable here, `missing` included: unlike the five members above,
-    nothing about this member's OWN exclusion also determines whether its
-    sibling is discovered — discovery here just is enumerating
-    `endpoints/*.json`, so a missing file behaves exactly like an excluded
-    one."""
+    excluding a connector-scoped endpoint file drops the ENTIRE connector
+    from `_connector_endpoint_sets`'s published sets, not just that one id,
+    even though `wise` still publishes a perfectly good `balances` endpoint
+    alongside the excluded `transfers` one: a partial set is exactly as
+    unreliable an answer to "does this connector publish `transfers`" as no
+    set at all, since an id it doesn't yet know about could be the very one
+    a ref names. `_connector_endpoint_ref_findings` treats an omitted
+    connector as *unknown* and skips its refs (its own docstring), so
+    RULE-STRM-043 (`connector-endpoint-ref-unresolved`) does not fire against
+    the stream's `transfers` ref here — a warning would be a false positive
+    against a ref the author wrote correctly.
+
+    `missing` is NOT one of the three modes this applies to, and is the
+    exception the parametrization carries rather than silently sharing the
+    other three's expectation: a `transfers.json` that was never authored at
+    all is never discovered by `known_json_children` in the first place, so
+    there is nothing for `_resolved_member` to exclude — `wise`'s set is
+    still recorded, just without a `transfers` id, and RULE-STRM-043 fires
+    exactly as it would for any other genuinely-unpublished endpoint id,
+    because no crashed content exists that COULD have published it. This is
+    the same missing-vs-excluded distinction the five bundle-member kinds
+    above draw, extended to this sixth one."""
     key = "connectors/wise/definition/endpoints/transfers.json"
     documents = _MATRIX_MUTATORS[failure_mode](_pipeline_tree_documents_with_extra_wise_endpoint(), key)
     result = validator.validate_pipeline_tree(documents)
-    assert any(
+    fired = any(
         f.get("rule") == "RULE-STRM-043" and f["message_id"] == "connector-endpoint-ref-unresolved"
-        and "'transfers'" in f["message"]
-        for f in result["findings"]), result["findings"]
+        for f in result["findings"])
+    assert fired == connector_endpoint_ref_should_warn, result["findings"]
 
 
 @pytest.mark.parametrize("failure_mode,expected_internal_errors", [

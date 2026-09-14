@@ -97,11 +97,11 @@ class _VirtualFS:
         `validate_pipeline_tree`'s stream/connection-endpoint scans each need,
         factored once so the filter isn't hand-written at every call site.
         Every caller of this method resolves each key it returns through
-        `document_set._resolved_member` (or `_validate_tree_document`
-        directly), which excludes — rather than silently treats as absent — a
-        key that is `known` but never materialized, so "known but crashed
-        during materialization" and "materialized cleanly" both reach the
-        caller, distinguishable by `materialized()`."""
+        `document_set._resolved_member`, which excludes — rather than
+        silently treats as absent — a key that is `known` but never
+        materialized, so "known but crashed during materialization" and
+        "materialized cleanly" both reach the caller, distinguishable by
+        `materialized()`."""
         return [
             key for key in sorted(self.known_keys)
             if key.startswith(prefix)

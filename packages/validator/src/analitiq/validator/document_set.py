@@ -322,20 +322,30 @@ def _resolved_member(
     `_validate_tree_document`, so a member this call is itself the one place
     that checks its content also earns its model-validation findings.
     `validate=False` resolves it with the same materialize/parse isolation
-    but skips `validate_document` entirely — for a document a DIFFERENT walk
-    over this same tree already validates (an embedded connector's own
-    `connector.json`, re-validated by the recursive `validate_connector_tree`
-    call over its own subtree) or one no walk validates at all today (a
-    connector-scoped endpoint file for a `kind` `check_coverage` never routes
-    through, e.g. `database`/`storage`) — running `validate_document` here
-    too would either double-report the same findings or grade content
-    genuinely out of this call's scope. A materialization crash is never
-    reported by this function either way: `_normalize_documents` already
-    named it. Every current `validate=False` caller that has no use for a
-    parse-crash finding of its own (the embedded-connector identity lookups,
-    whose crash, if any, is already reported by the `validate_connector_tree`
-    walk over that same subtree) discards this function's returned findings
-    outright rather than asking this gate to suppress them.
+    but skips `validate_document` entirely, for two different reasons
+    depending on the caller:
+
+    - The connector-scoped endpoint lookup in `_connector_endpoint_sets`
+      keeps this function's returned findings, so its reason has to hold on
+      its own: running `validate_document` there would either double-report
+      an API-kind connector's endpoint (already validated by the
+      sibling-endpoint scan `check_coverage` runs over it) or grade a
+      database/storage-kind connector's endpoint against a model shape
+      nothing else in this call's scope checks — `_connector_endpoint_sets`'s
+      own docstring carries the full argument.
+    - The two embedded-connector identity lookups (`_connector_endpoint_sets`
+      pulling a connector's own `connector_id`, and `validate_pipeline_tree`
+      doing the same) discard this function's returned findings outright
+      (`connector_doc, _ = _resolved_member(...)`), so nothing either call
+      does could ever double-report regardless of `validate`. Their reason is
+      simpler: the same `connector.json` this call would re-validate is
+      already validated (or its crash already reported) by the recursive
+      `validate_connector_tree` call over that connector's own subtree, so
+      validating it again here would only be redundant work whose result is
+      thrown away immediately.
+
+    A materialization crash is never reported by this function either way:
+    `_normalize_documents` already named it.
     """
     if validate:
         doc, findings = _validate_tree_document(fs, key, entity=entity)
@@ -457,9 +467,21 @@ def _connector_endpoint_sets(
     """Map each embedded connector — by its subtree slug and its own
     `connector_id` — to the endpoint ids it publishes, mirroring the plugin's
     own `_connector_endpoint_sets`. Returns `(sets, findings)`: a connector
-    whose `definition/endpoints/` holds no usable `*.json` is omitted from
-    `sets`, not recorded empty, so its set reads as *unknown* rather than *no
-    endpoints* — a ref against it is skipped rather than warned at.
+    whose `definition/endpoints/` holds no usable `*.json`, OR whose
+    `definition/endpoints/` holds at least one KNOWN key (a file that
+    genuinely exists, as opposed to an `endpoint_ref` simply naming an id no
+    file ever claimed) that fails to materialize, parse, or shape correctly,
+    is omitted from `sets` in full rather than recorded with a partial set —
+    an incomplete set is exactly as unusable for the "does this connector
+    publish this id" question as an empty one, since either could be hiding
+    the very id a ref names. So its set reads as *unknown* rather than *no
+    endpoints* or *these endpoints only* — a ref against it is skipped rather
+    than warned at. A `*.json` that was never authored at all does not put its
+    connector in this state: `fs.known_json_children` never enumerates a key
+    that isn't there, so there is nothing for this loop to have failed to
+    resolve, and the connector's set is still recorded — correctly missing
+    that one id, the same as it would be missing any other id no file ever
+    claimed.
 
     This is the only walk over a pipeline tree's embedded-connector
     `endpoints/*.json` files for connectors whose `kind` never routes
@@ -480,17 +502,19 @@ def _connector_endpoint_sets(
     for slug in connector_slugs:
         ep_prefix = f"connectors/{slug}/definition/endpoints/"
         ids: set[str] = set()
+        slug_is_incomplete = False
         for key in fs.known_json_children(ep_prefix):
             ep_doc, ep_findings = _resolved_member(fs, key, validate=False)
             findings.extend(_at_site(key, ep_findings))
             if ep_doc is None:
+                slug_is_incomplete = True
                 continue
             suffix = key[len(ep_prefix):]
             ids.add(suffix[:-len(".json")])
             eid = ep_doc.get("endpoint_id")
             if isinstance(eid, str) and eid:
                 ids.add(eid)
-        if not ids:
+        if slug_is_incomplete or not ids:
             continue
         keys = {slug}
         connector_doc, _ = _resolved_member(
