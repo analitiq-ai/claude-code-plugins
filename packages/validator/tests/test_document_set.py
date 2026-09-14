@@ -685,6 +685,38 @@ def test_validate_doc_dispatches_to_validate_document(validator):
     assert json.dumps(validator.validate_doc(document)) == json.dumps(expected)
 
 
+@_xfail("validate_doc")
+def test_ordinary_mode_type_map_entity_without_direction_reports_invalid_direction(validator):
+    # `diagnostics_for` required `direction` whenever `entity == "type-map"`,
+    # raising ValueError on a caller that omitted it; validate_doc keeps the
+    # pairing but reports it as the same invalid-direction finding gap
+    # resolution mode uses, rather than raising.
+    type_map = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+    result = validator.validate_doc(type_map, entity="type-map")
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-direction"]
+    assert "direction" not in result["findings"][0]
+
+
+@_xfail("validate_doc")
+def test_ordinary_mode_type_map_entity_bad_direction_reports_invalid_direction(validator):
+    type_map = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+    result = validator.validate_doc(type_map, entity="type-map", direction="sideways")
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-direction"]
+
+
+@_xfail("validate_doc")
+def test_ordinary_mode_direction_with_non_type_map_entity_reports_invalid_direction(validator):
+    # `diagnostics_for` also rejected `direction` for any entity other than
+    # "type-map" — kept here too, since only entity="type-map" documents have
+    # a read/write model for `direction` to select between.
+    document = json.loads((CORPUS / "valid_connector.json").read_text())
+    result = validator.validate_doc(document, entity="connector", direction="read")
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-direction"]
+
+
 # ---------------------------------------------------------------------------
 # Acceptance — equivalence: the path-based route and the document-set route
 # produce byte-identical results for the same content, per package kind.

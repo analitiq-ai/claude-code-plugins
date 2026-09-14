@@ -181,12 +181,27 @@ def validate_doc(
     `validate_document`'s list result today. `validate_document` takes no
     `entity` parameter today — how `entity` reaches its own document-kind
     detection through this route, if at all, is implementation, not fixed by
-    this signature. This route never inspects `doc`'s shape to decide
-    anything about `probes`/`direction` — the two modes below are selected
-    only by whether the caller passed `probes`, never by sniffing `doc`
-    itself, so there is no shape-guessing anywhere in this function. (What a
-    wire caller sends to select a mode, once this is wrapped by a published
-    schema, is that wrapper's concern, not this function's.)
+    this signature.
+
+    `direction` still pairs with `entity` the way `diagnostics_for` already
+    required in this mode: `entity == "type-map"` needs a `direction` to know
+    which of `TypeMapReadDoc`/`TypeMapWriteDoc` to check `doc` against, and
+    no other `entity` value takes one. `diagnostics_for` enforced that
+    pairing by raising `ValueError`; this function reports it instead — the
+    same `invalid-direction` finding the gap-resolution mode below reports —
+    for a `direction` that is missing or invalid while `entity == "type-map"`,
+    or given at all while `entity` is anything else. How an accepted
+    `direction` then reaches `validate_document`'s own read/write selection
+    (today keyed off a filename this path-free route has none of, with
+    `schema_url` only a fallback hint) is implementation, the same way
+    `entity`'s routing above is.
+
+    This route never inspects `doc`'s shape to decide anything about
+    `probes`/`direction` — the two modes below are selected only by whether
+    the caller passed `probes`, never by sniffing `doc` itself, so there is
+    no shape-guessing anywhere in this function. (What a wire caller sends to
+    select a mode, once this is wrapped by a published schema, is that
+    wrapper's concern, not this function's.)
 
     Type-map gap-resolution mode (`probes` given): the path-free form of
     `type_map_gaps.py`'s own probe resolution. `doc` is then one or more
