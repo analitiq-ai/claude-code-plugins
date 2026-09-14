@@ -60,10 +60,24 @@ _KINDS = ("fail", "notApplicable", "informational")
 _Validator = Callable[[Any, "Path | None", "str | None"], list[dict]]
 _KIND_REGISTRY: list[tuple[Callable[[Any], bool], _Validator]] = []
 
+#: Every named `Entity` this package can validate directly, bypassing
+#: `_KIND_REGISTRY`'s shape auto-detection — populated by `register_entity`,
+#: one call per kind-module alongside its `register_kind`/
+#: `register_model_and_schema_kind` call, never dispatched from a record (see
+#: this repo's drift policy on the rule registry).
+_ENTITY_VALIDATORS: dict[str, _Validator] = {}
+
 
 def register_kind(detector: Callable[[Any], bool], validator: _Validator) -> None:
     """Append a `(detector, validator_fn)` pair to the dispatch registry."""
     _KIND_REGISTRY.append((detector, validator))
+
+
+def register_entity(entity: str, validator: _Validator) -> None:
+    """Bind `entity` to `validator` for `validate_document`'s explicit-kind
+    override — the named kind's own validator, the same one `_KIND_REGISTRY`
+    reaches by shape detection, reachable directly by name instead."""
+    _ENTITY_VALIDATORS[entity] = validator
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +289,7 @@ def _missing_schema_url_findings(doc: Any) -> list[dict]:
     )]
 
 
-def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: TypeAdapter) -> None:
+def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: TypeAdapter) -> _Validator:
     """Register a single-document kind whose entire validity is its contract model
     plus the RULE-SHRD-003 `$schema`-omission check.
 
@@ -283,11 +297,14 @@ def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: Typ
     `_model_findings(doc, adapter) + _missing_schema_url_findings(doc)` under the
     per-kind `(doc, doc_path, schema_url)` signature. Packaging that here lets
     such a module supply just its detector and adapter, so the combination is
-    defined once rather than reimplemented per kind.
+    defined once rather than reimplemented per kind. Returns the built
+    validator so a caller that also wants it reachable by `Entity` name can
+    pass it straight to `register_entity` without rebuilding it.
     """
     def _validate(doc: Any, doc_path: Path | None = None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
         return _model_findings(doc, adapter) + _missing_schema_url_findings(doc)
     register_kind(detector, _validate)
+    return _validate
 
 
 # ---------------------------------------------------------------------------
@@ -295,13 +312,27 @@ def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: Typ
 # ---------------------------------------------------------------------------
 
 def validate_document(doc: Any, doc_path: Path | None = None,
-                      schema_url: str | None = None) -> list[dict]:
+                      schema_url: str | None = None,
+                      entity: str | None = None) -> list[dict]:
     """Detect the document kind, validate via its model, add cross-file checks.
 
     `schema_url` is a direction hint for a type-map array whose filename is
     ambiguous (a caller passing `--schema-url .../type-map-write/latest.json`
     from a temp file): it disambiguates read vs write when the filename can't.
+
+    `entity`, when given and registered (`register_entity`), names the kind
+    directly and skips `_KIND_REGISTRY`'s shape auto-detection entirely —
+    dispatching straight to that kind's own validator, the same way a caller
+    who already knows a document's kind from context (its own `--entity`
+    flag, say) would rather trust than re-derive from the document's shape.
+    An unregistered or unrecognized `entity` falls through to auto-detection
+    rather than raising, on the same principle `_dispatch` itself follows for
+    a document no detector claims: a caller supplying `entity` is asking this
+    function to trust it when it can, not asking to be rejected when it can't.
     """
+    if entity is not None and entity in _ENTITY_VALIDATORS:
+        return _run_guarded(_ENTITY_VALIDATORS[entity], doc, doc_path, schema_url,
+                            crash_label="document validation")
     return _run_guarded(_dispatch, doc, doc_path, schema_url, crash_label="document validation")
 
 

@@ -65,13 +65,13 @@ wrapping this package as a remote tool, registry CI, any caller handed
 document content directly — cannot use either route: it has the documents'
 content in hand, never a directory they can be read from.
 
-`analitiq.validator.document_set` fixes the contract such a consumer calls
-instead, ahead of building it: its types and signatures are exported from
-this package today; every function currently raises `NotImplementedError`.
+`analitiq.validator.document_set` is the contract such a consumer calls
+instead: `validate_connector_tree`, `validate_pipeline_tree`, `validate_tree`,
+`diagnostics`, and `resolve_type_map_gaps`, each taking a `DocumentSet` in
+and returning a `ValidationEnvelope` or `FindingsEnvelope` out.
 `packages/validator/tests/test_document_set.py` is the fixture corpus that
-fixes what an implementation must satisfy, `xfail` until each case's function
-is built. Read that module and that test file for the contract itself — it is
-not restated here.
+pins the contract. Read that module and that test file for the contract
+itself — it is not restated here.
 
 The contract is deliberately narrow: a `DocumentSet` never carries a directory
 to read from, and its keys are never resolved against a filesystem — the offline

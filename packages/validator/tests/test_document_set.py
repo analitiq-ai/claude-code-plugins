@@ -1,10 +1,5 @@
 """Fixture corpus for the path-free document-set API (`analitiq.validator
-.document_set`) — every case here is `xfail(strict=True)` because every
-function it exercises currently raises `NotImplementedError`. An
-implementation PR turns each case from `xfail` to passing by replacing the
-stub body it exercises and removing that case's marker; `strict=True` means a
-case that starts passing while its marker is still on it fails the suite,
-so a marker can never survive its own fix by accident.
+.document_set`).
 
 Two corpora already committed for the path-based routes are reused here
 rather than re-authored: `packages/validator/tests/corpus/` (a connector
@@ -34,27 +29,29 @@ if str(_PLUGIN_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_PLUGIN_SCRIPTS))
 
 
-def _xfail(fn_name: str):
-    return pytest.mark.xfail(
-        strict=True, raises=NotImplementedError,
-        reason=f"{fn_name} is not yet implemented (analitiq.validator.document_set)")
-
-
 # ---------------------------------------------------------------------------
-# Entity — drift guard against DOCUMENT_ARTIFACT_KINDS (not xfail: this is a
-# type-contract fact settled now, independent of any function body below
-# being implemented).
+# Entity — drift guard against DOCUMENT_ARTIFACT_KINDS.
 # ---------------------------------------------------------------------------
 
 def test_entity_matches_document_artifact_kinds(validator):
     assert set(get_args(validator.Entity)) == set(DOCUMENT_ARTIFACT_KINDS)
 
 
+def test_every_entity_has_a_registered_validator(validator):
+    """`validate_document`'s explicit-kind override falls through to shape
+    auto-detection, silently, when `entity` names a kind with no
+    `register_entity` binding — nothing else pins `_ENTITY_VALIDATORS`'s
+    registered keys to the `Entity` vocabulary, so a member landing in one and
+    not the other would ship with the override quietly doing nothing for it."""
+    from analitiq.validator._core import _ENTITY_VALIDATORS
+
+    assert set(get_args(validator.Entity)) == set(_ENTITY_VALIDATORS)
+
+
 # ---------------------------------------------------------------------------
 # Finding — drift guard against the keys `analitiq.validator.finding` actually
-# produces (not xfail: a type-contract fact settled now). `finding()`'s own
-# docstring is the source: `rule` only when given, `severity` only for a
-# `fail` kind, everything else unconditional.
+# produces. `finding()`'s own docstring is the source: `rule` only when given,
+# `severity` only for a `fail` kind, everything else unconditional.
 # ---------------------------------------------------------------------------
 
 def test_finding_matches_the_keys_finding_builder_produces(validator):
@@ -355,7 +352,6 @@ def _write_tree(root: Path, documents: dict) -> None:
 # resolve_type_map_gaps: never raises, {"findings"} only.
 # ---------------------------------------------------------------------------
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_reports_unreadable_map_without_raising(validator):
     result = validator.resolve_type_map_gaps(
         maps={"type-map-read.json": "not json"}, direction="read", probes=["STRING"])
@@ -365,7 +361,6 @@ def test_gap_resolution_reports_unreadable_map_without_raising(validator):
     assert "direction" not in result["findings"][0]
 
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_reports_invalid_map_with_its_direction(validator):
     # Fails TypeMapReadDoc: a list, but of a rule object missing its `match`
     # discriminator (and its arrow_type).
@@ -377,7 +372,6 @@ def test_gap_resolution_reports_invalid_map_with_its_direction(validator):
     assert invalid[0]["direction"] == "read"
 
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_direction_selects_the_matching_model(validator):
     # Valid under TypeMapReadDoc (native_type is a bare matcher, unvalidated for
     # placeholders) but invalid under TypeMapWriteDoc (native_type is the write
@@ -394,7 +388,6 @@ def test_gap_resolution_direction_selects_the_matching_model(validator):
     assert invalid[0]["direction"] == "write"
 
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_reports_an_unresolved_probe_as_informational(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING", "BIGINT"])
@@ -404,14 +397,12 @@ def test_gap_resolution_reports_an_unresolved_probe_as_informational(validator):
     assert gaps[0]["direction"] == "read"
 
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_fully_covered_reports_no_findings(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING"])
     assert result == {"findings": []}
 
 
-@_xfail("resolve_type_map_gaps")
 def test_gap_resolution_falls_through_to_a_later_map_for_a_probe_the_first_does_not_cover(validator):
     # Neither map alone covers every probe: a probe the first key's map does
     # not render must still resolve via the second key's map rather than
@@ -427,11 +418,78 @@ def test_gap_resolution_falls_through_to_a_later_map_for_a_probe_the_first_does_
     assert result == {"findings": []}, result
 
 
+def test_gap_resolution_contains_a_recursion_crash_while_parsing(validator):
+    """Deeply nested but syntactically valid JSON exhausts the recursion
+    limit `json.loads` parses with — a crash distinct from the `ValueError`
+    a malformed document raises, and one `_validate_tree_document`'s own
+    parse step already isolates the same way for the tree routes."""
+    deeply_nested = "[" * 20_000 + "]" * 20_000
+    result = validator.resolve_type_map_gaps(
+        maps={"type-map-read.json": deeply_nested}, direction="read", probes=["STRING"])
+    assert [f["message_id"] for f in result["findings"]] == ["type-map-unreadable"]
+    assert result["findings"][0]["kind"] == "fail" and result["findings"][0]["severity"] == "error"
+
+
+def test_gap_resolution_rejects_a_canonical_filename_naming_the_wrong_direction(validator):
+    """`type-map-write.json`'s rows and `type-map-read.json`'s rows share the
+    same `{match, native_type, arrow_type}` keys, so a write map can also
+    satisfy the read model — model validation alone cannot catch a map loaded
+    under the wrong direction. The canonical filename is the one signal that
+    can, mirroring `type_map_gaps.py`'s own filename/direction check."""
+    maps = {"type-map-write.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING"])
+    assert [f["message_id"] for f in result["findings"]] == ["type-map-wrong-direction"]
+    assert result["findings"][0]["direction"] == "read"
+    assert not any(f["message_id"] == "type-map-gap" for f in result["findings"]), result
+
+
+def test_gap_resolution_allows_a_non_canonical_filename_of_either_direction(validator):
+    """The filename/direction check only fires on a load-bearing canonical
+    name (`type-map-read.json`/`type-map-write.json`); a map filed under any
+    other key is judged by its content alone, same as before this check
+    existed."""
+    maps = {"connections/pg/definition/type-map.json": [
+        {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING"])
+    assert result == {"findings": []}, result
+
+
+def test_diagnostics_accepts_a_schema_url_direction_hint_for_an_ambiguous_type_map(validator):
+    """`diagnostics()` has no `doc_path`, so `_validate_type_map`'s
+    filename-based direction detection can never fire on this route; without
+    a direction hint an ambiguous-direction type-map array always defaults to
+    the read model, rejecting a genuinely-valid write-only rule (`arrow_type`
+    holding the regex matcher, `native_type` the literal it renders to) as an
+    invalid Arrow type name. `schema_url` is the same disambiguation hint
+    `validate_document`'s own filesystem route already accepts."""
+    write_rules = [{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+),(?<s>\d+)\)",
+                     "native_type": "NUMERIC(${p}, ${s})"}]
+    defaulted = validator.diagnostics(write_rules, entity="type-map")
+    assert defaulted["passed"] is False, defaulted
+
+    told = validator.diagnostics(
+        write_rules, entity="type-map",
+        schema_url="https://schemas.analitiq.ai/type-map-write/latest.json")
+    assert told["passed"] is True, told
+
+
+def test_diagnostics_reports_the_defaulted_direction_even_with_no_filename_to_name(validator):
+    """`diagnostics()`'s path-free route has no `doc_path`, so it has no
+    filename for `_validate_type_map` to call ambiguous or confirm — it is
+    the one caller that can reach `validate_document(doc_path=None)` at all.
+    Guessing a direction there without saying so is the same silent guess the
+    filesystem route already reports via `type-map-direction-defaulted`; the
+    gate must widen to `doc_path is None`, not stay conditioned on a filename
+    that this route never has."""
+    read_rules = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+    result = validator.diagnostics(read_rules, entity="type-map")
+    assert any(f["message_id"] == "type-map-direction-defaulted" for f in result["findings"]), result
+
+
 # ---------------------------------------------------------------------------
 # Key handling.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_tree")
 def test_leading_dot_slash_is_normalized_away(validator):
     with_prefix = validator.validate_tree({f"./{k}": v for k, v in _connector_tree_documents().items()})
     without_prefix = validator.validate_tree(_connector_tree_documents())
@@ -439,7 +497,6 @@ def test_leading_dot_slash_is_normalized_away(validator):
 
 
 @pytest.mark.parametrize("bad_key", ["/connector.json", "../connector.json", ""])
-@_xfail("validate_tree")
 def test_invalid_keys_are_reported_not_raised(validator, bad_key):
     documents = {**_connector_tree_documents(), bad_key: {}}
     result = validator.validate_tree(documents)
@@ -447,14 +504,120 @@ def test_invalid_keys_are_reported_not_raised(validator, bad_key):
     assert result["passed"] is False
 
 
-@_xfail("validate_tree")
+# ---------------------------------------------------------------------------
+# A bundle member is validated as the entity its position already names, not
+# whatever kind its shape happens to auto-detect as.
+# ---------------------------------------------------------------------------
+
+def test_connector_json_that_is_not_a_connector_is_rejected_not_misdetected(validator):
+    # _PIPELINE is a fully model-valid pipeline document; handed as
+    # connector.json with no entity pin, it would auto-detect as pipeline and
+    # validate clean, silently skipping connector validation and coverage.
+    result = validator.validate_connector_tree({"connector.json": _PIPELINE})
+    assert result["passed"] is False, result
+
+
+def test_pipeline_json_that_is_not_a_pipeline_is_rejected_not_misdetected(validator):
+    # A valid type-map array in place of the pipeline document would
+    # auto-detect as type-map and produce no blocking finding, so the whole
+    # tree could pass with no pipeline ever actually validated.
+    documents = {**_pipeline_tree_documents(), "pipelines/p/pipeline.json": _CONNECTOR_WISE_TYPE_MAP_READ}
+    result = validator.validate_pipeline_tree(documents)
+    assert result["passed"] is False, result
+
+
+def test_stream_json_that_is_not_a_stream_is_rejected_not_misdetected(validator):
+    documents = {**_pipeline_tree_documents(), "pipelines/p/streams/orders.json": _CONNECTOR_WISE_TYPE_MAP_READ}
+    result = validator.validate_pipeline_tree(documents)
+    assert result["passed"] is False, result
+
+
+def test_connection_json_that_is_not_a_connection_is_rejected_not_misdetected(validator):
+    documents = {**_pipeline_tree_documents(), "connections/wise/connection.json": _CONNECTOR_WISE_TYPE_MAP_READ}
+    result = validator.validate_pipeline_tree(documents)
+    assert result["passed"] is False, result
+
+
+def test_model_invalid_pipeline_member_does_not_crash_the_referential_pass(validator):
+    """A pipeline document that materializes, parses, and is a `dict` is still
+    a bundle member even when it fails its own model validation
+    (`_resolved_member`'s gate, by design, mirrors the plugin's
+    `complete`/`crashed` distinction rather than re-checking model validity).
+    `connections.destinations` set to a non-iterable is exactly the shape
+    `validate_pipeline_bundle`'s own `_check_connection_version_conflicts`
+    cannot handle (it splats `destinations` directly): the referential pass
+    must report that crash as a finding, not propagate the `TypeError`."""
+    documents = _pipeline_tree_documents()
+    pipeline = {**documents["pipelines/p/pipeline.json"]}
+    pipeline["connections"] = {**pipeline["connections"], "destinations": 5}
+    documents = {**documents, "pipelines/p/pipeline.json": pipeline}
+
+    result = validator.validate_pipeline_tree(documents)
+
+    assert result["passed"] is False, result
+    assert any(f["message_id"] == "internal-error" for f in result["findings"]), result
+
+
+def test_invalid_connection_value_still_leaves_its_key_discoverable(validator):
+    """A connection whose VALUE is unusable (e.g. `None`) is not the same
+    defect as a connection whose KEY is unusable: the key is still a real
+    path identity in this document set, and `conn_slug` is read off that key
+    alone, so `validate_pipeline_tree`'s connection-slug discovery must still
+    find it and still check the siblings it locates from that slug — here a
+    connection-scoped endpoint, which does not depend on the connection
+    document's own content at all."""
+    documents = {
+        **_pipeline_tree_documents(),
+        "connections/wise/connection.json": None,
+        "connections/wise/definition/endpoints/broken.json": "{not valid json",
+    }
+
+    result = validator.validate_pipeline_tree(documents)
+
+    assert any(f["message_id"] == "invalid-value"
+               and f["path"] == "connections/wise/connection.json" for f in result["findings"]), result
+    assert any(f["path"].startswith("connections/wise/definition/endpoints/broken.json")
+               for f in result["findings"]), result
+
+
+def test_connection_scoped_endpoint_that_is_not_a_database_endpoint_is_rejected_not_misdetected(validator):
+    """A connection-scoped endpoint is always a database endpoint by its
+    position in the tree — unlike an embedded connector's own endpoints,
+    where api-vs-database is genuinely ambiguous and left to shape
+    auto-detection. A valid type-map array in its place would otherwise
+    auto-detect as type-map and produce no blocking finding."""
+    documents = {
+        **_pipeline_tree_documents(),
+        f"connections/postgresql/definition/endpoints/{_EID}.json": _CONNECTOR_WISE_TYPE_MAP_READ,
+    }
+    result = validator.validate_pipeline_tree(documents)
+    assert result["passed"] is False, result
+
+
+def test_two_keys_normalizing_to_the_same_key_report_a_finding(validator):
+    documents = _connector_tree_documents()
+    key = next(iter(documents))
+    documents[f"./{key}"] = documents[key]
+    result = validator.validate_tree(documents)
+    assert any(f["message_id"] == "duplicate-key" and f["path"] == key for f in result["findings"]), result
+    assert result["passed"] is False
+
+
+def test_non_string_key_is_reported_not_raised_by_the_sort(validator):
+    """`path` is a public string field (`rules/SCHEMA.md`'s Findings shape):
+    the raw key is stringified into it rather than passed through, so an
+    int key doesn't produce a schema-invalid finding."""
+    documents = {**_connector_tree_documents(), 1: {}}
+    result = validator.validate_tree(documents)
+    assert any(f["message_id"] == "invalid-key" and f["path"] == "1" for f in result["findings"]), result
+
+
 def test_key_that_is_both_document_and_directory_prefix_conflicts(validator):
     documents = {**_connector_tree_documents(), "endpoints/v1__records.json/extra.json": {}}
     result = validator.validate_tree(documents)
     assert any(f["message_id"] == "key-path-conflict" for f in result["findings"])
 
 
-@_xfail("validate_tree")
 def test_output_finding_order_is_independent_of_input_mapping_order(validator):
     # Two distinct uncovered endpoints, not the clean tree: comparing two
     # empty findings lists cannot detect order-sensitivity at all.
@@ -472,7 +635,6 @@ def test_output_finding_order_is_independent_of_input_mapping_order(validator):
     assert forward == backward
 
 
-@_xfail("validate_tree")
 def test_one_invalid_key_does_not_block_validating_the_rest(validator):
     documents = {
         **_connector_tree_documents(),
@@ -493,7 +655,6 @@ def test_one_invalid_key_does_not_block_validating_the_rest(validator):
 # resolve_type_map_gaps's `maps`.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_tree")
 def test_bytes_value_is_decoded_as_utf8_with_bom_stripped(validator):
     documents = _connector_tree_documents()
     text_result = validator.validate_tree(documents)
@@ -503,7 +664,6 @@ def test_bytes_value_is_decoded_as_utf8_with_bom_stripped(validator):
     assert bytes_result == text_result
 
 
-@_xfail("validate_tree")
 def test_non_str_bytes_object_value_is_invalid_not_raised(validator):
     documents = {**_connector_tree_documents(), "connector.json": 42}
     result = validator.validate_tree(documents)
@@ -512,38 +672,49 @@ def test_non_str_bytes_object_value_is_invalid_not_raised(validator):
     assert result["passed"] is False
 
 
-@_xfail("resolve_type_map_gaps")
 def test_invalid_value_applies_to_resolve_type_map_gaps_maps_too(validator):
     result = validator.resolve_type_map_gaps(maps={"type-map-read.json": 42}, direction="read", probes=["STRING"])
     assert any(f["message_id"] == "invalid-value" for f in result["findings"])
+
+
+def test_colliding_map_keys_are_rejected_before_resolving_probes(validator):
+    """`"type-map-read.json"` and `"./type-map-read.json"` normalize to one
+    path, but only one map could actually exist at runtime. Each carries a
+    rule the other lacks, so treating them as two independent maps would let
+    their union cover every probe and report no gap — exactly the undefined-
+    document hazard `_normalize_documents`'s own `duplicate-key` finding
+    already guards against for the tree APIs."""
+    maps = {
+        "type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        "./type-map-read.json": [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}],
+    }
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING", "BIGINT"])
+    assert any(f["message_id"] == "duplicate-key" for f in result["findings"]), result
+    assert not any(f["message_id"] == "type-map-gap" for f in result["findings"]), result
 
 
 # ---------------------------------------------------------------------------
 # Package-kind dispatch is a registry.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_connector_tree")
 def test_validate_connector_tree_validates_its_own_root_shape_directly(validator):
     result = validator.validate_connector_tree(_connector_tree_documents())
     assert result["passed"] is True
     assert not any(f["message_id"] in ("ambiguous-layout", "unrecognized-layout") for f in result["findings"])
 
 
-@_xfail("validate_pipeline_tree")
 def test_validate_pipeline_tree_validates_its_own_root_shape_directly(validator):
     result = validator.validate_pipeline_tree(_pipeline_tree_documents())
     assert result["passed"] is True
     assert not any(f["message_id"] in ("ambiguous-layout", "unrecognized-layout") for f in result["findings"])
 
 
-@_xfail("validate_tree")
 def test_validate_tree_reports_unrecognized_layout_for_neither_shape(validator):
     result = validator.validate_tree({"README.md": "not a document set at all"})
     assert result["passed"] is False
     assert any(f["message_id"] == "unrecognized-layout" for f in result["findings"])
 
 
-@_xfail("validate_tree")
 def test_validate_tree_reports_ambiguous_layout_when_both_shapes_match(validator):
     # A pipeline tree that ALSO carries a root-level connector.json — matching
     # both the connector-tree and the pipeline-tree detector at once.
@@ -553,7 +724,6 @@ def test_validate_tree_reports_ambiguous_layout_when_both_shapes_match(validator
     assert any(f["message_id"] == "ambiguous-layout" for f in result["findings"])
 
 
-@_xfail("validate_tree")
 def test_validate_tree_dispatches_a_pipeline_tree_to_pipeline_validation(validator):
     # Every other validate_tree case above exercises the connector-tree
     # detector or the fallthrough cases; this is the one case that proves the
@@ -568,12 +738,12 @@ def test_validate_tree_dispatches_a_pipeline_tree_to_pipeline_validation(validat
                for f in result["findings"]), result["findings"]
 
 
-@_xfail("validate_pipeline_tree")
 def test_embedded_connector_subtree_gets_its_own_coverage_findings(validator):
     """`connectors/wise/definition/connector.json` (kind=api) ships no sibling
     type-map or `endpoints/` directory — today's plugin never notices, because
-    `_connector_endpoint_sets` only reads endpoint ids for stream-ref
-    resolution. `validate_pipeline_tree` must resolve this subtree through the
+    the only thing it reads out of an embedded connector subtree is the
+    `connector_id` its bundle-referential check needs.
+    `validate_pipeline_tree` must resolve this subtree through the
     same package-kind registry `validate_tree` walks and report its OWN
     coverage findings (RULE-PKG-030 missing read map, RULE-PKG-035 missing
     endpoints/), scoped under the subtree's key prefix."""
@@ -598,7 +768,6 @@ def _cyclic_dict() -> dict:
     return node
 
 
-@_xfail("validate_tree")
 def test_one_document_crash_is_isolated_to_its_key(validator):
     documents = {
         **_connector_tree_documents(),
@@ -617,7 +786,6 @@ def test_one_document_crash_is_isolated_to_its_key(validator):
     assert any(f["message_id"] == "native-type-unresolved" for f in result["findings"]), result["findings"]
 
 
-@_xfail("validate_pipeline_tree")
 def test_embedded_package_crash_is_isolated_to_its_subtree_prefix(validator):
     documents = {
         **_pipeline_tree_documents_with_embedded_connectors(),
@@ -635,13 +803,367 @@ def test_embedded_package_crash_is_isolated_to_its_subtree_prefix(validator):
                for f in result["findings"]), result["findings"]
 
 
+def test_unparseable_json_text_crash_is_contained(validator):
+    """Exercises `_validate_tree_document`'s OWN parse catch — distinct from
+    `_normalize_documents`'s materialization catch the two crash tests above
+    hit: a raw string that is not valid JSON materializes into text just
+    fine, so the crash surfaces only once `fs.parsed()` is asked to turn that
+    text into a document."""
+    documents = {**_connector_tree_documents(), "connector.json": "{not valid json"}
+    result = validator.validate_connector_tree(documents)
+    assert result["passed"] is False
+    # The crash finding's own path is "/" (the whole-document convention
+    # `validate_document` itself uses), never `key` — `validate_connector_tree`
+    # never re-roots the tree's own root document under a site, so this is the
+    # finding's own final path here, not merely an intermediate one.
+    assert any(f["message_id"] == "internal-error" and f["kind"] == "fail" and f["severity"] == "error"
+               and f["path"] == "/" for f in result["findings"]), result["findings"]
+
+
+def test_double_prefixing_is_not_reintroduced_for_a_site_scoped_crash(validator):
+    """Regression for a finding built by `_validate_tree_document` and then
+    re-rooted by `_at_site`: the crash's own `path` must be the whole-document
+    convention (`"/"`), not the site key itself — the latter would have
+    `_at_site` append the key a second time (e.g.
+    `streams/orders.json/streams/orders.json`) instead of once."""
+    documents = _pipeline_tree_documents()
+    documents = {**documents, "pipelines/p/streams/orders.json": "{not valid json"}
+    result = validator.validate_pipeline_tree(documents)
+    crashed = [f for f in result["findings"] if f["message_id"] == "internal-error"]
+    assert any(f["path"] == "streams/orders.json" for f in crashed), result["findings"]
+    assert not any("streams/orders.json/streams/orders.json" in f["path"] for f in crashed), result["findings"]
+
+
+def test_connector_tree_with_no_root_document_is_reported_not_silently_passed(validator):
+    documents = {"endpoints/v1__records.json": _uncovered_endpoint_document()}
+    result = validator.validate_connector_tree(documents)
+    assert result["passed"] is False
+    assert any(f["message_id"] == "missing-connector-document" and f["path"] == "connector.json"
+               for f in result["findings"]), result["findings"]
+
+
+def test_embedded_connector_subtree_with_no_root_document_is_reported(validator):
+    documents = {
+        **_pipeline_core_documents(),
+        # A `connectors/wise/definition/...` subtree exists (an endpoints
+        # file lives under it), but no connector.json.
+        "connectors/wise/definition/endpoints/transfers.json": _WISE_TRANSFERS_ENDPOINT,
+    }
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "missing-connector-document"
+               and f["path"].startswith("connectors/wise/") for f in result["findings"]), result["findings"]
+
+
+def test_a_second_pipeline_document_is_named_not_silently_ignored(validator):
+    documents = {
+        **_pipeline_tree_documents(),
+        "pipelines/q/pipeline.json": {**_PIPELINE, "pipeline_id": _PID},
+    }
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "ignored-pipeline-document" and f["path"] == "pipelines/q/pipeline.json"
+               for f in result["findings"]), result["findings"]
+
+
+def test_multiple_pipeline_documents_pick_the_pathlib_first_as_primary(validator):
+    """Slugs "p" and "p-2" collide under plain string sort ('-' 0x2D sorts
+    below '/' 0x2F): a plain `sorted()` over the raw keys would put
+    "pipelines/p-2/pipeline.json" first, the opposite of what
+    `_assemble_bundle` (plugins/analitiq-pipeline-builder/scripts/validate.py),
+    which sorts real `Path` objects, picks for byte-identical content laid out
+    on disk."""
+    documents = {
+        **_pipeline_tree_documents(),
+        "pipelines/p-2/pipeline.json": {**_PIPELINE, "pipeline_id": _PID},
+    }
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "ignored-pipeline-document" and f["path"] == "pipelines/p-2/pipeline.json"
+               for f in result["findings"]), result["findings"]
+    assert not any(f["message_id"] == "ignored-pipeline-document" and f["path"] == "pipelines/p/pipeline.json"
+                   for f in result["findings"]), result["findings"]
+
+
+def test_connection_scan_order_matches_pathlib_not_string_order(validator):
+    """Connection slugs "a" and "a-b" collide the same way pipeline slugs do
+    above. `_check_connection_connector_refs` (`pipelines.py`) reports one
+    finding per connection at `/connections/{i}/connector_id`, so a scan order
+    that disagrees with `_assemble_bundle`'s `Path`-sorted order reports the
+    same defect at a different index — an equivalence break the two
+    promised-equivalent routes must not have."""
+    documents = {
+        **_pipeline_tree_documents(),
+        "connections/a/connection.json": {
+            "$schema": f"{_H}/connection/latest.json", "connection_id": "55555555-5555-4555-8555-555555555555",
+            "connector_id": "ghost", "display_name": "A", "parameters": {}, "secret_refs": {},
+        },
+        "connections/a-b/connection.json": {
+            "$schema": f"{_H}/connection/latest.json", "connection_id": "66666666-6666-4666-8666-666666666666",
+            "connector_id": "ghost", "display_name": "A-B", "parameters": {}, "secret_refs": {},
+        },
+    }
+    result = validator.validate_pipeline_tree(documents)
+    refs = {f["path"]: f["message"] for f in result["findings"] if f["message_id"] == "connector-ref-unresolved"}
+    assert "55555555-5555-4555-8555-555555555555" in refs["/connections/0/connector_id"], refs
+    assert "66666666-6666-4666-8666-666666666666" in refs["/connections/1/connector_id"], refs
+
+
+def test_a_document_that_fails_to_parse_skips_the_referential_pass(validator):
+    """Item: a document that fails to parse must not be silently dropped from
+    the bundle `validate_pipeline_bundle` grades — that would let a
+    spurious `*-ref-unresolved` finding fire against a sibling that was
+    actually fine, mirroring `plugins/analitiq-pipeline-builder/scripts/
+    validate.py`'s own `complete`/`crashed` gate."""
+    documents = _pipeline_tree_documents()
+    documents = {**documents, "connections/postgresql/connection.json": "{not valid json"}
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "internal-error" for f in result["findings"]), result["findings"]
+    # The postgresql connection failed to parse and dropped out of the
+    # bundle, so the pipeline's own destination reference to it would
+    # (wrongly) look unresolved to validate_pipeline_bundle's own referential
+    # pass were it still run against a bundle this incomplete.
+    assert not any(f.get("message_id") == "connection-ref-unresolved" for f in result["findings"]), \
+        result["findings"]
+
+
+def test_a_document_that_never_materializes_also_skips_the_referential_pass(validator):
+    """The other of `_VirtualFS`'s two crash layers: a key whose own value
+    could not even be turned into JSON text (a cyclic structure) never reaches
+    `_validate_tree_document` at all — `_normalize_documents` reports it
+    directly. That must cost the bundle the same completeness gate a
+    parse-time crash does, since either way the connection dropped out of the
+    bundle just the same."""
+    cyclic: dict = {}
+    cyclic["self"] = cyclic
+    documents = _pipeline_tree_documents()
+    documents = {**documents, "connections/postgresql/connection.json": cyclic}
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "internal-error" for f in result["findings"]), result["findings"]
+    assert not any(f.get("message_id") == "connection-ref-unresolved" for f in result["findings"]), \
+        result["findings"]
+
+
+# ---------------------------------------------------------------------------
+# The crash-isolation matrix: every bundle member `_resolved_member` gates
+# (pipeline, stream, connection, connection-scoped endpoint, embedded
+# connector identity, connector-scoped endpoint id) against every way it can
+# fail to resolve (missing key, materialization crash, parse crash, wrong
+# shape). One mechanism gates all six member kinds, so this is one
+# parametrized test rather than N hand-written per-case tests — reverting any
+# one piece of that mechanism should turn most of this matrix red at once,
+# not just the cell that names the piece.
+# ---------------------------------------------------------------------------
+
+def _drop(documents: dict, key: str) -> dict:
+    return {k: v for k, v in documents.items() if k != key}
+
+
+def _crash_materialization(documents: dict, key: str) -> dict:
+    return {**documents, key: _cyclic_dict()}
+
+
+def _crash_parse(documents: dict, key: str) -> dict:
+    return {**documents, key: "{not valid json"}
+
+
+def _wrong_shape(documents: dict, key: str) -> dict:
+    # Valid JSON, wrong Python shape: every member this matrix covers is
+    # expected to be an object, so a list is "parses fine, still excluded".
+    return {**documents, key: []}
+
+
+_MATRIX_MUTATORS = {
+    "missing": _drop,
+    "materialization-crash": _crash_materialization,
+    "parse-crash": _crash_parse,
+    "wrong-shape": _wrong_shape,
+}
+
+# Five of the six member kinds are gated by `bundle_is_incomplete`: excluding
+# one for any reason skips `validate_pipeline_bundle`'s whole referential pass
+# for this call, which is observed here by the two `connection-ref-unresolved`
+# findings `_pipeline_tree_documents_with_two_findings` otherwise always
+# produces (for its two permanently-unresolvable injected connection ids)
+# going missing along with everything else.
+#
+# `missing` is absent for pipeline/stream/connection/connection-endpoint:
+# each of those is DISCOVERED by the presence of its own key
+# (`pipelines/<slug>/pipeline.json`, `pipelines/<slug>/streams/*.json`,
+# `connections/<slug>/connection.json`,
+# `connections/<slug>/definition/endpoints/*.json`) — a key that was never
+# there is never discovered at all, so there is nothing for `_resolved_member`
+# to exclude. That is a structurally different case from a key that IS
+# discovered and then fails to resolve, and it is not silently skipped here:
+# see the four `test_missing_*_is_not_an_exclusion...` tests below, which
+# pin what actually happens instead (each is independently reachable through
+# a referential check that already exists for a different reason).
+#
+# `connector-identity` is the one member of these five discovered by its
+# SUBTREE's presence (any file under `connectors/<slug>/definition/`,
+# independent of `connector.json` itself), so a missing `connector.json`
+# alongside an otherwise-present subtree IS reachable through this gate.
+_INCOMPLETENESS_CELLS = {
+    "pipeline": ("pipelines/p/pipeline.json",
+                 ("materialization-crash", "parse-crash", "wrong-shape")),
+    "stream": ("pipelines/p/streams/orders.json",
+               ("materialization-crash", "parse-crash", "wrong-shape")),
+    "connection": ("connections/postgresql/connection.json",
+                   ("materialization-crash", "parse-crash", "wrong-shape")),
+    "connection-endpoint": (f"connections/postgresql/definition/endpoints/{_EID}.json",
+                            ("materialization-crash", "parse-crash", "wrong-shape")),
+    "connector-identity": ("connectors/wise/definition/connector.json",
+                           ("missing", "materialization-crash", "parse-crash", "wrong-shape")),
+}
+
+
+@pytest.mark.parametrize(
+    "member_kind,failure_mode",
+    [(kind, mode) for kind, (_, modes) in _INCOMPLETENESS_CELLS.items() for mode in modes],
+)
+def test_excluded_bundle_member_marks_the_bundle_incomplete(validator, member_kind, failure_mode):
+    key, _ = _INCOMPLETENESS_CELLS[member_kind]
+    documents = _MATRIX_MUTATORS[failure_mode](_pipeline_tree_documents_with_two_findings(), key)
+    result = validator.validate_pipeline_tree(documents)
+    assert not any(
+        f.get("message_id") == "connection-ref-unresolved" and "missing-connection" in f.get("message", "")
+        for f in result["findings"]), result["findings"]
+    if member_kind == "pipeline":
+        # A crashed (not merely absent) pipeline document is `bundle_is_incomplete`'s
+        # OWN job to catch: `bundle["pipeline"]` reaches `validate_pipeline_bundle`
+        # as `None` either way, so without this flag skipping the call entirely,
+        # that function's `bundle-missing-pipeline-document` framework check would
+        # fire in its place — a real, observable finding this flag exists to
+        # prevent, not just the two-findings-absent signal every other kind shares.
+        assert not any(f["message_id"] == "bundle-missing-pipeline-document" for f in result["findings"]), \
+            result["findings"]
+
+
+def test_missing_pipeline_document_is_not_an_exclusion(validator):
+    """pipeline x missing is the one cell of the six-kind matrix
+    `_resolved_member`'s own gate cannot reach: with zero
+    `pipelines/<slug>/pipeline.json` keys at all, `validate_pipeline_tree`'s
+    `if pipeline_keys:` guard is never entered, so `_resolved_member` is never
+    called for a pipeline document and `bundle_is_incomplete` stays False —
+    `bundle["pipeline"]` reaches `validate_pipeline_bundle` as `None`, and
+    that function's own framework-level `bundle-missing-pipeline-document`
+    check (fired before any registered referential rule runs) reports it
+    instead, short-circuiting the referential pass by itself."""
+    documents = _drop(_pipeline_tree_documents_with_two_findings(), "pipelines/p/pipeline.json")
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "bundle-missing-pipeline-document" for f in result["findings"]), \
+        result["findings"]
+    assert not any(
+        f.get("message_id") == "connection-ref-unresolved" and "missing-connection" in f.get("message", "")
+        for f in result["findings"]), result["findings"]
+
+
+def test_absent_pipeline_document_is_named_even_when_the_referential_pass_is_skipped(validator):
+    """`bundle-missing-pipeline-document` is normally `validate_pipeline_bundle`'s
+    to report, and the completeness gate skips that pass whenever any bundle
+    member excluded itself. That gate exists because a missing member makes
+    CROSS-document references unreliable — but "this tree carries no pipeline
+    document at all" is read off the key set alone and needs no other member
+    to be trustworthy, so it must not disappear along with the pass that
+    usually carries it."""
+    documents = _drop(_pipeline_tree_documents_with_two_findings(), "pipelines/p/pipeline.json")
+    documents = {**documents, "connections/postgresql/connection.json": "{not valid json"}
+
+    result = validator.validate_pipeline_tree(documents)
+
+    message_ids = [f["message_id"] for f in result["findings"]]
+    assert message_ids.count("bundle-missing-pipeline-document") == 1, result["findings"]
+    assert "internal-error" in message_ids, result["findings"]
+
+
+def test_missing_stream_document_is_not_an_exclusion(validator):
+    """A `pipelines/<slug>/streams/*.json` key that was never there is never
+    discovered by `fs.known_json_children`, so it is not something
+    `_resolved_member` excludes — `bundle_is_incomplete` stays False, the
+    referential pass runs, and the stream's own absence surfaces the ordinary
+    way: RULE-PIPE-011's `stream-ref-unresolved` against the pipeline's own
+    `streams` list, alongside the always-otherwise-firing injected findings,
+    which still fire because the pass was never skipped."""
+    documents = _drop(_pipeline_tree_documents_with_two_findings(), "pipelines/p/streams/orders.json")
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "stream-ref-unresolved" for f in result["findings"]), result["findings"]
+    assert any(
+        f.get("message_id") == "connection-ref-unresolved" and "missing-connection" in f.get("message", "")
+        for f in result["findings"]), result["findings"]
+
+
+def test_missing_connection_document_is_not_an_exclusion(validator):
+    """A `connections/<slug>/connection.json` key that was never there is
+    never iterated by the connections loop at all — not just the connection
+    itself but its sibling scoped endpoint is never discovered either, since
+    both are located from that same key's presence (never its content). The
+    referential pass still runs (`bundle_is_incomplete` stays False): the
+    missing connection surfaces as its stream's now-unresolvable destination
+    `endpoint_ref` (RULE-STRM-034's `endpoint-ref-unresolved`, since the
+    connection-scoped endpoint the ref names was never discovered either),
+    alongside the always-otherwise-firing injected findings."""
+    documents = _drop(_pipeline_tree_documents_with_two_findings(), "connections/postgresql/connection.json")
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "endpoint-ref-unresolved" for f in result["findings"]), result["findings"]
+    assert any(
+        f.get("message_id") == "connection-ref-unresolved" and "missing-connection" in f.get("message", "")
+        for f in result["findings"]), result["findings"]
+
+
+def test_missing_connection_endpoint_document_is_not_an_exclusion(validator):
+    """A connection-scoped `endpoints/*.json` key that was never there is
+    never discovered by `fs.known_json_children`, so — unlike a materialization
+    crash, parse crash, or wrong-shaped value at that same key — there is
+    nothing for `_resolved_member` to exclude and `bundle_is_incomplete` stays
+    False. The referential pass still runs, and the missing endpoint surfaces
+    as the stream's destination `endpoint_ref` failing to resolve against the
+    bundle's (now one entry short) `endpoints` list."""
+    documents = _drop(
+        _pipeline_tree_documents_with_two_findings(),
+        f"connections/postgresql/definition/endpoints/{_EID}.json")
+    result = validator.validate_pipeline_tree(documents)
+    assert any(f["message_id"] == "endpoint-ref-unresolved" for f in result["findings"]), result["findings"]
+    assert any(
+        f.get("message_id") == "connection-ref-unresolved" and "missing-connection" in f.get("message", "")
+        for f in result["findings"]), result["findings"]
+
+
+# ---------------------------------------------------------------------------
+# Entity override — end-to-end: validate_document(entity=...) dispatches
+# straight to the named kind, bypassing shape auto-detection; diagnostics on a
+# DocumentSet never consults it.
+# ---------------------------------------------------------------------------
+
+def test_validate_document_entity_override_bypasses_shape_auto_detection(validator):
+    doc: dict = {}
+    auto = validator.validate_document(doc)
+    assert any(f["message_id"] == "unrecognized-document" for f in auto), auto
+
+    forced = validator.validate_document(doc, entity="connection")
+    assert not any(f["message_id"] == "unrecognized-document" for f in forced), forced
+    assert forced, forced  # the connection model still rejects an empty document
+
+
+def test_diagnostics_entity_override_reaches_only_the_single_document_route(validator):
+    # A non-mapping value, not `{}` — an empty dict is itself a (trivially
+    # valid) empty DocumentSet, so `diagnostics` would route it to
+    # `validate_tree` rather than `validate_document`, never reaching the
+    # shape auto-detection this test means to bypass.
+    doc = "not a document"
+    without_entity = validator.diagnostics(doc)
+    with_entity = validator.diagnostics(doc, entity="connection")
+    assert any(f["message_id"] == "unrecognized-document" for f in without_entity["findings"])
+    assert not any(f["message_id"] == "unrecognized-document" for f in with_entity["findings"])
+
+    documents = _connector_tree_documents()
+    without_entity_set = validator.validate_tree(documents)
+    with_entity_set = validator.diagnostics(documents, entity="connection")
+    assert json.dumps(with_entity_set) == json.dumps(without_entity_set)
+
+
 # ---------------------------------------------------------------------------
 # diagnostics — auto-detects single-document vs. document-set input and
 # dispatches to validate_document / validate_tree accordingly, wrapping
 # either result in one ValidationEnvelope shape.
 # ---------------------------------------------------------------------------
 
-@_xfail("diagnostics")
 def test_diagnostics_dispatches_a_single_document_to_validate_document(validator):
     document = json.loads((CORPUS / "valid_connector.json").read_text())
     expected_findings = validator.validate_document(document)
@@ -650,7 +1172,6 @@ def test_diagnostics_dispatches_a_single_document_to_validate_document(validator
     assert json.dumps(validator.diagnostics(document)) == json.dumps(expected)
 
 
-@_xfail("diagnostics")
 def test_diagnostics_dispatches_a_document_set_to_validate_tree(validator):
     documents = {
         **_connector_tree_documents(),
@@ -659,12 +1180,47 @@ def test_diagnostics_dispatches_a_document_set_to_validate_tree(validator):
     assert json.dumps(validator.diagnostics(documents)) == json.dumps(validator.validate_tree(documents))
 
 
+def test_a_document_set_key_named_like_a_document_field_is_not_misdetected_as_that_document(validator):
+    """A document set's keys are not restricted to `.json` names, so a
+    connector tree that happens to also carry a root-level key literally
+    named `"connections"` must still be recognized as the document set it is:
+    `pipelines.is_pipeline_doc` claims any mapping merely because it has a
+    `"connections"` key and no `"pipeline"` key, which the whole document set
+    mapping itself satisfies once such a key is present. A path-shaped sibling
+    key (`connector.json` here) must mark the mapping as a document set first."""
+    documents = {**_connector_tree_documents(), "connections": {"anything": "goes"}}
+    result = validator.diagnostics(documents)
+    assert result == validator.validate_tree(documents)
+    assert result["passed"] is True, result  # the base fixture is coverage-clean
+
+
+def test_a_rootless_document_set_with_a_field_named_key_is_not_misdetected_either(validator):
+    """The same misdetection can happen with no tree root present at all: a
+    document set carrying only a `connections/pg/connection.json` member and a
+    root-level `"connections"` key matches neither the connector-package root
+    shape nor the pipeline-bundle root shape, so a check for those two roots
+    alone would say "not a document set" and let `pipelines.is_pipeline_doc`
+    claim the whole mapping — same defect, without needing a `connector.json`
+    to reach it. It must still route through `validate_tree` and land on
+    `unrecognized-layout`, not on a pipeline-document verdict."""
+    documents = {
+        "connections/pg/connection.json": {
+            "$schema": f"{_H}/connection/latest.json",
+            "connection_id": "77777777-7777-4777-8777-777777777777",
+            "connector_id": "pg", "display_name": "PG", "parameters": {}, "secret_refs": {},
+        },
+        "connections": {"anything": "goes"},
+    }
+    result = validator.diagnostics(documents)
+    assert result == validator.validate_tree(documents)
+    assert "unrecognized-layout" in [f["message_id"] for f in result["findings"]], result
+
+
 # ---------------------------------------------------------------------------
 # Acceptance — equivalence: the path-based route and the document-set route
 # produce byte-identical results for the same content, per package kind.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_connector_tree")
 def test_connector_tree_equivalence_with_the_path_based_route(validator, tmp_path):
     # Two distinct uncovered endpoints, not just a clean tree: a route
     # producing zero findings would make "findings order included" vacuous.
@@ -684,7 +1240,6 @@ def test_connector_tree_equivalence_with_the_path_based_route(validator, tmp_pat
     assert json.dumps(tree_based) == json.dumps(expected)
 
 
-@_xfail("validate_pipeline_tree")
 def test_pipeline_tree_equivalence_with_the_path_based_route(validator, tmp_path):
     import validate as pipeline_adapter  # plugins/analitiq-pipeline-builder/scripts/validate.py
 
@@ -695,3 +1250,285 @@ def test_pipeline_tree_equivalence_with_the_path_based_route(validator, tmp_path
     assert len(path_based["findings"]) >= 2, path_based  # non-vacuous: order genuinely matters below
     tree_based = validator.validate_pipeline_tree(documents)
     assert json.dumps(tree_based) == json.dumps(path_based)
+
+
+# ---------------------------------------------------------------------------
+# _extract_subtree: a raw-key collision on the same subtree-relative key
+# resolves deterministically, regardless of the caller's insertion order.
+# ---------------------------------------------------------------------------
+
+def test_connector_subtrees_are_partitioned_in_one_pass_not_one_per_connector(validator):
+    """Extracting each embedded connector's subtree with its own full scan of
+    the document set makes validation O(C x N log N) in the number of
+    connectors C and total entries N — quadratic when each connector
+    contributes a constant number of files, so a large hosted request spends
+    most of its time rebuilding the same partition. The whole mapping is
+    walked a fixed number of times regardless of how many connectors it
+    carries, which is what this counts: adding a third connector must not add
+    a third walk."""
+    class _CountingDocuments(dict):
+        walks = 0
+
+        def __iter__(self):
+            type(self).walks += 1
+            return super().__iter__()
+
+    base = _pipeline_tree_documents()
+    two_connectors = _CountingDocuments(base)
+    validator.validate_pipeline_tree(two_connectors)
+    walks_for_two = _CountingDocuments.walks
+
+    _CountingDocuments.walks = 0
+    three_connectors = _CountingDocuments({
+        **base,
+        "connectors/stripe/definition/connector.json": {**_CONNECTOR_WISE, "connector_id": "stripe"},
+    })
+    validator.validate_pipeline_tree(three_connectors)
+
+    assert _CountingDocuments.walks == walks_for_two, (
+        f"{walks_for_two} walk(s) for two connectors, {_CountingDocuments.walks} for three — "
+        "the partition is being rebuilt per connector")
+
+
+def test_extract_subtree_resolves_a_raw_key_collision_by_sorted_order_not_insertion_order(validator):
+    """`_normalize_key` only strips a LEADING `./`, so two raw keys that both
+    normalize to the same subtree-relative key (a `./`-prefixed duplicate of
+    the whole path, here) must resolve to the same value regardless of which
+    one the caller happened to insert first — the same sorted-key-order-wins
+    rule `_normalize_documents` already applies at the whole tree's own top
+    level, per this function's own docstring."""
+    from analitiq.validator.document_set import _extract_subtrees
+
+    forward = {
+        "connectors/wise/definition/connector.json": {"which": "unprefixed"},
+        "./connectors/wise/definition/connector.json": {"which": "dot-slash-prefixed"},
+    }
+    backward = dict(reversed(list(forward.items())))
+
+    prefix = "connectors/wise/definition/"
+    forward_subtree = _extract_subtrees(forward, [prefix])[prefix]
+    backward_subtree = _extract_subtrees(backward, [prefix])[prefix]
+
+    # "./connectors/..." sorts before "connectors/..." in plain string order
+    # ("." < "c"), so it is the raw key `sorted(documents, key=str)` visits
+    # first — the one `setdefault` keeps.
+    assert forward_subtree == backward_subtree == {
+        "connector.json": {"which": "dot-slash-prefixed"},
+    }
+
+
+# ---------------------------------------------------------------------------
+# resolve_type_map_gaps: probe deduplication and probe/probes validation.
+# ---------------------------------------------------------------------------
+
+def test_gap_resolution_deduplicates_repeated_probes(validator):
+    """A repeated probe is one verdict, not one `type-map-gap` finding per
+    occurrence — mirroring the outcome `type_map_gaps.py`'s own `resolve`
+    already gives its CLI probes."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["BIGINT", "BIGINT", "BIGINT"])
+    gaps = [f for f in result["findings"] if f["message_id"] == "type-map-gap"]
+    assert len(gaps) == 1, result["findings"]
+
+
+def test_gap_resolution_deduplicates_a_repeated_invalid_probe_too(validator):
+    """De-duplication runs before the per-probe string check, not after: a
+    repeated non-string probe is one `invalid-probe` finding, not one per
+    occurrence — the same "one verdict per probe" rule as a repeated valid
+    one, and it is the harder half to get right, since the natural
+    implementation is to validate probes into a `set` as they're seen, which
+    itself crashes on an unhashable probe (a `list`, say) rather than
+    reporting it."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=[None, None, ["not", "hashable"]])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe", "invalid-probe"], result["findings"]
+
+
+def test_gap_resolution_deduplicates_a_repeated_unhashable_probe_too(validator):
+    """The O(1)-per-hashable-probe `set` fast path falls back to a linear
+    scan for an unhashable probe (a `list`, say) — that fallback must still
+    deduplicate a probe repeated more than once, not just tolerate a single
+    occurrence, proving the fallback is itself a working membership check and
+    not merely a crash-avoidance no-op."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(
+        maps=maps, direction="read", probes=[["not", "hashable"], ["not", "hashable"]])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe"], result["findings"]
+
+
+def test_gap_resolution_reports_a_non_string_probe_on_the_read_route_instead_of_crashing(validator):
+    """The read route's `_render_arrow_type` normalizes a probe by calling
+    string methods on it directly (`.strip()`), so a non-string probe would
+    otherwise crash this function rather than being reported, breaking the
+    "never raises" contract `resolve_type_map_gaps` documents for itself."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING", None])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe"], result["findings"]
+    invalid = result["findings"][0]
+    assert invalid["kind"] == "fail" and invalid["severity"] == "error"
+    assert invalid["direction"] == "read"
+    assert "native-type" in invalid["message"]
+
+
+def test_gap_resolution_reports_a_non_string_probe_on_the_write_route_too(validator):
+    """The write route's `_first_match_render` matches a probe against each
+    rule's `arrow_type` with no string normalization at all, so a non-string
+    probe does not crash there — pre-fix, it was silently graded resolved or
+    gapped by whatever comparison its type happened to support instead, a
+    wrong-answer failure mode rather than a crash, but the same underlying
+    defect: this route must report it exactly like the read route does,
+    naming the write-side vocabulary (Arrow types, not native types) in the
+    message."""
+    maps = {"type-map-write.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="write", probes=["Utf8", None])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe"], result["findings"]
+    invalid = result["findings"][0]
+    assert invalid["direction"] == "write"
+    assert "Arrow-type" in invalid["message"]
+
+
+def test_gap_resolution_contains_a_probe_whose_own_comparison_recurses(validator):
+    """A probe element is untrusted input, and `==` on one is unbounded: two
+    distinct self-referential lists compare forever, and so does a deeply
+    nested one against any other non-string probe. Neither can be graded
+    against a type map, so both are `invalid-probe` — the point is that
+    reaching that verdict must never run an arbitrary comparison on a value
+    not yet known to be a string, which is the only way this function can keep
+    the "never raises" contract it documents."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    cyclic_a: list = []
+    cyclic_a.append(cyclic_a)
+    cyclic_b: list = []
+    cyclic_b.append(cyclic_b)
+
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=[cyclic_a, cyclic_b])
+
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe"], result["findings"]
+
+
+def test_gap_resolution_contains_a_probe_whose_own_repr_recurses(validator):
+    """The same rule covers `repr`: a probe nested deeply enough exhausts the
+    recursion limit when formatted into a finding message, so the message
+    names what the probe IS rather than what it contains."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    deep: object = ["x"]
+    for _ in range(50_000):
+        deep = [deep]
+
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=[deep])
+
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe"], result["findings"]
+
+
+def test_gap_resolution_reports_a_non_list_probes_instead_of_raising(validator):
+    """`probes` itself, not one of its elements, can be the wrong shape: a
+    bare string iterates character by character rather than probe by probe,
+    and `None` is not iterable at all — both are the same "never raises"
+    contract the per-element `invalid-probe` check exists for, one level up."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=None)
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"], result["findings"]
+
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes="STRING")
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"], result["findings"]
+
+
+def test_gap_resolution_rejects_a_direction_outside_the_read_write_pair(validator):
+    """`Literal["read", "write"]` is a type-checker-only promise; an untyped
+    caller passing anything else must not have it silently treated as
+    'write' (the `direction == "read"` branch's implicit else) — including on
+    a reported finding's own `direction` field, typed the same closed
+    `Literal` an invalid value has no business appearing in."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="sideways", probes=["STRING"])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-direction"], result["findings"]
+    assert "direction" not in result["findings"][0]
+
+
+def test_gap_resolution_reports_a_regex_that_crashes_the_model_validator_instead_of_raising(validator):
+    """A syntactically valid JSON rule is not necessarily a computationally
+    sane one: a regex repetition count large enough to overflow Python's `re`
+    compiler raises `OverflowError`, not `re.error`/`ValidationError` — the
+    only exception `adapter.validate_python` was isolated against before this
+    fix, so this crash escaped `resolve_type_map_gaps` entirely."""
+    maps = {"type-map-read.json": [
+        {"match": "regex", "native_type": r"a{999999999999999999999999}", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING"])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-type-map"], result["findings"]
+
+
+@pytest.mark.parametrize("bad_value", [None, [], "not a dict", 42])
+@pytest.mark.parametrize("entry_point", [
+    "validate_connector_tree", "validate_pipeline_tree", "validate_tree",
+])
+def test_tree_entry_points_report_invalid_document_set_for_non_dict_input(
+        validator, entry_point, bad_value):
+    """`DocumentSet`'s `dict[str, DocumentSetValue]` annotation is a
+    type-checker-only promise: an untyped caller can hand any of these three
+    entry points something that is not a `dict` at all, and each must report
+    `invalid-document-set` rather than crash trying to normalize or key-scan
+    it as one — the same "never raises" contract every other malformed-input
+    shape in this module already gets."""
+    result = getattr(validator, entry_point)(bad_value)
+    assert result["findings"] == [{
+        "message_id": "invalid-document-set", "kind": "fail", "severity": "error", "path": "",
+        "message": (
+            f"a document set must be a dict of path-shaped keys to content; "
+            f"got {type(bad_value).__name__}."),
+    }], result
+
+
+@pytest.mark.parametrize("bad_value", [None, [], "not a dict", 42])
+def test_resolve_type_map_gaps_reports_invalid_document_set_for_non_dict_maps(validator, bad_value):
+    """Same non-`dict` `maps` gap as the three tree entry points, on
+    `resolve_type_map_gaps`'s own `FindingsEnvelope` shape (no `passed`)."""
+    result = validator.resolve_type_map_gaps(bad_value, "read", [])
+    assert result["findings"] == [{
+        "message_id": "invalid-document-set", "kind": "fail", "severity": "error", "path": "",
+        "message": (
+            f"a document set must be a dict of path-shaped keys to content; "
+            f"got {type(bad_value).__name__}."),
+    }], result
+
+
+def test_diagnostics_reports_an_invalid_key_even_when_every_valid_key_looks_like_a_field(validator):
+    """An absolute path key (`_normalize_key` rejects a leading `/`) must
+    still mark the whole mapping as a `DocumentSet` — even when doing so
+    leaves no OTHER key that normalizes to something path-shaped — so a kind
+    detector never gets the chance to claim the mapping as a single document
+    and swallow the `invalid-key` finding this absolute key deserves."""
+    target = {"/connector.json": {"kind": "api"}, "connections": {}}
+    result = validator.diagnostics(target)
+    assert any(f["message_id"] == "invalid-key" for f in result["findings"]), result
+
+
+def test_extract_subtree_prefix_conflict_scan_flags_every_conflicting_key(validator, tmp_path):
+    """The O(1)-per-key sorted-neighbor check must still catch every
+    `key-path-conflict`, not just a first one, when the document set has
+    several unrelated conflicting prefixes — proving the optimization did not
+    trade all-pairs correctness for its near-linear scan."""
+    from analitiq.validator.document_set import _normalize_documents
+
+    documents = {
+        "a": {}, "a/b": {},
+        "c": {}, "c/d": {},
+    }
+    _, findings = _normalize_documents(documents)
+    conflicts = {f["path"] for f in findings if f["message_id"] == "key-path-conflict"}
+    assert conflicts == {"a", "c"}, findings
+
+
+def test_extract_subtree_prefix_conflict_scan_survives_a_raw_string_sort_interloper(validator, tmp_path):
+    """`"a-sibling"` sorts between `"a"` and `"a/b"` in raw string order (`-` is
+    a lower byte than `/`) but not in path-parts order (`["a-sibling"]` sorts
+    after `["a", "b"]`, since a one-part tuple only precedes a longer tuple it
+    is itself a prefix of). A neighbor scan keyed by raw string order would
+    see `"a-sibling"` immediately after `"a"` and miss the real `"a"`/`"a/b"`
+    conflict entirely."""
+    from analitiq.validator.document_set import _normalize_documents
+
+    documents = {"a": {}, "a-sibling": {}, "a/b": {}}
+    _, findings = _normalize_documents(documents)
+    conflicts = {f["path"] for f in findings if f["message_id"] == "key-path-conflict"}
+    assert conflicts == {"a"}, findings

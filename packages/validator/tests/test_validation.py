@@ -1268,7 +1268,11 @@ def test_database_endpoint_valid_and_invalid(validator):
 # --- advisory warnings ---
 
 def _warnings(findings):
-    return [f for f in findings if f["severity"] == "warning"]
+    # `.get`, not `[...]` — an `informational` finding (e.g. this module's
+    # ambiguous-direction type-map default) carries no `severity` key at all,
+    # per `rules/SCHEMA.md`'s envelope; it is not a warning, but it must not
+    # crash this filter either.
+    return [f for f in findings if f.get("severity") == "warning"]
 
 
 def test_duplicate_type_map_rule_warns(validator):

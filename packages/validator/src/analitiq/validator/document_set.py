@@ -1,4 +1,4 @@
-"""The path-free document-set API — types and signatures, not yet implemented.
+"""The path-free document-set API.
 
 `analitiq.validator._core.validate_document` and `analitiq.validator.connectors
 .check_coverage` both read real files off disk: `check_coverage` walks a
@@ -10,17 +10,33 @@ filesystem — a hosted validator wrapping this package as a remote tool,
 registry CI, any caller handed document content directly rather than a
 directory to read it from — cannot use either route.
 
-This module fixes the contract such a consumer calls instead: a `DocumentSet`
-of already-loaded content, keyed by the relative path each document would
-have occupied on disk, in and out. Every function below raises
-`NotImplementedError` — the behaviour they must satisfy is fixed by
-`packages/validator/tests/test_document_set.py`, whose fixture cases are
-`xfail` until an implementation PR replaces these bodies and removes the
-markers one case at a time.
+This module is the path-free form of that contract: a `DocumentSet` of
+already-loaded content, keyed by the relative path each document would have
+occupied on disk, in and out. It reuses every existing path-anchored check
+unchanged, by handing it a `VirtualPath` (`._virtual_fs`) backed by an
+in-memory `_VirtualFS` instead of a real filesystem path — the same duck-typed
+`.parent` / `.is_file()` / `.read_text()` / `.rglob("*.json")` surface those
+checks already call.
 """
 from __future__ import annotations
 
+import json
+import re
 from typing import Any, Literal, TypedDict, Union
+
+from pydantic import ValidationError
+
+from ._core import _KIND_REGISTRY, finding, finding_costs_a_pass, validate_document
+from ._virtual_fs import VirtualPath, _VirtualFS, path_parts_key
+from .connectors import (
+    _READ_MAP_ADAPTER,
+    _READ_MAP_FILENAME,
+    _WRITE_MAP_ADAPTER,
+    _WRITE_MAP_FILENAME,
+    _first_match_render,
+    _render_arrow_type,
+)
+from .pipelines import validate_pipeline_bundle
 
 #: The value half of a `DocumentSet` entry: text, raw bytes (decoded as UTF-8
 #: with a BOM stripped if present — no encoding-guessing), or a value already
@@ -32,11 +48,11 @@ DocumentSetValue = Union[str, bytes, dict, list]
 #: A path-free bundle of documents: POSIX-relative-path-shaped string keys
 #: (e.g. `"connections/foo/connection.json"`, `"endpoints/widgets.json"`) mapped
 #: to already-loaded content. A leading `./` is normalized away; an absolute
-#: key, a key containing `..`, or the empty string is reported as an
-#: `invalid-key` finding rather than raised. Every function below that takes or
-#: produces a document set uses this one shape, so `validate_tree`'s
-#: `documents` and `resolve_type_map_gaps`'s `maps` share one value type rather
-#: than two independently-typed mappings.
+#: key, a key containing a `.` or `..` segment, or the empty string is
+#: reported as an `invalid-key` finding rather than raised. Every function
+#: below that takes or produces a document set uses this one shape, so
+#: `validate_tree`'s `documents` and `resolve_type_map_gaps`'s `maps` share one
+#: value type rather than two independently-typed mappings.
 DocumentSet = dict[str, DocumentSetValue]
 
 #: This API's document-kind vocabulary — a literal tuple, not a runtime import
@@ -108,6 +124,330 @@ class FindingsEnvelope(TypedDict):
     findings: list[Finding]
 
 
+# ---------------------------------------------------------------------------
+# Key/value normalization — shared by every function that walks a DocumentSet.
+# ---------------------------------------------------------------------------
+
+def _normalize_key(raw_key: Any) -> str | None:
+    """The relative-path shape a `DocumentSet` key must have, or `None` when it
+    is an absolute path, contains a `.` or `..` segment, or is the empty
+    string — a leading `./` (however many) is stripped first rather than
+    rejected. Rejecting every internal `.` segment (not just a leading one)
+    matters beyond tidiness: `"foo/./bar.json"` and `"foo/bar.json"` would
+    otherwise coexist as distinct keys denoting the same path, silently
+    escaping the `key-path-conflict` check that exists to catch exactly a
+    case like it."""
+    if not isinstance(raw_key, str):
+        return None
+    key = raw_key
+    while key.startswith("./"):
+        key = key[2:]
+    if key == "" or key.startswith("/"):
+        return None
+    parts = key.split("/")
+    if "" in parts or "." in parts or ".." in parts:
+        return None
+    return key
+
+
+def _key_and_value_findings(raw_key: Any, value: Any) -> tuple[str | None, list[dict]]:
+    """Validate one `DocumentSet` entry's key and value shape. `_normalize_documents`
+    is the one caller — every other function that walks a `DocumentSet`
+    (`resolve_type_map_gaps` included) reaches this through that function
+    rather than calling it directly, so none of them can grade a malformed
+    entry differently. Returns `(None, [invalid-key finding])` when `raw_key` itself
+    is not a usable relative path — the raw key is what that finding's `path`
+    names, since the normalized form does not exist for it. Returns
+    `(key, [invalid-value finding])` when the key is fine but `value` is not
+    one of the usable value types: the key is a real path identity in this
+    document set regardless of whether its content is usable, so a caller
+    must still be able to discover it (e.g. a connection slug whose sibling
+    endpoints and type maps are independently checkable) rather than treating
+    an unusable value the same as an unusable key. Returns `(key, [])` when
+    both are fine."""
+    key = _normalize_key(raw_key)
+    if key is None:
+        return None, [finding(
+            # `path` is a public string field (`rules/SCHEMA.md`'s Findings
+            # shape); `raw_key` is exactly the value that failed to normalize
+            # into one, so it is stringified here rather than passed through —
+            # an int, tuple, or bytes key would otherwise produce a
+            # schema-invalid finding, or break `json.dumps` on the envelope.
+            message_id="invalid-key", kind="fail", path=str(raw_key),
+            message=(
+                f"key {raw_key!r} is not a usable relative document path: it must "
+                "be a non-empty relative path (no leading '/') with no '.' or "
+                "'..' path segment."))]
+    if not isinstance(value, (str, bytes, dict, list)):
+        return key, [finding(
+            message_id="invalid-value", kind="fail", path=key,
+            message=(
+                f"value for {key!r} is a {type(value).__name__}, not one of "
+                "str / bytes / dict / list."))]
+    return key, []
+
+
+def _normalize_documents(documents: DocumentSet) -> tuple[_VirtualFS, list[dict]]:
+    """Normalize a raw `DocumentSet` into a `_VirtualFS` plus the findings the
+    normalization pass itself produces — `invalid-key`/`invalid-value` (via
+    `_key_and_value_findings`), `internal-error` for a value whose
+    materialization into text crashed (a cyclic structure, say),
+    `key-path-conflict` for a key that is simultaneously a document and a
+    directory prefix of another key, and `duplicate-key` for two distinct raw
+    keys that normalize to the same key. None of these describes a document's
+    own content, so none names a rule (`rules/SCHEMA.md`'s "no detector
+    recognised the document" case, generalized one level up to the document
+    set's own key/value shape).
+
+    Keys are processed in sorted order (by string form, so a raw key of any
+    type still sorts against another of a different type, rather than
+    crashing on a comparison before `_key_and_value_findings` ever gets a
+    chance to grade it as an invalid key), not the caller's own insertion
+    order, so this pass's own
+    findings never depend on how the caller happened to build the mapping —
+    the same guarantee `check_coverage`'s own `sorted(...)` endpoint scan
+    already gives the checks built on top of it.
+    """
+    findings: list[dict] = []
+    texts: dict[str, str] = {}
+    objects: dict[str, Any] = {}
+    known_keys: set[str] = set()
+    for raw_key in sorted(documents, key=str):
+        value = documents[raw_key]
+        key, kv_findings = _key_and_value_findings(raw_key, value)
+        if key is None:
+            findings.extend(kv_findings)
+            continue
+        if key in known_keys:
+            findings.append(finding(
+                message_id="duplicate-key", kind="fail", path=key,
+                message=(
+                    f"{raw_key!r} normalizes to {key!r}, which another key in "
+                    "this document set already denotes; two keys for one path "
+                    "leave which document is validated undefined.")))
+            continue
+        known_keys.add(key)
+        if kv_findings:
+            # invalid-value: the key is still a real path identity in this
+            # document set (kept in known_keys for discovery, per
+            # _key_and_value_findings), but there is no usable content to
+            # materialize into texts/objects.
+            findings.extend(kv_findings)
+            continue
+        try:
+            if isinstance(value, bytes):
+                text = value.decode("utf-8-sig")
+            elif isinstance(value, str):
+                text = value
+            else:
+                text = json.dumps(value)
+        except Exception as exc:  # noqa: BLE001 - isolate one key's crash
+            findings.append(finding(
+                message_id="internal-error", kind="fail", path=key,
+                message=(
+                    f"{key!r} could not be materialized into JSON text "
+                    f"({type(exc).__name__}: {exc}).")))
+            continue
+        texts[key] = text
+        if isinstance(value, (dict, list)):
+            objects[key] = value
+
+    # A single neighbor check, not an all-pairs scan: sorted by path parts
+    # (not raw string — see `path_parts_key`'s own docstring on why the two
+    # disagree), every key sharing a given prefix followed by "/" forms one
+    # contiguous run whose first member is the very next key in that order,
+    # since a shorter parts-tuple always sorts immediately before every
+    # longer tuple it is a prefix of.
+    sorted_keys = sorted(known_keys, key=path_parts_key)
+    for i, key in enumerate(sorted_keys):
+        if i + 1 < len(sorted_keys) and sorted_keys[i + 1].startswith(f"{key}/"):
+            findings.append(finding(
+                message_id="key-path-conflict", kind="fail", path=key,
+                message=(
+                    f"{key!r} is both a document key and a directory prefix of "
+                    "another key in this document set.")))
+
+    return _VirtualFS(texts, objects, known_keys), findings
+
+
+def _at_site(site: str, findings: list[dict]) -> list[dict]:
+    """Re-root a member's own findings at the site (key or key prefix) they
+    came from.
+
+    A finding `finding()` built for a document validated on its own carries a
+    leading-slash pointer into that document (`/`, `/endpoint_id`); a finding
+    this module builds directly for one of its own `DocumentSet` keys
+    (`internal-error`, `invalid-key`, ...) already carries a bare relative key.
+    These conventions can appear together in the same findings list being
+    rerooted here — an embedded connector subtree's own findings mix them —
+    so each is joined the way that makes it a path under `site` rather than a
+    sibling of it. A bare `/` is the whole-document case of the leading-slash
+    convention and joins to `site` itself, not `site` plus a trailing
+    slash."""
+    def _joined(path: str) -> str:
+        if path == "/":
+            return site
+        if path.startswith("/"):
+            return f"{site}{path}"
+        if path:
+            return f"{site}/{path}"
+        return site
+    return [{**f, "path": _joined(f["path"])} for f in findings]
+
+
+def _validate_tree_document(fs: _VirtualFS, key: str, *, entity: str | None = None) -> tuple[Any, list[dict]]:
+    """Parse `key`'s content and validate it via the single-document route,
+    isolating a materialization or parse crash to this one key. Returns
+    `(doc, findings)` — `doc` is `None` when `key` never materialized or when
+    parsing it crashed, so a caller that also needs the parsed value for
+    bundle assembly reads it off this return instead of parsing `key` a
+    second time, and can call this function unconditionally rather than
+    pre-guarding with `fs.materialized(key)` itself.
+
+    A key that never materialized produces no NEW finding here —
+    `_normalize_documents` already reported that crash (`internal-error`,
+    `path=key`) when it first tried to turn the value into text, and a second
+    finding for the same crash would only double-report it. A key that
+    materializes but fails to parse as JSON gets its own `internal-error`
+    here instead, since nothing upstream could have caught that failure.
+
+    `entity`, when given, is passed straight through to `validate_document`'s
+    own explicit-kind override, for a key whose kind this module already
+    knows from where it sits in the tree (a connection-scoped type-map file,
+    say) rather than from the document's own shape.
+
+    `analitiq.validator.validate_document` already contains a dispatch-time
+    crash (`check-crashed`, `notApplicable`) once a document is in hand, but
+    turning a `DocumentSet` entry's raw text into that document happens before
+    dispatch ever runs, so a crash there needs its own containment —
+    `internal-error` (`fail`/`error`), scoped to this key rather than the
+    framework's generic no-rule case, and distinct from `check-crashed`.
+
+    The parse-crash finding's own `path` is `"/"` — the same whole-document
+    pointer convention `validate_document` itself uses (e.g.
+    `unrecognized-document`) — never `key`: every caller re-roots this
+    function's findings at a site with `_at_site`, which already turns a
+    leading-slash path into `site` + that path; a bare `key` here would
+    instead be appended AGAIN as a relative suffix, double-prefixing the
+    finding's path.
+    """
+    if not fs.materialized(key):
+        return None, []
+    try:
+        doc = fs.parsed(key)
+    except Exception as exc:  # noqa: BLE001 - isolate one key's crash
+        return None, [finding(
+            message_id="internal-error", kind="fail", path="/",
+            message=f"{key!r} could not be parsed as JSON ({type(exc).__name__}: {exc}).")]
+    return doc, validate_document(doc, doc_path=VirtualPath(fs, key), entity=entity)
+
+
+def _resolved_member(
+        fs: _VirtualFS, key: str, *, entity: str | None = None, validate: bool = True,
+) -> tuple[dict | None, list[dict]]:
+    """The one gate a document-set member — the pipeline document, a stream,
+    a connection, a connection-scoped endpoint, an embedded connector's own
+    identity document — must clear to be usable for referential checking:
+    `key` must materialize, parse without crashing, and — every member this
+    gate is used for is expected to be an object — be a `dict`. Returns
+    `(None, findings)` on any of those four ways to fail (missing key,
+    materialization crash, parse crash, wrong shape); a caller collapses all
+    four into its own single "this member is excluded" signal rather than
+    re-deriving which one happened.
+
+    `validate=True` (the default) resolves `key` through
+    `_validate_tree_document`, so a member this call is itself the one place
+    that checks its content also earns its model-validation findings.
+    `validate=False` resolves it with the same materialize/parse isolation
+    but skips `validate_document` entirely. Its one caller — the embedded
+    connector identity lookup that pulls a `connector_id` off a bundled
+    `connectors/<slug>/definition/connector.json` — discards this function's
+    returned findings outright (`connector_doc, _ = _resolved_member(...)`),
+    because that same document is already validated (or its crash already
+    reported) by the recursive `validate_connector_tree` call over that
+    connector's own subtree; validating it again here would be redundant work
+    whose result is thrown away immediately.
+
+    A materialization crash is never reported by this function either way:
+    `_normalize_documents` already named it.
+    """
+    if validate:
+        doc, findings = _validate_tree_document(fs, key, entity=entity)
+    elif not fs.materialized(key):
+        doc, findings = None, []
+    else:
+        try:
+            doc, findings = fs.parsed(key), []
+        except Exception as exc:  # noqa: BLE001 - isolate one key's crash
+            doc = None
+            findings = [finding(
+                message_id="internal-error", kind="fail", path="/",
+                message=f"{key!r} could not be parsed as JSON ({type(exc).__name__}: {exc}).")]
+    if not isinstance(doc, dict):
+        return None, findings
+    return doc, findings
+
+
+def _extract_subtrees(documents: DocumentSet, prefixes: list[str]) -> dict[str, DocumentSet]:
+    """Re-relativize each embedded package's own documents out of the whole
+    tree's raw `documents` — not out of an already-normalized `_VirtualFS` —
+    so a value whose materialization crashes is handed to the recursive
+    `validate_connector_tree` call exactly as the caller supplied it, letting
+    that call discover and report the crash itself, scoped to its own
+    subtree-relative key rather than being reported (or silently dropped)
+    here.
+
+    Every prefix is partitioned in ONE walk of `documents`, returning a
+    subtree per prefix (empty where nothing matched). Extracting one prefix at
+    a time would sort and scan all N entries once per embedded connector,
+    making a tree of C connectors cost O(C * N log N) — quadratic when each
+    connector contributes a constant number of files, which is the shape a
+    real bundle has.
+
+    Two raw keys colliding on the same subtree-relative key (e.g. a
+    `./`-prefixed duplicate) are resolved the same way `_normalize_documents`
+    already resolves the identical collision at the whole tree's own top
+    level — keep the first in sorted key order — by walking `documents` in
+    that same order and keeping only the first value `setdefault` sees for
+    each relative key, rather than raw insertion order silently picking
+    whichever raw key happened to come last."""
+    subtrees: dict[str, DocumentSet] = {prefix: {} for prefix in prefixes}
+    for raw_key in sorted(documents, key=str):
+        key = _normalize_key(raw_key)
+        if key is None:
+            continue
+        for prefix, subtree in subtrees.items():
+            if key.startswith(prefix):
+                subtree.setdefault(key[len(prefix):], documents[raw_key])
+                break
+    return subtrees
+
+
+def _envelope(findings: list[dict]) -> ValidationEnvelope:
+    return {"passed": not any(finding_costs_a_pass(f) for f in findings), "findings": findings}
+
+
+def _document_set_type_findings(value: Any) -> list[dict]:
+    """`invalid-document-set` (`fail`/`error`, no `path`) when `value` is not a
+    `dict` at all. `DocumentSet`'s own `dict[str, DocumentSetValue]` annotation
+    is a type-checker-only promise, the same gap `invalid-direction`/
+    `invalid-probes` close for `resolve_type_map_gaps`'s other two parameters
+    — checked before any of `_normalize_documents`'s per-key work (which
+    assumes a mapping to call `.items()`/iterate over), or, on `validate_tree`'s
+    route, before `_tree_root_signals` iterates `value` as one, ever runs."""
+    if isinstance(value, dict):
+        return []
+    return [finding(
+        message_id="invalid-document-set", kind="fail", path="",
+        message=(
+            f"a document set must be a dict of path-shaped keys to content; "
+            f"got {type(value).__name__}."))]
+
+
+# ---------------------------------------------------------------------------
+# Package-kind entry points.
+# ---------------------------------------------------------------------------
+
 def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
     """Validate a connector package supplied as an in-memory `DocumentSet`
     instead of files on disk: the connector document, its sibling type maps,
@@ -118,19 +458,47 @@ def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
     it never walks the registry `validate_tree` walks, so it can never itself
     report an `ambiguous-layout` or `unrecognized-layout` finding.
 
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
+    A `VirtualPath` backed by the normalized `DocumentSet` stands in for the
+    real `doc_path` `check_coverage` reads sibling type-maps and endpoints
+    through, so that check runs unchanged; a root `connector.json` whose own
+    content crashed during normalization is reported by that pass alone
+    (`internal-error`), and is never handed to the single-document route on
+    top of it. A document set with no `connector.json` key at all — not even
+    one that crashed — is not a connector package missing nothing to report;
+    it is reported as `missing-connector-document` rather than silently
+    passing on whatever findings (often none) `_normalize_documents` happened
+    to produce.
+
+    `documents` itself must be a `dict`: see `_document_set_type_findings`.
     """
-    raise NotImplementedError(
-        "validate_connector_tree is not yet implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
+    type_findings = _document_set_type_findings(documents)
+    if type_findings:
+        return _envelope(type_findings)
+    fs, findings = _normalize_documents(documents)
+    if "connector.json" not in fs.known_keys:
+        findings.append(finding(
+            message_id="missing-connector-document", kind="fail", path="connector.json",
+            message="this document set has no root connector.json; a connector package must ship one."))
+    else:
+        # entity="connector": the root key's kind is already known from its
+        # position; auto-detecting would validate a wrong-shaped document
+        # (say, a valid pipeline object) as whatever kind it happens to
+        # match, skipping connector validation and coverage entirely.
+        _, doc_findings = _validate_tree_document(fs, "connector.json", entity="connector")
+        findings.extend(doc_findings)
+    return _envelope(findings)
+
+
+_CONNECTOR_SUBTREE_RE = re.compile(r"^connectors/([^/]+)/definition/")
+_PIPELINE_DOC_RE = re.compile(r"^pipelines/([^/]+)/pipeline\.json$")
+_CONNECTION_DOC_RE = re.compile(r"^connections/([^/]+)/connection\.json$")
 
 
 def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     """Validate a pipeline bundle supplied as an in-memory `DocumentSet`
     instead of files on disk: the pipeline document, its sibling
     `streams/*.json`, and every `connections/*/connection.json` (plus their
-    scoped endpoints and type maps) — assembled the way `plugins/
+    scoped endpoints) — assembled the way `plugins/
     analitiq-pipeline-builder/scripts/validate.py`'s `_assemble_bundle`
     already does from a filesystem root, then checked for referential
     integrity.
@@ -151,12 +519,223 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     never walks the registry, so it can never itself report an
     `ambiguous-layout` or `unrecognized-layout` finding.
 
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
+    `require_runnable` for the bundle-referential pass is derived from the
+    pipeline document's own `status` field (`status == "active"`), the same
+    reading the plugin's `is_runnable_required` makes from a filesystem-loaded
+    pipeline document — never a caller-supplied parameter, since the document
+    itself already says whether it claims to be runnable.
+
+    A materialization crash inside an embedded connector subtree is reported
+    once, by that subtree's own recursive resolution, scoped under its own
+    key prefix — not a second time by this function's own top-level
+    normalization pass over the whole tree, which structurally cannot avoid
+    walking those same keys (their presence is how a subtree is discovered at
+    all).
+
+    Every bundle member this function collects — the pipeline document, each
+    stream, each connection, each connection-scoped endpoint, and each
+    embedded connector's own identity (its `connector_id`, read for the
+    referential check that it is bundled) — is resolved through one gate,
+    `_resolved_member`: usable only when its key materializes, parses, and is
+    a `dict`. When any bundle member is excluded for any of those reasons, the
+    referential pass (`validate_pipeline_bundle`) is skipped entirely for this
+    call, keeping only the `internal-error` finding(s) (if any — a
+    materialization crash is already named by `_normalize_documents`, never
+    reported twice) already collected for the member(s) responsible —
+    mirroring `plugins/analitiq-pipeline-builder/scripts/validate.py`'s own
+    `complete`/`crashed` gate: the published bundle validator has no way to
+    tell "excluded here because it's broken" from "genuinely missing", so
+    running it against a bundle this incomplete risks reporting a reference as
+    broken that the missing/broken member, not the author, made unresolvable.
+    A connection-scoped endpoint's own resolution does not depend on its
+    parent connection resolving — the two are independently gated bundle
+    members, sharing only the `conn_slug` this function derives from the
+    connection's own KEY (never its content) to locate them — so a connection
+    that fails to resolve still leaves its sibling endpoints checked on their
+    own terms.
+
+    `documents` itself must be a `dict`: see `_document_set_type_findings`.
     """
-    raise NotImplementedError(
-        "validate_pipeline_tree is not yet implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
+    type_findings = _document_set_type_findings(documents)
+    if type_findings:
+        return _envelope(type_findings)
+    fs, findings = _normalize_documents(documents)
+
+    connector_slugs = sorted({
+        m.group(1) for key in fs.known_keys
+        for m in (_CONNECTOR_SUBTREE_RE.match(key),) if m
+    })
+    _deduped_under_connector_subtrees = ("internal-error", "key-path-conflict", "invalid-value")
+    findings = [
+        f for f in findings
+        if not (f["message_id"] in _deduped_under_connector_subtrees
+                and any(f["path"].startswith(f"connectors/{slug}/definition/") for slug in connector_slugs))
+    ]
+
+    bundle_is_incomplete = False
+
+    pipeline_doc: Any = None
+    slug = None
+    # Sorted by `path_parts_key`, matching `_VirtualFS.glob_json`'s ordering —
+    # a plain string sort would disagree with it whenever one slug is another
+    # plus a hyphenated suffix (`pipelines/a/...` vs `pipelines/a-b/...`).
+    pipeline_keys = sorted(
+        (key for key in fs.known_keys if _PIPELINE_DOC_RE.match(key)), key=path_parts_key)
+    if pipeline_keys:
+        primary_key = pipeline_keys[0]
+        slug = _PIPELINE_DOC_RE.match(primary_key).group(1)
+        # entity="pipeline": this key's position already says what it must be;
+        # auto-detecting would validate a wrong-shaped document (say, a valid
+        # type-map array) as whatever kind it happens to match instead of
+        # rejecting it as the pipeline document it was supposed to be.
+        pipeline_doc, doc_findings = _resolved_member(fs, primary_key, entity="pipeline")
+        findings.extend(doc_findings)
+        if pipeline_doc is None:
+            bundle_is_incomplete = True
+        # A second (or further) pipelines/<slug>/pipeline.json is not silently
+        # ignored: only `primary_key` (the first in sorted key order) becomes
+        # this tree's pipeline, and each other match is named so its author
+        # learns it was never validated as one, rather than reading no
+        # finding as "this one passed too".
+        for ignored_key in pipeline_keys[1:]:
+            findings.append(finding(
+                message_id="ignored-pipeline-document", kind="fail", path=ignored_key,
+                message=(
+                    f"{ignored_key!r} is a second pipelines/<slug>/pipeline.json in this "
+                    f"document set; only {primary_key!r} (the first in sorted key order) is "
+                    "validated as this tree's pipeline. Lay out one pipeline per document set.")))
+
+    streams: list[Any] = []
+    if slug is not None:
+        stream_prefix = f"pipelines/{slug}/streams/"
+        for key in fs.known_json_children(stream_prefix):
+            suffix = key[len(stream_prefix):]
+            # entity="stream": same reasoning as the pipeline document above.
+            doc, doc_findings = _resolved_member(fs, key, entity="stream")
+            findings.extend(_at_site(f"streams/{suffix}", doc_findings))
+            if doc is None:
+                bundle_is_incomplete = True
+            else:
+                streams.append(doc)
+
+    connections: list[Any] = []
+    endpoints: list[Any] = []
+    # Sorted by `path_parts_key`, matching `_VirtualFS.glob_json`'s ordering —
+    # see `pipeline_keys` above for why a plain string sort would diverge.
+    for key in sorted((k for k in fs.known_keys if _CONNECTION_DOC_RE.match(k)), key=path_parts_key):
+        # `conn_slug` comes from the KEY alone, never the connection document's
+        # own content, so a connection-scoped endpoint or type map is still
+        # locatable and independently checked even when the connection itself
+        # fails to resolve.
+        conn_slug = _CONNECTION_DOC_RE.match(key).group(1)
+        # entity="connection": same reasoning as the pipeline document above.
+        doc, doc_findings = _resolved_member(fs, key, entity="connection")
+        findings.extend(_at_site(key, doc_findings))
+        if doc is None:
+            bundle_is_incomplete = True
+            connection_id_value = None
+        else:
+            connections.append(doc)
+            connection_id_value = doc.get("connection_id")
+
+        ep_prefix = f"connections/{conn_slug}/definition/endpoints/"
+        for ep_key in fs.known_json_children(ep_prefix):
+            # entity="database-endpoint": a connection-scoped endpoint is
+            # always a database endpoint by its position in the tree — unlike
+            # an embedded connector's own endpoints (api-vs-database is
+            # genuinely ambiguous there, and is left to shape auto-detection),
+            # so pinning here rejects a wrong-shaped document the same way the
+            # pipeline/stream/connection members above already do.
+            ep_doc, ep_findings = _resolved_member(fs, ep_key, entity="database-endpoint")
+            findings.extend(_at_site(ep_key, ep_findings))
+            if ep_doc is None:
+                bundle_is_incomplete = True
+                continue
+            entry = {**ep_doc}
+            entry.setdefault("connection_id", connection_id_value)
+            entry.setdefault("scope", "connection")
+            endpoints.append(entry)
+
+    connector_identities = set(connector_slugs)
+    connector_subtrees = _extract_subtrees(
+        documents, [f"connectors/{conn_slug}/definition/" for conn_slug in connector_slugs])
+    for conn_slug in connector_slugs:
+        prefix = f"connectors/{conn_slug}/definition/"
+        sub_findings = validate_connector_tree(connector_subtrees[prefix])["findings"]
+        findings.extend(_at_site(prefix.rstrip("/"), sub_findings))
+        # validate=False: the recursive `validate_connector_tree` call just
+        # above already validated this same connector.json (or reported why
+        # it could not), scoped under `prefix` — this lookup exists only to
+        # pull `connector_id` off it, not to check it a second time.
+        connector_doc, _ = _resolved_member(
+            fs, f"{prefix}connector.json", validate=False)
+        if connector_doc is None:
+            bundle_is_incomplete = True
+        else:
+            cid = connector_doc.get("connector_id")
+            if isinstance(cid, str) and cid:
+                connector_identities.add(cid)
+
+    bundle = {
+        "pipeline": pipeline_doc,
+        "streams": streams,
+        "connections": connections,
+        "connectors": sorted(connector_identities),
+        "endpoints": endpoints,
+    }
+    if not bundle_is_incomplete:
+        # `_resolved_member`'s gate (materializes, parses, is a dict) admits a
+        # member that is dict-shaped but fails its own model validation —
+        # deliberately, mirroring the plugin's `complete`/`crashed` distinction
+        # documented above. The published bundle validator assumes referenced
+        # collections hold the shapes their model promises, so a member this
+        # gate let through with a wrong-shaped field (e.g. a non-iterable
+        # `destinations`) can still crash it. `_contained` in `plugins/
+        # analitiq-pipeline-builder/scripts/validate.py` isolates this same
+        # call for the same reason; mirror it here rather than tightening the
+        # gate, which would report those documents' own model-validation
+        # findings twice.
+        require_runnable = isinstance(pipeline_doc, dict) and pipeline_doc.get("status") == "active"
+        try:
+            findings.extend(validate_pipeline_bundle(bundle, require_runnable=require_runnable))
+        except Exception as exc:  # noqa: BLE001 - isolate the referential pass's own crash
+            findings.append(finding(
+                message_id="internal-error", kind="fail", path="pipeline",
+                message=(
+                    "cross-document referential validation crashed "
+                    f"({type(exc).__name__}: {exc}); a bundle member can materialize, parse, "
+                    "and still fail its own model validation, which this pass does not "
+                    "re-check before reading the shapes it assumes.")))
+    elif not pipeline_keys:
+        # The gate above skips the referential pass, and that pass is what
+        # normally names an absent pipeline document. The gate exists because
+        # an excluded member makes CROSS-document references unreliable —
+        # but "this tree carries no pipeline document at all" was read off the
+        # key set alone, before any member resolved, so it stays trustworthy
+        # however incomplete the rest of the bundle is and must not be lost
+        # with the pass that usually carries it. Reported by calling that same
+        # pass rather than restating its message here: `bundle["pipeline"]` is
+        # `None` in this branch by construction, which is the one input for
+        # which it returns the absent-document finding and nothing else.
+        findings.extend(validate_pipeline_bundle(bundle, require_runnable=False))
+
+    return _envelope(findings)
+
+
+def _tree_root_signals(documents: DocumentSet) -> tuple[bool, bool]:
+    """Whether `documents`' own key *names* carry a connector-package root
+    (`connector.json`) or a pipeline-bundle root
+    (`pipelines/<slug>/pipeline.json`) — read from the normalized key set
+    alone, without materializing any document's content. Shared by
+    `validate_tree` (which root shape a document set forms) and
+    `_is_single_document` (whether it is a document set at all): a key that
+    happens to also be a single-document field name (`"connections"`, say)
+    must not fall through to single-document detection once one of these
+    tree roots is actually present."""
+    keys = {key for key in (_normalize_key(raw_key) for raw_key in documents) if key is not None}
+    is_connector = "connector.json" in keys
+    is_pipeline = any(_PIPELINE_DOC_RE.match(key) for key in keys)
+    return is_connector, is_pipeline
 
 
 def validate_tree(documents: DocumentSet) -> ValidationEnvelope:
@@ -171,26 +750,103 @@ def validate_tree(documents: DocumentSet) -> ValidationEnvelope:
     fallthrough shape the single-document dispatcher already uses when no
     registered kind claims a document (`unrecognized-document`).
 
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
+    The root-shape detectors (`_tree_root_signals`) need only a document set's
+    key *names*, so shape detection reads the normalized key set alone,
+    without materializing any document's content; a document set matching
+    exactly one shape then delegates its whole normalization and validation to
+    that shape's own entry point rather than doing either twice.
+
+    `documents` itself must be a `dict`: see `_document_set_type_findings` —
+    checked here, before `_tree_root_signals` ever iterates `documents` as one.
     """
-    raise NotImplementedError(
-        "validate_tree is not yet implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
+    type_findings = _document_set_type_findings(documents)
+    if type_findings:
+        return _envelope(type_findings)
+    is_connector, is_pipeline = _tree_root_signals(documents)
+    if is_connector and is_pipeline:
+        _, findings = _normalize_documents(documents)
+        findings.append(finding(
+            message_id="ambiguous-layout", kind="fail", path="",
+            message=(
+                "this document set matches both the connector-package root shape "
+                "(a root-level connector.json) and the pipeline-bundle root shape "
+                "(a pipelines/<slug>/pipeline.json) at once; lay it out as one or "
+                "the other.")))
+        return _envelope(findings)
+    if not is_connector and not is_pipeline:
+        _, findings = _normalize_documents(documents)
+        findings.append(finding(
+            message_id="unrecognized-layout", kind="fail", path="",
+            message=(
+                "this document set matches neither the connector-package root "
+                "shape (a root-level connector.json) nor the pipeline-bundle "
+                "root shape (a pipelines/<slug>/pipeline.json).")))
+        return _envelope(findings)
+    if is_connector:
+        return validate_connector_tree(documents)
+    return validate_pipeline_tree(documents)
 
 
-def diagnostics(target: Any, entity: Entity | None = None) -> ValidationEnvelope:
+def _document_set_shaped_keys(target: dict) -> bool:
+    """Whether any of `target`'s own raw keys is shaped like a `DocumentSet`
+    member key — containing `/` or ending in `.json` — rather than a single
+    document's own field name. A document set is not restricted to keys
+    carrying an explicit tree root (`connector.json`,
+    `pipelines/<slug>/pipeline.json`; each already matches this broader test):
+    a sibling key like `connections/pg/connection.json` marks the whole
+    mapping as a document set even when another one of its keys happens to
+    coincide with a single-document field name (a root-level key literally
+    named `"connections"`, say).
+
+    Tests the RAW key text, not `_normalize_key`'s output: an invalid
+    path-shaped key (an absolute `/connector.json`, say) must still mark this
+    mapping as a document set rather than being silently dropped from
+    consideration — dropping it could let a kind detector claim the whole
+    mapping as a single document instead, losing the `invalid-key` finding
+    `_normalize_documents` exists to report for exactly that key."""
+    return any(
+        isinstance(raw_key, str) and ("/" in raw_key or raw_key.endswith(".json"))
+        for raw_key in target
+    )
+
+
+def _is_single_document(target: Any) -> bool:
+    """`target` is a single already-parsed document, as opposed to a
+    `DocumentSet`, when it is not a mapping at all, or when some registered
+    kind's own detector claims it — the same test `_core._dispatch` applies
+    once it is committed to treating something as a single document. A
+    `DocumentSet`'s own top-level keys are relative-path-shaped strings, which
+    match no registered kind's detector, so it falls through to being treated
+    as a document set rather than an unrecognized single document.
+
+    `_document_set_shaped_keys` is checked first, ahead of the kind registry:
+    once any key of `target` is itself path-shaped, `target` is a document set
+    regardless of what a field-shape detector would have said about it as a
+    whole."""
+    if not isinstance(target, dict):
+        return True
+    if _document_set_shaped_keys(target):
+        return False
+    return any(detector(target) for detector, _ in _KIND_REGISTRY)
+
+
+def diagnostics(
+        target: Any, entity: Entity | None = None,
+        schema_url: str | None = None) -> ValidationEnvelope:
     """Auto-detect whether `target` is a single already-parsed document or a
     `DocumentSet`, and dispatch to `analitiq.validator.validate_document` or
     `validate_tree` accordingly — replacing the pipeline-builder plugin's
     private `diagnostics_for()`, which takes an explicit `entity` argument
-    naming the document's kind rather than detecting it. `entity` plays no
-    part in detecting or validating a document SET, which is identified by
-    its shape alone. What it does for the single-document route is not
-    defined by this specification: `validate_document` takes no such
-    parameter today, and wiring `entity` into that route (or into whichever
-    replaces it) is implementation, not contract — out of scope here the same
-    way implementing this function's body is.
+    naming the document's kind rather than detecting it. `entity` and
+    `schema_url` play no part in detecting or validating a document SET, which
+    is identified by its shape alone; on the single-document route both are
+    passed straight through to `validate_document`, letting a caller that
+    already knows a document's kind name it directly instead of relying on
+    shape auto-detection, and disambiguate a type-map array's direction the
+    same way a real `doc_path`'s filename would — this path-free route has no
+    filename for `validate_document`'s own type-map validator to read one
+    from, so without `schema_url` an ambiguous-direction type-map document
+    always defaults to read.
 
     Wraps a single-document result in a `ValidationEnvelope` (`{"passed":
     finding_costs_a_pass`-reduction, "findings": ...}`) rather than returning
@@ -198,13 +854,10 @@ def diagnostics(target: Any, entity: Entity | None = None) -> ValidationEnvelope
     regardless of which route this dispatched to — the same wrapping the
     plugin's own `diagnostics_for` already does over `validate_document`'s
     list result today.
-
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
     """
-    raise NotImplementedError(
-        "diagnostics is not yet implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
+    if _is_single_document(target):
+        return _envelope(validate_document(target, entity=entity, schema_url=schema_url))
+    return validate_tree(target)
 
 
 def resolve_type_map_gaps(
@@ -212,21 +865,79 @@ def resolve_type_map_gaps(
         direction: Literal["read", "write"],
         probes: list[str]) -> FindingsEnvelope:
     """The path-free form of the pipeline-builder plugin's private
-    `type_map_gaps.py`: given one or more type-map documents in precedence
-    order (`maps`, keyed and ordered the same way a `DocumentSet` is — the
-    first key whose map renders a probe wins) and a list of native-type
-    `probes` to resolve in `direction`, report what each probe resolved to.
+    `type_map_gaps.py`: given one or more type-map documents (`maps`, a
+    `DocumentSet` like any other) and a list of native-type `probes` to
+    resolve in `direction`, report every probe that no map in `maps` resolves.
 
     Never raises. Returns `{"findings"}` only — no `resolved`, no top-level
-    `direction`. Finding kinds sharing that list: `type-map-unreadable`
-    (`fail`/`error`, no `direction` — a map that is invalid JSON or not a
-    list, a failure prior to any direction-specific check); `invalid-type-map`
-    (`fail`/`error`, `direction` = this call's `direction` — a map that fails
-    its `TypeMapReadDoc`/`TypeMapWriteDoc` model,
-    `analitiq.contracts.type_map`); `type-map-gap` (`informational`, no
-    severity, no rule, `direction` = this call's `direction` — a probe none of
-    `maps` resolved; never costs a pass). A run in which every probe resolved
-    reports an empty `findings` list.
+    `direction`. `direction` itself is validated first, before `maps` is even
+    normalized: `Literal["read", "write"]` is a type-checker-only promise, and
+    an untyped runtime caller passing anything else would otherwise have every
+    non-`"read"` value silently treated as `"write"`, including on a reported
+    finding's own `direction` field — typed the same closed `Literal` an
+    invalid value has no business appearing in. `invalid-direction`
+    (`fail`/`error`, no `direction` field of its own, since the value that
+    would go there is the very thing rejected) is the sole finding for that
+    case. `maps` itself is checked next, the same way and for the same
+    reason: `invalid-document-set` (`fail`/`error`, no `direction`) when it is
+    not a `dict` at all — `DocumentSet`'s own type is a type-checker-only
+    promise too, and `_normalize_documents` assumes a mapping to walk. Every
+    other finding kind below assumes both already validated.
+
+    Finding kinds sharing the findings list: `invalid-key`/`invalid-value`,
+    `duplicate-key`/`key-path-conflict`, and `internal-error` (a map's own
+    value crashed while being turned into text, e.g. bytes that are not valid
+    UTF-8) — the same collection-level hazards `_normalize_documents` guards
+    against, produced by delegating `maps`'s own key/value validation and
+    materialization to that same function rather than a second, hand-rolled
+    walk over it, since two raw keys normalizing to one map (or one key that
+    is also a directory prefix of another) could otherwise spread
+    complementary rules across both and make every probe appear covered when
+    only one of them could actually exist at runtime; `type-map-unreadable`
+    (`fail`/`error`, no `direction` — a map that failed to parse as JSON,
+    crashed for any other reason while parsing (a `RecursionError` from
+    pathologically deep nesting, say — isolated the same way
+    `_validate_tree_document`'s own parse step is), or parsed to something
+    other than a list, a failure prior to any direction-specific check);
+    `type-map-wrong-direction` (`fail`/`error`, `direction` = this call's
+    `direction` — a map whose canonical filename
+    (`type-map-read.json`/`type-map-write.json`) names the other direction:
+    both directions' exact-rule shapes share the same keys, so nothing in
+    `TypeMapReadDoc`/`TypeMapWriteDoc` model validation alone can catch a map
+    loaded under the wrong direction, mirroring `type_map_gaps.py`'s own
+    filename/direction check); `invalid-type-map` (`fail`/`error`, `direction`
+    = this call's `direction` — a map that fails its
+    `TypeMapReadDoc`/`TypeMapWriteDoc` model, `analitiq.contracts.type_map`, or
+    crashes while being checked against it: a syntactically valid rule is not
+    necessarily a computationally sane one — a regex repetition count large
+    enough to overflow Python's `re` compiler, say, raises `OverflowError`
+    rather than `re.error`/`ValidationError`, isolated here the same way a
+    parse crash is isolated above it);
+    `invalid-probes` (`fail`/`error`, `direction` = this call's `direction`,
+    no `path` — `probes` itself is not a `list`, short-circuiting the walk
+    below entirely the same way a map defect does: a non-list `probes` is
+    not "zero probes to check" and iterating it directly would either raise
+    (`None`) or silently probe its characters as if they were the intended
+    values (a bare `str`)); `invalid-probe` (`fail`/`error`, `direction` =
+    this call's `direction` — one element of `probes` that is not a `str`.
+    The read route's `_render_arrow_type` normalizes a probe by calling
+    string methods on it directly and crashes on anything else; the write
+    route's `_first_match_render` matches a probe against each rule's
+    `arrow_type` with no such normalization, so on that route a non-string
+    probe would not crash at all — it would instead be silently graded
+    resolved-or-gapped by whatever `==`/regex comparison its type happens to
+    support, which is the wrong failure mode for the same underlying defect.
+    This finding replaces both outcomes with one explicit report, on either
+    route, rather than letting only one of them announce itself by crashing);
+    `type-map-gap` (`informational`, no severity, no rule, `direction` = this
+    call's `direction` — a probe none of `maps` resolved; never costs a
+    pass). A run in which every probe resolved reports an empty `findings`
+    list.
+
+    `probes` is de-duplicated before resolution, order-preserving — a
+    repeated probe (valid or invalid) is one verdict, not one finding per
+    occurrence — mirroring the outcome `type_map_gaps.py`'s own `resolve`
+    already gives its CLI probes.
 
     This is a deliberate divergence from `type_map_gaps.py`'s own
     `_load_rules`, which raises `ValueError` on exactly the same two
@@ -236,9 +947,159 @@ def resolve_type_map_gaps(
     the same findings list this function already returns means a caller
     checks one place for every way a probe run can come back incomplete.
 
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
+    A map's own key/value, materialization, read/parse, or direction defect
+    (`invalid-key`, `invalid-value`, `internal-error`, `type-map-unreadable`,
+    `type-map-wrong-direction`, `invalid-type-map`) short-circuits the probe
+    walk below it: a probe
+    reported as a gap against an incomplete set of maps would be
+    indistinguishable from a genuine gap against the maps the caller actually
+    intended, so this function reports the map defect(s) alone and leaves
+    every probe unjudged rather than guessing.
+
+    `maps` is walked in sorted key order, not the caller's own insertion
+    order — the same precedent `_normalize_documents` already sets — so this
+    function's own findings never depend on how the caller happened to build
+    the mapping.
+
+    `direction` is validated before anything else runs: `Literal["read",
+    "write"]` is a type-checker-only promise, and a runtime caller that
+    bypasses it (an untyped caller, `**kwargs` from a dict) would otherwise
+    have every value other than `"read"` silently treated as `"write"` —
+    including a value like `"sideways"` that has no business appearing on a
+    reported finding's own `direction` field, which is typed the same closed
+    two-member `Literal`.
     """
-    raise NotImplementedError(
-        "resolve_type_map_gaps is not yet implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
+    if direction not in ("read", "write"):
+        return {"findings": [finding(
+            message_id="invalid-direction", kind="fail", path="",
+            message=f"direction must be 'read' or 'write'; got {direction!r}.")]}
+    type_findings = _document_set_type_findings(maps)
+    if type_findings:
+        return {"findings": type_findings}
+    fs, findings = _normalize_documents(maps)
+    rendered_maps: list[list] = []
+    load_bearing_filename = {_READ_MAP_FILENAME: "read", _WRITE_MAP_FILENAME: "write"}
+    for key in sorted(fs.known_keys, key=path_parts_key):
+        if not fs.materialized(key):
+            # Already reported by `_normalize_documents` (`internal-error`) or
+            # `_key_and_value_findings` (`invalid-value`) when it first tried
+            # to turn this key's value into usable content — a second finding
+            # here would only double-report the same crash.
+            continue
+        try:
+            parsed = fs.parsed(key)
+        except Exception as exc:  # noqa: BLE001 - isolate one map's parse crash
+            findings.append(finding(
+                message_id="type-map-unreadable", kind="fail", path=key,
+                message=(
+                    f"{key!r} is not readable as a JSON array of type-map rules "
+                    f"({type(exc).__name__}: {exc}).")))
+            continue
+        if not isinstance(parsed, list):
+            findings.append(finding(
+                message_id="type-map-unreadable", kind="fail", path=key,
+                message=f"{key!r} is not readable as a JSON array of type-map rules."))
+            continue
+        implied_direction = load_bearing_filename.get(key.rsplit("/", 1)[-1])
+        if implied_direction is not None and implied_direction != direction:
+            findings.append({
+                **finding(
+                    message_id="type-map-wrong-direction", kind="fail", path=key,
+                    message=(
+                        f"{key!r} is a {implied_direction}-direction map by its canonical "
+                        f"filename, but direction={direction!r} was requested; the read and "
+                        "write exact-rule shapes share the same keys, so model validation "
+                        "alone cannot catch a map loaded under the wrong direction.")),
+                "direction": direction,
+            })
+            continue
+        adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
+        try:
+            adapter.validate_python(parsed)
+        except ValidationError:
+            findings.append({
+                **finding(
+                    message_id="invalid-type-map", kind="fail", path=key,
+                    message=f"{key!r} does not satisfy the {direction} type-map model."),
+                "direction": direction,
+            })
+            continue
+        except Exception as exc:  # noqa: BLE001 - isolate one map's validation crash
+            # A syntactically valid rule can still crash the model validator
+            # itself instead of being cleanly rejected by it — a regex
+            # repetition count large enough to overflow Python's `re`
+            # compiler (`a{999999999999999999999999}`), say, raises
+            # `OverflowError`, which is neither `re.error` nor
+            # `ValidationError`. Isolated the same way the parse crash above
+            # is isolated, rather than escaping this function's own "never
+            # raises" contract.
+            findings.append({
+                **finding(
+                    message_id="invalid-type-map", kind="fail", path=key,
+                    message=(
+                        f"{key!r} could not be checked against the {direction} type-map "
+                        f"model ({type(exc).__name__}: {exc}).")),
+                "direction": direction,
+            })
+            continue
+        rendered_maps.append(parsed)
+
+    if findings:
+        return {"findings": findings}
+
+    if not isinstance(probes, list):
+        return {"findings": [{
+            **finding(
+                message_id="invalid-probes", kind="fail", path="",
+                message=f"probes must be a list of strings; got {type(probes).__name__}."),
+            "direction": direction,
+        }]}
+
+    # A probe element is untrusted, so until `isinstance` has established it is
+    # a `str` the only operations performed on it are `isinstance` and
+    # `type()` — both total and O(1). Hashing, equality and `repr` are each
+    # unbounded on an adversarial value and each raise, which is the contract
+    # this function states it does not do: a `list` is unhashable, two
+    # distinct self-referential containers compare forever, and a deeply
+    # nested one exhausts the recursion limit under `repr`. Validating the
+    # type first is what makes every value that reaches the de-duplicating
+    # `set` below a string, so that set can never be the thing that crashes.
+    # The cost is that a non-string probe is named by its type rather than its
+    # value, and reported once per type rather than once per distinct value —
+    # the defect being reported is "these are not strings", which the type
+    # names in full.
+    seen_probes: set[str] = set()
+    seen_invalid_types: set[str] = set()
+    for probe in probes:
+        if not isinstance(probe, str):
+            type_name = type(probe).__name__
+            if type_name in seen_invalid_types:
+                continue
+            seen_invalid_types.add(type_name)
+            expected = "a native-type" if direction == "read" else "an Arrow-type"
+            findings.append({
+                **finding(
+                    message_id="invalid-probe", kind="fail", path="",
+                    message=(
+                        f"a probe of type {type_name!r} is not a string; every {direction} "
+                        f"probe must be {expected} name.")),
+                "direction": direction,
+            })
+            continue
+        if probe in seen_probes:
+            continue
+        seen_probes.add(probe)
+        if direction == "read":
+            resolved = any(_render_arrow_type(probe, rules) is not None for rules in rendered_maps)
+        else:
+            resolved = any(
+                _first_match_render(probe, rules, "arrow_type", "native_type") is not None
+                for rules in rendered_maps)
+        if not resolved:
+            findings.append({
+                **finding(
+                    message_id="type-map-gap", kind="informational", path="",
+                    message=f"no bundled {direction} type map resolves {probe!r}."),
+                "direction": direction,
+            })
+    return {"findings": findings}

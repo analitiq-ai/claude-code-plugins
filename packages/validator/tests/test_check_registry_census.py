@@ -148,6 +148,98 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator.pipelines::validate_pipeline_bundle", "bundle-missing-pipeline-document"): (
         "rejects before any referential check the registry binds could even "
         "begin"),
+    ("analitiq.validator.document_set::_key_and_value_findings", "invalid-key"): (
+        "a structural precondition on the document set itself — a key that is "
+        "not a usable relative path — rejected before any rule-specific check "
+        "of the value it maps to could run"),
+    ("analitiq.validator.document_set::_key_and_value_findings", "invalid-value"): (
+        "a structural precondition on the document set itself — a value of a "
+        "type no route can materialize into a document — rejected before any "
+        "rule-specific check of its content could run"),
+    ("analitiq.validator.document_set::_document_set_type_findings", "invalid-document-set"): (
+        "a structural precondition on the document set itself — the value "
+        "handed to `validate_connector_tree`, `validate_pipeline_tree`, "
+        "`validate_tree`, or `resolve_type_map_gaps` is not a `dict` at all — "
+        "rejected before any per-key normalization (which assumes a mapping "
+        "to walk) could even start"),
+    ("analitiq.validator.document_set::_normalize_documents", "internal-error"): (
+        "a structural precondition rejected the entry before any rule-specific "
+        "check could run: the raw value could not even be materialized into "
+        "JSON text, let alone dispatched to a kind whose rules could apply"),
+    ("analitiq.validator.document_set::_normalize_documents", "key-path-conflict"): (
+        "a structural precondition on the document set's own shape — one key "
+        "is simultaneously a document and a directory prefix of another — "
+        "rejected before any one document's content could be checked"),
+    ("analitiq.validator.document_set::_normalize_documents", "duplicate-key"): (
+        "a structural precondition on the document set's own shape — two "
+        "distinct raw keys normalize to the same key — rejected before any "
+        "one document's content could be checked"),
+    ("analitiq.validator.document_set::_validate_tree_document", "internal-error"): (
+        "a structural precondition rejected the entry before any rule-specific "
+        "check could run: the materialized text could not even be parsed as "
+        "JSON, let alone dispatched to a kind whose rules could apply"),
+    ("analitiq.validator.document_set::_resolved_member", "internal-error"): (
+        "a structural precondition rejected the entry before any rule-specific "
+        "check could run: `validate=False`'s own materialize/parse isolation on "
+        "an embedded connector's own identity document, reached from an "
+        "embedded-connector identity lookup that discards this function's "
+        "returned findings outright — found the materialized text could not "
+        "even be parsed as JSON, let alone graded by the connector-tree "
+        "validation pass whose result this lookup does not need"),
+    ("analitiq.validator.document_set::validate_connector_tree", "missing-connector-document"): (
+        "a structural precondition on the document set's own shape — no root "
+        "connector.json key at all — rejected before any rule-specific check "
+        "of a document that does not exist could run"),
+    ("analitiq.validator.document_set::validate_pipeline_tree", "ignored-pipeline-document"): (
+        "a structural precondition on the document set's own shape — more than "
+        "one pipelines/<slug>/pipeline.json — names the document(s) this call "
+        "never validates as the tree's pipeline, before any rule-specific check "
+        "of one could run"),
+    ("analitiq.validator.document_set::validate_pipeline_tree", "internal-error"): (
+        "a structural precondition rejected the whole referential pass: a "
+        "bundle member can materialize, parse, and pass `_resolved_member`'s "
+        "dict-shape gate while still failing its own model validation, which "
+        "the published `validate_pipeline_bundle` does not re-check before "
+        "reading the shapes it assumes — so a crash there is caught here "
+        "rather than attributed to any one rule"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "invalid-direction"): (
+        "a structural precondition on `direction` itself — it is neither "
+        "'read' nor 'write' — rejected before `maps` is even normalized: "
+        "`Literal['read', 'write']` is a type-checker-only promise, and an "
+        "untyped caller bypassing it would otherwise have every other value "
+        "silently treated as 'write'"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "type-map-unreadable"): (
+        "a structural precondition — the map is not readable as a JSON array "
+        "at all — rejected before any rule-specific check of its rows could "
+        "run"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "type-map-wrong-direction"): (
+        "a structural precondition — the map's own canonical filename names "
+        "the other direction, which model validation cannot detect since both "
+        "directions' exact-rule shapes share the same keys — rejected before "
+        "any one probe's gap could be evaluated against it"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "invalid-type-map"): (
+        "a structural precondition — the map does not satisfy its read/write "
+        "model — rejected before any one probe's gap could be evaluated "
+        "against it"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "invalid-probes"): (
+        "a structural precondition on `probes` itself — it is not a list — "
+        "rejected before any element could be walked at all, the same way a "
+        "map defect short-circuits the walk"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "invalid-probe"): (
+        "a structural precondition on one probe — it is not a string — "
+        "rejected before it could be graded resolved or gapped: the read "
+        "route's resolution call would otherwise crash on it, and the write "
+        "route's would otherwise silently grade it by whatever comparison "
+        "its type happens to support"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "type-map-gap"): (
+        "informational: an unresolved probe is a fact about how this run's "
+        "coverage came out, with no rule to bind it to"),
+    ("analitiq.validator.document_set::validate_tree", "ambiguous-layout"): (
+        "a hand-written shape guard ahead of any kind-specific check: the "
+        "document set matches more than one registered root shape at once, "
+        "so no single shape's own validation route could even be chosen"),
+    ("analitiq.validator.document_set::validate_tree", "unrecognized-layout"): (
+        "no registered root shape's detector claimed the document set"),
 }
 
 
