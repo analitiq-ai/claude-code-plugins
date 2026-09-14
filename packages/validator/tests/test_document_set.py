@@ -484,6 +484,38 @@ def test_gap_resolution_allows_a_non_canonical_filename_of_either_direction(vali
     assert result == {"findings": []}, result
 
 
+def test_diagnostics_accepts_a_schema_url_direction_hint_for_an_ambiguous_type_map(validator):
+    """`diagnostics()` has no `doc_path`, so `_validate_type_map`'s
+    filename-based direction detection can never fire on this route; without
+    a direction hint an ambiguous-direction type-map array always defaults to
+    the read model, rejecting a genuinely-valid write-only rule (`arrow_type`
+    holding the regex matcher, `native_type` the literal it renders to) as an
+    invalid Arrow type name. `schema_url` is the same disambiguation hint
+    `validate_document`'s own filesystem route already accepts."""
+    write_rules = [{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+),(?<s>\d+)\)",
+                     "native_type": "NUMERIC(${p}, ${s})"}]
+    defaulted = validator.diagnostics(write_rules, entity="type-map")
+    assert defaulted["passed"] is False, defaulted
+
+    told = validator.diagnostics(
+        write_rules, entity="type-map",
+        schema_url="https://schemas.analitiq.ai/type-map-write/latest.json")
+    assert told["passed"] is True, told
+
+
+def test_diagnostics_reports_the_defaulted_direction_even_with_no_filename_to_name(validator):
+    """`diagnostics()`'s path-free route has no `doc_path`, so it has no
+    filename for `_validate_type_map` to call ambiguous or confirm — it is
+    the one caller that can reach `validate_document(doc_path=None)` at all.
+    Guessing a direction there without saying so is the same silent guess the
+    filesystem route already reports via `type-map-direction-defaulted`; the
+    gate must widen to `doc_path is None`, not stay conditioned on a filename
+    that this route never has."""
+    read_rules = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+    result = validator.diagnostics(read_rules, entity="type-map")
+    assert any(f["message_id"] == "type-map-direction-defaulted" for f in result["findings"]), result
+
+
 # ---------------------------------------------------------------------------
 # Key handling.
 # ---------------------------------------------------------------------------
@@ -601,9 +633,12 @@ def test_two_keys_normalizing_to_the_same_key_report_a_finding(validator):
 
 
 def test_non_string_key_is_reported_not_raised_by_the_sort(validator):
+    """`path` is a public string field (`rules/SCHEMA.md`'s Findings shape):
+    the raw key is stringified into it rather than passed through, so an
+    int key doesn't produce a schema-invalid finding."""
     documents = {**_connector_tree_documents(), 1: {}}
     result = validator.validate_tree(documents)
-    assert any(f["message_id"] == "invalid-key" and f["path"] == 1 for f in result["findings"]), result
+    assert any(f["message_id"] == "invalid-key" and f["path"] == "1" for f in result["findings"]), result
 
 
 def test_key_that_is_both_document_and_directory_prefix_conflicts(validator):
@@ -1435,3 +1470,106 @@ def test_pipeline_tree_equivalence_with_the_path_based_route(validator, tmp_path
     assert len(path_based["findings"]) >= 2, path_based  # non-vacuous: order genuinely matters below
     tree_based = validator.validate_pipeline_tree(documents)
     assert json.dumps(tree_based) == json.dumps(path_based)
+
+
+# ---------------------------------------------------------------------------
+# _extract_subtree: a raw-key collision on the same subtree-relative key
+# resolves deterministically, regardless of the caller's insertion order.
+# ---------------------------------------------------------------------------
+
+def test_extract_subtree_resolves_a_raw_key_collision_by_sorted_order_not_insertion_order(validator):
+    """`_normalize_key` only strips a LEADING `./`, so two raw keys that both
+    normalize to the same subtree-relative key (a `./`-prefixed duplicate of
+    the whole path, here) must resolve to the same value regardless of which
+    one the caller happened to insert first — the same sorted-key-order-wins
+    rule `_normalize_documents` already applies at the whole tree's own top
+    level, per this function's own docstring."""
+    from analitiq.validator.document_set import _extract_subtree
+
+    forward = {
+        "connectors/wise/definition/connector.json": {"which": "unprefixed"},
+        "./connectors/wise/definition/connector.json": {"which": "dot-slash-prefixed"},
+    }
+    backward = dict(reversed(list(forward.items())))
+
+    forward_subtree = _extract_subtree(forward, "connectors/wise/definition/")
+    backward_subtree = _extract_subtree(backward, "connectors/wise/definition/")
+
+    # "./connectors/..." sorts before "connectors/..." in plain string order
+    # ("." < "c"), so it is the raw key `sorted(documents, key=str)` visits
+    # first — the one `setdefault` keeps.
+    assert forward_subtree == backward_subtree == {
+        "connector.json": {"which": "dot-slash-prefixed"},
+    }
+
+
+# ---------------------------------------------------------------------------
+# resolve_type_map_gaps: probe deduplication and probe/probes validation.
+# ---------------------------------------------------------------------------
+
+def test_gap_resolution_deduplicates_repeated_probes(validator):
+    """A repeated probe is one verdict, not one `type-map-gap` finding per
+    occurrence — mirroring the outcome `type_map_gaps.py`'s own `resolve`
+    already gives its CLI probes."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["BIGINT", "BIGINT", "BIGINT"])
+    gaps = [f for f in result["findings"] if f["message_id"] == "type-map-gap"]
+    assert len(gaps) == 1, result["findings"]
+
+
+def test_gap_resolution_deduplicates_a_repeated_invalid_probe_too(validator):
+    """De-duplication runs before the per-probe string check, not after: a
+    repeated non-string probe is one `invalid-probe` finding, not one per
+    occurrence — the same "one verdict per probe" rule as a repeated valid
+    one, and it is the harder half to get right, since the natural
+    implementation is to validate probes into a `set` as they're seen, which
+    itself crashes on an unhashable probe (a `list`, say) rather than
+    reporting it."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=[None, None, ["not", "hashable"]])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe", "invalid-probe"], result["findings"]
+
+
+def test_gap_resolution_reports_a_non_string_probe_on_the_read_route_instead_of_crashing(validator):
+    """The read route's `_render_arrow_type` normalizes a probe by calling
+    string methods on it directly (`.strip()`), so a non-string probe would
+    otherwise crash this function rather than being reported, breaking the
+    "never raises" contract `resolve_type_map_gaps` documents for itself."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING", None])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe"], result["findings"]
+    invalid = result["findings"][0]
+    assert invalid["kind"] == "fail" and invalid["severity"] == "error"
+    assert invalid["direction"] == "read"
+    assert "native-type" in invalid["message"]
+
+
+def test_gap_resolution_reports_a_non_string_probe_on_the_write_route_too(validator):
+    """The write route's `_first_match_render` matches a probe against each
+    rule's `arrow_type` with no string normalization at all, so a non-string
+    probe does not crash there — pre-fix, it was silently graded resolved or
+    gapped by whatever comparison its type happened to support instead, a
+    wrong-answer failure mode rather than a crash, but the same underlying
+    defect: this route must report it exactly like the read route does,
+    naming the write-side vocabulary (Arrow types, not native types) in the
+    message."""
+    maps = {"type-map-write.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="write", probes=["Utf8", None])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe"], result["findings"]
+    invalid = result["findings"][0]
+    assert invalid["direction"] == "write"
+    assert "Arrow-type" in invalid["message"]
+
+
+def test_gap_resolution_reports_a_non_list_probes_instead_of_raising(validator):
+    """`probes` itself, not one of its elements, can be the wrong shape: a
+    bare string iterates character by character rather than probe by probe,
+    and `None` is not iterable at all — both are the same "never raises"
+    contract the per-element `invalid-probe` check exists for, one level up."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=None)
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"], result["findings"]
+
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes="STRING")
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"], result["findings"]

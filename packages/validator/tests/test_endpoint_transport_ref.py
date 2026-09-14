@@ -432,6 +432,17 @@ class TestStandaloneEndpointValidation:
             "filtering on RULE-ENDP-047 would never see it"
         )
 
+    def test_recursion_crash_reading_the_connector_is_reported_the_same_way(self, tmp_path):
+        """`_load_json_sibling` isolates any crash reading or parsing the
+        sibling, not just the read/decode/JSON errors a real file on disk
+        raises through `json.loads`'s ordinary error path: pathologically
+        deep but syntactically valid nesting exhausts the recursion limit
+        `json.loads` parses with, raising `RecursionError` — neither an
+        `OSError` nor a `json.JSONDecodeError`, so a narrower except clause
+        would let it propagate uncaught instead of being reported here."""
+        findings = self._run(tmp_path, "[" * 20_000 + "]" * 20_000)
+        assert any(f.get("message_id") == "sibling-connector-unreadable" for f in findings)
+
     def test_unparseable_connector_is_not_described_as_unreachable(self, tmp_path):
         """The file was found and read; only the parse failed. Reporting it as
         "no sibling connector.json was reachable" contradicts the parse error

@@ -973,10 +973,15 @@ def _load_json_sibling(
     that sibling to satisfy — RULE-PKG-030 for a type-map load, `None` where
     the read precedes any rule evaluation — rather than a shared default that
     could name the wrong one.
+
+    Catches any crash reading or parsing, not just `OSError` and
+    `json.JSONDecodeError`: pathologically deep-but-valid nesting crashes
+    `json.loads` with `RecursionError` regardless of where the bytes came
+    from — a real file on disk included — and neither of those two names it.
     """
     try:
         return json.loads(path.read_text()), []
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except Exception as exc:  # noqa: BLE001 - isolate this one sibling's crash
         return None, [finding(
             rule=rule, message_id=message_id, kind="fail", path="/",
             message=f"sibling {path.name} could not be read or parsed ({exc}).")]
@@ -1339,20 +1344,30 @@ def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None =
     else:
         direction = "read"
     findings = _type_map_findings(doc, direction)
-    if direction == "read" and doc_path is not None and doc_path.name not in (
+    filename_is_ambiguous = doc_path is None or doc_path.name not in (
         _READ_MAP_FILENAME, _WRITE_MAP_FILENAME
-    ) and not (isinstance(schema_url, str) and "type-map-read" in schema_url):
-        # informational, no rule: nothing here was violated — the CLI guessed a
-        # direction because the filename was ambiguous, which is a fact about
-        # how this run proceeded, not about the document (rules/SCHEMA.md's
-        # generalized ruleless-fail case's informational sibling).
+    )
+    if direction == "read" and filename_is_ambiguous and not (
+        isinstance(schema_url, str) and "type-map-read" in schema_url
+    ):
+        # informational, no rule: nothing here was violated — this route
+        # guessed a direction because it had no better signal, which is a
+        # fact about how this run proceeded, not about the document
+        # (rules/SCHEMA.md's generalized ruleless-fail case's informational
+        # sibling). `doc_path` is `None` on the path-free `diagnostics()`
+        # route, which has no filename to name — reported the same way, since
+        # the guess was made the same way, but naming the missing filename
+        # itself rather than pretending one was there and ambiguous.
+        reason = (
+            f"filename {doc_path.name!r} is neither {_READ_MAP_FILENAME!r} nor "
+            f"{_WRITE_MAP_FILENAME!r}"
+            if doc_path is not None
+            else "this route has no filename to read a direction from"
+        )
         findings.append(finding(
             message_id="type-map-direction-defaulted",
             kind="informational", path="/",
-            message=(
-                f"rule direction defaulted to 'read': filename {doc_path.name!r} is "
-                f"neither {_READ_MAP_FILENAME!r} nor {_WRITE_MAP_FILENAME!r} "
-                "(pass --schema-url to disambiguate).")))
+            message=f"rule direction defaulted to 'read': {reason} (pass a schema_url to disambiguate)."))
     return findings
 
 

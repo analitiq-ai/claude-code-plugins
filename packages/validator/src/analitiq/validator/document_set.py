@@ -170,7 +170,12 @@ def _key_and_value_findings(raw_key: Any, value: Any) -> tuple[str | None, list[
     key = _normalize_key(raw_key)
     if key is None:
         return None, [finding(
-            message_id="invalid-key", kind="fail", path=raw_key,
+            # `path` is a public string field (`rules/SCHEMA.md`'s Findings
+            # shape); `raw_key` is exactly the value that failed to normalize
+            # into one, so it is stringified here rather than passed through —
+            # an int, tuple, or bytes key would otherwise produce a
+            # schema-invalid finding, or break `json.dumps` on the envelope.
+            message_id="invalid-key", kind="fail", path=str(raw_key),
             message=(
                 f"key {raw_key!r} is not a usable relative document path: it must "
                 "be a non-empty relative path (no leading '/') with no '.' or "
@@ -398,13 +403,21 @@ def _extract_subtree(documents: DocumentSet, prefix: str) -> DocumentSet:
     `validate_connector_tree` call exactly as the caller supplied it, letting
     that call discover and report the crash itself, scoped to its own
     subtree-relative key rather than being reported (or silently dropped)
-    here."""
+    here.
+
+    Two raw keys colliding on the same subtree-relative key (e.g. a
+    `./`-prefixed duplicate) are resolved the same way `_normalize_documents`
+    already resolves the identical collision at the whole tree's own top
+    level — keep the first in sorted key order — by walking `documents` in
+    that same order and keeping only the first value `setdefault` sees for
+    each relative key, rather than raw insertion order silently picking
+    whichever raw key happened to come last."""
     subtree: DocumentSet = {}
-    for raw_key, value in documents.items():
+    for raw_key in sorted(documents, key=str):
         key = _normalize_key(raw_key)
         if key is None or not key.startswith(prefix):
             continue
-        subtree[key[len(prefix):]] = value
+        subtree.setdefault(key[len(prefix):], documents[raw_key])
     return subtree
 
 
@@ -924,17 +937,23 @@ def _is_single_document(target: Any) -> bool:
     return any(detector(target) for detector, _ in _KIND_REGISTRY)
 
 
-def diagnostics(target: Any, entity: Entity | None = None) -> ValidationEnvelope:
+def diagnostics(
+        target: Any, entity: Entity | None = None,
+        schema_url: str | None = None) -> ValidationEnvelope:
     """Auto-detect whether `target` is a single already-parsed document or a
     `DocumentSet`, and dispatch to `analitiq.validator.validate_document` or
     `validate_tree` accordingly — replacing the pipeline-builder plugin's
     private `diagnostics_for()`, which takes an explicit `entity` argument
-    naming the document's kind rather than detecting it. `entity` plays no
-    part in detecting or validating a document SET, which is identified by
-    its shape alone; on the single-document route it is passed straight
-    through to `validate_document`'s own explicit-kind override, letting a
-    caller that already knows a document's kind name it directly instead of
-    relying on shape auto-detection.
+    naming the document's kind rather than detecting it. `entity` and
+    `schema_url` play no part in detecting or validating a document SET, which
+    is identified by its shape alone; on the single-document route both are
+    passed straight through to `validate_document`, letting a caller that
+    already knows a document's kind name it directly instead of relying on
+    shape auto-detection, and disambiguate a type-map array's direction the
+    same way a real `doc_path`'s filename would — this path-free route has no
+    filename for `validate_document`'s own type-map validator to read one
+    from, so without `schema_url` an ambiguous-direction type-map document
+    always defaults to read.
 
     Wraps a single-document result in a `ValidationEnvelope` (`{"passed":
     finding_costs_a_pass`-reduction, "findings": ...}`) rather than returning
@@ -944,7 +963,7 @@ def diagnostics(target: Any, entity: Entity | None = None) -> ValidationEnvelope
     list result today.
     """
     if _is_single_document(target):
-        return _envelope(validate_document(target, entity=entity))
+        return _envelope(validate_document(target, entity=entity, schema_url=schema_url))
     return validate_tree(target)
 
 
@@ -982,10 +1001,31 @@ def resolve_type_map_gaps(
     filename/direction check); `invalid-type-map` (`fail`/`error`, `direction`
     = this call's `direction` — a map that fails its
     `TypeMapReadDoc`/`TypeMapWriteDoc` model, `analitiq.contracts.type_map`);
+    `invalid-probes` (`fail`/`error`, `direction` = this call's `direction`,
+    no `path` — `probes` itself is not a `list`, short-circuiting the walk
+    below entirely the same way a map defect does: a non-list `probes` is
+    not "zero probes to check" and iterating it directly would either raise
+    (`None`) or silently probe its characters as if they were the intended
+    values (a bare `str`)); `invalid-probe` (`fail`/`error`, `direction` =
+    this call's `direction` — one element of `probes` that is not a `str`.
+    The read route's `_render_arrow_type` normalizes a probe by calling
+    string methods on it directly and crashes on anything else; the write
+    route's `_first_match_render` matches a probe against each rule's
+    `arrow_type` with no such normalization, so on that route a non-string
+    probe would not crash at all — it would instead be silently graded
+    resolved-or-gapped by whatever `==`/regex comparison its type happens to
+    support, which is the wrong failure mode for the same underlying defect.
+    This finding replaces both outcomes with one explicit report, on either
+    route, rather than letting only one of them announce itself by crashing);
     `type-map-gap` (`informational`, no severity, no rule, `direction` = this
     call's `direction` — a probe none of `maps` resolved; never costs a
     pass). A run in which every probe resolved reports an empty `findings`
     list.
+
+    `probes` is de-duplicated before resolution, order-preserving — a
+    repeated probe (valid or invalid) is one verdict, not one finding per
+    occurrence — mirroring the outcome `type_map_gaps.py`'s own `resolve`
+    already gives its CLI probes.
 
     This is a deliberate divergence from `type_map_gaps.py`'s own
     `_load_rules`, which raises `ValueError` on exactly the same two
@@ -1062,7 +1102,34 @@ def resolve_type_map_gaps(
     if findings:
         return {"findings": findings}
 
+    if not isinstance(probes, list):
+        return {"findings": [{
+            **finding(
+                message_id="invalid-probes", kind="fail", path="",
+                message=f"probes must be a list of strings; got {type(probes).__name__}."),
+            "direction": direction,
+        }]}
+
+    # Order-preserving de-duplication via list membership, not a `set` /
+    # `dict.fromkeys` — a probe may be any type until the `isinstance` check
+    # just below runs, and a `set` would itself crash on an unhashable one
+    # (e.g. a `list` mistakenly passed as a probe), the exact "never raises"
+    # violation this whole block exists to close.
+    deduped_probes: list = []
     for probe in probes:
+        if probe not in deduped_probes:
+            deduped_probes.append(probe)
+
+    for probe in deduped_probes:
+        if not isinstance(probe, str):
+            expected = "a native-type" if direction == "read" else "an Arrow-type"
+            findings.append({
+                **finding(
+                    message_id="invalid-probe", kind="fail", path="",
+                    message=f"probe {probe!r} is not a string; every {direction} probe must be {expected} name."),
+                "direction": direction,
+            })
+            continue
         if direction == "read":
             resolved = any(_render_arrow_type(probe, rules) is not None for rules in rendered_maps)
         else:

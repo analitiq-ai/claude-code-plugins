@@ -210,6 +210,16 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "a structural precondition — the map does not satisfy its read/write "
         "model — rejected before any one probe's gap could be evaluated "
         "against it"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "invalid-probes"): (
+        "a structural precondition on `probes` itself — it is not a list — "
+        "rejected before any element could be walked at all, the same way a "
+        "map defect short-circuits the walk"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "invalid-probe"): (
+        "a structural precondition on one probe — it is not a string — "
+        "rejected before it could be graded resolved or gapped: the read "
+        "route's resolution call would otherwise crash on it, and the write "
+        "route's would otherwise silently grade it by whatever comparison "
+        "its type happens to support"),
     ("analitiq.validator.document_set::resolve_type_map_gaps", "type-map-gap"): (
         "informational: an unresolved probe is a fact about how this run's "
         "coverage came out, with no rule to bind it to"),
