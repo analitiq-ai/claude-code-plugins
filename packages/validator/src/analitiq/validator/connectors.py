@@ -995,12 +995,28 @@ def _load_type_map(path: Path) -> tuple[list | None, list[dict]]:
 
 
 def _type_map_findings(doc: Any, direction: str) -> list[dict]:
-    """Validate a loaded type-map document: model errors + advisory rule
-    warnings + (write-vocabulary coverage on the write direction). The single
-    definition used everywhere a type-map is checked — standalone, or as a
-    connector's sibling."""
+    """Everything a type-map document can be judged on by itself: model errors
+    plus the advisory rule warnings. The single definition used everywhere a
+    type-map is checked.
+
+    Whole-vocabulary write coverage is deliberately not here. `RULE-TMAP-017`
+    asks whether a *connector's* write map renders every Arrow family, which
+    is a claim about one package's whole DDL vocabulary rather than about the
+    document in hand — a connection-scoped map is partial by rule, and the
+    warning's remedy would be the shadowing that rule forbids. So it belongs
+    to `_connector_type_map_findings`, for a caller that knows it is holding a
+    connector's map; a caller handed a lone map and no package says nothing on
+    the question."""
     findings = _model_findings(doc, _DIRECTIONS[direction].adapter)
     findings.extend(_type_map_rule_warnings(doc, direction))
+    return findings
+
+
+def _connector_type_map_findings(doc: Any, direction: str) -> list[dict]:
+    """A *connector's* type map: the document's own checks, plus the
+    whole-vocabulary coverage only a connector's write map is claimed to
+    have."""
+    findings = _type_map_findings(doc, direction)
     if direction == "write" and isinstance(doc, list):
         findings.extend(_write_vocabulary_findings(doc))
     return findings
@@ -1047,7 +1063,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                 doc_, load = _load_type_map(path)
                 findings.extend(load)
                 if doc_ is not None:
-                    findings.extend(_type_map_findings(doc_, direction))
+                    findings.extend(_connector_type_map_findings(doc_, direction))
         return findings
 
     # A read map that cannot be rendered from is carried forward rather than
@@ -1067,7 +1083,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         read_doc, load = _load_type_map(read_path)
         findings.extend(load)
         if read_doc is not None:
-            findings.extend(_type_map_findings(read_doc, "read"))
+            findings.extend(_connector_type_map_findings(read_doc, "read"))
 
     if kind in _DATABASE_KINDS:
         if not write_path.is_file():
@@ -1079,7 +1095,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         write_doc, load = _load_type_map(write_path)
         findings.extend(load)
         if write_doc is not None:
-            findings.extend(_type_map_findings(write_doc, "write"))
+            findings.extend(_connector_type_map_findings(write_doc, "write"))
         return findings
 
     # api: no write map, and every endpoint's natives must be covered by the read map.
@@ -1363,7 +1379,7 @@ def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None =
         direction = "write"
     else:
         direction = "read"
-    findings = _type_map_findings(doc, direction)
+    findings = _connector_type_map_findings(doc, direction)
     if direction == "read" and doc_path is not None and doc_path.name not in (
         _READ_MAP_FILENAME, _WRITE_MAP_FILENAME
     ) and not (isinstance(schema_url, str) and "type-map-read" in schema_url):

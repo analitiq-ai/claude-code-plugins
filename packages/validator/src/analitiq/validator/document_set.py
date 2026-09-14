@@ -600,8 +600,19 @@ def validate_doc(
     records that claim them rather than flattened into one finding of this
     mode's own. Those findings keep their own `path` within the document,
     prefixed by the key the map was supplied under, since more than one map
-    can be in hand. A map whose model findings cost a pass contributes no
-    rules; one whose findings are all advisory still does.
+    can be in hand, and their messages are bounded like any other borrowed
+    diagnostic — a check writing about a rule's own `native_type` answers a
+    long one at length, and the rule above is about what leaves here rather
+    than about where a sentence was written. A map whose model findings cost a
+    pass contributes no rules; one whose findings are all advisory still does.
+
+    What that definition does not ask is whether a write map renders every
+    Arrow family. `RULE-TMAP-017` is a claim about a connector's whole DDL
+    vocabulary, and this mode is handed maps with no claim about the package
+    they came from — a connection-scoped map is partial by rule, so the
+    warning would fire on every one of them forever and its remedy would be
+    the shadowing that rule forbids. A caller holding a connector asks through
+    the route that validates a connector, which does report it.
 
     `type-map-gap` (`informational`, no severity, no rule, `direction` = this
     call's `direction`, `path` the empty string — a probe nothing in `doc`
@@ -717,12 +728,25 @@ def _crashed(doing: str, path: str, exc: BaseException) -> Finding:
     return crash_finding(message_id="internal-error", doing=doing, path=path, exc=exc)
 
 
-def _at_key(f: Finding, key: str) -> Finding:
-    """Re-path a finding raised about a document's own content onto the key
-    that document was supplied under, so a set holding several maps says which
-    one a model error came from."""
+def _forwarded(f: Finding, key: str) -> Finding:
+    """Bring a finding another module's check raised across this entry point.
+
+    Two things happen at that boundary, and both are this module's rule rather
+    than the check's. The finding is re-pathed onto the key its document was
+    supplied under, so a set holding several maps says which one a model error
+    came from. And its `message` is bounded, because the rule above is about
+    what leaves here: a check that interpolates a rule's own `native_type`
+    answers a 100 KB one with a 100 KB sentence, and where that sentence was
+    written decides nothing about how large a response this API returns. The
+    `path` is left whole, being the identifier half.
+
+    A check reached by a caller holding a directory is not bounded, and does
+    not need to be — it reports on a file that caller wrote, to that same
+    caller. This entry point is handed its documents instead, which is the
+    difference the bound is drawn from."""
     within = f.get("path", "")
-    return {**f, "path": key if within in ("", "/") else f"{key}{within}"}
+    return {**f, "path": key if within in ("", "/") else f"{key}{within}",
+            "message": _bounded(f.get("message", ""))}
 
 
 def _map_rules(key: str, value: Any, direction: str) -> tuple[list | None, list[Finding]]:
@@ -755,7 +779,7 @@ def _map_rules(key: str, value: Any, direction: str) -> tuple[list | None, list[
             message_id="type-map-unreadable", kind="fail", path=key,
             message=(f"{_repr(key)} is not an array of type-map rules; it holds a value "
                      f"of type {_type_name(content)}."))]
-    model = [_at_key(f, key) for f in _type_map_findings(content, direction)]
+    model = [_forwarded(f, key) for f in _type_map_findings(content, direction)]
     if any(finding_costs_a_pass(f) for f in model):
         return None, model
     return content, model

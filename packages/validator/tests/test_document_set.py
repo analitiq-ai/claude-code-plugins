@@ -397,6 +397,31 @@ def test_gap_resolution_reports_a_model_error_against_the_rule_that_claims_it(va
     assert malformed[0]["path"] == "m.json/0/exact"
 
 
+def test_gap_resolution_does_not_ask_a_whole_vocabulary_question_of_a_partial_map(validator):
+    # `RULE-TMAP-017` asks whether a CONNECTOR's write map renders every Arrow
+    # family — a claim about one package's whole DDL vocabulary. Gap mode is
+    # handed a set of maps and no claim about what package they came from, so
+    # it is not in a position to ask: a connection-scoped write map is partial
+    # by rule, and the warning's remedy — add the missing rules — is the
+    # shadowing that rule forbids. It would fire on every such map forever.
+    partial_write = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
+    result = validator.validate_doc(
+        doc={"type-map-write.json": partial_write}, direction="write", probes=["Utf8"])
+    assert result == {"passed": True, "findings": []}, result
+
+
+def test_a_lone_write_map_validated_by_path_still_carries_the_coverage_warning(validator, tmp_path):
+    # The other side of the same claim: withholding the question in gap mode
+    # must not withhold it where a caller does hold a connector. The by-path
+    # route keeps reporting it, so the two entry points differ by what each is
+    # in a position to ask, not by one of them having lost a check.
+    p = tmp_path / "type-map-write.json"
+    p.write_text("[]")
+    findings = validator.validate_document(
+        [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], doc_path=p)
+    assert any(f.get("rule") == "RULE-TMAP-017" for f in findings), findings
+
+
 def test_gap_resolution_direction_selects_the_matching_model(validator):
     # Valid under TypeMapReadDoc (native_type is a bare matcher, unvalidated for
     # placeholders) but invalid under TypeMapWriteDoc (native_type is the write
@@ -1669,6 +1694,14 @@ def _every_caller_text_route(validator):
             direction="read", probes=["STRING"]),
         "collision": lambda: validator.validate_doc(
             doc={f"s{i:06d}/../m.json": _READ_RULES for i in range(2000)},
+            direction="read", probes=["STRING"]),
+        # The routes above are messages this module writes. This one is a
+        # message another module's check writes, arriving through the
+        # type-map model: the rule is about what leaves this entry point, so
+        # a finding it forwards is bound by it exactly like one it builds.
+        "forwarded-model-finding": lambda: validator.validate_doc(
+            doc={"type-map-read.json": [
+                {"match": "exact", "native_type": _HUGE + "[]", "arrow_type": "Utf8"}]},
             direction="read", probes=["STRING"]),
     }
 
