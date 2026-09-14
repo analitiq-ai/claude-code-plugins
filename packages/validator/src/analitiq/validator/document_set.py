@@ -27,7 +27,7 @@ import json
 import posixpath
 from typing import Any, Literal, TypedDict, Union
 
-from ._core import _passed, crash_finding, finding, finding_costs_a_pass
+from ._core import _bounded, _passed, crash_finding, finding, finding_costs_a_pass
 
 #: The value half of a `DocumentSet` entry: text, raw bytes (decoded as UTF-8,
 #: with a BOM stripped from either text form — no encoding-guessing), or a value already
@@ -159,11 +159,19 @@ def _directed(f: Finding, direction: str) -> Finding:
 
 def _repr(value: Any) -> str:
     """`repr`, for a value this module is about to name in a finding about how
-    unusable it is. The caller owns the object, so its `__repr__` is the
-    caller's code and may raise — and a message explaining why an input was
-    rejected must not become the second failure."""
+    unusable it is, clipped to the width `_core._bounded` holds every borrowed
+    diagnostic to.
+
+    The caller owns the object, so its `__repr__` is the caller's code, and
+    that costs twice. It may raise, and a message explaining why an input was
+    rejected must not become the second failure. It may also be arbitrarily
+    long: unclipped, a finding's size is a multiple of the input it complains
+    about, and a set full of rejected keys answers a request with a response
+    several times its size — which for the hosted consumer this module exists
+    for is the caller choosing how much the validator sends back.
+    """
     try:
-        return repr(value)
+        return _bounded(repr(value))
     except Exception:  # noqa: BLE001 - see the docstring
         return f"<unrepresentable {type(value).__name__}>"
 
@@ -214,6 +222,13 @@ def _normalized_documents(documents: dict) -> tuple[dict[str, Any], list[Finding
     too malformed to have a name contributes the empty string, which no route
     can match and every route must therefore treat as possibly its own.
 
+    The name is whichever spelling that route would have tested, so it is the
+    canonical key wherever one exists and the raw key only where none does. A
+    rejected key never reached canonicalization — the raw spelling is the only
+    name it has — while a collided or conflicting key did, and the canonical
+    form is what a route selecting maps would have matched against had the key
+    survived.
+
     A key that cannot name a document at all is `invalid-key`, reported against
     the raw key the caller wrote rather than a canonical form they would not
     recognize. Distinct raw keys that canonicalize together are
@@ -230,7 +245,7 @@ def _normalized_documents(documents: dict) -> tuple[dict[str, Any], list[Finding
         if rejection is not None:
             findings.append(finding(
                 message_id="invalid-key", kind="fail",
-                path=raw if isinstance(raw, str) else _repr(raw),
+                path=_bounded(raw) if isinstance(raw, str) else _repr(raw),
                 message=f"{_repr(raw)} cannot be used as a document set key: {rejection}."))
             dropped.append(raw if isinstance(raw, str) else "")
             continue
@@ -241,9 +256,9 @@ def _normalized_documents(documents: dict) -> tuple[dict[str, Any], list[Finding
         if len(entries) > 1:
             spellings = ", ".join(_repr(raw) for raw, _ in entries)
             findings.append(finding(
-                message_id="normalized-key-collision", kind="fail", path=key,
-                message=(f"{spellings} all name the document {key!r}; which of them applies "
-                         "would be decided by iteration order.")))
+                message_id="normalized-key-collision", kind="fail", path=_bounded(key),
+                message=(f"{spellings} all name the document {_repr(key)}; which of them "
+                         "applies would be decided by iteration order.")))
             dropped.append(key)
             continue
         usable[key] = entries[0][1]
@@ -261,9 +276,9 @@ def _normalized_documents(documents: dict) -> tuple[dict[str, Any], list[Finding
             None)
         if parent is not None:
             findings.append(finding(
-                message_id="key-path-conflict", kind="fail", path=key,
-                message=(f"{key!r} is nested under {parent!r}, which this set also carries "
-                         "as a document of its own.")))
+                message_id="key-path-conflict", kind="fail", path=_bounded(key),
+                message=(f"{_repr(key)} is nested under {_repr(parent)}, which this set "
+                         "also carries as a document of its own.")))
             del usable[key]
             dropped.append(key)
     return usable, findings, dropped
@@ -282,10 +297,13 @@ def _document_content(value: Any) -> tuple[Any, str | None, str]:
     `"invalid-type"` for a value of a type this contract does not hold,
     `"not-utf8"` for bytes that are not UTF-8, `"unparseable"` for text that is
     not JSON, and `"over-limit"` for JSON this interpreter refuses to build a
-    value from. `detail` is what the underlying failure said — the decode
-    position, the JSON syntax error and its line and column — which the caller
-    interpolates, because a type map reported only as "unreadable" leaves its
-    author bisecting a file the parser could already point into.
+    value from. `detail` says what was found: the type name for `invalid-type`,
+    and otherwise what the underlying failure said — the decode position, the
+    JSON syntax error with its line and column, the limit the interpreter
+    refused to exceed. The caller interpolates it, because a type map reported
+    only as "unreadable" leaves its author bisecting a file the parser could
+    already point into. It is bounded here rather than at each of those call
+    sites, so no route can interpolate it unclipped.
 
     The reason is a code rather than a finding: what an unreadable value means
     is each route's own vocabulary, and this function is shared by all of them.
@@ -296,15 +314,21 @@ def _document_content(value: Any) -> tuple[Any, str | None, str]:
         try:
             text = value.decode("utf-8")
         except UnicodeDecodeError as exc:
-            return None, "not-utf8", str(exc)
+            return None, "not-utf8", _bounded(str(exc))
     elif isinstance(value, str):
         text = value
     else:
         return None, "invalid-type", type(value).__name__
+    # Stripped outside the guard below, which names the two ways `json.loads`
+    # declines well-formed JSON. `text` is a caller-supplied `str` subclass as
+    # readily as a `str`, so `removeprefix` can be the caller's own code; a
+    # crash in it is a crash, and folding it in here would report it as a
+    # property of the document instead.
+    body = text.removeprefix(_BOM)
     try:
-        return json.loads(text.removeprefix(_BOM)), None, ""
+        return json.loads(body), None, ""
     except json.JSONDecodeError as exc:
-        return None, "unparseable", str(exc)
+        return None, "unparseable", _bounded(str(exc))
     except (ValueError, RecursionError) as exc:
         # Separated from `unparseable` because the document is not malformed:
         # an integer literal past `int_max_str_digits` and nesting past the
@@ -313,7 +337,7 @@ def _document_content(value: Any) -> tuple[Any, str | None, str]:
         # would accept them. Calling either a syntax error sends the author
         # hunting for a typo that is not there, and letting it reach a crash
         # guard blames the validator for a property of the input.
-        return None, "over-limit", f"{type(exc).__name__}: {exc}"
+        return None, "over-limit", _bounded(f"{type(exc).__name__}: {exc}")
 
 
 def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
@@ -494,18 +518,27 @@ def validate_doc(
     rejections above and the key/value hazards every `DocumentSet` route
     shares (`DocumentSet`/`DocumentSetValue` state them), this mode's own
     finding kinds are: `direction-filename-mismatch` (`fail`/`error`,
-    `direction` = this call's `direction` — a map keyed under a load-bearing
-    filename for the *other* direction, present under a call `direction` that
-    contradicts it; checked before that map's content is read, and that map
-    not used to resolve anything). A key's *load-bearing filename* is its
-    final `/`-separated segment, so a scoped key like
+    `direction` = this call's `direction` — a map whose load-bearing filename
+    refuses it for this call; checked before that map's content is read, and
+    that map not used to resolve anything). A key's *load-bearing filename* is
+    its final `/`-separated segment, so a scoped key like
     `"connections/foo/type-map-read.json"` is recognized as the read map it is
     rather than passing unchecked. It is matched against the filename
     `analitiq.validator.connectors`'s `_DIRECTIONS` records for each
     direction, which is where the filenames themselves live — this mode names
-    that table rather than spelling either filename again. A key whose final
-    segment is no direction's filename carries no such expectation and cannot
-    mismatch.
+    that table rather than spelling either filename again.
+
+    A filename refuses a map two ways. It names the *other* direction, under a
+    call `direction` that contradicts it. Or it is the single-map filename
+    predating the read/write split, which names no direction at all: that one
+    is refused whichever direction is asked for. `RULE-PKG-030` rejects that
+    filename outright rather than reading it as a read map, because a package
+    still carrying it has a write direction nobody has separated out; a
+    path-free caller is owed that verdict too, not a quieter one reached by
+    handing the documents over without a directory. Any other final segment
+    carries no
+    expectation, so the caller's declared `direction` is the only claim in hand
+    and the map is consulted under it.
 
     `_validate_type_map` in that module answers a different question and so
     reaches a different verdict: it has no caller-declared direction, only a
@@ -541,16 +574,16 @@ def validate_doc(
     name: attributing it to one would implicate a map doing nothing wrong.
     The probe itself is named in the message.
 
-    A map whose load-bearing filename declares the direction this call is not
-    resolving is never consulted, and says so with
+    A map its filename refuses is never consulted, and says so with
     `direction-filename-mismatch`. Read and write rules share one key set and
     the resolvers only choose which key is matched and which is rendered, so
     such a map does not fail to resolve a probe — it resolves it through rules
-    authored for the opposite mapping, plausibly and wrongly. Its filename is
-    the one declaration of intent in hand, and it is taken at its word. The
-    same holds for a key lost before anything could read it: a lost
-    `type-map-write.json` costs a `read` call nothing, because that call would
-    not have consulted it.
+    authored for the opposite mapping, plausibly and wrongly, which is the one
+    outcome a caller cannot detect. Its filename is the declaration of intent
+    in hand, and it is taken at its word, including where that word is that the
+    direction was never declared. The same holds for a key lost before anything
+    could read it: a lost `type-map-write.json` costs a `read` call nothing,
+    because that call would not have consulted it.
 
     Gaps are reported only when the set could answer the question — no map
     this `direction` would have consulted was lost, and at least one was
@@ -565,7 +598,7 @@ def validate_doc(
       for that reason: a false gap is indistinguishable from a real one and
       sends an author to add a rule their map already had.
     - A set that supplies no map for this `direction` at all — empty, or
-      holding only maps whose filenames declare the other one — reports
+      holding only maps their filenames refuse — reports
       `missing-type-map` and no gaps. Every probe would otherwise come back
       unresolved against nothing, which is the same false report in its
       starkest form.
@@ -601,11 +634,14 @@ def validate_doc(
 
     Once this function is entered, every failure it reaches is a reported
     finding rather than an exception — `internal-error` is the last-resort
-    form of that, and it is structural: the mode's body runs inside a guard of
-    its own, so the guarantee covers the arguments nobody anticipated as well
-    as the ones the rejections above name. The guarantee does not extend to
-    importing this package: a missing `analitiq-contract-models` is reported
-    by `analitiq.validator.connectors` at import time, before any call here.
+    form of that, and the mode's body runs inside a guard of its own, so it
+    covers the arguments nobody anticipated as well as the ones the rejections
+    above name. Two things are outside it. Importing this package: a missing
+    `analitiq-contract-models` is reported by `analitiq.validator.connectors`
+    at import time, before any call here. And a failure that leaves no stack to
+    report from: a caller already close to the recursion limit can drive
+    `RecursionError` out of the handler itself, since building the finding it
+    would return needs frames the caller has already spent.
 
     Reporting rather than raising is a deliberate divergence from
     `type_map_gaps.py`'s `_load_rules`, which raises `ValueError` on an
@@ -625,12 +661,10 @@ def validate_doc(
             "packages/validator/tests/test_document_set.py for the fixed contract.")
     try:
         return _type_map_gap_mode(doc, direction, probes)
-    except Exception as exc:  # noqa: BLE001 - the closure guarantee, structurally
+    except Exception as exc:  # noqa: BLE001 - the closure guarantee
         # The inner guards cover the work; this one covers the reporting around
-        # it, so the guarantee this docstring makes holds for every argument
-        # rather than for every argument someone thought of. Reached only by an
-        # object whose own `__hash__`, `__bool__` or `__repr__` raises, since
-        # nothing else here runs caller code outside an inner guard.
+        # it, so the guarantee holds for every argument rather than for every
+        # argument someone thought of.
         return _envelope([_crashed("type-map gap resolution", "", exc)])
 
 
@@ -646,7 +680,8 @@ def _at_key(f: Finding, key: str) -> Finding:
     that document was supplied under, so a set holding several maps says which
     one a model error came from."""
     within = f.get("path", "")
-    return {**f, "path": key if within in ("", "/") else f"{key}{within}"}
+    at = _bounded(key)
+    return {**f, "path": at if within in ("", "/") else f"{at}{within}"}
 
 
 def _map_rules(key: str, value: Any, direction: str) -> tuple[list | None, list[Finding]]:
@@ -657,27 +692,28 @@ def _map_rules(key: str, value: Any, direction: str) -> tuple[list | None, list[
     content, unread, detail = _document_content(value)
     if unread == "invalid-type":
         return None, [finding(
-            message_id="invalid-value", kind="fail", path=key,
-            message=(f"{key!r} holds a {detail}; a document set value is the parsed "
-                     "document as a dict or list, or the JSON text as str or bytes."))]
+            message_id="invalid-value", kind="fail", path=_bounded(key),
+            message=(f"{_repr(key)} holds a value of type {detail}; a document set value "
+                     "is the parsed document as a dict or list, or the JSON text as str "
+                     "or bytes."))]
     if unread == "not-utf8":
         return None, [finding(
-            message_id="invalid-value", kind="fail", path=key,
-            message=f"{key!r} holds bytes that are not UTF-8: {detail}.")]
+            message_id="invalid-value", kind="fail", path=_bounded(key),
+            message=f"{_repr(key)} holds bytes that are not UTF-8: {detail}.")]
     if unread == "unparseable":
         return None, [finding(
-            message_id="type-map-unreadable", kind="fail", path=key,
-            message=f"{key!r} is not JSON: {detail}.")]
+            message_id="type-map-unreadable", kind="fail", path=_bounded(key),
+            message=f"{_repr(key)} is not JSON: {detail}.")]
     if unread == "over-limit":
         return None, [finding(
-            message_id="type-map-unreadable", kind="fail", path=key,
-            message=(f"{key!r} is JSON this interpreter will not build a value from: "
-                     f"{detail}."))]
+            message_id="type-map-unreadable", kind="fail", path=_bounded(key),
+            message=(f"{_repr(key)} is JSON this interpreter will not build a value "
+                     f"from: {detail}."))]
     if not isinstance(content, list):
         return None, [finding(
-            message_id="type-map-unreadable", kind="fail", path=key,
-            message=(f"{key!r} is not an array of type-map rules; it holds a "
-                     f"{type(content).__name__}."))]
+            message_id="type-map-unreadable", kind="fail", path=_bounded(key),
+            message=(f"{_repr(key)} is not an array of type-map rules; it holds a value "
+                     f"of type {type(content).__name__}."))]
     model = [_at_key(f, key) for f in _type_map_findings(content, direction)]
     if any(finding_costs_a_pass(f) for f in model):
         return None, model
@@ -695,7 +731,7 @@ def _type_map_gap_mode(doc: Any, direction: Any, probes: Any) -> ValidationEnvel
     in place of raising, and one envelope in place of its
     `{"direction", "resolved", "gaps"}` result.
     """
-    from .connectors import _DIRECTIONS
+    from .connectors import _DIRECTIONS, _LEGACY_MAP_FILENAME
 
     if not isinstance(direction, str) or direction not in _DIRECTIONS:
         return _envelope([finding(
@@ -715,11 +751,22 @@ def _type_map_gap_mode(doc: Any, direction: Any, probes: Any) -> ValidationEnvel
     resolve = _DIRECTIONS[direction].resolve
     declared_by_filename = {ops.filename: name for name, ops in _DIRECTIONS.items()}
 
-    def declares_another_direction(name: str) -> bool:
-        """Whether `name`'s load-bearing filename says it belongs to a
-        direction other than the one being resolved."""
-        declared = declared_by_filename.get(name.rsplit("/", 1)[-1])
-        return declared is not None and declared != direction
+    def filename_refusal(name: str) -> str | None:
+        """Why `name`'s load-bearing filename disqualifies it from resolving a
+        probe in this direction — the rest of a sentence that opens with the
+        key — or `None` where nothing does."""
+        by_name = name.rsplit("/", 1)[-1]
+        declared = declared_by_filename.get(by_name)
+        if declared is not None and declared != direction:
+            return (f"is a {declared} map by its load-bearing filename, but this call "
+                    f"resolves in the {direction} direction; it is not used to resolve "
+                    "any probe.")
+        if by_name == _LEGACY_MAP_FILENAME:
+            return ("carries the single-map filename that predates the read/write split, "
+                    "so nothing declares which direction its rules are authored for and "
+                    "it is not used to resolve any probe; key it under the filename for "
+                    "the direction it renders.")
+        return None
 
     try:
         maps, findings, dropped = _normalized_documents(doc)
@@ -728,25 +775,24 @@ def _type_map_gap_mode(doc: Any, direction: Any, probes: Any) -> ValidationEnvel
 
     # A key this set could not use may have been the very map a probe needs,
     # and nothing read it, so nothing can say otherwise — unless its filename
-    # declares the other direction, in which case it would not have been
-    # consulted even had it survived.
-    lost = any(not declares_another_direction(name) for name in dropped)
+    # refuses it anyway, in which case it would not have been consulted even
+    # had it survived.
+    lost = any(filename_refusal(name) is None for name in dropped)
 
     rules: list = []
     consulted = 0
     for key, value in maps.items():
-        if declares_another_direction(key):
+        refusal = filename_refusal(key)
+        if refusal is not None:
             findings.append(_directed(finding(
-                message_id="direction-filename-mismatch", kind="fail", path=key,
-                message=(f"{key!r} is a {declared_by_filename[key.rsplit('/', 1)[-1]]} map "
-                         f"by its load-bearing filename, but this call resolves in the "
-                         f"{direction} direction; it is not used to resolve any probe.")),
+                message_id="direction-filename-mismatch", kind="fail", path=_bounded(key),
+                message=f"{_repr(key)} {refusal}"),
                 direction))
             continue
         try:
             contributed, reported = _map_rules(key, value, direction)
         except Exception as exc:  # noqa: BLE001 - last-resort per-map guard
-            findings.append(_crashed(f"reading {key!r}", key, exc))
+            findings.append(_crashed(f"reading {_repr(key)}", _bounded(key), exc))
             lost = True
             continue
         findings.extend(reported)

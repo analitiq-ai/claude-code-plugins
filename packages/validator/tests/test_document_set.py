@@ -387,14 +387,14 @@ def test_gap_resolution_reports_a_model_error_against_the_rule_that_claims_it(va
     # ruleless finding of this mode's own.
     rule = {"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}
     result = validator.validate_doc(
-        doc={"type-map.json": [rule]}, direction="write", probes=["Utf8"])
+        doc={"m.json": [rule]}, direction="write", probes=["Utf8"])
     assert result["passed"] is False
     malformed = [f for f in result["findings"] if f.get("rule") == "RULE-TMAP-008"]
     assert len(malformed) == 1, result["findings"]
     assert malformed[0]["severity"] == "error"
     # Re-pathed onto the key it was supplied under: more than one map can be in
     # hand, and the model's own path alone would not say which.
-    assert malformed[0]["path"] == "type-map.json/0/exact"
+    assert malformed[0]["path"] == "m.json/0/exact"
 
 
 def test_gap_resolution_direction_selects_the_matching_model(validator):
@@ -404,10 +404,10 @@ def test_gap_resolution_direction_selects_the_matching_model(validator):
     # so direction alone decides which model this rule is checked against.
     rule = {"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}
     read_result = validator.validate_doc(
-        doc={"type-map.json": [rule]}, direction="read", probes=["VARCHAR${"])
+        doc={"m.json": [rule]}, direction="read", probes=["VARCHAR${"])
     assert read_result == {"passed": True, "findings": []}
     write_result = validator.validate_doc(
-        doc={"type-map.json": [rule]}, direction="write", probes=["Utf8"])
+        doc={"m.json": [rule]}, direction="write", probes=["Utf8"])
     assert any(f.get("rule") == "RULE-TMAP-008" for f in write_result["findings"]), write_result
 
 
@@ -783,8 +783,8 @@ def test_normalized_key_collision_is_reported_not_silently_overwritten_for_pipel
 
 def test_normalized_key_collision_is_reported_not_silently_overwritten_for_gap_resolution_mode(validator):
     maps = {
-        "type-map.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
-        "./type-map.json": [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}],
+        "m.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        "./m.json": [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}],
     }
     result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
     assert any(f["message_id"] == "normalized-key-collision" for f in result["findings"])
@@ -1398,16 +1398,23 @@ def test_gap_resolution_repaths_a_whole_document_finding_onto_the_bare_key(valid
 
 def test_gap_resolution_collision_uses_neither_spelling(validator):
     # The point of the finding: not just that the collision is reported, but
-    # that no arbitrary winner is picked. Were either spelling used, its rule
-    # would render STRING and only BIGINT would be unresolved.
+    # that no arbitrary winner is picked. STRING is the probe either spelling's
+    # rule would resolve, so a chosen winner shows up as the set answering it;
+    # BIGINT is the probe no supplied map covers, so a set still willing to
+    # answer at all shows up as a gap against it. Neither may appear, and
+    # `gap-resolution-skipped` is the observable that separates "no winner was
+    # picked" from "a winner was picked and covered both".
     result = validator.validate_doc(
         doc={"m.json": _READ_RULES, "./m.json": _READ_RULES},
-        direction="read", probes=["STRING"])
+        direction="read", probes=["STRING", "BIGINT"])
     collisions = [f for f in result["findings"]
                   if f["message_id"] == "normalized-key-collision"]
     assert len(collisions) == 1 and collisions[0]["path"] == "m.json"
     assert "'m.json'" in collisions[0]["message"] and "'./m.json'" in collisions[0]["message"]
     assert not any(f["message_id"] == "type-map-gap" for f in result["findings"])
+    assert any(f["message_id"] == "gap-resolution-skipped" for f in result["findings"]), \
+        result["findings"]
+    assert result["passed"] is False
 
 
 def test_gap_resolution_path_conflict_drops_the_nested_key_not_its_parent(validator):
@@ -1487,13 +1494,16 @@ def test_gap_resolution_names_a_probe_whose_repr_refuses_and_still_answers_it(va
         probes=[_Unrepresentable("nope")])
     gaps = [f for f in result["findings"] if f["message_id"] == "type-map-gap"]
     assert len(gaps) == 1, result["findings"]
-    assert "unrepresentable" in gaps[0]["message"]
+    # The fallback exists to name the probe by its type when its own `repr`
+    # will not, so a constant reading "unrepresentable" and nothing else is
+    # the degradation this guards against, not the one it accepts.
+    assert "_Unrepresentable" in gaps[0]["message"], gaps[0]["message"]
     assert result["passed"] is True
 
 
 def test_gap_resolution_reports_rather_than_raises_for_an_argument_no_check_anticipated(validator):
-    # The closure guarantee is structural, not a list of cases someone thought
-    # of: `probes` passes every stated check and still breaks the dedupe, which
+    # The closure guarantee is not a list of cases someone thought of:
+    # `probes` passes every stated check and still breaks the dedupe, which
     # no inner guard wraps. It must arrive as a finding.
     class _Unhashable(str):
         def __hash__(self):
@@ -1506,3 +1516,112 @@ def test_gap_resolution_reports_rather_than_raises_for_an_argument_no_check_anti
     assert [f["message_id"] for f in result["findings"]] == ["internal-error"]
     assert result["findings"][0]["kind"] == "notApplicable"
     assert "hash refused" in result["findings"][0]["message"]
+
+
+class _HostileText(str):
+    """A `str` subclass whose `removeprefix` is the caller's code and refuses.
+
+    A `DocumentSetValue` typed `str` is a `str` subclass as readily as a `str`,
+    so BOM-stripping runs caller code before the parser is ever reached."""
+
+    def __new__(cls, value, raising=None):
+        self = super().__new__(cls, value)
+        self._raising = raising or KeyError("removeprefix refused")
+        return self
+
+    def removeprefix(self, _prefix):
+        raise self._raising
+
+
+def test_gap_resolution_blames_the_validator_not_the_document_for_a_crash_while_reading(validator):
+    # The unreadable reasons name what is wrong with the *document*: not JSON,
+    # not UTF-8, past a limit this interpreter enforces. A crash in the reading
+    # itself is none of those, and reporting it as one sends the author
+    # hunting a defect their document does not have.
+    result = validator.validate_doc(
+        doc={"m.json": _HostileText("[]")}, direction="read", probes=["STRING"])
+    assert [f["message_id"] for f in result["findings"]] == [
+        "internal-error", "gap-resolution-skipped"], result["findings"]
+    assert result["findings"][0]["path"] == "m.json"
+    assert "KeyError" in result["findings"][0]["message"]
+
+
+def test_gap_resolution_survives_an_exception_that_cannot_describe_itself(validator):
+    # Rendering the exception is itself caller code: a crash report that
+    # crashes replaces the failure it was reporting. The degraded report must
+    # still be attributed to the key that produced it, and must not swallow
+    # the rest of the run — which is what a crash escaping to the outermost
+    # guard would do.
+    class _Nasty(Exception):
+        def __str__(self):
+            raise RuntimeError("str refused")
+
+    result = validator.validate_doc(
+        doc={"m.json": _HostileText("[]", raising=_Nasty())},
+        direction="read", probes=["STRING"])
+    assert [f["message_id"] for f in result["findings"]] == [
+        "internal-error", "gap-resolution-skipped"], result["findings"]
+    assert result["findings"][0]["path"] == "m.json"
+    assert "unreportable" in result["findings"][0]["message"]
+
+
+def test_gap_resolution_names_a_non_string_key_rather_than_crashing_on_it(validator):
+    # A key of the wrong type has no name to match a direction against, so the
+    # relevance test must treat it as possibly the map this call needed rather
+    # than reading a filename off it. Reporting it as `internal-error` would
+    # blame the validator for the caller's own mapping and lose the key.
+    result = validator.validate_doc(
+        doc={42: _READ_RULES, "type-map-read.json": _READ_RULES},
+        direction="read", probes=["STRING"])
+    assert [f["message_id"] for f in result["findings"]] == [
+        "invalid-key", "gap-resolution-skipped"], result["findings"]
+    assert result["findings"][0]["path"] == "42"
+    assert "42" in result["findings"][0]["message"]
+
+
+def test_gap_resolution_path_conflict_records_the_dropped_key_not_the_surviving_parent(validator):
+    # Which name reached the lost-key list decides whether the loss is
+    # relevant: the parent's filename declares the other direction and would
+    # not have been consulted, while the nested key's declares nothing and
+    # would have been. Recording the parent would withhold nothing and report
+    # a set that answered the question when it did not.
+    result = validator.validate_doc(
+        doc={"type-map-write.json": _READ_RULES,
+             "type-map-write.json/nested.json": _READ_RULES},
+        direction="read", probes=["STRING"])
+    assert [f["message_id"] for f in result["findings"]] == [
+        "key-path-conflict", "direction-filename-mismatch",
+        "gap-resolution-skipped"], result["findings"]
+
+
+@pytest.mark.parametrize("direction", ["read", "write"])
+def test_gap_resolution_refuses_the_pre_split_type_map_filename(validator, direction):
+    # RULE-PKG-030 rejects that filename outright rather than reading it as a
+    # read map, because a package still carrying it has a write direction
+    # nobody has separated out. Consulting it here would answer a probe
+    # through rules whose direction nothing declares — the silent wrong answer
+    # the mismatch check exists to prevent, reached through the one filename
+    # the path-based route already refuses.
+    result = validator.validate_doc(
+        doc={"type-map.json": _READ_RULES}, direction=direction, probes=["STRING"])
+    assert [f["message_id"] for f in result["findings"]] == [
+        "direction-filename-mismatch", "missing-type-map"], result["findings"]
+    assert result["passed"] is False
+    assert not any(f["message_id"] == "type-map-gap" for f in result["findings"])
+
+
+def test_gap_resolution_does_not_echo_caller_text_back_unbounded(validator):
+    # Every diagnostic this module borrows from caller input is clipped to the
+    # width the rest of the package clips to, so a response cannot be a
+    # caller-chosen multiple of the request that provoked it.
+    huge = "x" * 100_000
+    result = validator.validate_doc(
+        doc={f"../{huge}.json": _READ_RULES}, direction=huge, probes=[huge])
+    rendered = json.dumps(result)
+    assert len(rendered) < 5_000, len(rendered)
+
+    keyed = validator.validate_doc(
+        doc={f"../{huge}.json": _READ_RULES}, direction="read", probes=["STRING"])
+    assert len(json.dumps(keyed)) < 5_000, len(json.dumps(keyed))
+    assert [f["message_id"] for f in keyed["findings"]] == [
+        "invalid-key", "gap-resolution-skipped"]

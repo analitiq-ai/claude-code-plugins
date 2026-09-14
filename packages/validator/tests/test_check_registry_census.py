@@ -171,14 +171,15 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "resolve anything against"),
     ("analitiq.validator.document_set::_type_map_gap_mode", "direction-filename-mismatch"): (
         "a structural precondition on using the map as a rule source: its "
-        "load-bearing filename contradicts the declared direction, checked "
-        "before its content is read"),
+        "load-bearing filename either contradicts the declared direction or "
+        "declares none, checked before its content is read"),
     ("analitiq.validator.document_set::_map_rules", "invalid-value"): (
         "a value carrying no readable document content precedes any rule "
         "evaluation of that content"),
     ("analitiq.validator.document_set::_map_rules", "type-map-unreadable"): (
-        "a parse failure, or a document that is not a rule array at all, "
-        "precedes any direction-specific check of its rules"),
+        "no rule array was built — the text did not parse, the interpreter "
+        "declined to build a value from it, or what it holds is not an array "
+        "at all — so no rule of its own was ever reached"),
     ("analitiq.validator.document_set::_crashed", "internal-error"): (
         "a crash could have happened on behalf of any rule the work it "
         "interrupted would have graded, or none, so it names none — the same "

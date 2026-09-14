@@ -191,8 +191,8 @@ def _render_arrow_type(native_type: str, rules: list) -> str | None:
 
 def _render_native_type(arrow_type: str, rules: list) -> str | None:
     """The write direction's counterpart to `_render_arrow_type`: which keys a
-    write rule matches on and renders from, stated once so a caller resolving a
-    write probe names this instead of repeating the pair."""
+    write rule matches on and renders from, so a caller resolving a write probe
+    names this rather than passing the pair itself."""
     return _first_match_render(arrow_type, rules, "arrow_type", "native_type")
 
 
@@ -1209,9 +1209,7 @@ class _DirectionOps(NamedTuple):
 #: content is checked against, and the matcher a probe resolves through. A
 #: path-free caller has no filename to read a direction off and no sibling to
 #: compare against, so it asks here rather than carrying its own copy of which
-#: model and which matcher go with which direction. The checks in this module
-#: reach the same three facts from the document in front of them and do not
-#: need the table to find them.
+#: model and which matcher go with which direction.
 _DIRECTIONS: dict[str, _DirectionOps] = {
     "read": _DirectionOps(_READ_MAP_FILENAME, _READ_MAP_ADAPTER, _render_arrow_type),
     "write": _DirectionOps(_WRITE_MAP_FILENAME, _WRITE_MAP_ADAPTER, _render_native_type),
