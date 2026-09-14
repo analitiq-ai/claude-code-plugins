@@ -33,11 +33,13 @@ DocumentSetValue = Union[str, bytes, dict, list]
 #: (e.g. `"connections/foo/connection.json"`, `"endpoints/widgets.json"`) mapped
 #: to already-loaded content. A leading `./` is normalized away; an absolute
 #: key, a key containing `..`, or the empty string is reported as an
-#: `invalid-key` finding rather than raised. Every function below that takes or
-#: produces a document set uses this one shape, so `validate_connector_tree`'s
-#: and `validate_pipeline_tree`'s `documents` and `validate_doc`'s `doc` (in
-#: its type-map gap-resolution mode) share one value type rather than
-#: independently-typed mappings.
+#: `invalid-key` finding rather than raised; two keys where one names both a
+#: document and a directory prefix of another (e.g. `"a/b.json"` alongside
+#: `"a/b.json/c.json"`) are reported as `key-path-conflict` instead. Every
+#: function below that takes or produces a document set uses this one shape,
+#: so `validate_connector_tree`'s and `validate_pipeline_tree`'s `documents`
+#: and `validate_doc`'s `doc` (in its type-map gap-resolution mode) share one
+#: value type rather than independently-typed mappings.
 DocumentSet = dict[str, DocumentSetValue]
 
 #: This API's document-kind vocabulary — a literal tuple, not a runtime import
@@ -202,8 +204,9 @@ def validate_doc(
     value being silently treated as `"write"`. `entity`/`schema_url` play no
     part in this mode.
 
-    Beyond the `invalid-key`/`invalid-value` hazards every `DocumentSet` route
-    shares, this mode's own finding kinds are: `type-map-unreadable`
+    Beyond the `invalid-direction` rejection above and the key/value hazards
+    every `DocumentSet` route shares (`DocumentSet`/`DocumentSetValue` state
+    them), this mode's own finding kinds are: `type-map-unreadable`
     (`fail`/`error`, no `direction` — a map that is invalid JSON or not a
     list, a failure prior to any direction-specific check); `invalid-type-map`
     (`fail`/`error`, `direction` = this call's `direction` — a map that fails
