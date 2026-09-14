@@ -197,6 +197,12 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "the published `validate_pipeline_bundle` does not re-check before "
         "reading the shapes it assumes — so a crash there is caught here "
         "rather than attributed to any one rule"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "invalid-direction"): (
+        "a structural precondition on `direction` itself — it is neither "
+        "'read' nor 'write' — rejected before `maps` is even normalized: "
+        "`Literal['read', 'write']` is a type-checker-only promise, and an "
+        "untyped caller bypassing it would otherwise have every other value "
+        "silently treated as 'write'"),
     ("analitiq.validator.document_set::resolve_type_map_gaps", "type-map-unreadable"): (
         "a structural precondition — the map is not readable as a JSON array "
         "at all — rejected before any rule-specific check of its rows could "

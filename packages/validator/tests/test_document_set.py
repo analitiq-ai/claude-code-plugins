@@ -1573,3 +1573,54 @@ def test_gap_resolution_reports_a_non_list_probes_instead_of_raising(validator):
 
     result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes="STRING")
     assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"], result["findings"]
+
+
+def test_gap_resolution_rejects_a_direction_outside_the_read_write_pair(validator):
+    """`Literal["read", "write"]` is a type-checker-only promise; an untyped
+    caller passing anything else must not have it silently treated as
+    'write' (the `direction == "read"` branch's implicit else) — including on
+    a reported finding's own `direction` field, typed the same closed
+    `Literal` an invalid value has no business appearing in."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="sideways", probes=["STRING"])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-direction"], result["findings"]
+    assert "direction" not in result["findings"][0]
+
+
+def test_gap_resolution_reports_a_regex_that_crashes_the_model_validator_instead_of_raising(validator):
+    """A syntactically valid JSON rule is not necessarily a computationally
+    sane one: a regex repetition count large enough to overflow Python's `re`
+    compiler raises `OverflowError`, not `re.error`/`ValidationError` — the
+    only exception `adapter.validate_python` was isolated against before this
+    fix, so this crash escaped `resolve_type_map_gaps` entirely."""
+    maps = {"type-map-read.json": [
+        {"match": "regex", "native_type": r"a{999999999999999999999999}", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING"])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-type-map"], result["findings"]
+
+
+def test_diagnostics_reports_an_invalid_key_even_when_every_valid_key_looks_like_a_field(validator):
+    """An absolute path key (`_normalize_key` rejects a leading `/`) must
+    still mark the whole mapping as a `DocumentSet` — even when doing so
+    leaves no OTHER key that normalizes to something path-shaped — so a kind
+    detector never gets the chance to claim the mapping as a single document
+    and swallow the `invalid-key` finding this absolute key deserves."""
+    target = {"/connector.json": {"kind": "api"}, "connections": {}}
+    result = validator.diagnostics(target)
+    assert any(f["message_id"] == "invalid-key" for f in result["findings"]), result
+
+
+def test_extract_subtree_prefix_conflict_scan_flags_every_conflicting_key(validator, tmp_path):
+    """The O(1)-per-key sorted-neighbor check must still catch every
+    `key-path-conflict`, not just a first one, when the document set has
+    several unrelated conflicting prefixes — proving the optimization did not
+    trade all-pairs correctness for its near-linear scan."""
+    from analitiq.validator.document_set import _normalize_documents
+
+    documents = {
+        "a": {}, "a/b": {},
+        "c": {}, "c/d": {},
+    }
+    _, findings = _normalize_documents(documents)
+    conflicts = {f["path"] for f in findings if f["message_id"] == "key-path-conflict"}
+    assert conflicts == {"a", "c"}, findings

@@ -254,8 +254,14 @@ def _normalize_documents(documents: DocumentSet) -> tuple[_VirtualFS, list[dict]
         if isinstance(value, (dict, list)):
             objects[key] = value
 
-    for key in sorted(known_keys):
-        if any(other.startswith(f"{key}/") for other in known_keys):
+    # A single neighbor check, not an all-pairs scan: in sorted order, every
+    # key sharing a given prefix followed by "/" forms one contiguous run
+    # (lexicographic order splits by next character, and "/" is one such
+    # character), so if `key` prefixes anything at all, the very next sorted
+    # key is that run's first member.
+    sorted_keys = sorted(known_keys)
+    for i, key in enumerate(sorted_keys):
+        if i + 1 < len(sorted_keys) and sorted_keys[i + 1].startswith(f"{key}/"):
             findings.append(finding(
                 message_id="key-path-conflict", kind="fail", path=key,
                 message=(
@@ -901,19 +907,25 @@ def validate_tree(documents: DocumentSet) -> ValidationEnvelope:
 
 
 def _document_set_shaped_keys(target: dict) -> bool:
-    """Whether any of `target`'s own keys, once normalized, is shaped like a
-    `DocumentSet` member key — containing `/` or ending in `.json` — rather
-    than a single document's own field name. A document set is not restricted
-    to keys carrying an explicit tree root (`connector.json`,
+    """Whether any of `target`'s own raw keys is shaped like a `DocumentSet`
+    member key — containing `/` or ending in `.json` — rather than a single
+    document's own field name. A document set is not restricted to keys
+    carrying an explicit tree root (`connector.json`,
     `pipelines/<slug>/pipeline.json`; each already matches this broader test):
     a sibling key like `connections/pg/connection.json` marks the whole
     mapping as a document set even when another one of its keys happens to
     coincide with a single-document field name (a root-level key literally
-    named `"connections"`, say)."""
+    named `"connections"`, say).
+
+    Tests the RAW key text, not `_normalize_key`'s output: an invalid
+    path-shaped key (an absolute `/connector.json`, say) must still mark this
+    mapping as a document set rather than being silently dropped from
+    consideration — dropping it could let a kind detector claim the whole
+    mapping as a single document instead, losing the `invalid-key` finding
+    `_normalize_documents` exists to report for exactly that key."""
     return any(
-        "/" in key or key.endswith(".json")
-        for key in (_normalize_key(raw_key) for raw_key in target)
-        if key is not None
+        isinstance(raw_key, str) and ("/" in raw_key or raw_key.endswith(".json"))
+        for raw_key in target
     )
 
 
@@ -977,7 +989,17 @@ def resolve_type_map_gaps(
     resolve in `direction`, report every probe that no map in `maps` resolves.
 
     Never raises. Returns `{"findings"}` only — no `resolved`, no top-level
-    `direction`. Finding kinds sharing that list: `invalid-key`/`invalid-value`,
+    `direction`. `direction` itself is validated first, before `maps` is even
+    normalized: `Literal["read", "write"]` is a type-checker-only promise, and
+    an untyped runtime caller passing anything else would otherwise have every
+    non-`"read"` value silently treated as `"write"`, including on a reported
+    finding's own `direction` field — typed the same closed `Literal` an
+    invalid value has no business appearing in. `invalid-direction`
+    (`fail`/`error`, no `direction` field of its own, since the value that
+    would go there is the very thing rejected) is the sole finding for that
+    case; every other finding kind below assumes `direction` already validated.
+
+    Finding kinds sharing the findings list: `invalid-key`/`invalid-value`,
     `duplicate-key`/`key-path-conflict`, and `internal-error` (a map's own
     value crashed while being turned into text, e.g. bytes that are not valid
     UTF-8) — the same collection-level hazards `_normalize_documents` guards
@@ -1000,7 +1022,12 @@ def resolve_type_map_gaps(
     loaded under the wrong direction, mirroring `type_map_gaps.py`'s own
     filename/direction check); `invalid-type-map` (`fail`/`error`, `direction`
     = this call's `direction` — a map that fails its
-    `TypeMapReadDoc`/`TypeMapWriteDoc` model, `analitiq.contracts.type_map`);
+    `TypeMapReadDoc`/`TypeMapWriteDoc` model, `analitiq.contracts.type_map`, or
+    crashes while being checked against it: a syntactically valid rule is not
+    necessarily a computationally sane one — a regex repetition count large
+    enough to overflow Python's `re` compiler, say, raises `OverflowError`
+    rather than `re.error`/`ValidationError`, isolated here the same way a
+    parse crash is isolated above it);
     `invalid-probes` (`fail`/`error`, `direction` = this call's `direction`,
     no `path` — `probes` itself is not a `list`, short-circuiting the walk
     below entirely the same way a map defect does: a non-list `probes` is
@@ -1048,7 +1075,19 @@ def resolve_type_map_gaps(
     order — the same precedent `_normalize_documents` already sets — so this
     function's own findings never depend on how the caller happened to build
     the mapping.
+
+    `direction` is validated before anything else runs: `Literal["read",
+    "write"]` is a type-checker-only promise, and a runtime caller that
+    bypasses it (an untyped caller, `**kwargs` from a dict) would otherwise
+    have every value other than `"read"` silently treated as `"write"` —
+    including a value like `"sideways"` that has no business appearing on a
+    reported finding's own `direction` field, which is typed the same closed
+    two-member `Literal`.
     """
+    if direction not in ("read", "write"):
+        return {"findings": [finding(
+            message_id="invalid-direction", kind="fail", path="",
+            message=f"direction must be 'read' or 'write'; got {direction!r}.")]}
     fs, findings = _normalize_documents(maps)
     rendered_maps: list[list] = []
     load_bearing_filename = {_READ_MAP_FILENAME: "read", _WRITE_MAP_FILENAME: "write"}
@@ -1094,6 +1133,24 @@ def resolve_type_map_gaps(
                 **finding(
                     message_id="invalid-type-map", kind="fail", path=key,
                     message=f"{key!r} does not satisfy the {direction} type-map model."),
+                "direction": direction,
+            })
+            continue
+        except Exception as exc:  # noqa: BLE001 - isolate one map's validation crash
+            # A syntactically valid rule can still crash the model validator
+            # itself instead of being cleanly rejected by it — a regex
+            # repetition count large enough to overflow Python's `re`
+            # compiler (`a{999999999999999999999999}`), say, raises
+            # `OverflowError`, which is neither `re.error` nor
+            # `ValidationError`. Isolated the same way the parse crash above
+            # is isolated, rather than escaping this function's own "never
+            # raises" contract.
+            findings.append({
+                **finding(
+                    message_id="invalid-type-map", kind="fail", path=key,
+                    message=(
+                        f"{key!r} could not be checked against the {direction} type-map "
+                        f"model ({type(exc).__name__}: {exc}).")),
                 "direction": direction,
             })
             continue
