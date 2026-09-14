@@ -202,7 +202,8 @@ def validate_doc(
     value being silently treated as `"write"`. `entity`/`schema_url` play no
     part in this mode.
 
-    Every other finding kind this mode can report: `type-map-unreadable`
+    Beyond the `invalid-key`/`invalid-value` hazards every `DocumentSet` route
+    shares, this mode's own finding kinds are: `type-map-unreadable`
     (`fail`/`error`, no `direction` — a map that is invalid JSON or not a
     list, a failure prior to any direction-specific check); `invalid-type-map`
     (`fail`/`error`, `direction` = this call's `direction` — a map that fails

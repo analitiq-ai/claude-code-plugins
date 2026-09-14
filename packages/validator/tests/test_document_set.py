@@ -455,6 +455,18 @@ def test_gap_resolution_bad_direction_value_reports_invalid_direction(validator)
 
 
 @_xfail("validate_doc")
+def test_gap_resolution_bad_direction_short_circuits_before_doc_is_checked(validator):
+    # `doc` here is independently invalid (not a list of rules) — if direction
+    # were validated after doc normalization, this call would also report
+    # type-map-unreadable. It must not: direction is checked first, so the bad
+    # doc is never reached.
+    maps = {"type-map-read.json": "not a list"}
+    result = validator.validate_doc(doc=maps, direction="sideways", probes=["STRING"])
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-direction"]
+
+
+@_xfail("validate_doc")
 def test_validate_doc_with_document_set_shaped_doc_and_no_probes_uses_ordinary_mode(validator):
     # `doc` here is shaped exactly like the DocumentSet gap-resolution mode
     # takes (path-like keys, list-of-rule values) but `probes` is omitted —
@@ -468,7 +480,11 @@ def test_validate_doc_with_document_set_shaped_doc_and_no_probes_uses_ordinary_m
 
 
 # ---------------------------------------------------------------------------
-# Key handling.
+# Key handling, shared by every function below that takes a DocumentSet
+# (validate_connector_tree's and validate_pipeline_tree's `documents`,
+# validate_doc's `doc` in its type-map gap-resolution mode) — exercised once,
+# through validate_connector_tree, since they share one contract for what a
+# DocumentSet's keys may be.
 # ---------------------------------------------------------------------------
 
 @_xfail("validate_connector_tree")
