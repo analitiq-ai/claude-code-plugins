@@ -1055,6 +1055,24 @@ def test_missing_pipeline_document_is_not_an_exclusion(validator):
         for f in result["findings"]), result["findings"]
 
 
+def test_absent_pipeline_document_is_named_even_when_the_referential_pass_is_skipped(validator):
+    """`bundle-missing-pipeline-document` is normally `validate_pipeline_bundle`'s
+    to report, and the completeness gate skips that pass whenever any bundle
+    member excluded itself. That gate exists because a missing member makes
+    CROSS-document references unreliable — but "this tree carries no pipeline
+    document at all" is read off the key set alone and needs no other member
+    to be trustworthy, so it must not disappear along with the pass that
+    usually carries it."""
+    documents = _drop(_pipeline_tree_documents_with_two_findings(), "pipelines/p/pipeline.json")
+    documents = {**documents, "connections/postgresql/connection.json": "{not valid json"}
+
+    result = validator.validate_pipeline_tree(documents)
+
+    message_ids = [f["message_id"] for f in result["findings"]]
+    assert message_ids.count("bundle-missing-pipeline-document") == 1, result["findings"]
+    assert "internal-error" in message_ids, result["findings"]
+
+
 def test_missing_stream_document_is_not_an_exclusion(validator):
     """A `pipelines/<slug>/streams/*.json` key that was never there is never
     discovered by `fs.known_json_children`, so it is not something
@@ -1239,6 +1257,39 @@ def test_pipeline_tree_equivalence_with_the_path_based_route(validator, tmp_path
 # resolves deterministically, regardless of the caller's insertion order.
 # ---------------------------------------------------------------------------
 
+def test_connector_subtrees_are_partitioned_in_one_pass_not_one_per_connector(validator):
+    """Extracting each embedded connector's subtree with its own full scan of
+    the document set makes validation O(C x N log N) in the number of
+    connectors C and total entries N — quadratic when each connector
+    contributes a constant number of files, so a large hosted request spends
+    most of its time rebuilding the same partition. The whole mapping is
+    walked a fixed number of times regardless of how many connectors it
+    carries, which is what this counts: adding a third connector must not add
+    a third walk."""
+    class _CountingDocuments(dict):
+        walks = 0
+
+        def __iter__(self):
+            type(self).walks += 1
+            return super().__iter__()
+
+    base = _pipeline_tree_documents()
+    two_connectors = _CountingDocuments(base)
+    validator.validate_pipeline_tree(two_connectors)
+    walks_for_two = _CountingDocuments.walks
+
+    _CountingDocuments.walks = 0
+    three_connectors = _CountingDocuments({
+        **base,
+        "connectors/stripe/definition/connector.json": {**_CONNECTOR_WISE, "connector_id": "stripe"},
+    })
+    validator.validate_pipeline_tree(three_connectors)
+
+    assert _CountingDocuments.walks == walks_for_two, (
+        f"{walks_for_two} walk(s) for two connectors, {_CountingDocuments.walks} for three — "
+        "the partition is being rebuilt per connector")
+
+
 def test_extract_subtree_resolves_a_raw_key_collision_by_sorted_order_not_insertion_order(validator):
     """`_normalize_key` only strips a LEADING `./`, so two raw keys that both
     normalize to the same subtree-relative key (a `./`-prefixed duplicate of
@@ -1246,7 +1297,7 @@ def test_extract_subtree_resolves_a_raw_key_collision_by_sorted_order_not_insert
     one the caller happened to insert first — the same sorted-key-order-wins
     rule `_normalize_documents` already applies at the whole tree's own top
     level, per this function's own docstring."""
-    from analitiq.validator.document_set import _extract_subtree
+    from analitiq.validator.document_set import _extract_subtrees
 
     forward = {
         "connectors/wise/definition/connector.json": {"which": "unprefixed"},
@@ -1254,8 +1305,9 @@ def test_extract_subtree_resolves_a_raw_key_collision_by_sorted_order_not_insert
     }
     backward = dict(reversed(list(forward.items())))
 
-    forward_subtree = _extract_subtree(forward, "connectors/wise/definition/")
-    backward_subtree = _extract_subtree(backward, "connectors/wise/definition/")
+    prefix = "connectors/wise/definition/"
+    forward_subtree = _extract_subtrees(forward, [prefix])[prefix]
+    backward_subtree = _extract_subtrees(backward, [prefix])[prefix]
 
     # "./connectors/..." sorts before "connectors/..." in plain string order
     # ("." < "c"), so it is the raw key `sorted(documents, key=str)` visits
@@ -1333,6 +1385,39 @@ def test_gap_resolution_reports_a_non_string_probe_on_the_write_route_too(valida
     invalid = result["findings"][0]
     assert invalid["direction"] == "write"
     assert "Arrow-type" in invalid["message"]
+
+
+def test_gap_resolution_contains_a_probe_whose_own_comparison_recurses(validator):
+    """A probe element is untrusted input, and `==` on one is unbounded: two
+    distinct self-referential lists compare forever, and so does a deeply
+    nested one against any other non-string probe. Neither can be graded
+    against a type map, so both are `invalid-probe` — the point is that
+    reaching that verdict must never run an arbitrary comparison on a value
+    not yet known to be a string, which is the only way this function can keep
+    the "never raises" contract it documents."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    cyclic_a: list = []
+    cyclic_a.append(cyclic_a)
+    cyclic_b: list = []
+    cyclic_b.append(cyclic_b)
+
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=[cyclic_a, cyclic_b])
+
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe"], result["findings"]
+
+
+def test_gap_resolution_contains_a_probe_whose_own_repr_recurses(validator):
+    """The same rule covers `repr`: a probe nested deeply enough exhausts the
+    recursion limit when formatted into a finding message, so the message
+    names what the probe IS rather than what it contains."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    deep: object = ["x"]
+    for _ in range(50_000):
+        deep = [deep]
+
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=[deep])
+
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe"], result["findings"]
 
 
 def test_gap_resolution_reports_a_non_list_probes_instead_of_raising(validator):

@@ -388,14 +388,21 @@ def _resolved_member(
     return doc, findings
 
 
-def _extract_subtree(documents: DocumentSet, prefix: str) -> DocumentSet:
-    """Re-relativize an embedded package's own documents out of the whole
+def _extract_subtrees(documents: DocumentSet, prefixes: list[str]) -> dict[str, DocumentSet]:
+    """Re-relativize each embedded package's own documents out of the whole
     tree's raw `documents` — not out of an already-normalized `_VirtualFS` —
     so a value whose materialization crashes is handed to the recursive
     `validate_connector_tree` call exactly as the caller supplied it, letting
     that call discover and report the crash itself, scoped to its own
     subtree-relative key rather than being reported (or silently dropped)
     here.
+
+    Every prefix is partitioned in ONE walk of `documents`, returning a
+    subtree per prefix (empty where nothing matched). Extracting one prefix at
+    a time would sort and scan all N entries once per embedded connector,
+    making a tree of C connectors cost O(C * N log N) — quadratic when each
+    connector contributes a constant number of files, which is the shape a
+    real bundle has.
 
     Two raw keys colliding on the same subtree-relative key (e.g. a
     `./`-prefixed duplicate) are resolved the same way `_normalize_documents`
@@ -404,13 +411,16 @@ def _extract_subtree(documents: DocumentSet, prefix: str) -> DocumentSet:
     that same order and keeping only the first value `setdefault` sees for
     each relative key, rather than raw insertion order silently picking
     whichever raw key happened to come last."""
-    subtree: DocumentSet = {}
+    subtrees: dict[str, DocumentSet] = {prefix: {} for prefix in prefixes}
     for raw_key in sorted(documents, key=str):
         key = _normalize_key(raw_key)
-        if key is None or not key.startswith(prefix):
+        if key is None:
             continue
-        subtree.setdefault(key[len(prefix):], documents[raw_key])
-    return subtree
+        for prefix, subtree in subtrees.items():
+            if key.startswith(prefix):
+                subtree.setdefault(key[len(prefix):], documents[raw_key])
+                break
+    return subtrees
 
 
 def _envelope(findings: list[dict]) -> ValidationEnvelope:
@@ -647,10 +657,11 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
             endpoints.append(entry)
 
     connector_identities = set(connector_slugs)
+    connector_subtrees = _extract_subtrees(
+        documents, [f"connectors/{conn_slug}/definition/" for conn_slug in connector_slugs])
     for conn_slug in connector_slugs:
         prefix = f"connectors/{conn_slug}/definition/"
-        subtree = _extract_subtree(documents, prefix)
-        sub_findings = validate_connector_tree(subtree)["findings"]
+        sub_findings = validate_connector_tree(connector_subtrees[prefix])["findings"]
         findings.extend(_at_site(prefix.rstrip("/"), sub_findings))
         # validate=False: the recursive `validate_connector_tree` call just
         # above already validated this same connector.json (or reported why
@@ -695,6 +706,18 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
                     f"({type(exc).__name__}: {exc}); a bundle member can materialize, parse, "
                     "and still fail its own model validation, which this pass does not "
                     "re-check before reading the shapes it assumes.")))
+    elif not pipeline_keys:
+        # The gate above skips the referential pass, and that pass is what
+        # normally names an absent pipeline document. The gate exists because
+        # an excluded member makes CROSS-document references unreliable —
+        # but "this tree carries no pipeline document at all" was read off the
+        # key set alone, before any member resolved, so it stays trustworthy
+        # however incomplete the rest of the bundle is and must not be lost
+        # with the pass that usually carries it. Reported by calling that same
+        # pass rather than restating its message here: `bundle["pipeline"]` is
+        # `None` in this branch by construction, which is the one input for
+        # which it returns the absent-document finding and nothing else.
+        findings.extend(validate_pipeline_bundle(bundle, require_runnable=False))
 
     return _envelope(findings)
 
@@ -1032,40 +1055,40 @@ def resolve_type_map_gaps(
             "direction": direction,
         }]}
 
-    # Order-preserving de-duplication, O(1) membership per hashable probe via
-    # a `set` — not `dict.fromkeys`, which raises the same `TypeError` a bare
-    # `set` would on an unhashable probe (e.g. a `list` mistakenly passed as
-    # one), the exact "never raises" violation this whole block exists to
-    # close. An unhashable probe falls back to an O(k) linear scan against
-    # only the other unhashable probes seen so far (k bounded by how many
-    # such probes actually appear, never by the hashable majority), so a
-    # single unhashable outlier cannot make the whole list quadratic again.
-    deduped_probes: list = []
-    seen_hashable: set = set()
-    seen_unhashable: list = []
+    # A probe element is untrusted, so until `isinstance` has established it is
+    # a `str` the only operations performed on it are `isinstance` and
+    # `type()` — both total and O(1). Hashing, equality and `repr` are each
+    # unbounded on an adversarial value and each raise, which is the contract
+    # this function states it does not do: a `list` is unhashable, two
+    # distinct self-referential containers compare forever, and a deeply
+    # nested one exhausts the recursion limit under `repr`. Validating the
+    # type first is what makes every value that reaches the de-duplicating
+    # `set` below a string, so that set can never be the thing that crashes.
+    # The cost is that a non-string probe is named by its type rather than its
+    # value, and reported once per type rather than once per distinct value —
+    # the defect being reported is "these are not strings", which the type
+    # names in full.
+    seen_probes: set[str] = set()
+    seen_invalid_types: set[str] = set()
     for probe in probes:
-        try:
-            already_seen = probe in seen_hashable
-        except TypeError:
-            already_seen = probe in seen_unhashable
-            if not already_seen:
-                seen_unhashable.append(probe)
-        else:
-            if not already_seen:
-                seen_hashable.add(probe)
-        if not already_seen:
-            deduped_probes.append(probe)
-
-    for probe in deduped_probes:
         if not isinstance(probe, str):
+            type_name = type(probe).__name__
+            if type_name in seen_invalid_types:
+                continue
+            seen_invalid_types.add(type_name)
             expected = "a native-type" if direction == "read" else "an Arrow-type"
             findings.append({
                 **finding(
                     message_id="invalid-probe", kind="fail", path="",
-                    message=f"probe {probe!r} is not a string; every {direction} probe must be {expected} name."),
+                    message=(
+                        f"a probe of type {type_name!r} is not a string; every {direction} "
+                        f"probe must be {expected} name.")),
                 "direction": direction,
             })
             continue
+        if probe in seen_probes:
+            continue
+        seen_probes.add(probe)
         if direction == "read":
             resolved = any(_render_arrow_type(probe, rules) is not None for rules in rendered_maps)
         else:
