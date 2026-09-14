@@ -156,6 +156,12 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "a structural precondition on the document set itself — a value of a "
         "type no route can materialize into a document — rejected before any "
         "rule-specific check of its content could run"),
+    ("analitiq.validator.document_set::_document_set_type_findings", "invalid-document-set"): (
+        "a structural precondition on the document set itself — the value "
+        "handed to `validate_connector_tree`, `validate_pipeline_tree`, "
+        "`validate_tree`, or `resolve_type_map_gaps` is not a `dict` at all — "
+        "rejected before any per-key normalization (which assumes a mapping "
+        "to walk) could even start"),
     ("analitiq.validator.document_set::_normalize_documents", "internal-error"): (
         "a structural precondition rejected the entry before any rule-specific "
         "check could run: the raw value could not even be materialized into "
@@ -175,12 +181,19 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator.document_set::_resolved_member", "internal-error"): (
         "a structural precondition rejected the entry before any rule-specific "
         "check could run: `validate=False`'s own materialize/parse isolation on "
-        "an embedded connector's endpoint file, reached regardless of the "
-        "connector's kind — the only place a database/storage-kind connector's "
+        "an embedded connector's own identity document, reached from an "
+        "embedded-connector identity lookup that discards this function's "
+        "returned findings outright — found the materialized text could not "
+        "even be parsed as JSON, let alone graded by the connector-tree "
+        "validation pass whose result this lookup does not need"),
+    ("analitiq.validator.document_set::_connector_endpoint_sets", "endpoint-file-unreadable"): (
+        "a sibling endpoint file's read/parse failure precedes any rule "
+        "evaluation of its content — the same `message_id`"
+        " `connectors.py::check_coverage` reports for the identical failure "
+        "on the real-filesystem route, reached regardless of the connector's "
+        "kind and the only place a database/storage-kind connector's "
         "endpoint-file parse crash is caught at all, since `check_coverage` "
-        "returns before reaching those kinds' endpoint files — found the "
-        "materialized text could not even be parsed as JSON, let alone graded "
-        "for RULE-STRM-043"),
+        "returns before reaching those kinds' endpoint files"),
     ("analitiq.validator.document_set::validate_connector_tree", "missing-connector-document"): (
         "a structural precondition on the document set's own shape — no root "
         "connector.json key at all — rejected before any rule-specific check "

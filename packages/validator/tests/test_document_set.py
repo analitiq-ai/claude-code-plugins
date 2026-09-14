@@ -1104,26 +1104,34 @@ def test_excluded_connector_scoped_endpoint_marks_the_whole_connector_unknown(
     assert fired == connector_endpoint_ref_should_warn, result["findings"]
 
 
-@pytest.mark.parametrize("failure_mode,expected_internal_errors", [
-    ("missing", 0),
-    ("materialization-crash", 1),
-    ("parse-crash", 1),
-    ("wrong-shape", 0),
+@pytest.mark.parametrize("failure_mode,expected_message_id", [
+    ("missing", None),
+    ("materialization-crash", "internal-error"),
+    ("parse-crash", "endpoint-file-unreadable"),
+    ("wrong-shape", None),
 ])
 def test_excluded_connector_scoped_endpoint_crash_is_reported_exactly_once(
-        validator, failure_mode, expected_internal_errors):
+        validator, failure_mode, expected_message_id):
     """`_connector_endpoint_sets` is the only walk that ever reads a
     connector-scoped endpoint file for a `database`/`storage`-kind connector
     (`check_coverage` never routes through `endpoints/` for those kinds), so
     its own materialize/parse gate must report a genuine parse crash exactly
     once and must NOT re-report a materialization crash `_normalize_documents`
-    already named — both are `_resolved_member`'s job, and a shape defect or
-    an absent file (never a crash) reports neither."""
+    already named. A materialization crash is `_normalize_documents`'s own
+    `internal-error`; a parse crash is `_connector_endpoint_sets`'s own
+    `endpoint-file-unreadable` — the same message_id `check_coverage` uses
+    for the identical failure on the real-filesystem route, not the generic
+    `internal-error` a shared helper would misclassify it as. A shape defect
+    or an absent file (never a crash) reports neither."""
     key = f"connectors/postgresql/definition/endpoints/{_EID}.json"
     documents = _MATRIX_MUTATORS[failure_mode](_pipeline_tree_documents(), key)
     result = validator.validate_pipeline_tree(documents)
-    hits = [f for f in result["findings"] if f["message_id"] == "internal-error" and f["path"] == key]
-    assert len(hits) == expected_internal_errors, result["findings"]
+    hits = [f for f in result["findings"] if f["path"] == key
+            and f["message_id"] in ("internal-error", "endpoint-file-unreadable")]
+    if expected_message_id is None:
+        assert hits == [], result["findings"]
+    else:
+        assert [f["message_id"] for f in hits] == [expected_message_id], result["findings"]
 
 
 def test_connector_scoped_endpoint_is_not_independently_shape_validated(validator):
@@ -1339,7 +1347,7 @@ def test_embedded_connector_endpoint_that_fails_to_parse_is_reported(validator):
     }
     result = validator.validate_pipeline_tree(documents)
     assert any(
-        f["message_id"] == "internal-error"
+        f["message_id"] == "endpoint-file-unreadable"
         and f["path"] == "connectors/postgresql/definition/endpoints/broken.json"
         for f in result["findings"]), result["findings"]
 
@@ -1530,6 +1538,18 @@ def test_gap_resolution_deduplicates_a_repeated_invalid_probe_too(validator):
     assert [f["message_id"] for f in result["findings"]] == ["invalid-probe", "invalid-probe"], result["findings"]
 
 
+def test_gap_resolution_deduplicates_a_repeated_unhashable_probe_too(validator):
+    """The O(1)-per-hashable-probe `set` fast path falls back to a linear
+    scan for an unhashable probe (a `list`, say) — that fallback must still
+    deduplicate a probe repeated more than once, not just tolerate a single
+    occurrence, proving the fallback is itself a working membership check and
+    not merely a crash-avoidance no-op."""
+    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.resolve_type_map_gaps(
+        maps=maps, direction="read", probes=[["not", "hashable"], ["not", "hashable"]])
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probe"], result["findings"]
+
+
 def test_gap_resolution_reports_a_non_string_probe_on_the_read_route_instead_of_crashing(validator):
     """The read route's `_render_arrow_type` normalizes a probe by calling
     string methods on it directly (`.strip()`), so a non-string probe would
@@ -1599,6 +1619,40 @@ def test_gap_resolution_reports_a_regex_that_crashes_the_model_validator_instead
     assert [f["message_id"] for f in result["findings"]] == ["invalid-type-map"], result["findings"]
 
 
+@pytest.mark.parametrize("bad_value", [None, [], "not a dict", 42])
+@pytest.mark.parametrize("entry_point", [
+    "validate_connector_tree", "validate_pipeline_tree", "validate_tree",
+])
+def test_tree_entry_points_report_invalid_document_set_for_non_dict_input(
+        validator, entry_point, bad_value):
+    """`DocumentSet`'s `dict[str, DocumentSetValue]` annotation is a
+    type-checker-only promise: an untyped caller can hand any of these three
+    entry points something that is not a `dict` at all, and each must report
+    `invalid-document-set` rather than crash trying to normalize or key-scan
+    it as one — the same "never raises" contract every other malformed-input
+    shape in this module already gets."""
+    result = getattr(validator, entry_point)(bad_value)
+    assert result["findings"] == [{
+        "message_id": "invalid-document-set", "kind": "fail", "severity": "error", "path": "",
+        "message": (
+            f"a document set must be a dict of path-shaped keys to content; "
+            f"got {type(bad_value).__name__}."),
+    }], result
+
+
+@pytest.mark.parametrize("bad_value", [None, [], "not a dict", 42])
+def test_resolve_type_map_gaps_reports_invalid_document_set_for_non_dict_maps(validator, bad_value):
+    """Same non-`dict` `maps` gap as the three tree entry points, on
+    `resolve_type_map_gaps`'s own `FindingsEnvelope` shape (no `passed`)."""
+    result = validator.resolve_type_map_gaps(bad_value, "read", [])
+    assert result["findings"] == [{
+        "message_id": "invalid-document-set", "kind": "fail", "severity": "error", "path": "",
+        "message": (
+            f"a document set must be a dict of path-shaped keys to content; "
+            f"got {type(bad_value).__name__}."),
+    }], result
+
+
 def test_diagnostics_reports_an_invalid_key_even_when_every_valid_key_looks_like_a_field(validator):
     """An absolute path key (`_normalize_key` rejects a leading `/`) must
     still mark the whole mapping as a `DocumentSet` — even when doing so
@@ -1624,3 +1678,18 @@ def test_extract_subtree_prefix_conflict_scan_flags_every_conflicting_key(valida
     _, findings = _normalize_documents(documents)
     conflicts = {f["path"] for f in findings if f["message_id"] == "key-path-conflict"}
     assert conflicts == {"a", "c"}, findings
+
+
+def test_extract_subtree_prefix_conflict_scan_survives_a_raw_string_sort_interloper(validator, tmp_path):
+    """`"a-sibling"` sorts between `"a"` and `"a/b"` in raw string order (`-` is
+    a lower byte than `/`) but not in path-parts order (`["a-sibling"]` sorts
+    after `["a", "b"]`, since a one-part tuple only precedes a longer tuple it
+    is itself a prefix of). A neighbor scan keyed by raw string order would
+    see `"a-sibling"` immediately after `"a"` and miss the real `"a"`/`"a/b"`
+    conflict entirely."""
+    from analitiq.validator.document_set import _normalize_documents
+
+    documents = {"a": {}, "a-sibling": {}, "a/b": {}}
+    _, findings = _normalize_documents(documents)
+    conflicts = {f["path"] for f in findings if f["message_id"] == "key-path-conflict"}
+    assert conflicts == {"a"}, findings

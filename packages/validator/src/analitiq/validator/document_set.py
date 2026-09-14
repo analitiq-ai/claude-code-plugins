@@ -254,12 +254,13 @@ def _normalize_documents(documents: DocumentSet) -> tuple[_VirtualFS, list[dict]
         if isinstance(value, (dict, list)):
             objects[key] = value
 
-    # A single neighbor check, not an all-pairs scan: in sorted order, every
-    # key sharing a given prefix followed by "/" forms one contiguous run
-    # (lexicographic order splits by next character, and "/" is one such
-    # character), so if `key` prefixes anything at all, the very next sorted
-    # key is that run's first member.
-    sorted_keys = sorted(known_keys)
+    # A single neighbor check, not an all-pairs scan: sorted by path parts
+    # (not raw string — see `path_parts_key`'s own docstring on why the two
+    # disagree), every key sharing a given prefix followed by "/" forms one
+    # contiguous run whose first member is the very next key in that order,
+    # since a shorter parts-tuple always sorts immediately before every
+    # longer tuple it is a prefix of.
+    sorted_keys = sorted(known_keys, key=path_parts_key)
     for i, key in enumerate(sorted_keys):
         if i + 1 < len(sorted_keys) and sorted_keys[i + 1].startswith(f"{key}/"):
             findings.append(finding(
@@ -363,14 +364,6 @@ def _resolved_member(
     but skips `validate_document` entirely, for two different reasons
     depending on the caller:
 
-    - The connector-scoped endpoint lookup in `_connector_endpoint_sets`
-      keeps this function's returned findings, so its reason has to hold on
-      its own: running `validate_document` there would either double-report
-      an API-kind connector's endpoint (already validated by the
-      sibling-endpoint scan `check_coverage` runs over it) or grade a
-      database/storage-kind connector's endpoint against a model shape
-      nothing else in this call's scope checks — `_connector_endpoint_sets`'s
-      own docstring carries the full argument.
     - The two embedded-connector identity lookups (`_connector_endpoint_sets`
       pulling a connector's own `connector_id`, and `validate_pipeline_tree`
       doing the same) discard this function's returned findings outright
@@ -381,6 +374,15 @@ def _resolved_member(
       `validate_connector_tree` call over that connector's own subtree, so
       validating it again here would only be redundant work whose result is
       thrown away immediately.
+
+    `_connector_endpoint_sets`'s own endpoint-file scan does not call this
+    function: its parse-crash finding needs a `message_id` this repo already
+    uses for the identical failure on the real-filesystem route
+    (`endpoint-file-unreadable`, `connectors.py::check_coverage`), and a
+    literal `message_id` per call site is what
+    `test_check_registry_census.py`'s call-site census can attribute — a
+    `message_id` threaded through this shared function as a parameter would
+    read as a variable to that census's AST walk and escape it.
 
     A materialization crash is never reported by this function either way:
     `_normalize_documents` already named it.
@@ -431,6 +433,23 @@ def _envelope(findings: list[dict]) -> ValidationEnvelope:
     return {"passed": not any(finding_costs_a_pass(f) for f in findings), "findings": findings}
 
 
+def _document_set_type_findings(value: Any) -> list[dict]:
+    """`invalid-document-set` (`fail`/`error`, no `path`) when `value` is not a
+    `dict` at all. `DocumentSet`'s own `dict[str, DocumentSetValue]` annotation
+    is a type-checker-only promise, the same gap `invalid-direction`/
+    `invalid-probes` close for `resolve_type_map_gaps`'s other two parameters
+    — checked before any of `_normalize_documents`'s per-key work (which
+    assumes a mapping to call `.items()`/iterate over), or, on `validate_tree`'s
+    route, before `_tree_root_signals` iterates `value` as one, ever runs."""
+    if isinstance(value, dict):
+        return []
+    return [finding(
+        message_id="invalid-document-set", kind="fail", path="",
+        message=(
+            f"a document set must be a dict of path-shaped keys to content; "
+            f"got {type(value).__name__}."))]
+
+
 # ---------------------------------------------------------------------------
 # Package-kind entry points.
 # ---------------------------------------------------------------------------
@@ -455,7 +474,12 @@ def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
     it is reported as `missing-connector-document` rather than silently
     passing on whatever findings (often none) `_normalize_documents` happened
     to produce.
+
+    `documents` itself must be a `dict`: see `_document_set_type_findings`.
     """
+    type_findings = _document_set_type_findings(documents)
+    if type_findings:
+        return _envelope(type_findings)
     fs, findings = _normalize_documents(documents)
     if "connector.json" not in fs.known_keys:
         findings.append(finding(
@@ -537,17 +561,20 @@ def _connector_endpoint_sets(
     regardless of `kind`, and for a `database`/`storage`-kind connector it is
     the only one: `check_coverage` returns before reaching that kind's
     endpoint files at all. So a crash reading one (materialization or parse)
-    is reported here (`internal-error`, parse-crash only — a materialization
-    crash is `_normalize_documents`'s own to name) rather than swallowed, and
-    a key that never resolves is
-    excluded from `ids` outright — the only alternative would be treating a
-    broken file's name as a published endpoint id regardless, which could
-    wrongly resolve a stream's `endpoint_ref` against a document that never
-    actually validated. `_resolved_member(..., validate=False)` is used
-    rather than the full single-document route: nothing here validates a
-    connector-scoped endpoint's own model shape (that is out of scope for
-    the `kind`s this walk exists for), only whether it resolves to a `dict`
-    an id can be read off."""
+    is reported here rather than swallowed — with `endpoint-file-unreadable`,
+    the same `message_id` `connectors.py::check_coverage` already reports for
+    a sibling endpoint file's identical failure on the real-filesystem route,
+    parse-crash only (a materialization crash is `_normalize_documents`'s own
+    to name) — and a key that never resolves is excluded from `ids` outright
+    — the only alternative would be treating a broken file's name as a
+    published endpoint id regardless, which could wrongly resolve a stream's
+    `endpoint_ref` against a document that never actually validated. The
+    materialize/parse/shape check is inlined here rather than routed through
+    `_resolved_member`: nothing here validates a connector-scoped endpoint's
+    own model shape (that is out of scope for the `kind`s this walk exists
+    for), only whether it resolves to a `dict` an id can be read off — and
+    `_resolved_member`'s shared `internal-error` message_id would misclassify
+    the identical failure this function needs `endpoint-file-unreadable` for."""
     sets: dict[str, set[str]] = {}
     findings: list[dict] = []
     for slug in connector_slugs:
@@ -555,9 +582,21 @@ def _connector_endpoint_sets(
         ids: set[str] = set()
         slug_is_incomplete = False
         for key in fs.known_json_children(ep_prefix):
-            ep_doc, ep_findings = _resolved_member(fs, key, validate=False)
-            findings.extend(_at_site(key, ep_findings))
-            if ep_doc is None:
+            if not fs.materialized(key):
+                # Already reported by `_normalize_documents` as an
+                # `internal-error` when it first tried to turn this key's
+                # value into usable text.
+                slug_is_incomplete = True
+                continue
+            try:
+                ep_doc = fs.parsed(key)
+            except Exception as exc:  # noqa: BLE001 - isolate one endpoint file's crash
+                findings.append(finding(
+                    message_id="endpoint-file-unreadable", kind="fail", path=key,
+                    message=f"{key!r} could not be read or parsed ({type(exc).__name__}: {exc})."))
+                slug_is_incomplete = True
+                continue
+            if not isinstance(ep_doc, dict):
                 slug_is_incomplete = True
                 continue
             suffix = key[len(ep_prefix):]
@@ -691,7 +730,12 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     rather than a referential check the published bundle validator owns, and
     runs regardless, the same way the plugin's own connector-endpoint-ref
     check does.
+
+    `documents` itself must be a `dict`: see `_document_set_type_findings`.
     """
+    type_findings = _document_set_type_findings(documents)
+    if type_findings:
+        return _envelope(type_findings)
     fs, findings = _normalize_documents(documents)
 
     connector_slugs = sorted({
@@ -880,7 +924,13 @@ def validate_tree(documents: DocumentSet) -> ValidationEnvelope:
     without materializing any document's content; a document set matching
     exactly one shape then delegates its whole normalization and validation to
     that shape's own entry point rather than doing either twice.
+
+    `documents` itself must be a `dict`: see `_document_set_type_findings` —
+    checked here, before `_tree_root_signals` ever iterates `documents` as one.
     """
+    type_findings = _document_set_type_findings(documents)
+    if type_findings:
+        return _envelope(type_findings)
     is_connector, is_pipeline = _tree_root_signals(documents)
     if is_connector and is_pipeline:
         _, findings = _normalize_documents(documents)
@@ -997,7 +1047,11 @@ def resolve_type_map_gaps(
     invalid value has no business appearing in. `invalid-direction`
     (`fail`/`error`, no `direction` field of its own, since the value that
     would go there is the very thing rejected) is the sole finding for that
-    case; every other finding kind below assumes `direction` already validated.
+    case. `maps` itself is checked next, the same way and for the same
+    reason: `invalid-document-set` (`fail`/`error`, no `direction`) when it is
+    not a `dict` at all — `DocumentSet`'s own type is a type-checker-only
+    promise too, and `_normalize_documents` assumes a mapping to walk. Every
+    other finding kind below assumes both already validated.
 
     Finding kinds sharing the findings list: `invalid-key`/`invalid-value`,
     `duplicate-key`/`key-path-conflict`, and `internal-error` (a map's own
@@ -1088,6 +1142,9 @@ def resolve_type_map_gaps(
         return {"findings": [finding(
             message_id="invalid-direction", kind="fail", path="",
             message=f"direction must be 'read' or 'write'; got {direction!r}.")]}
+    type_findings = _document_set_type_findings(maps)
+    if type_findings:
+        return {"findings": type_findings}
     fs, findings = _normalize_documents(maps)
     rendered_maps: list[list] = []
     load_bearing_filename = {_READ_MAP_FILENAME: "read", _WRITE_MAP_FILENAME: "write"}
@@ -1167,14 +1224,28 @@ def resolve_type_map_gaps(
             "direction": direction,
         }]}
 
-    # Order-preserving de-duplication via list membership, not a `set` /
-    # `dict.fromkeys` — a probe may be any type until the `isinstance` check
-    # just below runs, and a `set` would itself crash on an unhashable one
-    # (e.g. a `list` mistakenly passed as a probe), the exact "never raises"
-    # violation this whole block exists to close.
+    # Order-preserving de-duplication, O(1) membership per hashable probe via
+    # a `set` — not `dict.fromkeys`, which raises the same `TypeError` a bare
+    # `set` would on an unhashable probe (e.g. a `list` mistakenly passed as
+    # one), the exact "never raises" violation this whole block exists to
+    # close. An unhashable probe falls back to an O(k) linear scan against
+    # only the other unhashable probes seen so far (k bounded by how many
+    # such probes actually appear, never by the hashable majority), so a
+    # single unhashable outlier cannot make the whole list quadratic again.
     deduped_probes: list = []
+    seen_hashable: set = set()
+    seen_unhashable: list = []
     for probe in probes:
-        if probe not in deduped_probes:
+        try:
+            already_seen = probe in seen_hashable
+        except TypeError:
+            already_seen = probe in seen_unhashable
+            if not already_seen:
+                seen_unhashable.append(probe)
+        else:
+            if not already_seen:
+                seen_hashable.add(probe)
+        if not already_seen:
             deduped_probes.append(probe)
 
     for probe in deduped_probes:
