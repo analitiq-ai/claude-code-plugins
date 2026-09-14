@@ -357,14 +357,23 @@ def crash_finding(*, message_id: str, doing: str, path: str, exc: BaseException,
     that wording, so a second spelling of it would be a crash the claim probes
     no longer see.
 
-    Rendering `exc` is itself guarded. A last-resort guard runs this from
-    inside its own `except`, where the exception is by definition one nothing
-    here knows anything about — including whether its `__str__` works — and a
-    crash report that crashes replaces the failure it was reporting.
+    Rendering `exc` is itself guarded, and bounded like any other borrowed
+    diagnostic. A last-resort guard runs this from inside its own `except`,
+    where the exception is by definition one nothing here knows anything about
+    — including how long its `__str__` runs on for, or whether it works at all
+    — and a crash report that crashes, or that answers a two-byte input with a
+    megabyte, replaces the failure it was reporting.
+
+    `BaseException` rather than `Exception`, because `exc` reaching here is
+    routinely caller code and a caller's `__str__` may raise anything at all;
+    the two that mean the process is being torn down are re-raised, since
+    swallowing those would outlast this report.
     """
     try:
-        detail = f"{type(exc).__name__}: {exc}"
-    except Exception:  # noqa: BLE001 - see the docstring
+        detail = _bounded(f"{type(exc).__name__}: {exc}")
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except BaseException:  # noqa: BLE001 - see the docstring
         detail = "unreportable"
     return finding(
         rule=rule, message_id=message_id, kind="notApplicable", path=path,

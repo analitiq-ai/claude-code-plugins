@@ -1290,7 +1290,7 @@ _LOST_MAP_CASES = {
     "invalid-value": {"m.json": 42},
     "not-utf8": {"m.json": b"\xff\xfe\x00rubbish"},
     "unparseable": {"m.json": "not json"},
-    "over-limit": {"m.json": "[" + "9" * 5000 + "]"},
+    "over-limit": {"m.json": "[" * 100_000 + "]" * 100_000},
     "not-an-array": {"m.json": {"rules": []}},
     "model-error": {"m.json": [{"native_type": "STRING"}]},
     "map-crash": {"m.json": _ExplodingRules([{"match": "exact", "native_type": "STRING",
@@ -1468,11 +1468,21 @@ def test_gap_resolution_reports_an_unusable_direction_rather_than_raising(
     assert [f["message_id"] for f in result["findings"]] == ["invalid-direction"]
 
 
-def test_gap_resolution_reports_json_it_cannot_build_a_value_from_distinctly(validator):
+@pytest.mark.parametrize("document", [
+    pytest.param("[" * 100_000 + "]" * 100_000, id="past-the-recursion-limit"),
+    pytest.param("[" + "9" * 5000 + "]", id="past-the-integer-digit-limit",
+                 marks=pytest.mark.skipif(
+                     not hasattr(sys, "get_int_max_str_digits"),
+                     reason="this interpreter enforces no integer conversion limit")),
+])
+def test_gap_resolution_reports_json_it_cannot_build_a_value_from_distinctly(validator, document):
     # Well-formed JSON the interpreter refuses: not a syntax error, and not a
-    # validator bug either — so neither message is used for it.
+    # validator bug either — so neither message is used for it. Both refusals
+    # the reason covers are exercised, and only one of them is universal: the
+    # integer conversion limit arrived mid-3.10, which this package still
+    # supports, so a suite pinned to it alone would fail on a supported runtime.
     result = validator.validate_doc(
-        doc={"m.json": "[" + "9" * 5000 + "]"}, direction="read", probes=["STRING"])
+        doc={"m.json": document}, direction="read", probes=["STRING"])
     assert result["passed"] is False
     unreadable = [f for f in result["findings"] if f["message_id"] == "type-map-unreadable"]
     assert len(unreadable) == 1, result["findings"]
@@ -1526,7 +1536,7 @@ class _HostileText(str):
 
     def __new__(cls, value, raising=None):
         self = super().__new__(cls, value)
-        self._raising = raising or KeyError("removeprefix refused")
+        self._raising = raising or ValueError("removeprefix refused")
         return self
 
     def removeprefix(self, _prefix):
@@ -1543,7 +1553,7 @@ def test_gap_resolution_blames_the_validator_not_the_document_for_a_crash_while_
     assert [f["message_id"] for f in result["findings"]] == [
         "internal-error", "gap-resolution-skipped"], result["findings"]
     assert result["findings"][0]["path"] == "m.json"
-    assert "KeyError" in result["findings"][0]["message"]
+    assert "ValueError" in result["findings"][0]["message"]
 
 
 def test_gap_resolution_survives_an_exception_that_cannot_describe_itself(validator):
@@ -1610,18 +1620,105 @@ def test_gap_resolution_refuses_the_pre_split_type_map_filename(validator, direc
     assert not any(f["message_id"] == "type-map-gap" for f in result["findings"])
 
 
-def test_gap_resolution_does_not_echo_caller_text_back_unbounded(validator):
-    # Every diagnostic this module borrows from caller input is clipped to the
-    # width the rest of the package clips to, so a response cannot be a
-    # caller-chosen multiple of the request that provoked it.
-    huge = "x" * 100_000
-    result = validator.validate_doc(
-        doc={f"../{huge}.json": _READ_RULES}, direction=huge, probes=[huge])
-    rendered = json.dumps(result)
-    assert len(rendered) < 5_000, len(rendered)
+_HUGE = "x" * 100_000
 
-    keyed = validator.validate_doc(
-        doc={f"../{huge}.json": _READ_RULES}, direction="read", probes=["STRING"])
-    assert len(json.dumps(keyed)) < 5_000, len(json.dumps(keyed))
-    assert [f["message_id"] for f in keyed["findings"]] == [
-        "invalid-key", "gap-resolution-skipped"]
+
+class _HugeRepr:
+    def __repr__(self):
+        return _HUGE
+
+
+class _HugeStr(Exception):
+    def __str__(self):
+        return _HUGE
+
+
+class _RaisingRepr(str):
+    def __repr__(self):
+        raise RuntimeError("repr refused")
+
+
+def _every_caller_text_route(validator):
+    """One call per way caller-supplied text reaches a finding message."""
+    huge_type = type(_HUGE, (), {})
+    return {
+        "direction": lambda: validator.validate_doc(
+            doc={"m.json": _READ_RULES}, direction=_HUGE, probes=["STRING"]),
+        "probes": lambda: validator.validate_doc(
+            doc={"m.json": _READ_RULES}, direction="read", probes=_HugeRepr()),
+        "probe": lambda: validator.validate_doc(
+            doc={"type-map-read.json": _READ_RULES}, direction="read",
+            probes=[_HUGE]),
+        "probe-repr-refused": lambda: validator.validate_doc(
+            doc={"type-map-read.json": _READ_RULES}, direction="read",
+            probes=[type(_HUGE, (_RaisingRepr,), {})("nope")]),
+        "key": lambda: validator.validate_doc(
+            doc={f"../{_HUGE}.json": _READ_RULES}, direction="read", probes=["STRING"]),
+        "value-type": lambda: validator.validate_doc(
+            doc={"m.json": huge_type()}, direction="read", probes=["STRING"]),
+        "content-type": lambda: validator.validate_doc(
+            doc={"m.json": {"rules": []}}, direction="read", probes=["STRING"]),
+        "doc-type": lambda: validator.validate_doc(
+            doc=huge_type(), direction="read", probes=["STRING"]),
+        "parse-error": lambda: validator.validate_doc(
+            doc={"m.json": '["' + _HUGE + '"'}, direction="read", probes=["STRING"]),
+        "crash": lambda: validator.validate_doc(
+            doc={"m.json": _HostileText("[]", raising=_HugeStr())},
+            direction="read", probes=["STRING"]),
+        "collision": lambda: validator.validate_doc(
+            doc={f"s{i:06d}/../m.json": _READ_RULES for i in range(2000)},
+            direction="read", probes=["STRING"]),
+    }
+
+
+def test_no_finding_message_echoes_caller_text_back_unbounded(validator):
+    # A message is explanation, so every piece of caller text in one is a
+    # borrowed diagnostic and is clipped. Unclipped, a finding's size is a
+    # caller-chosen multiple of the input it complains about. Asserting this
+    # over the *envelope* rather than each message is what previously let the
+    # clip be applied to `path` too, where it does not belong.
+    for name, call in _every_caller_text_route(validator).items():
+        result = call()
+        assert result["findings"], f"{name} produced no finding to check"
+        for f in result["findings"]:
+            assert len(f["message"]) < 2_000, (name, len(f["message"]), f["message"][:120])
+
+
+def test_a_findings_path_names_the_key_whole_however_long_it_is(validator):
+    # `path` identifies the document, so it is never clipped: two keys sharing
+    # a long prefix must not arrive as one finding, and a consumer holding the
+    # envelope must be able to look the key back up in the set it sent.
+    pre = "d/" + "a" * 250
+    k1, k2 = f"{pre}/one.json", f"{pre}/two.json"
+    result = validator.validate_doc(
+        doc={k1: "nope", k2: "nope"}, direction="read", probes=["STRING"])
+    unreadable = [f for f in result["findings"] if f["message_id"] == "type-map-unreadable"]
+    assert {f["path"] for f in unreadable} == {k1, k2}, [f["path"] for f in unreadable]
+    assert all(f["path"] in {k1, k2} for f in unreadable)
+
+
+def test_a_model_findings_path_keeps_the_whole_key_in_front_of_its_pointer(validator):
+    # `_at_key` splices the key onto the model's own pointer within the
+    # document. A clipped key would graft `/0/exact` onto a name no consumer
+    # can resolve, and collapse two documents onto one path.
+    pre = "d/" + "a" * 250
+    bad = [{"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}]
+    k1, k2 = f"{pre}/one/type-map-write.json", f"{pre}/two/type-map-write.json"
+    result = validator.validate_doc(
+        doc={k1: bad, k2: bad}, direction="write", probes=["Utf8"])
+    inside = [f for f in result["findings"] if f.get("rule") == "RULE-TMAP-008"]
+    assert {f["path"] for f in inside} == {f"{k1}/0/exact", f"{k2}/0/exact"}, \
+        [f["path"] for f in inside]
+
+
+def test_a_collision_names_the_spellings_without_growing_with_them(validator):
+    # The finding has to show the caller which spellings collided; it does not
+    # have to show all of them. Naming every one of 2000 is not a sentence.
+    result = validator.validate_doc(
+        doc={f"s{i:06d}/../m.json": _READ_RULES for i in range(2000)},
+        direction="read", probes=["STRING"])
+    collisions = [f for f in result["findings"]
+                  if f["message_id"] == "normalized-key-collision"]
+    assert len(collisions) == 1, result["findings"]
+    assert "and 1995 more" in collisions[0]["message"], collisions[0]["message"]
+    assert "'s000000/../m.json'" in collisions[0]["message"]

@@ -142,6 +142,12 @@ class ValidationEnvelope(TypedDict):
 #: decoded text before it is parsed; `json` rejects it as a stray character.
 _BOM = codecs.BOM_UTF8.decode("utf-8")
 
+#: How many colliding spellings a `normalized-key-collision` names before it
+#: counts the rest. Enough that a caller reading the finding sees the mistake
+#: they actually made — two or three spellings of one path is what a collision
+#: normally is — without the message growing with the input.
+_MAX_SPELLINGS = 5
+
 
 def _envelope(findings: list[Finding]) -> ValidationEnvelope:
     """Wrap a findings list in the envelope shape this module's routes return,
@@ -157,23 +163,43 @@ def _directed(f: Finding, direction: str) -> Finding:
     return {**f, "direction": direction}
 
 
+#: Where caller-supplied text is allowed to reach a finding whole, and where it
+#: is not. A `path` identifies the document a finding is about, so it carries
+#: the caller's key verbatim: clipping it would let two keys sharing a prefix
+#: arrive as one, and the envelope cannot say which document it meant. A
+#: `message` explains, and every piece of caller text in one is borrowed
+#: diagnostic — a `repr`, a type name, a parser's complaint, an exception —
+#: clipped to `_core._bounded`'s width. Unclipped, a finding's size is a
+#: multiple of the input it complains about, and the hosted consumer this
+#: module exists for lets the caller choose how much comes back.
+#:
+#: Echoing a key in `path` is bounded by the request: each document draws a
+#: small, fixed number of findings, so the response stays proportional to what
+#: was sent. It is the message interpolations that multiply, which is why they
+#: are the half that clips. `_repr` and `_type_name` are the two ways a caller
+#: value enters a message, so between them they are where that is enforced.
+
+
 def _repr(value: Any) -> str:
     """`repr`, for a value this module is about to name in a finding about how
-    unusable it is, clipped to the width `_core._bounded` holds every borrowed
-    diagnostic to.
+    unusable it is — bounded on both paths out, since the fallback names a
+    caller-chosen type too.
 
-    The caller owns the object, so its `__repr__` is the caller's code, and
-    that costs twice. It may raise, and a message explaining why an input was
-    rejected must not become the second failure. It may also be arbitrarily
-    long: unclipped, a finding's size is a multiple of the input it complains
-    about, and a set full of rejected keys answers a request with a response
-    several times its size — which for the hosted consumer this module exists
-    for is the caller choosing how much the validator sends back.
+    The caller owns the object, so its `__repr__` is the caller's code: it may
+    raise, and a message explaining why an input was rejected must not become
+    the second failure.
     """
     try:
         return _bounded(repr(value))
     except Exception:  # noqa: BLE001 - see the docstring
-        return f"<unrepresentable {type(value).__name__}>"
+        return _bounded(f"<unrepresentable {type(value).__name__}>")
+
+
+def _type_name(value: Any) -> str:
+    """The name of `value`'s type, for a message that reports having been
+    handed the wrong kind of thing. A caller names its own classes, so this is
+    borrowed text like any other."""
+    return _bounded(type(value).__name__)
 
 
 def _canonical_key(raw: str) -> str:
@@ -222,12 +248,14 @@ def _normalized_documents(documents: dict) -> tuple[dict[str, Any], list[Finding
     too malformed to have a name contributes the empty string, which no route
     can match and every route must therefore treat as possibly its own.
 
-    The name is whichever spelling that route would have tested, so it is the
-    canonical key wherever one exists and the raw key only where none does. A
-    rejected key never reached canonicalization — the raw spelling is the only
-    name it has — while a collided or conflicting key did, and the canonical
-    form is what a route selecting maps would have matched against had the key
-    survived.
+    The name is whichever spelling that route would have tested. For a collided
+    or conflicting key that is the canonical one, which is what a route
+    selecting documents would have matched against had the key survived. A
+    rejected key has no such form to offer: it was rejected *for* what it
+    canonicalizes to — `"a/../../b.json"` resolves outside the set, `"a/.."`
+    names no document — so its canonical form is not a name any route could
+    have matched, and the raw spelling, which is also what the caller wrote, is
+    the only name it ever had.
 
     A key that cannot name a document at all is `invalid-key`, reported against
     the raw key the caller wrote rather than a canonical form they would not
@@ -245,7 +273,7 @@ def _normalized_documents(documents: dict) -> tuple[dict[str, Any], list[Finding
         if rejection is not None:
             findings.append(finding(
                 message_id="invalid-key", kind="fail",
-                path=_bounded(raw) if isinstance(raw, str) else _repr(raw),
+                path=raw if isinstance(raw, str) else _repr(raw),
                 message=f"{_repr(raw)} cannot be used as a document set key: {rejection}."))
             dropped.append(raw if isinstance(raw, str) else "")
             continue
@@ -254,9 +282,15 @@ def _normalized_documents(documents: dict) -> tuple[dict[str, Any], list[Finding
     usable: dict[str, Any] = {}
     for key, entries in grouped.items():
         if len(entries) > 1:
-            spellings = ", ".join(_repr(raw) for raw, _ in entries)
+            # Each spelling is bounded, and so is how many are named: a caller
+            # can collide unboundedly many raw keys onto one canonical name,
+            # and a finding that lists every one of them stops being a sentence
+            # long before it stops being accurate.
+            shown = [_repr(raw) for raw, _ in entries[:_MAX_SPELLINGS]]
+            rest = len(entries) - len(shown)
+            spellings = ", ".join(shown) + (f", and {rest} more" if rest else "")
             findings.append(finding(
-                message_id="normalized-key-collision", kind="fail", path=_bounded(key),
+                message_id="normalized-key-collision", kind="fail", path=key,
                 message=(f"{spellings} all name the document {_repr(key)}; which of them "
                          "applies would be decided by iteration order.")))
             dropped.append(key)
@@ -276,7 +310,7 @@ def _normalized_documents(documents: dict) -> tuple[dict[str, Any], list[Finding
             None)
         if parent is not None:
             findings.append(finding(
-                message_id="key-path-conflict", kind="fail", path=_bounded(key),
+                message_id="key-path-conflict", kind="fail", path=key,
                 message=(f"{_repr(key)} is nested under {_repr(parent)}, which this set "
                          "also carries as a document of its own.")))
             del usable[key]
@@ -318,7 +352,7 @@ def _document_content(value: Any) -> tuple[Any, str | None, str]:
     elif isinstance(value, str):
         text = value
     else:
-        return None, "invalid-type", type(value).__name__
+        return None, "invalid-type", _type_name(value)
     # Stripped outside the guard below, which names the two ways `json.loads`
     # declines well-formed JSON. `text` is a caller-supplied `str` subclass as
     # readily as a `str`, so `removeprefix` can be the caller's own code; a
@@ -428,7 +462,7 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
         "packages/validator/tests/test_document_set.py for the fixed contract.")
 
 
-def validate_doc(
+def validate_doc(  # skipcq: PYL-W0613 — `entity` and `schema_url` are the fixed contract of ordinary document mode, which raises below; renaming them would change the keyword a caller passes
         doc: Any,
         entity: Entity | None = None,
         schema_url: str | None = None,
@@ -536,9 +570,8 @@ def validate_doc(
     still carrying it has a write direction nobody has separated out; a
     path-free caller is owed that verdict too, not a quieter one reached by
     handing the documents over without a directory. Any other final segment
-    carries no
-    expectation, so the caller's declared `direction` is the only claim in hand
-    and the map is consulted under it.
+    carries no expectation, so the caller's declared `direction` is the only
+    claim in hand and the map is consulted under it.
 
     `_validate_type_map` in that module answers a different question and so
     reaches a different verdict: it has no caller-declared direction, only a
@@ -575,15 +608,19 @@ def validate_doc(
     The probe itself is named in the message.
 
     A map its filename refuses is never consulted, and says so with
-    `direction-filename-mismatch`. Read and write rules share one key set and
-    the resolvers only choose which key is matched and which is rendered, so
-    such a map does not fail to resolve a probe — it resolves it through rules
-    authored for the opposite mapping, plausibly and wrongly, which is the one
-    outcome a caller cannot detect. Its filename is the declaration of intent
-    in hand, and it is taken at its word, including where that word is that the
-    direction was never declared. The same holds for a key lost before anything
-    could read it: a lost `type-map-write.json` costs a `read` call nothing,
-    because that call would not have consulted it.
+    `direction-filename-mismatch`. Refusing rather than trying it is what keeps
+    a wrong answer from looking like a right one: read and write rules share
+    one key set and the resolvers only choose which key is matched and which is
+    rendered, so a map authored for the other mapping does not fail to resolve
+    a probe — it resolves it, plausibly and wrongly, which is the one outcome a
+    caller cannot detect. A map whose direction was never declared is refused
+    for the same reason rather than the same evidence: its rules may well be
+    authored for the direction asked for, but nothing in hand says so, and a
+    probe answered on that basis is right by luck. Either way the filename is
+    the declaration of intent available, and it is taken at its word. The same
+    holds for a key lost before anything could read it: a lost
+    `type-map-write.json` costs a `read` call nothing, because that call would
+    not have consulted it.
 
     Gaps are reported only when the set could answer the question — no map
     this `direction` would have consulted was lost, and at least one was
@@ -632,16 +669,18 @@ def validate_doc(
     Either way it is the same envelope shape as every other call to this
     function, never a bare `{"findings"}` shape with no `passed` key.
 
-    Once this function is entered, every failure it reaches is a reported
-    finding rather than an exception — `internal-error` is the last-resort
-    form of that, and the mode's body runs inside a guard of its own, so it
-    covers the arguments nobody anticipated as well as the ones the rejections
-    above name. Two things are outside it. Importing this package: a missing
+    Once this function is entered, every `Exception` it reaches is a reported
+    finding rather than a raise — `internal-error` is the last-resort form of
+    that, and the mode's body runs inside a guard of its own, so it covers the
+    arguments nobody anticipated as well as the ones the rejections above name.
+    The rule is `Exception`, which is what bounds it: a `BaseException` is
+    caught nowhere here and propagates, whether it is an interrupt or one a
+    caller's own `__str__` or `__hash__` chose to raise. So does a
+    `RecursionError` arriving with no stack left to build the finding on, since
+    a caller already close to the limit has spent the frames the handler needs.
+    Reporting also says nothing about importing this package: a missing
     `analitiq-contract-models` is reported by `analitiq.validator.connectors`
-    at import time, before any call here. And a failure that leaves no stack to
-    report from: a caller already close to the recursion limit can drive
-    `RecursionError` out of the handler itself, since building the finding it
-    would return needs frames the caller has already spent.
+    at import time, before any call here.
 
     Reporting rather than raising is a deliberate divergence from
     `type_map_gaps.py`'s `_load_rules`, which raises `ValueError` on an
@@ -680,8 +719,7 @@ def _at_key(f: Finding, key: str) -> Finding:
     that document was supplied under, so a set holding several maps says which
     one a model error came from."""
     within = f.get("path", "")
-    at = _bounded(key)
-    return {**f, "path": at if within in ("", "/") else f"{at}{within}"}
+    return {**f, "path": key if within in ("", "/") else f"{key}{within}"}
 
 
 def _map_rules(key: str, value: Any, direction: str) -> tuple[list | None, list[Finding]]:
@@ -692,28 +730,28 @@ def _map_rules(key: str, value: Any, direction: str) -> tuple[list | None, list[
     content, unread, detail = _document_content(value)
     if unread == "invalid-type":
         return None, [finding(
-            message_id="invalid-value", kind="fail", path=_bounded(key),
+            message_id="invalid-value", kind="fail", path=key,
             message=(f"{_repr(key)} holds a value of type {detail}; a document set value "
                      "is the parsed document as a dict or list, or the JSON text as str "
                      "or bytes."))]
     if unread == "not-utf8":
         return None, [finding(
-            message_id="invalid-value", kind="fail", path=_bounded(key),
+            message_id="invalid-value", kind="fail", path=key,
             message=f"{_repr(key)} holds bytes that are not UTF-8: {detail}.")]
     if unread == "unparseable":
         return None, [finding(
-            message_id="type-map-unreadable", kind="fail", path=_bounded(key),
+            message_id="type-map-unreadable", kind="fail", path=key,
             message=f"{_repr(key)} is not JSON: {detail}.")]
     if unread == "over-limit":
         return None, [finding(
-            message_id="type-map-unreadable", kind="fail", path=_bounded(key),
+            message_id="type-map-unreadable", kind="fail", path=key,
             message=(f"{_repr(key)} is JSON this interpreter will not build a value "
                      f"from: {detail}."))]
     if not isinstance(content, list):
         return None, [finding(
-            message_id="type-map-unreadable", kind="fail", path=_bounded(key),
+            message_id="type-map-unreadable", kind="fail", path=key,
             message=(f"{_repr(key)} is not an array of type-map rules; it holds a value "
-                     f"of type {type(content).__name__}."))]
+                     f"of type {_type_name(content)}."))]
     model = [_at_key(f, key) for f in _type_map_findings(content, direction)]
     if any(finding_costs_a_pass(f) for f in model):
         return None, model
@@ -746,7 +784,7 @@ def _type_map_gap_mode(doc: Any, direction: Any, probes: Any) -> ValidationEnvel
         return _envelope([finding(
             message_id="missing-type-map", kind="fail", path="",
             message=("type-map gap resolution reads its maps from the keys of `doc`, "
-                     f"which must be a dict; got a {type(doc).__name__}."))])
+                     f"which must be a dict; got a {_type_name(doc)}."))])
 
     resolve = _DIRECTIONS[direction].resolve
     declared_by_filename = {ops.filename: name for name, ops in _DIRECTIONS.items()}
@@ -785,14 +823,14 @@ def _type_map_gap_mode(doc: Any, direction: Any, probes: Any) -> ValidationEnvel
         refusal = filename_refusal(key)
         if refusal is not None:
             findings.append(_directed(finding(
-                message_id="direction-filename-mismatch", kind="fail", path=_bounded(key),
+                message_id="direction-filename-mismatch", kind="fail", path=key,
                 message=f"{_repr(key)} {refusal}"),
                 direction))
             continue
         try:
             contributed, reported = _map_rules(key, value, direction)
         except Exception as exc:  # noqa: BLE001 - last-resort per-map guard
-            findings.append(_crashed(f"reading {_repr(key)}", _bounded(key), exc))
+            findings.append(_crashed(f"reading {_repr(key)}", key, exc))
             lost = True
             continue
         findings.extend(reported)
