@@ -156,10 +156,16 @@ def _key_and_value_findings(raw_key: Any, value: Any) -> tuple[str | None, list[
     """Validate one `DocumentSet` entry's key and value shape — shared by every
     caller that walks a `DocumentSet` (`_normalize_documents`,
     `resolve_type_map_gaps`) so they never grade a malformed entry
-    differently. Returns the normalized key, or `None` plus the one finding
-    (`invalid-key` or `invalid-value`) naming why the entry could not be used;
-    the raw key is what an `invalid-key` finding's `path` names, since the
-    normalized form does not exist for it."""
+    differently. Returns `(None, [invalid-key finding])` when `raw_key` itself
+    is not a usable relative path — the raw key is what that finding's `path`
+    names, since the normalized form does not exist for it. Returns
+    `(key, [invalid-value finding])` when the key is fine but `value` is not
+    one of the usable value types: the key is a real path identity in this
+    document set regardless of whether its content is usable, so a caller
+    must still be able to discover it (e.g. a connection slug whose sibling
+    endpoints and type maps are independently checkable) rather than treating
+    an unusable value the same as an unusable key. Returns `(key, [])` when
+    both are fine."""
     key = _normalize_key(raw_key)
     if key is None:
         return None, [finding(
@@ -169,7 +175,7 @@ def _key_and_value_findings(raw_key: Any, value: Any) -> tuple[str | None, list[
                 "be a non-empty relative path (no leading '/') with no '.' or "
                 "'..' path segment."))]
     if not isinstance(value, (str, bytes, dict, list)):
-        return None, [finding(
+        return key, [finding(
             message_id="invalid-value", kind="fail", path=key,
             message=(
                 f"value for {key!r} is a {type(value).__name__}, not one of "
@@ -215,6 +221,13 @@ def _normalize_documents(documents: DocumentSet) -> tuple[_VirtualFS, list[dict]
                     "leave which document is validated undefined.")))
             continue
         known_keys.add(key)
+        if kv_findings:
+            # invalid-value: the key is still a real path identity in this
+            # document set (kept in known_keys for discovery, per
+            # _key_and_value_findings), but there is no usable content to
+            # materialize into texts/objects.
+            findings.extend(kv_findings)
+            continue
         try:
             if isinstance(value, bytes):
                 text = value.decode("utf-8-sig")
@@ -731,7 +744,13 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
 
         ep_prefix = f"connections/{conn_slug}/definition/endpoints/"
         for ep_key in fs.known_json_children(ep_prefix):
-            ep_doc, ep_findings = _resolved_member(fs, ep_key)
+            # entity="database-endpoint": a connection-scoped endpoint is
+            # always a database endpoint by its position in the tree — unlike
+            # an embedded connector's own endpoints (api-vs-database is
+            # genuinely ambiguous there, and is left to shape auto-detection),
+            # so pinning here rejects a wrong-shaped document the same way the
+            # pipeline/stream/connection members above already do.
+            ep_doc, ep_findings = _resolved_member(fs, ep_key, entity="database-endpoint")
             findings.extend(_at_site(ep_key, ep_findings))
             if ep_doc is None:
                 bundle_is_incomplete = True
@@ -770,8 +789,28 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
         "endpoints": endpoints,
     }
     if not bundle_is_incomplete:
+        # `_resolved_member`'s gate (materializes, parses, is a dict) admits a
+        # member that is dict-shaped but fails its own model validation —
+        # deliberately, mirroring the plugin's `complete`/`crashed` distinction
+        # documented above. The published bundle validator assumes referenced
+        # collections hold the shapes their model promises, so a member this
+        # gate let through with a wrong-shaped field (e.g. a non-iterable
+        # `destinations`) can still crash it. `_contained` in `plugins/
+        # analitiq-pipeline-builder/scripts/validate.py` isolates this same
+        # call for the same reason; mirror it here rather than tightening the
+        # gate, which would report those documents' own model-validation
+        # findings twice.
         require_runnable = isinstance(pipeline_doc, dict) and pipeline_doc.get("status") == "active"
-        findings.extend(validate_pipeline_bundle(bundle, require_runnable=require_runnable))
+        try:
+            findings.extend(validate_pipeline_bundle(bundle, require_runnable=require_runnable))
+        except Exception as exc:  # noqa: BLE001 - isolate the referential pass's own crash
+            findings.append(finding(
+                message_id="internal-error", kind="fail", path="pipeline",
+                message=(
+                    "cross-document referential validation crashed "
+                    f"({type(exc).__name__}: {exc}); a bundle member can materialize, parse, "
+                    "and still fail its own model validation, which this pass does not "
+                    "re-check before reading the shapes it assumes.")))
 
     endpoint_sets, endpoint_set_findings = _connector_endpoint_sets(fs, connector_slugs)
     findings.extend(endpoint_set_findings)
@@ -873,15 +912,21 @@ def resolve_type_map_gaps(
     `probes` to resolve in `direction`, report what each probe resolved to.
 
     Never raises. Returns `{"findings"}` only — no `resolved`, no top-level
-    `direction`. Finding kinds sharing that list: `type-map-unreadable`
-    (`fail`/`error`, no `direction` — a map that is invalid JSON or not a
-    list, a failure prior to any direction-specific check); `invalid-type-map`
-    (`fail`/`error`, `direction` = this call's `direction` — a map that fails
-    its `TypeMapReadDoc`/`TypeMapWriteDoc` model,
-    `analitiq.contracts.type_map`); `type-map-gap` (`informational`, no
-    severity, no rule, `direction` = this call's `direction` — a probe none of
-    `maps` resolved; never costs a pass). A run in which every probe resolved
-    reports an empty `findings` list.
+    `direction`. Finding kinds sharing that list: `invalid-key`/`invalid-value`
+    (via `_key_and_value_findings`) and `duplicate-key`/`key-path-conflict` —
+    the same collection-level hazards `_normalize_documents` guards against,
+    since two raw keys normalizing to one map (or one key that is also a
+    directory prefix of another) could otherwise spread complementary rules
+    across both and make every probe appear covered when only one of them
+    could actually exist at runtime; `type-map-unreadable` (`fail`/`error`, no
+    `direction` — a map that is invalid JSON or not a list, a failure prior to
+    any direction-specific check); `invalid-type-map` (`fail`/`error`,
+    `direction` = this call's `direction` — a map that fails its
+    `TypeMapReadDoc`/`TypeMapWriteDoc` model, `analitiq.contracts.type_map`);
+    `type-map-gap` (`informational`, no severity, no rule, `direction` = this
+    call's `direction` — a probe none of `maps` resolved; never costs a
+    pass). A run in which every probe resolved reports an empty `findings`
+    list.
 
     This is a deliberate divergence from `type_map_gaps.py`'s own
     `_load_rules`, which raises `ValueError` on exactly the same two
@@ -906,10 +951,33 @@ def resolve_type_map_gaps(
     """
     findings: list[dict] = []
     rendered_maps: list[list] = []
+    known_keys: set[str] = set()
     for raw_key in sorted(maps, key=str):
         value = maps[raw_key]
         key, kv_findings = _key_and_value_findings(raw_key, value)
         if key is None:
+            findings.extend(kv_findings)
+            continue
+        if key in known_keys:
+            # Two raw keys normalizing to the same map (e.g. "a.json" and
+            # "./a.json") is the same undefined-document hazard
+            # `_normalize_documents` already guards: complementary rules
+            # spread across both could make every probe appear covered, when
+            # only one of the two could actually exist at runtime.
+            findings.append(finding(
+                message_id="duplicate-key", kind="fail", path=key,
+                message=(
+                    f"{raw_key!r} normalizes to {key!r}, which another key in "
+                    "this document set already denotes; two keys for one path "
+                    "leave which map is actually resolved undefined.")))
+            continue
+        known_keys.add(key)
+        if kv_findings:
+            # A map has no sibling documents that depend on its own key being
+            # discoverable the way a pipeline-tree connection slug does, so an
+            # invalid-value entry is reported and dropped the same as an
+            # invalid-key one — there is nothing here for a caller to still
+            # discover it for.
             findings.extend(kv_findings)
             continue
         if isinstance(value, (dict, list)):
@@ -937,6 +1005,14 @@ def resolve_type_map_gaps(
             })
             continue
         rendered_maps.append(parsed)
+
+    for key in sorted(known_keys):
+        if any(other.startswith(f"{key}/") for other in known_keys):
+            findings.append(finding(
+                message_id="key-path-conflict", kind="fail", path=key,
+                message=(
+                    f"{key!r} is both a document key and a directory prefix of "
+                    "another key in this document set.")))
 
     if findings:
         return {"findings": findings}

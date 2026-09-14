@@ -500,6 +500,61 @@ def test_connection_json_that_is_not_a_connection_is_rejected_not_misdetected(va
     assert result["passed"] is False, result
 
 
+def test_model_invalid_pipeline_member_does_not_crash_the_referential_pass(validator):
+    """A pipeline document that materializes, parses, and is a `dict` is still
+    a bundle member even when it fails its own model validation
+    (`_resolved_member`'s gate, by design, mirrors the plugin's
+    `complete`/`crashed` distinction rather than re-checking model validity).
+    `connections.destinations` set to a non-iterable is exactly the shape
+    `validate_pipeline_bundle`'s own `_check_connection_version_conflicts`
+    cannot handle (it splats `destinations` directly): the referential pass
+    must report that crash as a finding, not propagate the `TypeError`."""
+    documents = _pipeline_tree_documents()
+    pipeline = {**documents["pipelines/p/pipeline.json"]}
+    pipeline["connections"] = {**pipeline["connections"], "destinations": 5}
+    documents = {**documents, "pipelines/p/pipeline.json": pipeline}
+
+    result = validator.validate_pipeline_tree(documents)
+
+    assert result["passed"] is False, result
+    assert any(f["message_id"] == "internal-error" for f in result["findings"]), result
+
+
+def test_invalid_connection_value_still_leaves_its_key_discoverable(validator):
+    """A connection whose VALUE is unusable (e.g. `None`) is not the same
+    defect as a connection whose KEY is unusable: the key is still a real
+    path identity in this document set, so `validate_pipeline_tree`'s
+    connection-slug discovery must still find it and still check its
+    independently-checkable siblings — here, the legacy `type-map.json`
+    filename (RULE-CONN-012), which does not depend on the connection
+    document's own content at all."""
+    documents = {
+        **_pipeline_tree_documents(),
+        "connections/wise/connection.json": None,
+        "connections/wise/definition/type-map.json": "[]",
+    }
+
+    result = validator.validate_pipeline_tree(documents)
+
+    message_ids = {f["message_id"] for f in result["findings"]}
+    assert "invalid-value" in message_ids, result
+    assert "legacy-type-map-filename" in message_ids, result
+
+
+def test_connection_scoped_endpoint_that_is_not_a_database_endpoint_is_rejected_not_misdetected(validator):
+    """A connection-scoped endpoint is always a database endpoint by its
+    position in the tree — unlike an embedded connector's own endpoints,
+    where api-vs-database is genuinely ambiguous and left to shape
+    auto-detection. A valid type-map array in its place would otherwise
+    auto-detect as type-map and produce no blocking finding."""
+    documents = {
+        **_pipeline_tree_documents(),
+        f"connections/postgresql/definition/endpoints/{_EID}.json": _CONNECTOR_WISE_TYPE_MAP_READ,
+    }
+    result = validator.validate_pipeline_tree(documents)
+    assert result["passed"] is False, result
+
+
 def test_two_keys_normalizing_to_the_same_key_report_a_finding(validator):
     documents = _connector_tree_documents()
     key = next(iter(documents))
@@ -578,6 +633,22 @@ def test_non_str_bytes_object_value_is_invalid_not_raised(validator):
 def test_invalid_value_applies_to_resolve_type_map_gaps_maps_too(validator):
     result = validator.resolve_type_map_gaps(maps={"type-map-read.json": 42}, direction="read", probes=["STRING"])
     assert any(f["message_id"] == "invalid-value" for f in result["findings"])
+
+
+def test_colliding_map_keys_are_rejected_before_resolving_probes(validator):
+    """`"type-map-read.json"` and `"./type-map-read.json"` normalize to one
+    path, but only one map could actually exist at runtime. Each carries a
+    rule the other lacks, so treating them as two independent maps would let
+    their union cover every probe and report no gap — exactly the undefined-
+    document hazard `_normalize_documents`'s own `duplicate-key` finding
+    already guards against for the tree APIs."""
+    maps = {
+        "type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        "./type-map-read.json": [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}],
+    }
+    result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING", "BIGINT"])
+    assert any(f["message_id"] == "duplicate-key" for f in result["findings"]), result
+    assert not any(f["message_id"] == "type-map-gap" for f in result["findings"]), result
 
 
 # ---------------------------------------------------------------------------

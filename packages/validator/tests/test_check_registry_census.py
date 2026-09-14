@@ -187,6 +187,21 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "one pipelines/<slug>/pipeline.json — names the document(s) this call "
         "never validates as the tree's pipeline, before any rule-specific check "
         "of one could run"),
+    ("analitiq.validator.document_set::validate_pipeline_tree", "internal-error"): (
+        "a structural precondition rejected the whole referential pass: a "
+        "bundle member can materialize, parse, and pass `_resolved_member`'s "
+        "dict-shape gate while still failing its own model validation, which "
+        "the published `validate_pipeline_bundle` does not re-check before "
+        "reading the shapes it assumes — so a crash there is caught here "
+        "rather than attributed to any one rule"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "duplicate-key"): (
+        "a structural precondition on the map collection's own shape — two "
+        "distinct raw keys normalize to the same map — rejected before any "
+        "one map's rows could be checked"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "key-path-conflict"): (
+        "a structural precondition on the map collection's own shape — one "
+        "key is simultaneously a map and a directory prefix of another — "
+        "rejected before any one map's rows could be checked"),
     ("analitiq.validator.document_set::resolve_type_map_gaps", "type-map-unreadable"): (
         "a structural precondition — the map is not readable as a JSON array "
         "at all — rejected before any rule-specific check of its rows could "
