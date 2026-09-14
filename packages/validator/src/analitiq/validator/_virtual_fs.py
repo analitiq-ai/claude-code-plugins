@@ -38,6 +38,20 @@ import json
 from typing import Any, Iterator
 
 
+def path_parts_key(key: str) -> list[str]:
+    """Sort key matching `pathlib.Path`'s ordering (which compares parts, not
+    the raw string) rather than raw-string order — the two disagree whenever a
+    `-` (0x2D) and a `/` (0x2F) compete at the same position, e.g.
+    `"a-b.json"` sorts after `"a/z.json"` as a path (its first part `"a-b.json"`
+    follows the shorter, prefix-equal first part `"a"`) but before it as a
+    string (`-` is the lower byte). Shared by every caller that needs its own
+    scan order to match a real filesystem walk's `Path`-sorted order — a
+    document-set-wide key listing has no such equivalence to keep, and sorts
+    by plain string order instead — so none of the callers that do need it
+    can drift from `glob_json`'s own ordering below."""
+    return key.split("/")
+
+
 class _VirtualFS:
     def __init__(self, texts: dict[str, str], objects: dict[str, Any],
                  known_keys: set[str]) -> None:
@@ -77,17 +91,13 @@ class _VirtualFS:
     def glob_json(self, dir_key: str) -> list[str]:
         """Every known key under `dir_key` ending in `.json`, at any depth —
         matching `Path.rglob("*.json")`, the only pattern any caller uses.
-        Sorted by path-part tuple, matching `pathlib.Path`'s ordering (which
-        compares parts, not the raw string) rather than raw-string order — the
-        two disagree whenever a `-` (0x2D) and a `/` (0x2F) compete at the same
-        position, e.g. `"a-b.json"` sorts after `"a/z.json"` as a path (its
-        first part `"a-b.json"` follows the shorter, prefix-equal first part
-        `"a"`) but before it as a string (`-` is the lower byte)."""
+        Sorted by `path_parts_key`, matching `pathlib.Path`'s ordering rather
+        than raw-string order — see that function for why they diverge."""
         prefix = f"{dir_key}/" if dir_key else ""
         return sorted(
             (k for k in self.known_keys
              if k != dir_key and k.startswith(prefix) and k.endswith(".json")),
-            key=lambda k: k.split("/"),
+            key=path_parts_key,
         )
 
     def known_json_children(self, prefix: str) -> list[str]:
@@ -171,9 +181,7 @@ class VirtualPath:
         return isinstance(other, VirtualPath) and self._fs is other._fs and self._key == other._key
 
     def __lt__(self, other: "VirtualPath") -> bool:
-        # Path-part comparison, matching `pathlib.Path`'s ordering — see
-        # `_VirtualFS.glob_json`'s docstring for why raw-string order diverges.
-        return self._key.split("/") < other._key.split("/")
+        return path_parts_key(self._key) < path_parts_key(other._key)
 
     def __hash__(self) -> int:
         return hash((id(self._fs), self._key))

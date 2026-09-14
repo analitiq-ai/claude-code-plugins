@@ -28,7 +28,7 @@ from typing import Any, Literal, TypedDict, Union
 from pydantic import ValidationError
 
 from ._core import _KIND_REGISTRY, finding, finding_costs_a_pass, validate_document
-from ._virtual_fs import VirtualPath, _VirtualFS
+from ._virtual_fs import VirtualPath, _VirtualFS, path_parts_key
 from .connectors import (
     _LEGACY_MAP_FILENAME,
     _READ_MAP_ADAPTER,
@@ -153,10 +153,11 @@ def _normalize_key(raw_key: Any) -> str | None:
 
 
 def _key_and_value_findings(raw_key: Any, value: Any) -> tuple[str | None, list[dict]]:
-    """Validate one `DocumentSet` entry's key and value shape — shared by every
-    caller that walks a `DocumentSet` (`_normalize_documents`,
-    `resolve_type_map_gaps`) so they never grade a malformed entry
-    differently. Returns `(None, [invalid-key finding])` when `raw_key` itself
+    """Validate one `DocumentSet` entry's key and value shape. `_normalize_documents`
+    is the one caller — every other function that walks a `DocumentSet`
+    (`resolve_type_map_gaps` included) reaches this through that function
+    rather than calling it directly, so none of them can grade a malformed
+    entry differently. Returns `(None, [invalid-key finding])` when `raw_key` itself
     is not a usable relative path — the raw key is what that finding's `path`
     names, since the normalized form does not exist for it. Returns
     `(key, [invalid-value finding])` when the key is fine but `value` is not
@@ -196,8 +197,10 @@ def _normalize_documents(documents: DocumentSet) -> tuple[_VirtualFS, list[dict]
     set's own key/value shape).
 
     Keys are processed in sorted order (by string form, so a raw key of any
-    type still sorts rather than crashing `_key_and_value_findings` never got
-    to grade), not the caller's own insertion order, so this pass's own
+    type still sorts against another of a different type, rather than
+    crashing on a comparison before `_key_and_value_findings` ever gets a
+    chance to grade it as an invalid key), not the caller's own insertion
+    order, so this pass's own
     findings never depend on how the caller happened to build the mapping —
     the same guarantee `check_coverage`'s own `sorted(...)` endpoint scan
     already gives the checks built on top of it.
@@ -511,12 +514,13 @@ def _connector_endpoint_sets(
     that one id, the same as it would be missing any other id no file ever
     claimed.
 
-    This is the only walk over a pipeline tree's embedded-connector
-    `endpoints/*.json` files for connectors whose `kind` never routes
-    `check_coverage` through them at all (`database`/`storage`), so a crash
-    reading one (materialization or parse) is reported here (`internal-error`,
-    parse-crash only — a materialization crash is `_normalize_documents`'s
-    own to name) rather than swallowed, and a key that never resolves is
+    This walk runs over every embedded connector's `endpoints/*.json` files
+    regardless of `kind`, and for a `database`/`storage`-kind connector it is
+    the only one: `check_coverage` returns before reaching that kind's
+    endpoint files at all. So a crash reading one (materialization or parse)
+    is reported here (`internal-error`, parse-crash only — a materialization
+    crash is `_normalize_documents`'s own to name) rather than swallowed, and
+    a key that never resolves is
     excluded from `ids` outright — the only alternative would be treating a
     broken file's name as a published endpoint id regardless, which could
     wrongly resolve a stream's `endpoint_ref` against a document that never
@@ -686,7 +690,11 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
 
     pipeline_doc: Any = None
     slug = None
-    pipeline_keys = sorted(key for key in fs.known_keys if _PIPELINE_DOC_RE.match(key))
+    # Sorted by `path_parts_key`, matching `_VirtualFS.glob_json`'s ordering —
+    # a plain string sort would disagree with it whenever one slug is another
+    # plus a hyphenated suffix (`pipelines/a/...` vs `pipelines/a-b/...`).
+    pipeline_keys = sorted(
+        (key for key in fs.known_keys if _PIPELINE_DOC_RE.match(key)), key=path_parts_key)
     if pipeline_keys:
         primary_key = pipeline_keys[0]
         slug = _PIPELINE_DOC_RE.match(primary_key).group(1)
@@ -726,7 +734,9 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
 
     connections: list[Any] = []
     endpoints: list[Any] = []
-    for key in sorted(k for k in fs.known_keys if _CONNECTION_DOC_RE.match(k)):
+    # Sorted by `path_parts_key`, matching `_VirtualFS.glob_json`'s ordering —
+    # see `pipeline_keys` above for why a plain string sort would diverge.
+    for key in sorted((k for k in fs.known_keys if _CONNECTION_DOC_RE.match(k)), key=path_parts_key):
         # `conn_slug` comes from the KEY alone, never the connection document's
         # own content, so a connection-scoped endpoint or type map is still
         # locatable and independently checked even when the connection itself
@@ -818,6 +828,22 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     return _envelope(findings)
 
 
+def _tree_root_signals(documents: DocumentSet) -> tuple[bool, bool]:
+    """Whether `documents`' own key *names* carry a connector-package root
+    (`connector.json`) or a pipeline-bundle root
+    (`pipelines/<slug>/pipeline.json`) — read from the normalized key set
+    alone, without materializing any document's content. Shared by
+    `validate_tree` (which root shape a document set forms) and
+    `_is_single_document` (whether it is a document set at all): a key that
+    happens to also be a single-document field name (`"connections"`, say)
+    must not fall through to single-document detection once one of these
+    tree roots is actually present."""
+    keys = {key for key in (_normalize_key(raw_key) for raw_key in documents) if key is not None}
+    is_connector = "connector.json" in keys
+    is_pipeline = any(_PIPELINE_DOC_RE.match(key) for key in keys)
+    return is_connector, is_pipeline
+
+
 def validate_tree(documents: DocumentSet) -> ValidationEnvelope:
     """Detect which package kind `documents` forms, and validate it.
 
@@ -830,16 +856,13 @@ def validate_tree(documents: DocumentSet) -> ValidationEnvelope:
     fallthrough shape the single-document dispatcher already uses when no
     registered kind claims a document (`unrecognized-document`).
 
-    The root-shape detectors themselves need only a document set's key
-    *names* — a root-level `connector.json`, a `pipelines/<slug>/pipeline.json`
-    — so shape detection reads the normalized key set alone, without
-    materializing any document's content; a document set matching exactly one
-    shape then delegates its whole normalization and validation to that
-    shape's own entry point rather than doing either twice.
+    The root-shape detectors (`_tree_root_signals`) need only a document set's
+    key *names*, so shape detection reads the normalized key set alone,
+    without materializing any document's content; a document set matching
+    exactly one shape then delegates its whole normalization and validation to
+    that shape's own entry point rather than doing either twice.
     """
-    keys = {key for key in (_normalize_key(raw_key) for raw_key in documents) if key is not None}
-    is_connector = "connector.json" in keys
-    is_pipeline = any(_PIPELINE_DOC_RE.match(key) for key in keys)
+    is_connector, is_pipeline = _tree_root_signals(documents)
     if is_connector and is_pipeline:
         _, findings = _normalize_documents(documents)
         findings.append(finding(
@@ -864,6 +887,23 @@ def validate_tree(documents: DocumentSet) -> ValidationEnvelope:
     return validate_pipeline_tree(documents)
 
 
+def _document_set_shaped_keys(target: dict) -> bool:
+    """Whether any of `target`'s own keys, once normalized, is shaped like a
+    `DocumentSet` member key — containing `/` or ending in `.json` — rather
+    than a single document's own field name. A document set is not restricted
+    to keys carrying an explicit tree root (`connector.json`,
+    `pipelines/<slug>/pipeline.json`; each already matches this broader test):
+    a sibling key like `connections/pg/connection.json` marks the whole
+    mapping as a document set even when another one of its keys happens to
+    coincide with a single-document field name (a root-level key literally
+    named `"connections"`, say)."""
+    return any(
+        "/" in key or key.endswith(".json")
+        for key in (_normalize_key(raw_key) for raw_key in target)
+        if key is not None
+    )
+
+
 def _is_single_document(target: Any) -> bool:
     """`target` is a single already-parsed document, as opposed to a
     `DocumentSet`, when it is not a mapping at all, or when some registered
@@ -871,9 +911,16 @@ def _is_single_document(target: Any) -> bool:
     once it is committed to treating something as a single document. A
     `DocumentSet`'s own top-level keys are relative-path-shaped strings, which
     match no registered kind's detector, so it falls through to being treated
-    as a document set rather than an unrecognized single document."""
+    as a document set rather than an unrecognized single document.
+
+    `_document_set_shaped_keys` is checked first, ahead of the kind registry:
+    once any key of `target` is itself path-shaped, `target` is a document set
+    regardless of what a field-shape detector would have said about it as a
+    whole."""
     if not isinstance(target, dict):
         return True
+    if _document_set_shaped_keys(target):
+        return False
     return any(detector(target) for detector, _ in _KIND_REGISTRY)
 
 
@@ -906,22 +953,34 @@ def resolve_type_map_gaps(
         direction: Literal["read", "write"],
         probes: list[str]) -> FindingsEnvelope:
     """The path-free form of the pipeline-builder plugin's private
-    `type_map_gaps.py`: given one or more type-map documents in precedence
-    order (`maps`, keyed and ordered the same way a `DocumentSet` is — the
-    first key whose map renders a probe wins) and a list of native-type
-    `probes` to resolve in `direction`, report what each probe resolved to.
+    `type_map_gaps.py`: given one or more type-map documents (`maps`, a
+    `DocumentSet` like any other) and a list of native-type `probes` to
+    resolve in `direction`, report every probe that no map in `maps` resolves.
 
     Never raises. Returns `{"findings"}` only — no `resolved`, no top-level
-    `direction`. Finding kinds sharing that list: `invalid-key`/`invalid-value`
-    (via `_key_and_value_findings`) and `duplicate-key`/`key-path-conflict` —
-    the same collection-level hazards `_normalize_documents` guards against,
-    since two raw keys normalizing to one map (or one key that is also a
-    directory prefix of another) could otherwise spread complementary rules
-    across both and make every probe appear covered when only one of them
-    could actually exist at runtime; `type-map-unreadable` (`fail`/`error`, no
-    `direction` — a map that is invalid JSON or not a list, a failure prior to
-    any direction-specific check); `invalid-type-map` (`fail`/`error`,
-    `direction` = this call's `direction` — a map that fails its
+    `direction`. Finding kinds sharing that list: `invalid-key`/`invalid-value`,
+    `duplicate-key`/`key-path-conflict`, and `internal-error` (a map's own
+    value crashed while being turned into text, e.g. bytes that are not valid
+    UTF-8) — the same collection-level hazards `_normalize_documents` guards
+    against, produced by delegating `maps`'s own key/value validation and
+    materialization to that same function rather than a second, hand-rolled
+    walk over it, since two raw keys normalizing to one map (or one key that
+    is also a directory prefix of another) could otherwise spread
+    complementary rules across both and make every probe appear covered when
+    only one of them could actually exist at runtime; `type-map-unreadable`
+    (`fail`/`error`, no `direction` — a map that failed to parse as JSON,
+    crashed for any other reason while parsing (a `RecursionError` from
+    pathologically deep nesting, say — isolated the same way
+    `_validate_tree_document`'s own parse step is), or parsed to something
+    other than a list, a failure prior to any direction-specific check);
+    `type-map-wrong-direction` (`fail`/`error`, `direction` = this call's
+    `direction` — a map whose canonical filename
+    (`type-map-read.json`/`type-map-write.json`) names the other direction:
+    both directions' exact-rule shapes share the same keys, so nothing in
+    `TypeMapReadDoc`/`TypeMapWriteDoc` model validation alone can catch a map
+    loaded under the wrong direction, mirroring `type_map_gaps.py`'s own
+    filename/direction check); `invalid-type-map` (`fail`/`error`, `direction`
+    = this call's `direction` — a map that fails its
     `TypeMapReadDoc`/`TypeMapWriteDoc` model, `analitiq.contracts.type_map`);
     `type-map-gap` (`informational`, no severity, no rule, `direction` = this
     call's `direction` — a probe none of `maps` resolved; never costs a
@@ -936,62 +995,56 @@ def resolve_type_map_gaps(
     the same findings list this function already returns means a caller
     checks one place for every way a probe run can come back incomplete.
 
-    A map's own key/value or read/parse defect (`invalid-key`, `invalid-value`,
-    `type-map-unreadable`, `invalid-type-map`) short-circuits the probe walk
-    below it: a probe reported as a gap against an incomplete set of maps
-    would be indistinguishable from a genuine gap against the maps the caller
-    actually intended, so this function reports the map defect(s) alone and
-    leaves every probe unjudged rather than guessing.
+    A map's own key/value, materialization, read/parse, or direction defect
+    (`invalid-key`, `invalid-value`, `internal-error`, `type-map-unreadable`,
+    `type-map-wrong-direction`, `invalid-type-map`) short-circuits the probe
+    walk below it: a probe
+    reported as a gap against an incomplete set of maps would be
+    indistinguishable from a genuine gap against the maps the caller actually
+    intended, so this function reports the map defect(s) alone and leaves
+    every probe unjudged rather than guessing.
 
-    `maps` is walked in sorted key order (by string form, so a raw key of any
-    type still sorts rather than crashing `_key_and_value_findings` never got
-    to grade), not the caller's own insertion order — the same precedent
-    `_normalize_documents` already sets — so this function's own findings
-    never depend on how the caller happened to build the mapping.
+    `maps` is walked in sorted key order, not the caller's own insertion
+    order — the same precedent `_normalize_documents` already sets — so this
+    function's own findings never depend on how the caller happened to build
+    the mapping.
     """
-    findings: list[dict] = []
+    fs, findings = _normalize_documents(maps)
     rendered_maps: list[list] = []
-    known_keys: set[str] = set()
-    for raw_key in sorted(maps, key=str):
-        value = maps[raw_key]
-        key, kv_findings = _key_and_value_findings(raw_key, value)
-        if key is None:
-            findings.extend(kv_findings)
+    load_bearing_filename = {_READ_MAP_FILENAME: "read", _WRITE_MAP_FILENAME: "write"}
+    for key in sorted(fs.known_keys, key=path_parts_key):
+        if not fs.materialized(key):
+            # Already reported by `_normalize_documents` (`internal-error`) or
+            # `_key_and_value_findings` (`invalid-value`) when it first tried
+            # to turn this key's value into usable content — a second finding
+            # here would only double-report the same crash.
             continue
-        if key in known_keys:
-            # Two raw keys normalizing to the same map (e.g. "a.json" and
-            # "./a.json") is the same undefined-document hazard
-            # `_normalize_documents` already guards: complementary rules
-            # spread across both could make every probe appear covered, when
-            # only one of the two could actually exist at runtime.
+        try:
+            parsed = fs.parsed(key)
+        except Exception as exc:  # noqa: BLE001 - isolate one map's parse crash
             findings.append(finding(
-                message_id="duplicate-key", kind="fail", path=key,
+                message_id="type-map-unreadable", kind="fail", path=key,
                 message=(
-                    f"{raw_key!r} normalizes to {key!r}, which another key in "
-                    "this document set already denotes; two keys for one path "
-                    "leave which map is actually resolved undefined.")))
+                    f"{key!r} is not readable as a JSON array of type-map rules "
+                    f"({type(exc).__name__}: {exc}).")))
             continue
-        known_keys.add(key)
-        if kv_findings:
-            # A map has no sibling documents that depend on its own key being
-            # discoverable the way a pipeline-tree connection slug does, so an
-            # invalid-value entry is reported and dropped the same as an
-            # invalid-key one — there is nothing here for a caller to still
-            # discover it for.
-            findings.extend(kv_findings)
-            continue
-        if isinstance(value, (dict, list)):
-            parsed: Any = value
-        else:
-            try:
-                text = value.decode("utf-8-sig") if isinstance(value, bytes) else value
-                parsed = json.loads(text)
-            except ValueError:
-                parsed = None
         if not isinstance(parsed, list):
             findings.append(finding(
                 message_id="type-map-unreadable", kind="fail", path=key,
                 message=f"{key!r} is not readable as a JSON array of type-map rules."))
+            continue
+        implied_direction = load_bearing_filename.get(key.rsplit("/", 1)[-1])
+        if implied_direction is not None and implied_direction != direction:
+            findings.append({
+                **finding(
+                    message_id="type-map-wrong-direction", kind="fail", path=key,
+                    message=(
+                        f"{key!r} is a {implied_direction}-direction map by its canonical "
+                        f"filename, but direction={direction!r} was requested; the read and "
+                        "write exact-rule shapes share the same keys, so model validation "
+                        "alone cannot catch a map loaded under the wrong direction.")),
+                "direction": direction,
+            })
             continue
         adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
         try:
@@ -1005,14 +1058,6 @@ def resolve_type_map_gaps(
             })
             continue
         rendered_maps.append(parsed)
-
-    for key in sorted(known_keys):
-        if any(other.startswith(f"{key}/") for other in known_keys):
-            findings.append(finding(
-                message_id="key-path-conflict", kind="fail", path=key,
-                message=(
-                    f"{key!r} is both a document key and a directory prefix of "
-                    "another key in this document set.")))
 
     if findings:
         return {"findings": findings}

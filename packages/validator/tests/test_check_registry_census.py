@@ -174,10 +174,13 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "JSON, let alone dispatched to a kind whose rules could apply"),
     ("analitiq.validator.document_set::_resolved_member", "internal-error"): (
         "a structural precondition rejected the entry before any rule-specific "
-        "check could run: `validate=False`'s own materialize/parse isolation, "
-        "for a connector-scoped endpoint file `check_coverage` never reaches, "
-        "found the materialized text could not even be parsed as JSON, let "
-        "alone graded for RULE-STRM-043"),
+        "check could run: `validate=False`'s own materialize/parse isolation on "
+        "an embedded connector's endpoint file, reached regardless of the "
+        "connector's kind — the only place a database/storage-kind connector's "
+        "endpoint-file parse crash is caught at all, since `check_coverage` "
+        "returns before reaching those kinds' endpoint files — found the "
+        "materialized text could not even be parsed as JSON, let alone graded "
+        "for RULE-STRM-043"),
     ("analitiq.validator.document_set::validate_connector_tree", "missing-connector-document"): (
         "a structural precondition on the document set's own shape — no root "
         "connector.json key at all — rejected before any rule-specific check "
@@ -194,18 +197,15 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "the published `validate_pipeline_bundle` does not re-check before "
         "reading the shapes it assumes — so a crash there is caught here "
         "rather than attributed to any one rule"),
-    ("analitiq.validator.document_set::resolve_type_map_gaps", "duplicate-key"): (
-        "a structural precondition on the map collection's own shape — two "
-        "distinct raw keys normalize to the same map — rejected before any "
-        "one map's rows could be checked"),
-    ("analitiq.validator.document_set::resolve_type_map_gaps", "key-path-conflict"): (
-        "a structural precondition on the map collection's own shape — one "
-        "key is simultaneously a map and a directory prefix of another — "
-        "rejected before any one map's rows could be checked"),
     ("analitiq.validator.document_set::resolve_type_map_gaps", "type-map-unreadable"): (
         "a structural precondition — the map is not readable as a JSON array "
         "at all — rejected before any rule-specific check of its rows could "
         "run"),
+    ("analitiq.validator.document_set::resolve_type_map_gaps", "type-map-wrong-direction"): (
+        "a structural precondition — the map's own canonical filename names "
+        "the other direction, which model validation cannot detect since both "
+        "directions' exact-rule shapes share the same keys — rejected before "
+        "any one probe's gap could be evaluated against it"),
     ("analitiq.validator.document_set::resolve_type_map_gaps", "invalid-type-map"): (
         "a structural precondition — the map does not satisfy its read/write "
         "model — rejected before any one probe's gap could be evaluated "
