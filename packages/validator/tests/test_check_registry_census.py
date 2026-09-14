@@ -148,6 +148,47 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator.pipelines::validate_pipeline_bundle", "bundle-missing-pipeline-document"): (
         "rejects before any referential check the registry binds could even "
         "begin"),
+    # A document set's keys are how a caller addresses the request, not content
+    # any record governs; a key these reject names a document that is never
+    # read, so no rule was evaluated against it either.
+    ("analitiq.validator.document_set::_normalized_documents", "invalid-key"): (
+        "a structural precondition on the request: the key cannot name a "
+        "document, so the value under it is never read"),
+    ("analitiq.validator.document_set::_normalized_documents", "normalized-key-collision"): (
+        "a structural precondition on the request: which document the "
+        "collided key names is undecidable, so neither is read"),
+    ("analitiq.validator.document_set::_normalized_documents", "key-path-conflict"): (
+        "a structural precondition on the request: the key cannot exist "
+        "alongside the document it nests under, so it is never read"),
+    ("analitiq.validator.document_set::_type_map_gap_mode", "invalid-direction"): (
+        "a structural precondition on the call's own arguments, rejected "
+        "before any document is read"),
+    ("analitiq.validator.document_set::_type_map_gap_mode", "invalid-probes"): (
+        "a structural precondition on the call's own arguments, rejected "
+        "before any document is read"),
+    ("analitiq.validator.document_set::_type_map_gap_mode", "missing-type-map"): (
+        "a structural precondition: no type-map document was supplied to "
+        "resolve anything against"),
+    ("analitiq.validator.document_set::_type_map_gap_mode", "direction-filename-mismatch"): (
+        "a structural precondition on using the map as a rule source: its "
+        "load-bearing filename contradicts the declared direction, checked "
+        "before its content is read"),
+    ("analitiq.validator.document_set::_map_rules", "invalid-value"): (
+        "a value carrying no readable document content precedes any rule "
+        "evaluation of that content"),
+    ("analitiq.validator.document_set::_map_rules", "type-map-unreadable"): (
+        "a parse failure, or a document that is not a rule array at all, "
+        "precedes any direction-specific check of its rules"),
+    ("analitiq.validator.document_set::_crashed", "internal-error"): (
+        "a crash could have happened on behalf of any rule the work it "
+        "interrupted would have graded, or none, so it names none — the same "
+        "reason `_run_guarded` passes no rule through"),
+    ("analitiq.validator.document_set::_type_map_gap_mode", "gap-resolution-skipped"): (
+        "the gap question went undecided because a map was lost, so no rule "
+        "about what the maps cover was ever reached"),
+    ("analitiq.validator.document_set::_type_map_gap_mode", "type-map-gap"): (
+        "informational: an unresolved probe is a fact about what the supplied "
+        "maps cover, and no rule obliges a map to cover any given probe"),
 }
 
 

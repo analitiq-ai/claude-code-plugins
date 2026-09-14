@@ -1,4 +1,4 @@
-"""The path-free document-set API — types and signatures, not yet implemented.
+"""The path-free document-set API.
 
 `analitiq.validator._core.validate_document` and `analitiq.validator.connectors
 .check_coverage` both read real files off disk: `check_coverage` walks a
@@ -12,18 +12,25 @@ directory to read it from — cannot use either route.
 
 This module fixes the contract such a consumer calls instead: a `DocumentSet`
 of already-loaded content, keyed by the relative path each document would
-have occupied on disk, in and out. Every function below raises
-`NotImplementedError` — the behaviour they must satisfy is fixed by
-`packages/validator/tests/test_document_set.py`, whose fixture cases are
-`xfail` until an implementation PR replaces these bodies and removes the
-markers one case at a time.
+have occupied on disk, in and out. `validate_doc`'s type-map gap-resolution
+mode resolves probes; `validate_connector_tree`, `validate_pipeline_tree` and
+`validate_doc`'s ordinary document mode raise `NotImplementedError`. The
+behaviour every route must satisfy is fixed by
+`packages/validator/tests/test_document_set.py`, whose cases for a route that
+raises carry an `xfail` marker — `strict`, so a marker cannot outlive the body
+it stands in for.
 """
 from __future__ import annotations
 
+import codecs
+import json
+import posixpath
 from typing import Any, Literal, TypedDict, Union
 
-#: The value half of a `DocumentSet` entry: text, raw bytes (decoded as UTF-8
-#: with a BOM stripped if present — no encoding-guessing), or a value already
+from ._core import _passed, finding, finding_costs_a_pass
+
+#: The value half of a `DocumentSet` entry: text, raw bytes (decoded as UTF-8,
+#: with a BOM stripped from either text form — no encoding-guessing), or a value already
 #: parsed into the `dict`/`list` shape `analitiq.validator.validate_document`
 #: itself expects for `doc`. A value that is none of these is reported as an
 #: `invalid-value` finding on its own key, never raised.
@@ -31,13 +38,14 @@ DocumentSetValue = Union[str, bytes, dict, list]
 
 #: A path-free bundle of documents: POSIX-relative-path-shaped string keys
 #: (e.g. `"connections/foo/connection.json"`, `"endpoints/widgets.json"`) mapped
-#: to already-loaded content. A leading `./` is normalized away; an absolute
-#: key, a key containing `..`, or the empty string is reported as an
+#: to already-loaded content. A key is canonicalized the way a relative POSIX
+#: path is, so redundant `.` and `/` spellings of one path are one key; an
+#: absolute key, a key that escapes the set, a key naming the set root rather
+#: than a document in it, and the empty string are reported as an
 #: `invalid-key` finding rather than raised; two keys where one names both a
 #: document and a directory prefix of another (e.g. `"a/b.json"` alongside
-#: `"a/b.json/c.json"`) are reported as `key-path-conflict` instead; two
-#: distinct raw keys that normalize to the same canonical key — the collision
-#: leading-`./`-stripping can itself create, e.g. `"connector.json"` alongside
+#: `"a/b.json/c.json"`) are reported as `key-path-conflict` instead; distinct
+#: raw keys that canonicalize together — e.g. `"connector.json"` alongside
 #: `"./connector.json"` — are reported as `normalized-key-collision` rather
 #: than one silently overwriting the other by iteration order. Every
 #: function below that takes or produces a document set uses this one shape,
@@ -122,6 +130,162 @@ class ValidationEnvelope(TypedDict):
     findings: list[Finding]
 
 
+# ---------------------------------------------------------------------------
+# Shared `DocumentSet` handling — one definition of how a key is canonicalized
+# and how a value is decoded, so the routes that take a `DocumentSet` cannot
+# answer the same question differently.
+# ---------------------------------------------------------------------------
+
+#: A UTF-8 byte-order mark, decoded — derived from the `codecs` constant rather
+#: than typed out, since the character itself is invisible in a source file and
+#: survives no editor that normalizes one. Stripped from the leading edge of
+#: decoded text before it is parsed; `json` rejects it as a stray character.
+_BOM = codecs.BOM_UTF8.decode("utf-8")
+
+
+def _envelope(findings: list[Finding]) -> ValidationEnvelope:
+    """Wrap a findings list in the envelope shape this module's routes return,
+    taking the verdict from `_core._passed` — the same reduction the path-based
+    route answers "did this document pass" with, rather than a second predicate
+    beside it."""
+    return {"passed": _passed(findings), "findings": list(findings)}
+
+
+def _directed(f: Finding, direction: str) -> Finding:
+    """Tag a finding with the direction it was produced under — a declared
+    `Finding` key `finding()` itself never sets."""
+    return {**f, "direction": direction}
+
+
+def _canonical_key(raw: str) -> str:
+    """The one spelling of the relative path `raw` names, via `posixpath`
+    rather than a strip of its own: `"./a.json"`, `"././a.json"` and
+    `"a/./b.json"` name the documents `"a.json"` and `"a/b.json"`, and a
+    hand-written canonicalizer that misses one of those spellings lets two keys
+    for one document both survive — which is the collision
+    `normalized-key-collision` exists to report."""
+    return posixpath.normpath(raw)
+
+
+def _key_rejection(raw: object) -> str | None:
+    """Why `raw` cannot name a document in a `DocumentSet`, or `None` when it
+    can. A key stands in for the relative path the document would occupy on
+    disk, so it must be a non-empty relative string naming a document inside
+    the set.
+
+    Every test is applied to the canonical form, not the raw key. Deciding one
+    of them on each is how a key gets past all of them: `".//a.json"` does not
+    begin with `"/"`, and canonicalizes to `"/a.json"`, which does.
+    """
+    if not isinstance(raw, str) or not raw:
+        return "a document set key must be a non-empty string"
+    key = _canonical_key(raw)
+    if key.startswith("/"):
+        return "a document set key is relative, never absolute"
+    if key == ".." or key.startswith("../"):
+        return "a document set key names a document inside the set, and this one leaves it"
+    if key == ".":
+        return "a document set key names a document, not the root of the set"
+    return None
+
+
+def _normalized_documents(documents: dict) -> tuple[dict[str, Any], list[Finding]]:
+    """Canonicalize a `DocumentSet`'s keys, reporting every key it cannot use
+    rather than raising on one.
+
+    Returns the usable entries — canonical key to raw value, in the input's own
+    iteration order, which is what carries precedence for a route that has any
+    — alongside the findings for the keys left out. A key that cannot name a
+    document at all is `invalid-key`, reported against the raw key the caller
+    wrote rather than a canonical form they would not recognize. Distinct raw
+    keys that canonicalize together are `normalized-key-collision`: which of
+    them applies could only be settled by iteration order, so neither is used.
+    A key nested under another key's own document is `key-path-conflict` —
+    no filesystem holds both, and it is the nested key that cannot exist, so
+    that is the one dropped and named.
+    """
+    findings: list[Finding] = []
+    grouped: dict[str, list[tuple[str, Any]]] = {}
+    for raw, value in documents.items():
+        rejection = _key_rejection(raw)
+        if rejection is not None:
+            findings.append(finding(
+                message_id="invalid-key", kind="fail",
+                path=raw if isinstance(raw, str) else repr(raw),
+                message=f"{raw!r} cannot be used as a document set key: {rejection}."))
+            continue
+        grouped.setdefault(_canonical_key(raw), []).append((raw, value))
+
+    usable: dict[str, Any] = {}
+    for key, entries in grouped.items():
+        if len(entries) > 1:
+            spellings = ", ".join(repr(raw) for raw, _ in entries)
+            findings.append(finding(
+                message_id="normalized-key-collision", kind="fail", path=key,
+                message=(f"{spellings} all name the document {key!r}; which of them applies "
+                         "would be decided by iteration order.")))
+            continue
+        usable[key] = entries[0][1]
+
+    # Sorted, so which conflict is reported first does not follow the caller's
+    # iteration order. A prefix always sorts before the keys under it, so a
+    # parent is never deleted before the keys that consult it.
+    for key in sorted(usable):
+        segments = key.split("/")
+        parent = next(
+            (p for p in ("/".join(segments[:i]) for i in reversed(range(1, len(segments))))
+             if p in usable),
+            None)
+        if parent is not None:
+            findings.append(finding(
+                message_id="key-path-conflict", kind="fail", path=key,
+                message=(f"{key!r} is nested under {parent!r}, which this set also carries "
+                         "as a document of its own.")))
+            del usable[key]
+    return usable, findings
+
+
+def _document_content(value: Any) -> tuple[Any, str | None, str]:
+    """Decode one `DocumentSet` value into the parsed shape a validator takes.
+
+    A `dict`/`list` is already parsed and passes through untouched; `str` and
+    `bytes` are JSON-parsed, `bytes` decoded as UTF-8 with no encoding-guessing,
+    and a leading BOM stripped from either text form — a caller that read a
+    BOM-bearing file with `str` semantics hands over the mark just as one
+    handing over the raw bytes does.
+
+    Returns `(content, None, "")`, or `(None, reason, detail)` where `reason` is
+    `"invalid-type"` for a value of a type this contract does not hold,
+    `"not-utf8"` for bytes that are not UTF-8, and `"unparseable"` for text that
+    is not JSON. `detail` is what the underlying failure said — the decode
+    position, the JSON syntax error and its line and column — which the caller
+    interpolates, because a type map reported only as "unreadable" leaves its
+    author bisecting a file the parser could already point into.
+
+    The reason is a code rather than a finding: what an unreadable value means
+    is each route's own vocabulary, and this function is shared by all of them.
+    """
+    if isinstance(value, (dict, list)):
+        return value, None, ""
+    if isinstance(value, bytes):
+        try:
+            text = value.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            return None, "not-utf8", str(exc)
+    elif isinstance(value, str):
+        text = value
+    else:
+        return None, "invalid-type", type(value).__name__
+    try:
+        return json.loads(text.removeprefix(_BOM)), None, ""
+    except json.JSONDecodeError as exc:
+        # Narrower than `ValueError` deliberately: `json.loads` also raises a
+        # bare `ValueError` for an interpreter limit (an integer literal past
+        # `int_max_str_digits`), which is not a malformed document and must not
+        # be reported as one. It reaches the caller's crash guard instead.
+        return None, "unparseable", str(exc)
+
+
 def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
     """Validate a connector package supplied as an in-memory `DocumentSet`
     instead of files on disk: the connector document, its sibling type maps,
@@ -148,7 +312,7 @@ def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
     """
     raise NotImplementedError(
-        "validate_connector_tree is not yet implemented — see "
+        "validate_connector_tree is not implemented — see "
         "packages/validator/tests/test_document_set.py for the fixed contract.")
 
 
@@ -206,7 +370,7 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
     """
     raise NotImplementedError(
-        "validate_pipeline_tree is not yet implemented — see "
+        "validate_pipeline_tree is not implemented — see "
         "packages/validator/tests/test_document_set.py for the fixed contract.")
 
 
@@ -285,9 +449,9 @@ def validate_doc(
     omitted `probes` argument selects ordinary mode instead of ever reaching
     this check — or a list holding anything other than a `str`, gets a single
     `invalid-probes` finding (`fail`/`error`, no `direction` field), checked
-    before `doc` is touched — mirroring the same check `type_map_gaps.py`'s
-    own CLI argument parsing runs before it ever resolves a probe.
-    `entity`/`schema_url` play no part in this mode.
+    before `doc` is touched. `type_map_gaps.py` rejects the same shape, also
+    before it resolves anything, though it reads its probes from stdin rather
+    than from an argument. `entity`/`schema_url` play no part in this mode.
 
     A `doc` with no key at all is rejected too, before any probe is resolved:
     `type_map_gaps.py`'s own `--map` is `required=True`, and an empty `doc`
@@ -307,62 +471,241 @@ def validate_doc(
     `direction` = this call's `direction` — a map keyed under a load-bearing
     filename for the *other* direction, present under a call `direction` that
     contradicts it; checked before that map's content is read, and that map
-    excluded from resolution the same way `type-map-unreadable` below is). A
-    key's *load-bearing filename* is its final `/`-separated segment (a bare
-    key with no `/` is its own segment — this mode's own fixture keys, all
-    top-level, are), matched against `analitiq.validator.connectors`'s
-    `_READ_MAP_FILENAME`/`_WRITE_MAP_FILENAME`
-    (`"type-map-read.json"`/`"type-map-write.json"`) — the same two constants
-    `_validate_type_map` there already holds a sibling file's direction to,
-    so this mode names them rather than retyping the filenames as a second,
-    independently-spelled pair. A key whose final segment is neither constant
-    carries no such expectation and cannot mismatch.
+    not used to resolve anything). A key's *load-bearing filename* is its
+    final `/`-separated segment, so a scoped key like
+    `"connections/foo/type-map-read.json"` is recognized as the read map it is
+    rather than passing unchecked. It is matched against the filename
+    `analitiq.validator.connectors`'s `_DIRECTIONS` records for each
+    direction, which is where the filenames themselves live — this mode names
+    that table rather than spelling either filename again. A key whose final
+    segment is no direction's filename carries no such expectation and cannot
+    mismatch.
 
-    This mode's own check diverges from `_validate_type_map`'s in one
-    respect, deliberately: `_validate_type_map` treats a name/direction
-    mismatch as ambiguity, not error — it defaults to `"read"` and reports an
-    informational `type-map-direction-defaulted` finding, never failing the
-    document. This mode instead mirrors `type_map_gaps.py`'s own CLI, whose
-    `load_bearing` check hard-fails the same mismatch before any map is even
-    read. The two are answering different questions:
-    `_validate_type_map` asks "what direction is this lone sibling file most
-    plausibly in", with no caller-declared direction to check it against;
-    this mode asks "does this caller-declared `direction` hold for every map
-    it was handed" — `type_map_gaps.py`'s own `--direction` question, which
-    has a declared direction to contradict and so has no ambiguous case to
-    default.
+    `_validate_type_map` in that module answers a different question and so
+    reaches a different verdict: it has no caller-declared direction, only a
+    lone sibling file, so it asks which direction the file is most plausibly
+    in and reports an informational `type-map-direction-defaulted` when the
+    filename settles nothing. This mode has a declared `direction` for the
+    filename to contradict, which is a mismatch rather than an ambiguity —
+    the same question `type_map_gaps.py`'s `--direction` asks, and it too
+    refuses the map rather than guessing.
 
-    `type-map-unreadable` (`fail`/`error`, no `direction` — a map that is
-    invalid JSON or not a list, a failure prior to any direction-specific
-    check); `invalid-type-map` (`fail`/`error`, `direction` = this call's
-    `direction` — a map that fails its type-map model); `type-map-gap`
-    (`informational`, no severity, no rule, `direction` = this call's
-    `direction` — a probe none of `doc` resolved; never costs a pass);
-    `internal-error` (`fail`/`error`, no `direction` — one map's resolution
-    crashed; isolated to that map's key the same way
-    `validate_connector_tree`'s and `validate_pipeline_tree`'s own per-key
-    crash isolation works, so one bad map does not stop the rest of `doc`
-    from being resolved). A run in which every probe resolved reports a
+    `type-map-unreadable` (`fail`/`error`, no `direction`) — a map whose text
+    is not JSON, or whose content is not an array of rules. The two are
+    distinct messages: the parser's own complaint, position included, for the
+    first, and what was found instead for the second. A map that parses into
+    an array is then validated by `connectors._type_map_findings`, the
+    definition every other type-map check in this package already goes
+    through, so a map's model errors arrive here attributed to the rule
+    records that claim them rather than flattened into one finding of this
+    mode's own. Those findings keep their own `path` within the document,
+    prefixed by the key the map was supplied under, since more than one map
+    can be in hand. A map whose model findings cost a pass contributes no
+    rules; one whose findings are all advisory still does.
+
+    `type-map-gap` (`informational`, no severity, no rule, `direction` = this
+    call's `direction`, `path` the empty string — a probe nothing in `doc`
+    resolved; never costs a pass). A gap is a fact about a probe against the
+    whole supplied set rather than about any one map, so there is no key to
+    name: attributing it to one would implicate a map doing nothing wrong.
+    The probe itself is named in the message.
+
+    Gaps are withheld when a map that could have carried rules for this
+    `direction` was not usable — a rejected or colliding key, an unreadable
+    map, one whose model errors cost a pass, a crash. A probe called
+    unresolved against what is left may be covered by exactly the map that
+    went missing, and `type_map_gaps.py`'s `_load_rules` raises for that
+    reason: a false gap is indistinguishable from a real one and sends an
+    author to add a rule their map already had. A
+    `direction-filename-mismatch` is deliberately not such a case — a write
+    map cannot resolve a read probe, so refusing it removes nothing a probe
+    could have matched, and a gap found without it is real.
+
+    Where gaps are withheld, a `gap-resolution-skipped` finding
+    (`notApplicable`, no severity, no rule, `path` the empty string) says so.
+    Without it the envelope would be indistinguishable from a run that
+    resolved every probe, since an absence of `type-map-gap` findings is what
+    full coverage looks like too, and `notApplicable` is this package's
+    vocabulary for a question nothing decided.
+
+    `internal-error` (`notApplicable`, no `severity`, no `rule` — something
+    this mode did crashed). A crash settles nothing about whether the map or
+    probe it was reading is valid, which is what `notApplicable` reports and
+    what `fail` would misstate; `analitiq.validator._core`'s `_run_guarded`
+    classifies a crashing check the same way and for the same reason. Naming
+    no rule, it still costs a pass. It is emitted from three places, each
+    carrying what it can name: canonicalizing the keys (`path` empty),
+    reading one map (`path` that map's key, so the rest of `doc` is still
+    read), and resolving one probe (`path` empty, `direction` set, so the
+    remaining probes are still resolved). A crash reading a map means a map
+    was lost, so it withholds gaps the way any other lost map does.
+
+    Every map `doc` carries that this `direction` admits is read and checked
+    whether or not a probe needed it, matching `type_map_gaps.py`'s
+    `_load_rules`, which runs over every `--map` before a single probe
+    resolves. So a malformed map is reported even where an earlier map
+    already covers every probe, and a call whose `probes` list is empty is
+    still a check of the maps rather than a trivially-passing no-op. A run
+    whose maps are all usable and whose every probe resolved reports a
     `ValidationEnvelope` with `passed: True` and an empty `findings` list —
     this mode reports through the same envelope shape as every other call to
     this function, never a bare `{"findings"}` shape with no `passed` key.
-    This mode never raises: every failure above, `internal-error` included,
-    is a reported finding, the same guarantee
-    `validate_connector_tree`'s and `validate_pipeline_tree`'s own per-key
-    isolation make for a `DocumentSet`.
 
-    Reporting rather than raising is itself a deliberate divergence from
-    `type_map_gaps.py`'s own `_load_rules`, which raises `ValueError` on
-    `type-map-unreadable`'s and `invalid-type-map`'s two conditions (an
-    unreadable map, a map failing its model): a path-free caller has no
-    filename to name in a raised message the way the plugin's CLI does, and
-    folding both conditions into the same findings list this function already
-    returns means a caller checks one place for every way a probe run can
-    come back incomplete.
+    Once this function is entered, every failure it reaches is a reported
+    finding rather than an exception — `internal-error` is the last-resort
+    form of that. The guarantee does not extend to importing this package: a
+    missing `analitiq-contract-models` is reported by
+    `analitiq.validator.connectors` at import time, before any call here.
 
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
+    Reporting rather than raising is a deliberate divergence from
+    `type_map_gaps.py`'s `_load_rules`, which raises `ValueError` on an
+    unreadable or model-invalid map: a path-free caller has no filename to
+    name in a raised message the way the plugin's CLI does, and folding those
+    conditions into the findings list this function already returns means a
+    caller checks one place for every way a probe run can come back
+    incomplete.
+
+    Ordinary document mode raises `NotImplementedError`; gap-resolution mode
+    is implemented. Both modes' behaviour is fixed by
+    `packages/validator/tests/test_document_set.py`.
     """
-    raise NotImplementedError(
-        "validate_doc is not yet implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
+    if probes is _OMITTED:
+        raise NotImplementedError(
+            "validate_doc's ordinary document mode is not implemented — see "
+            "packages/validator/tests/test_document_set.py for the fixed contract.")
+    return _type_map_gap_mode(doc, direction, probes)
+
+
+def _crashed(doing: str, path: str, exc: BaseException) -> Finding:
+    """The one shape a crash inside this module reports as."""
+    return finding(
+        message_id="internal-error", kind="notApplicable", path=path,
+        message=(f"{doing} crashed unexpectedly ({type(exc).__name__}: {exc}); "
+                 "this is a validator bug — please report."))
+
+
+def _at_key(f: Finding, key: str) -> Finding:
+    """Re-path a finding raised about a document's own content onto the key
+    that document was supplied under, so a set holding several maps says which
+    one a model error came from."""
+    within = f.get("path", "")
+    return {**f, "path": key if within in ("", "/") else f"{key}{within}"}
+
+
+def _map_rules(key: str, value: Any, direction: str) -> tuple[list | None, list[Finding]]:
+    """The rules one supplied map contributes, or `None` where it contributes
+    none, alongside everything to report about it."""
+    from .connectors import _type_map_findings
+
+    content, unread, detail = _document_content(value)
+    if unread in ("invalid-type", "not-utf8"):
+        return None, [finding(
+            message_id="invalid-value", kind="fail", path=key,
+            message=f"{key!r} holds no readable document content: {detail}.")]
+    if unread == "unparseable":
+        return None, [finding(
+            message_id="type-map-unreadable", kind="fail", path=key,
+            message=f"{key!r} is not JSON: {detail}.")]
+    if not isinstance(content, list):
+        return None, [finding(
+            message_id="type-map-unreadable", kind="fail", path=key,
+            message=(f"{key!r} is not an array of type-map rules; it holds a "
+                     f"{type(content).__name__}."))]
+    model = [_at_key(f, key) for f in _type_map_findings(content, direction)]
+    if any(finding_costs_a_pass(f) for f in model):
+        return None, model
+    return content, model
+
+
+def _type_map_gap_mode(doc: Any, direction: Any, probes: Any) -> ValidationEnvelope:
+    """`validate_doc`'s type-map gap-resolution mode — see its docstring for
+    the contract this implements.
+
+    The resolution itself is whatever `connectors._DIRECTIONS` records for the
+    direction, which is what `type_map_gaps.py`'s `resolve()` calls too, so a
+    probe resolves here exactly as it does for the plugin CLI rather than
+    through a second matcher beside it. What this adds over that CLI is
+    reporting in place of raising, and one envelope in place of its
+    `{"direction", "resolved", "gaps"}` result.
+    """
+    from .connectors import _DIRECTIONS
+
+    if direction not in _DIRECTIONS:
+        return _envelope([finding(
+            message_id="invalid-direction", kind="fail", path="",
+            message=("type-map gap resolution needs a direction of 'read' or 'write'; "
+                     f"got {direction!r}."))])
+    if not isinstance(probes, list) or not all(isinstance(p, str) for p in probes):
+        return _envelope([finding(
+            message_id="invalid-probes", kind="fail", path="",
+            message=f"probes must be a list of native-type strings; got {probes!r}.")])
+    if not isinstance(doc, dict):
+        return _envelope([finding(
+            message_id="missing-type-map", kind="fail", path="",
+            message=("type-map gap resolution reads its maps from the keys of `doc`, "
+                     f"which must be a dict; got a {type(doc).__name__}."))])
+    if not doc:
+        return _envelope([finding(
+            message_id="missing-type-map", kind="fail", path="",
+            message=("type-map gap resolution needs at least one type-map document "
+                     "keyed in `doc`; none was supplied."))])
+
+    resolve = _DIRECTIONS[direction].resolve
+    declared_by_filename = {ops.filename: name for name, ops in _DIRECTIONS.items()}
+
+    try:
+        maps, findings = _normalized_documents(doc)
+    except Exception as exc:  # noqa: BLE001 - the caller's own mapping and keys
+        return _envelope([_crashed("canonicalizing the document set's keys", "", exc)])
+
+    # A key this set could not use may have been the very map a probe needs,
+    # and nothing read it, so nothing can say otherwise.
+    lost = bool(findings)
+
+    rules: list = []
+    for key, value in maps.items():
+        declared = declared_by_filename.get(key.rsplit("/", 1)[-1])
+        if declared is not None and declared != direction:
+            findings.append(_directed(finding(
+                message_id="direction-filename-mismatch", kind="fail", path=key,
+                message=(f"{key!r} is a {declared} map by its load-bearing filename, but "
+                         f"this call resolves in the {direction} direction; it is not "
+                         "used to resolve any probe.")), direction))
+            continue
+        try:
+            contributed, reported = _map_rules(key, value, direction)
+        except Exception as exc:  # noqa: BLE001 - last-resort per-map guard
+            findings.append(_crashed(f"reading {key!r}", key, exc))
+            lost = True
+            continue
+        findings.extend(reported)
+        if contributed is None:
+            lost = True
+        else:
+            rules.extend(contributed)
+
+    if lost:
+        findings.append(finding(
+            message_id="gap-resolution-skipped", kind="notApplicable", path="",
+            message=("no probe was resolved: a map this set was handed could not be used, "
+                     "and a probe unresolved without it may be one that map covers.")))
+        return _envelope(findings)
+
+    # Deduped so a probe asked for twice is answered once; the CLI dedupes its
+    # own probe list the same way.
+    for probe in dict.fromkeys(probes):
+        try:
+            # Guarded separately from the map loop because this is the one step
+            # validating the maps did not already perform: running a matcher.
+            # Every value the matcher reads was read while the map was checked,
+            # so a malformed map crashes there instead — what is left here is
+            # the matching itself, a regex run against a probe.
+            rendered = resolve(probe, rules)
+        except Exception as exc:  # noqa: BLE001 - last-resort per-probe guard
+            findings.append(_directed(_crashed(f"resolving probe {probe!r}", "", exc), direction))
+            continue
+        if rendered is None:
+            findings.append(_directed(finding(
+                message_id="type-map-gap", kind="informational", path="",
+                message=f"no supplied {direction} map resolves {probe!r}."), direction))
+    return _envelope(findings)

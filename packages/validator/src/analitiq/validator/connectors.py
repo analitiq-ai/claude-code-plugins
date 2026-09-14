@@ -46,7 +46,7 @@ import re
 import reprlib
 import sys
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterator, NamedTuple
 
 from ._core import (
     contract_model_domain,
@@ -992,8 +992,7 @@ def _type_map_findings(doc: Any, direction: str) -> list[dict]:
     warnings + (write-vocabulary coverage on the write direction). The single
     definition used everywhere a type-map is checked — standalone, or as a
     connector's sibling."""
-    adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
-    findings = _model_findings(doc, adapter)
+    findings = _model_findings(doc, _DIRECTIONS[direction].adapter)
     findings.extend(_type_map_rule_warnings(doc, direction))
     if direction == "write" and isinstance(doc, list):
         findings.extend(_write_vocabulary_findings(doc))
@@ -1188,6 +1187,29 @@ _API_ENDPOINT_ADAPTER = TypeAdapter(ApiEndpointDoc)
 _DATABASE_ENDPOINT_ADAPTER = TypeAdapter(DatabaseEndpointDoc)
 _READ_MAP_ADAPTER = TypeAdapter(TypeMapReadDoc)
 _WRITE_MAP_ADAPTER = TypeAdapter(TypeMapWriteDoc)
+
+
+class _DirectionOps(NamedTuple):
+    """What one type-map direction implies."""
+
+    filename: str
+    adapter: TypeAdapter
+    resolve: Callable[[str, list], str | None]
+
+
+#: Everything a type-map direction decides, keyed by the direction — the
+#: filename a map is load-bearing under, the model its content is checked
+#: against, and how a probe renders through its rules. Callers ask the
+#: direction what it implies instead of re-deriving each implication from a
+#: `direction == "read"` test of their own, so a third direction, or a change
+#: to what one of them implies, lands here rather than at every site that
+#: happens to branch on one.
+_DIRECTIONS: dict[str, _DirectionOps] = {
+    "read": _DirectionOps(_READ_MAP_FILENAME, _READ_MAP_ADAPTER, _render_arrow_type),
+    "write": _DirectionOps(
+        _WRITE_MAP_FILENAME, _WRITE_MAP_ADAPTER,
+        lambda probe, rules: _first_match_render(probe, rules, "arrow_type", "native_type")),
+}
 
 
 # ---------------------------------------------------------------------------

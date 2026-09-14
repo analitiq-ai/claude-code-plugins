@@ -1,10 +1,12 @@
 """Fixture corpus for the path-free document-set API (`analitiq.validator
-.document_set`) — every case here is `xfail(strict=True)` because every
-function it exercises currently raises `NotImplementedError`. An
-implementation PR turns each case from `xfail` to passing by replacing the
-stub body it exercises and removing that case's marker; `strict=True` means a
-case that starts passing while its marker is still on it fails the suite,
-so a marker can never survive its own fix by accident.
+.document_set`). `validate_doc`'s type-map gap-resolution mode is implemented,
+so its cases run for real; the cases for a route that raises
+`NotImplementedError` — both package routes and `validate_doc`'s ordinary
+document mode — carry `xfail(strict=True, raises=NotImplementedError)`.
+Implementing one of those turns its cases from `xfail` to passing by replacing
+the stub body and removing that case's marker; `strict=True` means a case that
+starts passing while its marker is still on it fails the suite, so a marker can
+never survive its own fix by accident.
 
 Two corpora already committed for the path-based routes are reused here
 rather than re-authored: `packages/validator/tests/corpus/` (a connector
@@ -37,7 +39,7 @@ if str(_PLUGIN_SCRIPTS) not in sys.path:
 def _xfail(fn_name: str):
     return pytest.mark.xfail(
         strict=True, raises=NotImplementedError,
-        reason=f"{fn_name} is not yet implemented (analitiq.validator.document_set)")
+        reason=f"{fn_name} is not implemented (analitiq.validator.document_set)")
 
 
 # ---------------------------------------------------------------------------
@@ -358,31 +360,43 @@ def _write_tree(root: Path, documents: dict) -> None:
 # uses.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_doc")
+#: A minimal valid read map, covering "STRING" and nothing else — so "BIGINT"
+#: is a probe it genuinely does not resolve.
+_READ_RULES = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+
+
 def test_gap_resolution_reports_unreadable_map_without_raising(validator):
     result = validator.validate_doc(
         doc={"type-map-read.json": "not json"}, direction="read", probes=["STRING"])
     assert result["passed"] is False
-    assert [f["message_id"] for f in result["findings"]] == ["type-map-unreadable"]
+    assert [f["message_id"] for f in result["findings"]] == [
+        "type-map-unreadable", "gap-resolution-skipped"]
     assert result["findings"][0]["kind"] == "fail"
     assert result["findings"][0]["severity"] == "error"
     assert "direction" not in result["findings"][0]
+    # The parser already knows where the text stopped being JSON; a map reported
+    # only as "unreadable" leaves its author bisecting a file to find out.
+    assert "line 1" in result["findings"][0]["message"], result["findings"][0]
 
 
-@_xfail("validate_doc")
-def test_gap_resolution_reports_invalid_map_with_its_direction(validator):
-    # Fails TypeMapReadDoc: a list, but of a rule object missing its `match`
-    # discriminator (and its arrow_type).
+def test_gap_resolution_reports_a_model_error_against_the_rule_that_claims_it(validator):
+    # A map that parses but fails its model is checked by the same
+    # `_type_map_findings` every other type-map check in the package goes
+    # through, so the verdict arrives naming the record it violates, at the
+    # position inside the map that violates it — not flattened into one
+    # ruleless finding of this mode's own.
+    rule = {"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}
     result = validator.validate_doc(
-        doc={"type-map-read.json": [{"native_type": "STRING"}]}, direction="read", probes=["STRING"])
+        doc={"type-map.json": [rule]}, direction="write", probes=["Utf8"])
     assert result["passed"] is False
-    invalid = [f for f in result["findings"] if f["message_id"] == "invalid-type-map"]
-    assert len(invalid) == 1, result["findings"]
-    assert invalid[0]["kind"] == "fail" and invalid[0]["severity"] == "error"
-    assert invalid[0]["direction"] == "read"
+    malformed = [f for f in result["findings"] if f.get("rule") == "RULE-TMAP-008"]
+    assert len(malformed) == 1, result["findings"]
+    assert malformed[0]["severity"] == "error"
+    # Re-pathed onto the key it was supplied under: more than one map can be in
+    # hand, and the model's own path alone would not say which.
+    assert malformed[0]["path"] == "type-map.json/0/exact"
 
 
-@_xfail("validate_doc")
 def test_gap_resolution_direction_selects_the_matching_model(validator):
     # Valid under TypeMapReadDoc (native_type is a bare matcher, unvalidated for
     # placeholders) but invalid under TypeMapWriteDoc (native_type is the write
@@ -391,15 +405,24 @@ def test_gap_resolution_direction_selects_the_matching_model(validator):
     rule = {"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}
     read_result = validator.validate_doc(
         doc={"type-map.json": [rule]}, direction="read", probes=["VARCHAR${"])
-    assert not any(f["message_id"] == "invalid-type-map" for f in read_result["findings"]), read_result
+    assert read_result == {"passed": True, "findings": []}
     write_result = validator.validate_doc(
         doc={"type-map.json": [rule]}, direction="write", probes=["Utf8"])
-    invalid = [f for f in write_result["findings"] if f["message_id"] == "invalid-type-map"]
-    assert len(invalid) == 1, write_result
-    assert invalid[0]["direction"] == "write"
+    assert any(f.get("rule") == "RULE-TMAP-008" for f in write_result["findings"]), write_result
 
 
-@_xfail("validate_doc")
+def test_gap_resolution_advisory_map_findings_still_contribute_their_rules(validator):
+    # A duplicate rule is a warning: the map is imperfect but entirely usable,
+    # so it resolves probes and gaps are not withheld. Only a map that cannot
+    # contribute its rules withholds them.
+    rule = {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}
+    result = validator.validate_doc(
+        doc={"type-map-read.json": [rule, rule]}, direction="read", probes=["STRING"])
+    assert result["passed"] is True
+    assert [f.get("rule") for f in result["findings"]] == ["RULE-TMAP-022"]
+    assert not any(f["message_id"] == "gap-resolution-skipped" for f in result["findings"])
+
+
 def test_gap_resolution_reports_an_unresolved_probe_as_informational(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.validate_doc(doc=maps, direction="read", probes=["STRING", "BIGINT"])
@@ -407,18 +430,48 @@ def test_gap_resolution_reports_an_unresolved_probe_as_informational(validator):
     assert len(gaps) == 1, result["findings"]
     assert gaps[0]["kind"] == "informational" and "severity" not in gaps[0]
     assert gaps[0]["direction"] == "read"
+    # `path` is a required, consumer-facing field, so the convention it carries
+    # for this finding is pinned rather than left to an implementation: a gap
+    # is a fact about a probe against the whole supplied set, not about any one
+    # map, so there is no key to name and the probe travels in the message.
+    assert gaps[0]["path"] == ""
+    assert "BIGINT" in gaps[0]["message"]
     # An informational type-map-gap never costs a pass on its own.
     assert result["passed"] is True
 
 
-@_xfail("validate_doc")
+def test_gap_resolution_validates_every_map_even_when_no_probe_needs_it(validator):
+    # The first map already covers every probe, and the second is malformed.
+    # An implementation that resolved probes first and stopped once they were
+    # all covered would never read the second map, report nothing, and pass —
+    # so this pins that every supplied map is checked against the direction's
+    # model regardless of what resolution needed, the way `type_map_gaps.py`'s
+    # own `_load_rules` runs over every `--map` before any probe is resolved.
+    maps = {
+        "type-map-covering.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        "type-map-broken.json": [{"native_type": "BIGINT"}],
+    }
+    result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
+    assert result["passed"] is False
+    assert any(f["path"].startswith("type-map-broken.json") and f["severity"] == "error"
+               for f in result["findings"] if "severity" in f), result["findings"]
+
+
+def test_gap_resolution_with_no_probes_still_validates_the_maps(validator):
+    # The same claim with resolution removed entirely: an empty probe list is a
+    # check of the maps, not a trivially-passing no-op.
+    maps = {"type-map-broken.json": [{"native_type": "BIGINT"}]}
+    result = validator.validate_doc(doc=maps, direction="read", probes=[])
+    assert result["passed"] is False
+    assert [f["path"] for f in result["findings"] if "severity" in f] == ["type-map-broken.json/0"]
+
+
 def test_gap_resolution_fully_covered_reports_no_findings(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
     assert result == {"passed": True, "findings": []}
 
 
-@_xfail("validate_doc")
 def test_gap_resolution_falls_through_to_a_later_map_for_a_probe_the_first_does_not_cover(validator):
     # Neither map alone covers every probe: a probe the first key's map does
     # not render must still resolve via the second key's map rather than
@@ -435,7 +488,6 @@ def test_gap_resolution_falls_through_to_a_later_map_for_a_probe_the_first_does_
     assert result == {"passed": True, "findings": []}, result
 
 
-@_xfail("validate_doc")
 def test_gap_resolution_missing_direction_reports_invalid_direction(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.validate_doc(doc=maps, probes=["STRING"])
@@ -446,7 +498,6 @@ def test_gap_resolution_missing_direction_reports_invalid_direction(validator):
     assert "direction" not in result["findings"][0]
 
 
-@_xfail("validate_doc")
 def test_gap_resolution_bad_direction_value_reports_invalid_direction(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.validate_doc(doc=maps, direction="sideways", probes=["STRING"])
@@ -455,7 +506,6 @@ def test_gap_resolution_bad_direction_value_reports_invalid_direction(validator)
     assert "direction" not in result["findings"][0]
 
 
-@_xfail("validate_doc")
 def test_gap_resolution_bad_direction_short_circuits_before_doc_is_checked(validator):
     # `doc` here is independently invalid (not a list of rules) — if direction
     # were validated after doc normalization, this call would also report
@@ -467,7 +517,6 @@ def test_gap_resolution_bad_direction_short_circuits_before_doc_is_checked(valid
     assert [f["message_id"] for f in result["findings"]] == ["invalid-direction"]
 
 
-@_xfail("validate_doc")
 def test_gap_resolution_non_list_probes_reports_invalid_probes(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.validate_doc(doc=maps, direction="read", probes="STRING")
@@ -475,7 +524,6 @@ def test_gap_resolution_non_list_probes_reports_invalid_probes(validator):
     assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"]
 
 
-@_xfail("validate_doc")
 def test_gap_resolution_non_str_probe_element_reports_invalid_probes(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.validate_doc(doc=maps, direction="read", probes=[1, "STRING"])
@@ -483,7 +531,6 @@ def test_gap_resolution_non_str_probe_element_reports_invalid_probes(validator):
     assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"]
 
 
-@_xfail("validate_doc")
 def test_gap_resolution_empty_doc_reports_missing_type_map(validator):
     result = validator.validate_doc(doc={}, direction="read", probes=["STRING"])
     assert result["passed"] is False
@@ -491,14 +538,12 @@ def test_gap_resolution_empty_doc_reports_missing_type_map(validator):
 
 
 @pytest.mark.parametrize("bad_doc", [[], "not-a-mapping", 42])
-@_xfail("validate_doc")
 def test_gap_resolution_non_mapping_doc_reports_missing_type_map(validator, bad_doc):
     result = validator.validate_doc(doc=bad_doc, direction="read", probes=["STRING"])
     assert result["passed"] is False
     assert [f["message_id"] for f in result["findings"]] == ["missing-type-map"]
 
 
-@_xfail("validate_doc")
 def test_gap_resolution_explicit_none_probes_selects_gap_resolution_mode(validator):
     # probes=None is NOT the same as omitting probes: the default is a private
     # sentinel, so an explicit None still selects gap-resolution mode and is
@@ -510,40 +555,51 @@ def test_gap_resolution_explicit_none_probes_selects_gap_resolution_mode(validat
     assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"]
 
 
-@_xfail("validate_doc")
 def test_gap_resolution_reports_a_read_filename_used_with_write_direction(validator):
-    # Scoped, not a bare top-level key: a match that only worked by comparing
-    # the whole key against the literal filename would silently pass this
-    # scoped key through unchecked, which is exactly the bug a prior round of
-    # this check shipped with. The key's final segment is still the
-    # load-bearing filename.
+    # Scoped, not a bare top-level key: a match comparing the whole key against
+    # the literal filename would silently pass this scoped key through
+    # unchecked. The key's final segment is the load-bearing filename, so a
+    # scoped key is what distinguishes a basename match from a whole-key one.
     maps = {"connections/foo/type-map-read.json": [
         {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.validate_doc(doc=maps, direction="write", probes=["Utf8"])
     assert result["passed"] is False
-    assert any(f["message_id"] == "direction-filename-mismatch"
-               and f["path"] == "connections/foo/type-map-read.json"
-               for f in result["findings"])
-    # The mismatched map is excluded from resolution, not merely flagged: an
-    # implementation that reports direction-filename-mismatch and still uses
-    # the map to resolve "Utf8" would pass the assertion above while
-    # violating the docstring's own exclusion claim — so the excluded probe
-    # must also surface as an unresolved type-map-gap.
-    assert any(f["message_id"] == "type-map-gap" and f["direction"] == "write"
-               for f in result["findings"])
+    # The mismatch AND the gap. Refusing a read map on a write run removes
+    # nothing that could have rendered a write probe, so the probe going
+    # unresolved is a real gap, not an artefact of the refusal — unlike a map
+    # that was lost, which withholds gaps. An implementation that suppressed
+    # this one would report full coverage over a set holding no usable map.
+    assert [f["message_id"] for f in result["findings"]] == [
+        "direction-filename-mismatch", "type-map-gap"]
+    assert result["findings"][0]["path"] == "connections/foo/type-map-read.json"
+    assert result["findings"][0]["direction"] == "write"
+    assert not any(f["message_id"] == "gap-resolution-skipped" for f in result["findings"])
 
 
-@_xfail("validate_doc")
 def test_gap_resolution_reports_a_write_filename_used_with_read_direction(validator):
     maps = {"connections/foo/type-map-write.json": [
         {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
     assert result["passed"] is False
-    assert any(f["message_id"] == "direction-filename-mismatch"
-               and f["path"] == "connections/foo/type-map-write.json"
-               for f in result["findings"])
-    assert any(f["message_id"] == "type-map-gap" and f["direction"] == "read"
-               for f in result["findings"])
+    assert [f["message_id"] for f in result["findings"]] == [
+        "direction-filename-mismatch", "type-map-gap"]
+    assert result["findings"][0]["path"] == "connections/foo/type-map-write.json"
+    assert result["findings"][0]["direction"] == "read"
+
+
+def test_gap_resolution_both_halves_of_a_connector_still_report_a_real_gap(validator):
+    # The obvious thing a caller does: hand over a connector's own two maps and
+    # ask about the read direction. The write map is refused, which is correct,
+    # and STRING resolves from the read map — so BIGINT going unresolved is a
+    # genuine gap and must be reported rather than swallowed by the refusal.
+    maps = {
+        "type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        "type-map-write.json": [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}],
+    }
+    result = validator.validate_doc(doc=maps, direction="read", probes=["STRING", "BIGINT"])
+    gaps = [f for f in result["findings"] if f["message_id"] == "type-map-gap"]
+    assert len(gaps) == 1, result["findings"]
+    assert "BIGINT" in gaps[0]["message"]
 
 
 @_xfail("validate_doc")
@@ -584,7 +640,6 @@ def test_leading_dot_slash_is_normalized_away_for_pipeline_tree(validator):
     assert with_prefix == without_prefix
 
 
-@_xfail("validate_doc")
 def test_leading_dot_slash_is_normalized_away_for_gap_resolution_mode(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     with_prefix = validator.validate_doc(
@@ -612,7 +667,6 @@ def test_invalid_keys_are_reported_not_raised_for_pipeline_tree(validator, bad_k
 
 
 @pytest.mark.parametrize("bad_key", ["/type-map-read.json", "../type-map-read.json", ""])
-@_xfail("validate_doc")
 def test_invalid_keys_are_reported_not_raised_for_gap_resolution_mode(validator, bad_key):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], bad_key: []}
     result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
@@ -634,7 +688,6 @@ def test_key_that_is_both_document_and_directory_prefix_conflicts_for_pipeline_t
     assert any(f["message_id"] == "key-path-conflict" for f in result["findings"])
 
 
-@_xfail("validate_doc")
 def test_key_that_is_both_document_and_directory_prefix_conflicts_for_gap_resolution_mode(validator):
     maps = {
         "type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
@@ -663,7 +716,6 @@ def test_normalized_key_collision_is_reported_not_silently_overwritten_for_pipel
     assert result["passed"] is False
 
 
-@_xfail("validate_doc")
 def test_normalized_key_collision_is_reported_not_silently_overwritten_for_gap_resolution_mode(validator):
     maps = {
         "type-map.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
@@ -736,7 +788,7 @@ def test_bytes_value_is_decoded_as_utf8_with_bom_stripped(validator):
     documents = _connector_tree_documents()
     text_result = validator.validate_connector_tree(documents)
     as_bytes = dict(documents)
-    as_bytes["connector.json"] = ("﻿" + json.dumps(documents["connector.json"])).encode("utf-8")
+    as_bytes["connector.json"] = ("\ufeff" + json.dumps(documents["connector.json"])).encode("utf-8")
     bytes_result = validator.validate_connector_tree(as_bytes)
     assert bytes_result == text_result
 
@@ -747,16 +799,15 @@ def test_bytes_value_is_decoded_as_utf8_with_bom_stripped_for_pipeline_tree(vali
     text_result = validator.validate_pipeline_tree(documents)
     as_bytes = dict(documents)
     as_bytes["pipelines/p/pipeline.json"] = (
-        "﻿" + json.dumps(documents["pipelines/p/pipeline.json"])).encode("utf-8")
+        "\ufeff" + json.dumps(documents["pipelines/p/pipeline.json"])).encode("utf-8")
     bytes_result = validator.validate_pipeline_tree(as_bytes)
     assert bytes_result == text_result
 
 
-@_xfail("validate_doc")
 def test_bytes_value_is_decoded_as_utf8_with_bom_stripped_for_gap_resolution_mode(validator):
     maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
     text_result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
-    as_bytes = {"type-map-read.json": ("﻿" + json.dumps(maps["type-map-read.json"])).encode("utf-8")}
+    as_bytes = {"type-map-read.json": ("\ufeff" + json.dumps(maps["type-map-read.json"])).encode("utf-8")}
     bytes_result = validator.validate_doc(doc=as_bytes, direction="read", probes=["STRING"])
     assert bytes_result == text_result
 
@@ -779,7 +830,6 @@ def test_non_str_bytes_object_value_is_invalid_not_raised_for_pipeline_tree(vali
     assert result["passed"] is False
 
 
-@_xfail("validate_doc")
 def test_invalid_value_applies_to_gap_resolution_maps_too(validator):
     result = validator.validate_doc(doc={"type-map-read.json": 42}, direction="read", probes=["STRING"])
     assert any(f["message_id"] == "invalid-value" for f in result["findings"])
@@ -921,8 +971,15 @@ def test_one_document_crash_is_isolated_to_its_key(validator):
     result = validator.validate_connector_tree(documents)
     assert result["passed"] is False
     crashed = [f for f in result["findings"] if f["path"] == "endpoints/widgets.json"]
-    assert any(f["message_id"] == "internal-error" and f["kind"] == "fail" and f["severity"] == "error"
+    # notApplicable, not fail: a crash settled nothing about whether the
+    # document it was reading is valid, and `_run_guarded` classifies a
+    # crashing check the same way. Naming no rule, it still costs the pass
+    # asserted above — one `message_id` cannot mean two kinds across the
+    # routes of one module.
+    assert any(f["message_id"] == "internal-error" and f["kind"] == "notApplicable"
                for f in crashed), result["findings"]
+    assert all("severity" not in f and "rule" not in f
+               for f in crashed if f["message_id"] == "internal-error")
     # The rest of the tree was still validated — a real, distinguishable finding
     # for the OTHER (well-formed but deliberately uncovered) endpoint is
     # present, proving it was reached rather than silently dropped once one key
@@ -948,20 +1005,60 @@ def test_embedded_package_crash_is_isolated_to_its_subtree_prefix(validator):
                for f in result["findings"]), result["findings"]
 
 
-@_xfail("validate_doc")
+class _ExplodingRules(list):
+    """A rule list that is a `list` by every shape check and raises when read.
+
+    Gap resolution's crash trigger is not `_cyclic_dict`: a cyclic structure is
+    an ordinary shape defect on this route and gets reported as one — a bare
+    cyclic dict is not a list, so it is `type-map-unreadable`, and one wrapped
+    in a list fails the type-map model, so it is reported against the record
+    that model violation belongs to. Neither reaches the crash guard. What does
+    is a value that passes the shape check and its model, and then fails while
+    being read — which is what the guard exists for: a defect in the walk
+    itself, not in the document.
+    """
+
+    def __iter__(self):
+        raise RuntimeError("rule list cannot be read")
+
+
+class _ExplodingMapping(dict):
+    """A `DocumentSet` that is a `dict` by every shape check and raises when
+    its entries are read — the shape a caller backed by remote storage rather
+    than a local dict literal can genuinely hand over."""
+
+    def items(self):
+        raise RuntimeError("document set cannot be enumerated")
+
+
+
+
 def test_gap_resolution_map_crash_is_isolated_to_its_key(validator):
+    # The second map is itself invalid, so it has a real, distinguishable
+    # finding of its own: that is what proves the walk continued past the
+    # crash rather than stopping at it. A clean second map could not — once a
+    # map is dropped no probe is resolved, so a clean map contributes nothing
+    # observable either way.
     maps = {
-        "type-map-a.json": _cyclic_dict(),
-        "type-map-b.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        "type-map-a.json": _ExplodingRules([{"match": "exact", "native_type": "STRING",
+                                             "arrow_type": "Utf8"}]),
+        "type-map-b.json": [{"native_type": "BIGINT"}],
     }
     result = validator.validate_doc(doc=maps, direction="read", probes=["STRING"])
     assert result["passed"] is False
     crashed = [f for f in result["findings"] if f["path"] == "type-map-a.json"]
-    assert any(f["message_id"] == "internal-error" and f["kind"] == "fail" and f["severity"] == "error"
+    # notApplicable, not fail: the crash settled nothing about whether that map
+    # is valid, which is the distinction `_run_guarded` draws for exactly this
+    # case. Naming no rule, it still costs the pass asserted above.
+    assert any(f["message_id"] == "internal-error" and f["kind"] == "notApplicable"
                for f in crashed), result["findings"]
-    # The rest of doc was still resolved — the probe covered by the other map
-    # is not reported as a gap, proving that map was reached despite the crash.
-    assert not any(f["message_id"] == "type-map-gap" for f in result["findings"]), result["findings"]
+    assert all("severity" not in f and "rule" not in f
+               for f in crashed if f["message_id"] == "internal-error")
+    assert any(f["path"].startswith("type-map-b.json") for f in result["findings"]), \
+        result["findings"]
+    # A crash means a map was lost, so no probe is resolved and the envelope
+    # says which question went undecided rather than reporting full coverage.
+    assert any(f["message_id"] == "gap-resolution-skipped" for f in result["findings"])
 
 
 # ---------------------------------------------------------------------------
@@ -1069,3 +1166,151 @@ def test_pipeline_tree_equivalence_with_the_path_based_route(validator, tmp_path
     assert len(path_based["findings"]) >= 2, path_based  # non-vacuous: order genuinely matters below
     tree_based = validator.validate_pipeline_tree(documents)
     assert json.dumps(tree_based) == json.dumps(path_based)
+
+
+def test_gap_resolution_probe_crash_is_isolated_to_that_probe(validator, monkeypatch):
+    # The probe guard covers the one step validating the maps never performs:
+    # running a matcher against a probe. No document reaches it, because every
+    # value the matcher reads was already read while the map was validated — so
+    # the failure is injected at the resolver rather than contrived into a map,
+    # which is the behaviour under test either way.
+    from analitiq.validator import connectors
+
+    def explode_on_one(probe, rules):
+        if probe == "STRING":
+            raise RuntimeError("matcher cannot be run")
+        return None
+
+    read = connectors._DIRECTIONS["read"]
+    monkeypatch.setitem(connectors._DIRECTIONS, "read", read._replace(resolve=explode_on_one))
+    result = validator.validate_doc(
+        doc={"type-map-read.json": _READ_RULES}, direction="read", probes=["STRING", "BIGINT"])
+    assert result["passed"] is False
+    crashed = [f for f in result["findings"] if f["message_id"] == "internal-error"]
+    assert len(crashed) == 1, result["findings"]
+    assert crashed[0]["kind"] == "notApplicable"
+    assert "severity" not in crashed[0] and "rule" not in crashed[0]
+    # `path` is empty and `direction` is set: a probe is asked of the whole set,
+    # so no key is implicated, but the direction it was asked in is known.
+    assert crashed[0]["path"] == "" and crashed[0]["direction"] == "read"
+    assert "STRING" in crashed[0]["message"]
+    # The probe after the crash still got its verdict.
+    assert any(f["message_id"] == "type-map-gap" and "BIGINT" in f["message"]
+               for f in result["findings"]), result["findings"]
+
+
+def test_gap_resolution_reports_a_crash_enumerating_the_document_set(validator):
+    # Key canonicalization is the first code to touch caller-controlled data,
+    # so it is inside the guard too: a mapping that raises when read is a
+    # reported finding, not an exception out of validate_doc.
+    result = validator.validate_doc(
+        doc=_ExplodingMapping({"type-map-read.json": []}), direction="read", probes=["STRING"])
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["internal-error"]
+    assert result["findings"][0]["kind"] == "notApplicable"
+    assert result["findings"][0]["path"] == ""
+
+
+#: Every way a supplied map can fail to contribute its rules, each paired with
+#: a `doc` whose probe would otherwise resolve or report a gap. Gaps are
+#: withheld for all of them, so a probe unresolved only because a map went
+#: missing is never reported as a fact about the maps that remain.
+_LOST_MAP_CASES = {
+    "invalid-key": {"/type-map-read.json": _READ_RULES},
+    "normalized-key-collision": {"m.json": _READ_RULES, "./m.json": _READ_RULES},
+    "key-path-conflict": {"m.json": _READ_RULES, "m.json/nested.json": _READ_RULES},
+    "invalid-value": {"m.json": 42},
+    "unparseable": {"m.json": "not json"},
+    "not-an-array": {"m.json": {"rules": []}},
+    "model-error": {"m.json": [{"native_type": "STRING"}]},
+    "map-crash": {"m.json": _ExplodingRules([{"match": "exact", "native_type": "STRING",
+                                              "arrow_type": "Utf8"}])},
+}
+
+
+@pytest.mark.parametrize("case", sorted(_LOST_MAP_CASES))
+def test_gap_resolution_withholds_gaps_whenever_a_map_is_lost(validator, case):
+    result = validator.validate_doc(
+        doc=_LOST_MAP_CASES[case], direction="read", probes=["STRING", "BIGINT"])
+    assert result["passed"] is False
+    assert not any(f["message_id"] == "type-map-gap" for f in result["findings"]), result
+    # And the envelope says so, rather than leaving the absence of gaps to read
+    # like full coverage.
+    skipped = [f for f in result["findings"] if f["message_id"] == "gap-resolution-skipped"]
+    assert len(skipped) == 1, result["findings"]
+    assert skipped[0]["kind"] == "notApplicable"
+    assert "severity" not in skipped[0] and "rule" not in skipped[0]
+    assert skipped[0]["path"] == ""
+
+
+def test_gap_resolution_invalid_probes_is_checked_before_doc_is_touched(validator):
+    # `doc` is independently broken, so a run that reached it would say so.
+    result = validator.validate_doc(doc="not a mapping", direction="read", probes="STRING")
+    assert [f["message_id"] for f in result["findings"]] == ["invalid-probes"]
+    assert result["findings"][0]["kind"] == "fail"
+    assert result["findings"][0]["severity"] == "error"
+    assert "direction" not in result["findings"][0]
+
+
+def test_gap_resolution_non_mapping_doc_reports_missing_type_map(validator):
+    result = validator.validate_doc(doc=["not", "a", "mapping"], direction="read", probes=["STRING"])
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["missing-type-map"]
+    assert result["findings"][0]["kind"] == "fail"
+    assert result["findings"][0]["severity"] == "error"
+    assert "direction" not in result["findings"][0]
+    # The message names what was wrong with `doc`, not just that a map is
+    # absent: a caller who passed a list did supply maps, in the wrong shape.
+    assert "list" in result["findings"][0]["message"]
+
+
+def test_gap_resolution_direction_mismatch_is_checked_before_the_map_is_read(validator):
+    # The map's content is unreadable, so a run that read it before checking
+    # the filename would report that instead.
+    result = validator.validate_doc(
+        doc={"type-map-write.json": "not json"}, direction="read", probes=["STRING"])
+    ids = [f["message_id"] for f in result["findings"]]
+    assert "direction-filename-mismatch" in ids, result["findings"]
+    assert "type-map-unreadable" not in ids, result["findings"]
+    mismatch = result["findings"][0]
+    assert mismatch["kind"] == "fail" and mismatch["severity"] == "error"
+
+
+def test_gap_resolution_reports_non_utf8_bytes_as_an_invalid_value(validator):
+    result = validator.validate_doc(
+        doc={"type-map-read.json": b"\xff\xfe[]"}, direction="read", probes=["STRING"])
+    assert result["passed"] is False
+    invalid = [f for f in result["findings"] if f["message_id"] == "invalid-value"]
+    assert len(invalid) == 1, result["findings"]
+    assert invalid[0]["path"] == "type-map-read.json"
+    # The decode failure is named: bytes ARE a supported value, so a message
+    # saying only that the value was unreadable points the author at the wrong
+    # thing — what failed is the encoding.
+    assert "utf-8" in invalid[0]["message"].lower()
+
+
+def test_gap_resolution_reports_a_parsed_non_array_distinctly_from_unparseable_text(validator):
+    result = validator.validate_doc(
+        doc={"type-map-read.json": {"rules": []}}, direction="read", probes=["STRING"])
+    unreadable = [f for f in result["findings"] if f["message_id"] == "type-map-unreadable"]
+    assert len(unreadable) == 1, result["findings"]
+    assert unreadable[0]["path"] == "type-map-read.json"
+    # A document that parsed is not a syntax error, and saying so would send
+    # the author looking for one.
+    assert "dict" in unreadable[0]["message"]
+    assert "not JSON" not in unreadable[0]["message"]
+
+
+def test_gap_resolution_strips_a_bom_from_a_str_value(validator):
+    result = validator.validate_doc(
+        doc={"type-map-read.json": "\ufeff" + json.dumps(_READ_RULES)},
+        direction="read", probes=["STRING"])
+    assert result == {"passed": True, "findings": []}
+
+
+def test_gap_resolution_reports_a_probe_once_however_often_it_is_asked_for(validator):
+    result = validator.validate_doc(
+        doc={"type-map-read.json": _READ_RULES}, direction="read",
+        probes=["BIGINT", "BIGINT", "BIGINT"])
+    gaps = [f for f in result["findings"] if f["message_id"] == "type-map-gap"]
+    assert len(gaps) == 1, result["findings"]
