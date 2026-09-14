@@ -15,10 +15,10 @@ Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 pairs with the core dispatch registry — a new kind is a new module registering
 the same way, without touching `_core`. The public surface is re-exported here.
 
-`document_set` declares the path-free document-set API's types and
-signatures ahead of their implementation — every function it exports
-currently raises `NotImplementedError`; see that module's docstring and
-`__all__` below for what it contributes to this package's surface.
+`document_set` is the path-free document-set API: a `DocumentSet` of
+already-loaded content in, the same `ValidationEnvelope`/`FindingsEnvelope`
+shape out — see that module's docstring and `__all__` below for what it
+contributes to this package's surface.
 """
 from ._core import finding, finding_costs_a_pass, main, validate_document
 from .document_set import (

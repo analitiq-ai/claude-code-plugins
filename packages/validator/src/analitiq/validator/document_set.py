@@ -427,7 +427,11 @@ def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
             message_id="missing-connector-document", kind="fail", path="connector.json",
             message="this document set has no root connector.json; a connector package must ship one."))
     else:
-        _, doc_findings = _validate_tree_document(fs, "connector.json")
+        # entity="connector": the root key's kind is already known from its
+        # position; auto-detecting would validate a wrong-shaped document
+        # (say, a valid pipeline object) as whatever kind it happens to
+        # match, skipping connector validation and coverage entirely.
+        _, doc_findings = _validate_tree_document(fs, "connector.json", entity="connector")
         findings.extend(doc_findings)
     return _envelope(findings)
 
@@ -673,7 +677,11 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
     if pipeline_keys:
         primary_key = pipeline_keys[0]
         slug = _PIPELINE_DOC_RE.match(primary_key).group(1)
-        pipeline_doc, doc_findings = _resolved_member(fs, primary_key)
+        # entity="pipeline": this key's position already says what it must be;
+        # auto-detecting would validate a wrong-shaped document (say, a valid
+        # type-map array) as whatever kind it happens to match instead of
+        # rejecting it as the pipeline document it was supposed to be.
+        pipeline_doc, doc_findings = _resolved_member(fs, primary_key, entity="pipeline")
         findings.extend(doc_findings)
         if pipeline_doc is None:
             bundle_is_incomplete = True
@@ -695,7 +703,8 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
         stream_prefix = f"pipelines/{slug}/streams/"
         for key in fs.known_json_children(stream_prefix):
             suffix = key[len(stream_prefix):]
-            doc, doc_findings = _resolved_member(fs, key)
+            # entity="stream": same reasoning as the pipeline document above.
+            doc, doc_findings = _resolved_member(fs, key, entity="stream")
             findings.extend(_at_site(f"streams/{suffix}", doc_findings))
             if doc is None:
                 bundle_is_incomplete = True
@@ -710,7 +719,8 @@ def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
         # locatable and independently checked even when the connection itself
         # fails to resolve.
         conn_slug = _CONNECTION_DOC_RE.match(key).group(1)
-        doc, doc_findings = _resolved_member(fs, key)
+        # entity="connection": same reasoning as the pipeline document above.
+        doc, doc_findings = _resolved_member(fs, key, entity="connection")
         findings.extend(_at_site(key, doc_findings))
         if doc is None:
             bundle_is_incomplete = True

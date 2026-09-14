@@ -466,6 +466,40 @@ def test_invalid_keys_are_reported_not_raised(validator, bad_key):
     assert result["passed"] is False
 
 
+# ---------------------------------------------------------------------------
+# A bundle member is validated as the entity its position already names, not
+# whatever kind its shape happens to auto-detect as.
+# ---------------------------------------------------------------------------
+
+def test_connector_json_that_is_not_a_connector_is_rejected_not_misdetected(validator):
+    # _PIPELINE is a fully model-valid pipeline document; handed as
+    # connector.json with no entity pin, it would auto-detect as pipeline and
+    # validate clean, silently skipping connector validation and coverage.
+    result = validator.validate_connector_tree({"connector.json": _PIPELINE})
+    assert result["passed"] is False, result
+
+
+def test_pipeline_json_that_is_not_a_pipeline_is_rejected_not_misdetected(validator):
+    # A valid type-map array in place of the pipeline document would
+    # auto-detect as type-map and produce no blocking finding, so the whole
+    # tree could pass with no pipeline ever actually validated.
+    documents = {**_pipeline_tree_documents(), "pipelines/p/pipeline.json": _CONNECTOR_WISE_TYPE_MAP_READ}
+    result = validator.validate_pipeline_tree(documents)
+    assert result["passed"] is False, result
+
+
+def test_stream_json_that_is_not_a_stream_is_rejected_not_misdetected(validator):
+    documents = {**_pipeline_tree_documents(), "pipelines/p/streams/orders.json": _CONNECTOR_WISE_TYPE_MAP_READ}
+    result = validator.validate_pipeline_tree(documents)
+    assert result["passed"] is False, result
+
+
+def test_connection_json_that_is_not_a_connection_is_rejected_not_misdetected(validator):
+    documents = {**_pipeline_tree_documents(), "connections/wise/connection.json": _CONNECTOR_WISE_TYPE_MAP_READ}
+    result = validator.validate_pipeline_tree(documents)
+    assert result["passed"] is False, result
+
+
 def test_two_keys_normalizing_to_the_same_key_report_a_finding(validator):
     documents = _connector_tree_documents()
     key = next(iter(documents))
