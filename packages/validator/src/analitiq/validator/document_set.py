@@ -896,7 +896,7 @@ def resolve_type_map_gaps(
             try:
                 text = value.decode("utf-8-sig") if isinstance(value, bytes) else value
                 parsed = json.loads(text)
-            except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            except ValueError:
                 parsed = None
         if not isinstance(parsed, list):
             findings.append(finding(
