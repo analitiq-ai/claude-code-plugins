@@ -28,7 +28,7 @@ entry point. This adapter routes each entity as follows:
     which is already known here, guarantees the right model runs and yields
     per-field findings instead.
   * ``type-map`` (with ``--direction {read,write}``) -> ``analitiq.validator.validate_document``
-    over the connection-scoped type-map rule array, after an adapter filename gate:
+    over the connection-scoped type-map document, after an adapter filename gate:
     the engine loads ``connections/<slug>/definition/type-map-{read,write}.json`` by
     exactly those names (and the published validator derives rule direction from
     them, defaulting an unknown name to read), so a misnamed file gets the rename
@@ -263,11 +263,15 @@ def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
             f"file is named {document_path.name!r} but direction {direction!r} requires "
             f"{expected!r} — the engine loads each direction only from its exact "
             f"filename (connections/<slug>/definition/{expected}).")]
-    if not (isinstance(doc, dict) and "rules" in doc):
+    if not isinstance(doc, dict):
         return [_finding(
             "connection-type-map", "error", "",
             f"{expected} must be a top-level JSON object with a `rules` key, "
             f"got {type(doc).__name__}.")]
+    if "rules" not in doc:
+        return [_finding(
+            "connection-type-map", "error", "",
+            f"{expected} is a JSON object but has no `rules` key.")]
     from analitiq.validator import validate_document
     findings = validate_document(doc, doc_path=_authored_path(document_path))
     if direction == "write":

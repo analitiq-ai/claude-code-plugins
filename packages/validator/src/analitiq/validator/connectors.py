@@ -991,9 +991,11 @@ def _type_map_findings(doc: Any, direction: str) -> list[dict]:
     """Validate a loaded type-map document: model errors + advisory rule
     warnings + (write-vocabulary coverage on the write direction). The single
     definition used everywhere a type-map is checked — standalone, or as a
-    connector's sibling. `doc` is the whole `{$schema, direction, rules}`
-    object; the advisory/coverage checks below only ever needed the `rules`
-    array, so that is all they are handed."""
+    connector's sibling. `doc` is nominally the whole `{$schema, direction,
+    rules}` object — a malformed sibling can hand it any JSON-parseable value
+    instead, which `_model_findings` below rejects — the advisory/coverage
+    checks only ever needed the `rules` array, extracted defensively, so that
+    is all they are handed."""
     adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
     findings = _model_findings(doc, adapter)
     rules = doc.get("rules") if isinstance(doc, dict) else None
@@ -1051,9 +1053,10 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
     # returned on: the rendering is what needs it, and returning here would
     # withhold every endpoint-anchored check as well, hiding every defect in
     # every endpoint document behind one broken file. What is carried is
-    # whatever loaded — `None` when the file is absent, unreadable, or not the
-    # `{$schema, direction, rules}` object, the `rules` array when it is — so
-    # the readers below ask whether it is a list rather than whether it is set.
+    # whatever `doc.get("rules")` holds when `doc` is a dict — `None` when the
+    # file is absent, unreadable, or not a dict, and whatever value the dict's
+    # `rules` key holds otherwise, list or not — so the readers below ask
+    # whether it is a list rather than whether it is set.
     read_doc: Any = None
     read_rules: Any = None
     if not read_path.is_file():

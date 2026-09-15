@@ -26,6 +26,9 @@ pytest.importorskip("analitiq.validator",
 from analitiq.contracts.endpoint_identity import (  # noqa: E402
     build_database_object, derive_db_endpoint_id,
 )
+from analitiq.contracts.type_map import (  # noqa: E402
+    TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL,
+)
 
 SRC = "22222222-2222-4222-8222-222222222222"
 DST = "33333333-3333-4333-8333-333333333333"
@@ -503,8 +506,8 @@ TYPE_MAP_WRITE = [
 
 
 def _tm(rules: list, direction: str) -> dict:
-    return {"$schema": f"https://schemas.analitiq.ai/type-map-{direction}/latest.json",
-            "direction": direction, "rules": rules}
+    schema_url = TYPE_MAP_READ_SCHEMA_URL if direction == "read" else TYPE_MAP_WRITE_SCHEMA_URL
+    return {"$schema": schema_url, "direction": direction, "rules": rules}
 
 
 @pytest.mark.parametrize("direction,fname,doc", [

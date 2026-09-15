@@ -14,6 +14,8 @@ from urllib.parse import urlsplit
 
 import pytest
 
+from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL
+
 CORPUS = Path(__file__).resolve().parent / "corpus"
 
 API = "https://schemas.analitiq.ai/api-endpoint/latest.json"
@@ -111,7 +113,7 @@ def _write_tree(root: Path, connector: dict, endpoints: dict):
     (root / "endpoints").mkdir(parents=True)
     (root / "connector.json").write_text(json.dumps(connector))
     (root / "type-map-read.json").write_text(json.dumps({
-        "$schema": "https://schemas.analitiq.ai/type-map-read/latest.json",
+        "$schema": TYPE_MAP_READ_SCHEMA_URL,
         "direction": "read",
         "rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
     }))

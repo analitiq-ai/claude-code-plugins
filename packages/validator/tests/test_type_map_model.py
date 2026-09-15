@@ -6,6 +6,8 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from analitiq.contracts.type_map import (
+    TYPE_MAP_READ_SCHEMA_URL,
+    TYPE_MAP_WRITE_SCHEMA_URL,
     TypeMapReadDoc,
     TypeMapWriteDoc,
     normalize_native_type,
@@ -55,8 +57,9 @@ def _wrap(adapter, rules):
     """A bare rule list wrapped in the published `{$schema, direction, rules}`
     type-map document shape, direction inferred from which adapter it targets."""
     direction = "read" if adapter is READ else "write"
+    schema_url = TYPE_MAP_READ_SCHEMA_URL if adapter is READ else TYPE_MAP_WRITE_SCHEMA_URL
     return {
-        "$schema": f"https://schemas.analitiq.ai/type-map-{direction}/latest.json",
+        "$schema": schema_url,
         "direction": direction,
         "rules": rules,
     }

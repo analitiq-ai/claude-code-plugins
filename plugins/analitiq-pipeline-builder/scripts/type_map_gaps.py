@@ -53,8 +53,9 @@ def _fail(message: str) -> "int":
 
 
 def _load_rules(path: Path, direction: str) -> list:
-    """Read one rule-list file and model-validate it against the pinned
-    contract. Validation here is load-bearing, not a courtesy: the resolver
+    """Read one {$schema, direction, rules} type-map document and model-validate
+    it against the pinned contract, returning its `rules` array. Validation
+    here is load-bearing, not a courtesy: the resolver
     mirrors runtime semantics, which *skip* a malformed rule — so a broken
     rule would surface as a false "gap", indistinguishable from a genuinely
     uncovered probe, and a false gap makes the authoring agent shadow the very

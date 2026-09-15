@@ -27,6 +27,7 @@ import gen_pipeline_docs as G  # noqa: E402
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
+from analitiq.contracts.type_map import TYPE_MAP_WRITE_SCHEMA_URL  # noqa: E402
 
 
 def test_generated_blocks_in_sync():
@@ -203,7 +204,7 @@ def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
     from analitiq.validator import validate_document
 
     raw = validate_document(
-        {"$schema": "https://schemas.analitiq.ai/type-map-write/latest.json",
+        {"$schema": TYPE_MAP_WRITE_SCHEMA_URL,
          "direction": "write", "rules": []},
         doc_path=Path("type-map-write.json"))
     assert "RULE-TMAP-017" in {f.get("rule") for f in raw}, (

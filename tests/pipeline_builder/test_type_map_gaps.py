@@ -22,6 +22,9 @@ import type_map_gaps as G  # noqa: E402
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
+from analitiq.contracts.type_map import (  # noqa: E402
+    TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL,
+)
 
 CONNECTOR_READ = [
     {"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"},
@@ -36,8 +39,8 @@ CONNECTOR_WRITE = [
 
 
 def _tm_doc(rules: list, direction: str) -> dict:
-    return {"$schema": f"https://schemas.analitiq.ai/type-map-{direction}/latest.json",
-            "direction": direction, "rules": rules}
+    schema_url = TYPE_MAP_READ_SCHEMA_URL if direction == "read" else TYPE_MAP_WRITE_SCHEMA_URL
+    return {"$schema": schema_url, "direction": direction, "rules": rules}
 
 
 def _map(tmp_path: Path, name: str, rules: list, direction: str = "read") -> Path:

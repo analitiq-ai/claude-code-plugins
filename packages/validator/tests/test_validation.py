@@ -18,6 +18,7 @@ from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
 from analitiq.contracts.endpoints import _REFUSED_REFERENCE_KEYWORDS
 from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
 from analitiq.contracts.stream import STREAM_SCHEMA_URL
+from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL
 from analitiq.validator.connectors import (
     _DATABASE_KINDS,
     _READ_MAP_FILENAME,
@@ -105,8 +106,8 @@ def test_kindless_connector_errors(validator):
     assert _errors(validator.validate_document(doc))
 
 
-_TM_READ_SCHEMA = "https://schemas.analitiq.ai/type-map-read/latest.json"
-_TM_WRITE_SCHEMA = "https://schemas.analitiq.ai/type-map-write/latest.json"
+_TM_READ_SCHEMA = TYPE_MAP_READ_SCHEMA_URL
+_TM_WRITE_SCHEMA = TYPE_MAP_WRITE_SCHEMA_URL
 
 
 def _type_map_doc(rules, direction="read"):
@@ -1265,7 +1266,7 @@ def test_type_map_direction_from_schema_url(validator, tmp_path):
     p = tmp_path / "generic.json"
     defaulted = validator.validate_document(doc, doc_path=p)
     hinted = validator.validate_document(
-        doc, doc_path=p, schema_url="https://schemas.analitiq.ai/type-map-write/latest.json")
+        doc, doc_path=p, schema_url=_TM_WRITE_SCHEMA)
     assert any(f["message_id"] == "type-map-direction-defaulted" for f in defaulted), defaulted
     assert not any(f["message_id"] == "type-map-direction-defaulted" for f in hinted), hinted
 
@@ -1298,6 +1299,33 @@ def test_self_declared_direction_resolves_silently_without_defaulting(validator,
     findings = validator.validate_document(doc, doc_path=p)
     assert not _errors(findings), findings
     assert not any(f["message_id"] == "type-map-direction-defaulted" for f in findings), findings
+
+
+def test_schema_url_read_hint_resolves_a_generic_filename(validator, tmp_path):
+    # The read-hint mirror of test_type_map_direction_from_schema_url's
+    # write-hint case: a generic filename with a --schema-url pointing at
+    # type-map-read must resolve to the READ model directly, without falling
+    # through to the self-declared `direction` (here deliberately "write",
+    # disagreeing with the hint) or the ambiguous default.
+    doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write")
+    p = tmp_path / "generic.json"
+    findings = validator.validate_document(doc, doc_path=p, schema_url=_TM_READ_SCHEMA)
+    errors = _errors(findings)
+    assert any(f["path"] == "/direction" for f in errors), findings
+    assert not any(f["message_id"] == "type-map-direction-defaulted" for f in findings), findings
+
+
+def test_legacy_bare_array_type_map_is_rejected_not_silently_accepted(validator, tmp_path):
+    # Pre-migration documents (a bare top-level rule array, no envelope) no
+    # longer sniff as a type-map at all — `register_kind`'s detector requires
+    # a dict with a `rules` key. This pins that the old shape still fails
+    # loud, as an unrecognized document, rather than silently passing under
+    # some other detector or vanishing with no finding.
+    doc = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+    p = tmp_path / "type-map-read.json"
+    findings = validator.validate_document(doc, doc_path=p)
+    errors = _errors(findings)
+    assert any(f["message_id"] == "unrecognized-document" for f in errors), findings
 
 
 def test_coverage_flags_nested_endpoint_file(tmp_path, connector_base, validator):
