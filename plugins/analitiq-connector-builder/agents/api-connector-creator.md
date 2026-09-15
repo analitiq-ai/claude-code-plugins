@@ -165,7 +165,7 @@ you are returning.
 {
   "connector": { ...connector body... },
   "type_map_read": {
-    "$schema": "<the read-map $schema URL — spec-type-maps.md §File shape>",
+    "$schema": "<the read-map $schema URL — spec-type-maps.md §On-disk location>",
     "direction": "read",
     "rules": [ ...rules... ]
   },

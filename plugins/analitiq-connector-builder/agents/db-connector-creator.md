@@ -327,12 +327,12 @@ disk.
 {
   "connector": { ...connector body... },
   "type_map_read": {
-    "$schema": "<the read-map $schema URL — spec-type-maps.md §File shape>",
+    "$schema": "<the read-map $schema URL — spec-type-maps.md §On-disk location>",
     "direction": "read",
     "rules": [ ...native → Arrow rules... ]
   },
   "type_map_write": {
-    "$schema": "<the write-map $schema URL — spec-type-maps.md §File shape>",
+    "$schema": "<the write-map $schema URL — spec-type-maps.md §On-disk location>",
     "direction": "write",
     "rules": [ ...Arrow → native rules... ]
   },
