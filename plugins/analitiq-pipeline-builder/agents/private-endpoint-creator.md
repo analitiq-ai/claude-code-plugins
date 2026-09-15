@@ -152,8 +152,8 @@ One invocation runs exactly one mode.
        }
      ],
      "type_maps": {
-       "read":  [ /* full file content for definition/type-map-read.json, or null */ ],
-       "write": [ /* full file content for definition/type-map-write.json, or null */ ],
+       "read":  { /* full file content for definition/type-map-read.json ($schema, direction, rules), or null */ },
+       "write": { /* full file content for definition/type-map-write.json ($schema, direction, rules), or null */ },
        "ambiguities": [ {"arrow_type": "…", "candidates": ["<native>", "<native>"]} ],
        "notes": []
      }
@@ -162,9 +162,11 @@ One invocation runs exactly one mode.
 
    `directory_slug` equals the endpoint's derived `endpoint_id` and becomes the
    filename stem (`connections/<connection-slug>/definition/endpoints/<endpoint_id>.json`).
-   `type_maps.read` / `type_maps.write` are the complete arrays the orchestrator
-   writes to `connections/<connection-slug>/definition/type-map-{read,write}.json`
-   — `null` means write nothing (never emit an empty array).
+   `type_maps.read` / `type_maps.write` are the complete `{$schema, direction,
+   rules}` documents the orchestrator writes to
+   `connections/<connection-slug>/definition/type-map-{read,write}.json` —
+   `null` means write nothing (never emit a document with an empty `rules`
+   array).
 
 ### Mode 4: `author-new-table`
 

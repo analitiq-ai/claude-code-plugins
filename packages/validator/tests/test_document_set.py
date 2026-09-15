@@ -121,7 +121,8 @@ def _connector_tree_documents(*, native="STRING", arrow="Utf8") -> dict:
     }
     return {
         "connector.json": connector,
-        "type-map-read.json": [{"match": "exact", "native_type": native, "arrow_type": arrow}],
+        "type-map-read.json": _type_map_doc(
+            "read", [{"match": "exact", "native_type": native, "arrow_type": arrow}]),
         "endpoints/v1__records.json": endpoint,
     }
 
@@ -145,6 +146,13 @@ def _uncovered_endpoint_document(*, endpoint_id="v2__widgets", request_path="/v2
 
 
 _H = "https://schemas.analitiq.ai"
+
+
+def _type_map_doc(direction: str, rules: list) -> dict:
+    """A `{$schema, direction, rules}` type-map document for the given
+    direction — the shape `TypeMapReadDoc`/`TypeMapWriteDoc` require."""
+    return {"$schema": f"{_H}/type-map-{direction}/latest.json", "direction": direction, "rules": rules}
+
 _SRC, _DST, _PID, _SID = (
     "22222222-2222-4222-8222-222222222222",
     "33333333-3333-4333-8333-333333333333",
@@ -218,7 +226,8 @@ _CONNECTOR_WISE = {
             "ui": {"label": "API Token", "widget": "password", "help_text": "Wise API token."}}},
         "required_for_activation": ["secrets.api_token"]},
 }
-_CONNECTOR_WISE_TYPE_MAP_READ = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+_CONNECTOR_WISE_TYPE_MAP_READ = _type_map_doc(
+    "read", [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])
 _WISE_TRANSFERS_ENDPOINT = {
     "$schema": f"{_H}/api-endpoint/latest.json", "endpoint_id": "transfers",
     "operations": {"read": {
@@ -267,11 +276,12 @@ _CONNECTOR_PG = {
         "produces": ["connection.endpoints", "connection.type_map"],
         "triggers": {"list_resources": "on_activation", "describe_resource": "on_resource_selected"}},
 }
-_CONNECTOR_PG_TYPE_MAP_READ = [{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}]
-_CONNECTOR_PG_TYPE_MAP_WRITE = [
+_CONNECTOR_PG_TYPE_MAP_READ = _type_map_doc(
+    "read", [{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}])
+_CONNECTOR_PG_TYPE_MAP_WRITE = _type_map_doc("write", [
     {"match": "exact", "native_type": "bigint", "arrow_type": "Int64"},
     {"match": "regex", "native_type": "TEXT", "arrow_type": ".*"},
-]
+])
 def _pipeline_core_documents() -> dict:
     """The connection, stream, pipeline, and destination-endpoint documents a
     pipeline-tree `DocumentSet` carries regardless of what its embedded
@@ -367,10 +377,11 @@ def test_gap_resolution_reports_unreadable_map_without_raising(validator):
 
 @_xfail("resolve_type_map_gaps")
 def test_gap_resolution_reports_invalid_map_with_its_direction(validator):
-    # Fails TypeMapReadDoc: a list, but of a rule object missing its `match`
-    # discriminator (and its arrow_type).
+    # Fails TypeMapReadDoc: a rule object missing its `match` discriminator
+    # (and its arrow_type).
     result = validator.resolve_type_map_gaps(
-        maps={"type-map-read.json": [{"native_type": "STRING"}]}, direction="read", probes=["STRING"])
+        maps={"type-map-read.json": _type_map_doc("read", [{"native_type": "STRING"}])},
+        direction="read", probes=["STRING"])
     invalid = [f for f in result["findings"] if f["message_id"] == "invalid-type-map"]
     assert len(invalid) == 1, result["findings"]
     assert invalid[0]["kind"] == "fail" and invalid[0]["severity"] == "error"
@@ -385,10 +396,10 @@ def test_gap_resolution_direction_selects_the_matching_model(validator):
     # so direction alone decides which model this rule is checked against.
     rule = {"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}
     read_result = validator.resolve_type_map_gaps(
-        maps={"type-map.json": [rule]}, direction="read", probes=["VARCHAR${"])
+        maps={"type-map.json": _type_map_doc("read", [rule])}, direction="read", probes=["VARCHAR${"])
     assert not any(f["message_id"] == "invalid-type-map" for f in read_result["findings"]), read_result
     write_result = validator.resolve_type_map_gaps(
-        maps={"type-map.json": [rule]}, direction="write", probes=["Utf8"])
+        maps={"type-map.json": _type_map_doc("write", [rule])}, direction="write", probes=["Utf8"])
     invalid = [f for f in write_result["findings"] if f["message_id"] == "invalid-type-map"]
     assert len(invalid) == 1, write_result
     assert invalid[0]["direction"] == "write"
@@ -396,7 +407,8 @@ def test_gap_resolution_direction_selects_the_matching_model(validator):
 
 @_xfail("resolve_type_map_gaps")
 def test_gap_resolution_reports_an_unresolved_probe_as_informational(validator):
-    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    maps = {"type-map-read.json": _type_map_doc(
+        "read", [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])}
     result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING", "BIGINT"])
     gaps = [f for f in result["findings"] if f["message_id"] == "type-map-gap"]
     assert len(gaps) == 1, result["findings"]
@@ -406,7 +418,8 @@ def test_gap_resolution_reports_an_unresolved_probe_as_informational(validator):
 
 @_xfail("resolve_type_map_gaps")
 def test_gap_resolution_fully_covered_reports_no_findings(validator):
-    maps = {"type-map-read.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    maps = {"type-map-read.json": _type_map_doc(
+        "read", [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])}
     result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING"])
     assert result == {"findings": []}
 
@@ -420,8 +433,10 @@ def test_gap_resolution_falls_through_to_a_later_map_for_a_probe_the_first_does_
     # so this is the one multi-map behaviour its envelope can observe —
     # WHICH map's value wins on a genuine conflict is not visible here.)
     maps = {
-        "type-map-primary.json": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
-        "type-map-fallback.json": [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}],
+        "type-map-primary.json": _type_map_doc(
+            "read", [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
+        "type-map-fallback.json": _type_map_doc(
+            "read", [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}]),
     }
     result = validator.resolve_type_map_gaps(maps=maps, direction="read", probes=["STRING", "BIGINT"])
     assert result == {"findings": []}, result

@@ -220,7 +220,8 @@ def resolve_type_map_gaps(
     Never raises. Returns `{"findings"}` only — no `resolved`, no top-level
     `direction`. Finding kinds sharing that list: `type-map-unreadable`
     (`fail`/`error`, no `direction` — a map that is invalid JSON or not a
-    list, a failure prior to any direction-specific check); `invalid-type-map`
+    `{$schema, direction, rules}` object, a failure prior to any
+    direction-specific check); `invalid-type-map`
     (`fail`/`error`, `direction` = this call's `direction` — a map that fails
     its `TypeMapReadDoc`/`TypeMapWriteDoc` model,
     `analitiq.contracts.type_map`); `type-map-gap` (`informational`, no

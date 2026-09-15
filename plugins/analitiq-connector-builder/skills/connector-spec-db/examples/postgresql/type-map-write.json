@@ -1,142 +1,146 @@
-[
-  {
-    "match": "exact",
-    "arrow_type": "Boolean",
-    "native_type": "BOOLEAN"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Int8",
-    "native_type": "SMALLINT"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Int16",
-    "native_type": "SMALLINT"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Int32",
-    "native_type": "INTEGER"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Int64",
-    "native_type": "BIGINT"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "UInt8",
-    "native_type": "SMALLINT"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "UInt16",
-    "native_type": "INTEGER"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "UInt32",
-    "native_type": "BIGINT"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "UInt64",
-    "native_type": "BIGINT"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Float16",
-    "native_type": "REAL"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Float32",
-    "native_type": "REAL"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Float64",
-    "native_type": "DOUBLE PRECISION"
-  },
-  {
-    "match": "regex",
-    "arrow_type": "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$",
-    "native_type": "NUMERIC(${p}, ${s})"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Utf8",
-    "native_type": "TEXT"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "LargeUtf8",
-    "native_type": "TEXT"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Json",
-    "native_type": "JSONB"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Object",
-    "native_type": "JSONB"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "List",
-    "native_type": "JSONB"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Binary",
-    "native_type": "BYTEA"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "LargeBinary",
-    "native_type": "BYTEA"
-  },
-  {
-    "match": "regex",
-    "arrow_type": "^FixedSizeBinary\\(\\d+\\)$",
-    "native_type": "BYTEA"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Date32",
-    "native_type": "DATE"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Date64",
-    "native_type": "DATE"
-  },
-  {
-    "match": "regex",
-    "arrow_type": "^Time(32|64)\\([A-Z]+\\)$",
-    "native_type": "TIME"
-  },
-  {
-    "match": "regex",
-    "arrow_type": "^Timestamp\\([A-Z]+\\)$",
-    "native_type": "TIMESTAMP"
-  },
-  {
-    "match": "regex",
-    "arrow_type": "^Timestamp\\([A-Z]+,\\s*UTC\\)$",
-    "native_type": "TIMESTAMPTZ"
-  },
-  {
-    "match": "regex",
-    "arrow_type": "^Duration\\([A-Z]+\\)$",
-    "native_type": "INTERVAL"
-  },
-  {
-    "match": "exact",
-    "arrow_type": "Null",
-    "native_type": "TEXT"
-  }
-]
+{
+  "$schema": "https://schemas.analitiq.ai/type-map-write/latest.json",
+  "direction": "write",
+  "rules": [
+    {
+      "match": "exact",
+      "arrow_type": "Boolean",
+      "native_type": "BOOLEAN"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Int8",
+      "native_type": "SMALLINT"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Int16",
+      "native_type": "SMALLINT"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Int32",
+      "native_type": "INTEGER"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Int64",
+      "native_type": "BIGINT"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "UInt8",
+      "native_type": "SMALLINT"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "UInt16",
+      "native_type": "INTEGER"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "UInt32",
+      "native_type": "BIGINT"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "UInt64",
+      "native_type": "BIGINT"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Float16",
+      "native_type": "REAL"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Float32",
+      "native_type": "REAL"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Float64",
+      "native_type": "DOUBLE PRECISION"
+    },
+    {
+      "match": "regex",
+      "arrow_type": "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$",
+      "native_type": "NUMERIC(${p}, ${s})"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Utf8",
+      "native_type": "TEXT"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "LargeUtf8",
+      "native_type": "TEXT"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Json",
+      "native_type": "JSONB"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Object",
+      "native_type": "JSONB"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "List",
+      "native_type": "JSONB"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Binary",
+      "native_type": "BYTEA"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "LargeBinary",
+      "native_type": "BYTEA"
+    },
+    {
+      "match": "regex",
+      "arrow_type": "^FixedSizeBinary\\(\\d+\\)$",
+      "native_type": "BYTEA"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Date32",
+      "native_type": "DATE"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Date64",
+      "native_type": "DATE"
+    },
+    {
+      "match": "regex",
+      "arrow_type": "^Time(32|64)\\([A-Z]+\\)$",
+      "native_type": "TIME"
+    },
+    {
+      "match": "regex",
+      "arrow_type": "^Timestamp\\([A-Z]+\\)$",
+      "native_type": "TIMESTAMP"
+    },
+    {
+      "match": "regex",
+      "arrow_type": "^Timestamp\\([A-Z]+,\\s*UTC\\)$",
+      "native_type": "TIMESTAMPTZ"
+    },
+    {
+      "match": "regex",
+      "arrow_type": "^Duration\\([A-Z]+\\)$",
+      "native_type": "INTERVAL"
+    },
+    {
+      "match": "exact",
+      "arrow_type": "Null",
+      "native_type": "TEXT"
+    }
+  ]
+}

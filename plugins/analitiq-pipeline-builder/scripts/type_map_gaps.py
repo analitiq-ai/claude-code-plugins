@@ -63,8 +63,8 @@ def _load_rules(path: Path, direction: str) -> list:
         doc = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
-    if not isinstance(doc, list):
-        raise ValueError(f"{path} is not a JSON array of rules")
+    if not (isinstance(doc, dict) and "rules" in doc):
+        raise ValueError(f"{path} is not a {{$schema, direction, rules}} type-map document")
     from pydantic import ValidationError
     from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
     model = TypeMapReadDoc if direction == "read" else TypeMapWriteDoc
@@ -74,7 +74,7 @@ def _load_rules(path: Path, direction: str) -> list:
         raise ValueError(
             f"{path} is not a valid {direction} type map — fix it (or, for a "
             f"connector map, raise the defect upstream) before probing: {exc}") from exc
-    return doc
+    return doc["rules"]
 
 
 def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:

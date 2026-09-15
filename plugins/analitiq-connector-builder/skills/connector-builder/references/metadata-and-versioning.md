@@ -74,4 +74,4 @@ The document families differ, so don't generalize from one to another:
 |---|---|---|
 | Connector | Author it; matched by pattern, tolerating any environment host (`schemas.analitiq.<tld>`). | Partly. The *pattern* is enforced when present, but the field is optional — a connector omitting `$schema` entirely validates clean. Always writing it is our convention, not a contract rule. |
 | API endpoint | Locked to the `.ai` URL by a `const`. | Yes — required, and a different host is rejected. |
-| Type maps | None — both maps are bare JSON arrays with no envelope. | N/A; direction comes from the filename. |
+| Type maps | Required, locked to the direction's `.ai` URL by a `Literal` (`type-map-read` / `type-map-write`). | Yes — required, and a mismatched or missing `$schema` is rejected. Direction is still resolved from the filename first; the document's own `direction` field is a fallback, never an override. |

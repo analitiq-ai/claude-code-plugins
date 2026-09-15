@@ -52,8 +52,22 @@ The pre-split filename `type-map.json` is never authored (`RULE-PKG-030`).
 
 ## File shape
 
-Each file is a top-level JSON array of rule objects, authored in resolution
-order (`RULE-TMAP-013`). Each rule object carries exactly the keys named below
+Each file is a top-level JSON object: a fixed `direction` (`"read"` /
+`"write"`), the file's own `$schema` URL, and `rules` — a non-empty array of
+rule objects authored in resolution order (`RULE-TMAP-013`):
+
+<!-- validate: type-map-read -->
+```json
+{
+  "$schema": "https://schemas.analitiq.ai/type-map-read/latest.json",
+  "direction": "read",
+  "rules": [
+    { "match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean" }
+  ]
+}
+```
+
+Each rule object carries exactly the keys named below
 and no others — but which key is the *matcher* and which is *rendered*
 depends on the direction:
 
@@ -197,10 +211,14 @@ The shape markers `Object` and `List` split by direction:
 
   <!-- validate: type-map-write -->
   ```json
-  [
-    { "match": "exact", "arrow_type": "Object", "native_type": "JSONB" },
-    { "match": "exact", "arrow_type": "List",   "native_type": "JSONB" }
-  ]
+  {
+    "$schema": "https://schemas.analitiq.ai/type-map-write/latest.json",
+    "direction": "write",
+    "rules": [
+      { "match": "exact", "arrow_type": "Object", "native_type": "JSONB" },
+      { "match": "exact", "arrow_type": "List",   "native_type": "JSONB" }
+    ]
+  }
   ```
 
   Author these as `exact` rules over the bare markers — do **not** widen

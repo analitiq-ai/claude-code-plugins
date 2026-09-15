@@ -325,6 +325,8 @@ def measured_reachable_connectors_ids() -> set[str]:
     import json
     import tempfile
 
+    from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL
+
     adapter = _pipeline_validate_adapter()
     observed: set[str | None] = set()
 
@@ -351,7 +353,11 @@ def measured_reachable_connectors_ids() -> set[str]:
             {"match": "regex", "native_type": "^duplicate_probe$", "arrow_type": "Utf8"},
         ]
         path = root / "type-map-read.json"
-        path.write_text(json.dumps(read_rules))
+        path.write_text(json.dumps({
+            "$schema": TYPE_MAP_READ_SCHEMA_URL,
+            "direction": "read",
+            "rules": read_rules,
+        }))
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
             "type-map", path, direction="read")["findings"]}
 
@@ -362,7 +368,11 @@ def measured_reachable_connectors_ids() -> set[str]:
         # to the adapter's own output. It does not: excluded below by what
         # this probe observes, not by name.
         path = root / "type-map-write.json"
-        path.write_text(json.dumps([]))
+        path.write_text(json.dumps({
+            "$schema": TYPE_MAP_WRITE_SCHEMA_URL,
+            "direction": "write",
+            "rules": [],
+        }))
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
             "type-map", path, direction="write")["findings"]}
 

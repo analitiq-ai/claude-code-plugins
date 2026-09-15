@@ -71,8 +71,8 @@ connect or run time.
   anything the connector already covers *overrides* the connector for every
   stream on this connection — never shadow. A write-coverage warning is not a
   reason to add one.
-- **No gaps → no file.** Never write an empty array; when a direction has no
-  gaps, write nothing.
+- **No gaps → no file.** Never write a document with an empty `rules` array;
+  when a direction has no gaps, write nothing.
 - **Extend, never rewrite** (`RULE-TMAP-012`). Append after the rules a
   connection map already carries — they are prior authored behavior on this
   connection.

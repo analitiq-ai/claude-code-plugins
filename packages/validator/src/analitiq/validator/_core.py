@@ -298,7 +298,7 @@ def validate_document(doc: Any, doc_path: Path | None = None,
                       schema_url: str | None = None) -> list[dict]:
     """Detect the document kind, validate via its model, add cross-file checks.
 
-    `schema_url` is a direction hint for a type-map array whose filename is
+    `schema_url` is a direction hint for a type-map document whose filename is
     ambiguous (a caller passing `--schema-url .../type-map-write/latest.json`
     from a temp file): it disambiguates read vs write when the filename can't.
     """
@@ -316,8 +316,9 @@ def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) ->
         message=(
             "document does not match any known artifact (connector / api-endpoint / "
             "database-endpoint / type-map / connection / stream / pipeline); a connector "
-            "must declare 'kind', an api-endpoint 'operations', a type-map is a JSON array "
-            "of rules, a connection a 'connector_id', a stream 'source' + 'destinations', "
+            "must declare 'kind', an api-endpoint 'operations', a type-map a "
+            "'rules' array (inside the {$schema, direction, rules} object), a "
+            "connection a 'connector_id', a stream 'source' + 'destinations', "
             "a pipeline 'connections'."))]
 
 
@@ -361,7 +362,7 @@ def main() -> int:
     # Accepted for backward compatibility with existing invocations. Validation
     # is now always model-driven and offline, so these are no-ops.
     parser.add_argument("--schema-url", help="Used only as a read/write direction hint for an "
-                        "ambiguously-named type-map array; otherwise not fetched (validation is model-driven).")
+                        "ambiguously-named type-map document; otherwise not fetched (validation is model-driven).")
     parser.add_argument("--semantic-only", action="store_true", help="(ignored) always offline now.")
     parser.add_argument("--json-only", action="store_true", help="(ignored) always offline now.")
     parser.add_argument("--no-cache", action="store_true", help="(ignored) no schema cache.")

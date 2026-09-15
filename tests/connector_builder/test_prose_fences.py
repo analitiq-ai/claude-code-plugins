@@ -320,7 +320,7 @@ def test_every_block_is_annotated():
 # Coverage is a conscious number: adding a block (or changing a disposition)
 # must move this constant in the same change, so the validated surface never
 # shrinks silently.
-EXPECTED_DISPOSITIONS = {"validate": 15, "invalid": 0, "illustrative": 7}
+EXPECTED_DISPOSITIONS = {"validate": 16, "invalid": 0, "illustrative": 7}
 
 
 def test_disposition_counts_are_conscious():
@@ -489,6 +489,7 @@ HOSTS = {
      "api-endpoint#/operations/write/upsert/request"):
         "tests/connector_builder/fixtures/prose-hosts/contact.json",
     ("skills/connector-spec-db/spec-type-maps.md", "type-map-write"): STANDALONE,
+    ("skills/connector-spec-db/spec-type-maps.md", "type-map-read"): STANDALONE,
 }
 
 

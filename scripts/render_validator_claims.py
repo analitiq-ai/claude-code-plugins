@@ -181,6 +181,18 @@ def _example_body(example_dir: Path) -> dict:
     return json.loads(body.read_text())
 
 
+def _wrap_type_map(rules: list, direction: str) -> dict:
+    """A bare rule list, as every probe author writes one, wrapped in the
+    published `{$schema, direction, rules}` type-map document shape."""
+    from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL
+    schema_url = TYPE_MAP_READ_SCHEMA_URL if direction == "read" else TYPE_MAP_WRITE_SCHEMA_URL
+    return {
+        "$schema": schema_url,
+        "direction": direction,
+        "rules": rules,
+    }
+
+
 def _staged_connector(mutate: Callable[[dict], dict], example_dir: Path,
                       read_map: list | None = None, write_map: list | None = None) -> list[dict]:
     """Validate a mutated example connector with its siblings staged on disk.
@@ -188,15 +200,19 @@ def _staged_connector(mutate: Callable[[dict], dict], example_dir: Path,
     Staging mirrors `tests/connector_builder/test_examples_validate.py`: the
     cross-file coverage checks walk a `definition/` directory, so the type maps
     (and endpoints, for the API example) must sit beside the document.
+    `read_map`/`write_map` are bare rule lists; they are wrapped into the
+    type-map document shape before being staged, same as every on-disk example.
     """
     doc = mutate(_example_body(example_dir))
     with tempfile.TemporaryDirectory() as tmp:
         definition = Path(tmp) / "definition"
         definition.mkdir()
         (definition / "connector.json").write_text(json.dumps(doc))
-        for name, override in (("type-map-read.json", read_map), ("type-map-write.json", write_map)):
+        for name, direction, override in (
+            ("type-map-read.json", "read", read_map), ("type-map-write.json", "write", write_map)
+        ):
             if override is not None:
-                (definition / name).write_text(json.dumps(override))
+                (definition / name).write_text(json.dumps(_wrap_type_map(override, direction)))
             elif (example_dir / name).exists():
                 shutil.copy(example_dir / name, definition / name)
         if (example_dir / "endpoints").is_dir():
@@ -205,10 +221,12 @@ def _staged_connector(mutate: Callable[[dict], dict], example_dir: Path,
 
 
 def _staged_type_map(rules: list, filename: str) -> list[dict]:
+    direction = "write" if "write" in filename else "read"
+    doc = _wrap_type_map(rules, direction)
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / filename
-        path.write_text(json.dumps(rules))
-        return _validate(rules, doc_path=path)
+        path.write_text(json.dumps(doc))
+        return _validate(doc, doc_path=path)
 
 
 def _first_transport(doc: dict) -> dict:
@@ -496,12 +514,12 @@ def _p_sql_capabilities_pairing_unchecked() -> list[dict]:
 
 
 def _p_read_map_completeness() -> list[dict]:
-    read_map = json.loads((DB_EXAMPLE / "type-map-read.json").read_text())
+    read_map = json.loads((DB_EXAMPLE / "type-map-read.json").read_text())["rules"]
     return _staged_connector(lambda doc: doc, DB_EXAMPLE, read_map=read_map[:1])
 
 
 def _p_read_map_native_semantics() -> list[dict]:
-    read_map = json.loads((DB_EXAMPLE / "type-map-read.json").read_text())
+    read_map = json.loads((DB_EXAMPLE / "type-map-read.json").read_text())["rules"]
     read_map = [r for r in read_map if "JSONB" not in json.dumps(r)]
     read_map.append({"match": "exact", "native_type": "JSONB", "arrow_type": "Utf8"})
     return _staged_connector(lambda doc: doc, DB_EXAMPLE, read_map=read_map)
@@ -568,7 +586,7 @@ def _p_param_key_provider_spelling() -> list[dict]:
 # --- type-map probes --------------------------------------------------------
 
 def _p_write_map_regex_case() -> list[dict]:
-    rules = json.loads((DB_EXAMPLE / "type-map-write.json").read_text())
+    rules = json.loads((DB_EXAMPLE / "type-map-write.json").read_text())["rules"]
     rules.append({"match": "regex", "arrow_type": "^utf8$", "native_type": "TEXT"})
     return _staged_type_map(rules, "type-map-write.json")
 

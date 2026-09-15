@@ -566,7 +566,7 @@ def _write_vocabulary_findings(rules: list) -> list[dict]:
         return []
     return [finding(
         rule="RULE-TMAP-017",
-        message_id="write-map-missing-family", kind="fail", path="/",
+        message_id="write-map-missing-family", kind="fail", path="/rules",
         message=(
             f"write map has no rule rendering these Arrow families: {missing}. "
             "If the dialect renders them via a column-type override this is expected; "
@@ -600,7 +600,7 @@ def _type_map_rule_warnings(rules: list, direction: str) -> list[dict]:
             if key in seen:
                 findings.append(finding(
                     rule="RULE-TMAP-022",
-                    message_id="duplicate-type-map-rule", kind="fail", path=f"/{i}",
+                    message_id="duplicate-type-map-rule", kind="fail", path=f"/rules/{i}",
                     message=(
                         f"duplicate rule for (match={match!r}, {matcher_key}={matcher!r}); "
                         "first-match-wins makes later duplicates unreachable."),
@@ -630,7 +630,7 @@ def _type_map_rule_warnings(rules: list, direction: str) -> list[dict]:
                 findings.append(finding(
                     rule="RULE-TMAP-014",
                     message_id="regex-native-case-mismatch", kind="fail",
-                    path=f"/{i}/{matcher_key}",
+                    path=f"/rules/{i}/{matcher_key}",
                     message=(
                         f"regex {matcher_key} is matched against UPPERCASED natives; "
                         f"lowercase literals in {matcher!r} can never match."),
@@ -981,7 +981,7 @@ def _load_json_sibling(
             message=f"sibling {path.name} could not be read or parsed ({exc}).")]
 
 
-def _load_type_map(path: Path) -> tuple[list | None, list[dict]]:
+def _load_type_map(path: Path) -> tuple[Any | None, list[dict]]:
     """A type-map document, or `None` plus an unparseable-sibling finding."""
     return _load_json_sibling(
         path, rule="RULE-PKG-030", message_id="type-map-unparseable")
@@ -991,12 +991,15 @@ def _type_map_findings(doc: Any, direction: str) -> list[dict]:
     """Validate a loaded type-map document: model errors + advisory rule
     warnings + (write-vocabulary coverage on the write direction). The single
     definition used everywhere a type-map is checked — standalone, or as a
-    connector's sibling."""
+    connector's sibling. `doc` is the whole `{$schema, direction, rules}`
+    object; the advisory/coverage checks below only ever needed the `rules`
+    array, so that is all they are handed."""
     adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
     findings = _model_findings(doc, adapter)
-    findings.extend(_type_map_rule_warnings(doc, direction))
-    if direction == "write" and isinstance(doc, list):
-        findings.extend(_write_vocabulary_findings(doc))
+    rules = doc.get("rules") if isinstance(doc, dict) else None
+    findings.extend(_type_map_rule_warnings(rules, direction))
+    if direction == "write" and isinstance(rules, list):
+        findings.extend(_write_vocabulary_findings(rules))
     return findings
 
 
@@ -1048,10 +1051,11 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
     # returned on: the rendering is what needs it, and returning here would
     # withhold every endpoint-anchored check as well, hiding every defect in
     # every endpoint document behind one broken file. What is carried is
-    # whatever loaded — `None` when the file is absent or unreadable, the parsed
-    # value when it is readable but not a list of rules — so the readers below
-    # ask whether it is a list rather than whether it is set.
+    # whatever loaded — `None` when the file is absent, unreadable, or not the
+    # `{$schema, direction, rules}` object, the `rules` array when it is — so
+    # the readers below ask whether it is a list rather than whether it is set.
     read_doc: Any = None
+    read_rules: Any = None
     if not read_path.is_file():
         findings.append(finding(
             rule="RULE-PKG-030",
@@ -1062,6 +1066,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         findings.extend(load)
         if read_doc is not None:
             findings.extend(_type_map_findings(read_doc, "read"))
+            read_rules = read_doc.get("rules") if isinstance(read_doc, dict) else None
 
     if kind in _DATABASE_KINDS:
         if not write_path.is_file():
@@ -1084,7 +1089,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             message=(
                 f"api connector must not ship {_WRITE_MAP_FILENAME}; the write direction "
                 "is database-only.")))
-    if not isinstance(read_doc, list):
+    if not isinstance(read_rules, list):
         # notApplicable, not fail: the check knows exactly which rule it would
         # be grading (RULE-PKG-033) — the read map itself is missing, unreadable,
         # or malformed, which is already reported above under its own rule; this
@@ -1094,8 +1099,9 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             message_id="native-type-coverage-skipped", kind="notApplicable", path="/",
             message=(
                 f"native_type coverage against sibling {_READ_MAP_FILENAME} was not "
-                "rendered: the map is missing, unreadable, or not a list of rules. "
-                "Endpoint native_type/arrow_type agreement is unverified until it is fixed.")))
+                "rendered: the map is missing, unreadable, or its `rules` is not a "
+                "list. Endpoint native_type/arrow_type agreement is unverified until "
+                "it is fixed.")))
     endpoint_dir = parent / "endpoints"
     if not endpoint_dir.is_dir():
         findings.append(finding(
@@ -1158,9 +1164,9 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             continue
         # The rendering is the one check here that needs the sibling map; a map
         # that did not load skips it, and the connector-level warning says so.
-        if isinstance(read_doc, list):
+        if isinstance(read_rules, list):
             for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
-                rendered = _render_arrow_type(native, read_doc)
+                rendered = _render_arrow_type(native, read_rules)
                 site = f"{ep_path.name}{pointer}"
                 if rendered is None:
                     findings.append(finding(
@@ -1328,30 +1334,39 @@ def _validate_database_endpoint(doc: Any, doc_path: Path | None, schema_url: str
 
 
 def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:
-    # Direction from the filename; fall back to the --schema-url hint (write
-    # vs read) when the filename is ambiguous, before defaulting to read.
+    # Direction from the filename, then the --schema-url hint, wins whenever
+    # either names one: the engine loads each direction only from its exact
+    # filename regardless of what the document's own `direction` says, so a
+    # doc whose declared direction disagrees with its filename must surface as
+    # a model error (the chosen adapter's `direction: Literal[...]` rejects
+    # it), not be silently resolved by trusting the content over the name.
+    # Only when NEITHER signal is available does the document's own
+    # self-declared `direction` get to decide, before defaulting to read.
     by_name = doc_path.name if doc_path is not None else ""
     if by_name == _WRITE_MAP_FILENAME or (
         by_name != _READ_MAP_FILENAME and isinstance(schema_url, str) and "type-map-write" in schema_url
     ):
-        direction = "write"
+        direction, ambiguous = "write", False
+    elif by_name == _READ_MAP_FILENAME or (isinstance(schema_url, str) and "type-map-read" in schema_url):
+        direction, ambiguous = "read", False
     else:
-        direction = "read"
+        declared = doc.get("direction") if isinstance(doc, dict) else None
+        ambiguous = declared not in ("read", "write")
+        direction = "read" if ambiguous else declared
     findings = _type_map_findings(doc, direction)
-    if direction == "read" and doc_path is not None and doc_path.name not in (
-        _READ_MAP_FILENAME, _WRITE_MAP_FILENAME
-    ) and not (isinstance(schema_url, str) and "type-map-read" in schema_url):
+    if ambiguous and doc_path is not None:
         # informational, no rule: nothing here was violated — the CLI guessed a
-        # direction because the filename was ambiguous, which is a fact about
-        # how this run proceeded, not about the document (rules/SCHEMA.md's
-        # generalized ruleless-fail case's informational sibling).
+        # direction because the filename was ambiguous and the document names no
+        # valid `direction` either, which is a fact about how this run proceeded,
+        # not about the document (rules/SCHEMA.md's generalized ruleless-fail
+        # case's informational sibling).
         findings.append(finding(
             message_id="type-map-direction-defaulted",
             kind="informational", path="/",
             message=(
                 f"rule direction defaulted to 'read': filename {doc_path.name!r} is "
-                f"neither {_READ_MAP_FILENAME!r} nor {_WRITE_MAP_FILENAME!r} "
-                "(pass --schema-url to disambiguate).")))
+                f"neither {_READ_MAP_FILENAME!r} nor {_WRITE_MAP_FILENAME!r}, and the "
+                "document names no valid `direction` (pass --schema-url to disambiguate).")))
     return findings
 
 
@@ -1366,13 +1381,17 @@ def _validate_kindless_connector(doc: Any, doc_path: Path | None, schema_url: st
 
 
 # Registration order mirrors the original dispatch precedence: connector,
-# api-endpoint, database-endpoint, type-map (any JSON array), then the
-# kindless-connector fallback. `_core._dispatch` runs these in order and falls
-# through to the generic "unrecognized document" verdict if none match.
+# api-endpoint, database-endpoint, type-map (an object carrying a `rules` key
+# — no other document kind has one at the top level), then the
+# kindless-connector fallback. Sniffing on `rules` alone (not also requiring a
+# valid `direction`) means a doc with a missing/malformed `direction` still
+# reaches the model and gets that specific error, rather than falling through
+# to the generic "unrecognized document" verdict. `_core._dispatch` runs these
+# in order and falls through to that verdict if none match.
 register_kind(is_connector_doc, _validate_connector)
 register_kind(is_api_endpoint_doc, _validate_api_endpoint)
 register_kind(is_database_endpoint_doc, _validate_database_endpoint)
-register_kind(lambda doc: isinstance(doc, list), _validate_type_map)
+register_kind(lambda doc: isinstance(doc, dict) and "rules" in doc, _validate_type_map)
 register_kind(
     lambda doc: isinstance(doc, dict) and any(k in doc for k in _CONNECTOR_SENTINELS),
     _validate_kindless_connector,

@@ -1,10 +1,14 @@
-[
-  { "match": "exact", "native_type": "BOOLEAN",                                  "arrow_type": "Boolean" },
-  { "match": "exact", "native_type": "INTEGER",                                  "arrow_type": "Int32" },
-  { "match": "exact", "native_type": "BIGINT",                                   "arrow_type": "Int64" },
-  { "match": "exact", "native_type": "TEXT",                                     "arrow_type": "Utf8" },
-  { "match": "regex", "native_type": "^TIMESTAMP\\(0\\)( WITHOUT TIME ZONE)?$",       "arrow_type": "Timestamp(SECOND)" },
-  { "match": "regex", "native_type": "^TIMESTAMP\\([1-3]\\)( WITHOUT TIME ZONE)?$",   "arrow_type": "Timestamp(MILLISECOND)" },
-  { "match": "regex", "native_type": "^TIMESTAMP(\\([4-6]\\))?( WITHOUT TIME ZONE)?$","arrow_type": "Timestamp(MICROSECOND)" },
-  { "match": "exact", "native_type": "JSONB",                                    "arrow_type": "Json" }
-]
+{
+  "$schema": "https://schemas.analitiq.ai/type-map-read/latest.json",
+  "direction": "read",
+  "rules": [
+    { "match": "exact", "native_type": "BOOLEAN",                                  "arrow_type": "Boolean" },
+    { "match": "exact", "native_type": "INTEGER",                                  "arrow_type": "Int32" },
+    { "match": "exact", "native_type": "BIGINT",                                   "arrow_type": "Int64" },
+    { "match": "exact", "native_type": "TEXT",                                     "arrow_type": "Utf8" },
+    { "match": "regex", "native_type": "^TIMESTAMP\\(0\\)( WITHOUT TIME ZONE)?$",       "arrow_type": "Timestamp(SECOND)" },
+    { "match": "regex", "native_type": "^TIMESTAMP\\([1-3]\\)( WITHOUT TIME ZONE)?$",   "arrow_type": "Timestamp(MILLISECOND)" },
+    { "match": "regex", "native_type": "^TIMESTAMP(\\([4-6]\\))?( WITHOUT TIME ZONE)?$","arrow_type": "Timestamp(MICROSECOND)" },
+    { "match": "exact", "native_type": "JSONB",                                    "arrow_type": "Json" }
+  ]
+}

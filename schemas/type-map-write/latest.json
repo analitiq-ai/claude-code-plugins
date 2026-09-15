@@ -60,26 +60,50 @@
   },
   "$id": "https://schemas.analitiq.ai/type-map-write/latest.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Public JSON Schema contract for a database connector's `type-map-write.json` \u2014 the write direction (arrow_type \u2192 native_type DDL) of its type-map pair, a top-level array of `{match, native_type, arrow_type}` rules where `arrow_type` matches and `native_type` renders. The full per-rule contract lives in the model and is enforced by the connector validator; this published schema is the structural projection. Source of truth: analitiq.contracts.type_map.TypeMapWriteDoc (Pydantic).",
-  "items": {
-    "discriminator": {
-      "mapping": {
-        "exact": "#/$defs/TypeMapWriteExactRule",
-        "regex": "#/$defs/TypeMapWriteRegexRule"
-      },
-      "propertyName": "match"
+  "additionalProperties": false,
+  "description": "Public JSON Schema contract for a database connector's `type-map-write.json` \u2014 the write direction (arrow_type \u2192 native_type DDL) of its type-map pair, a top-level object carrying `direction` (fixed `\"write\"`) and an ordered, non-empty `rules` array of `{match, native_type, arrow_type}` rules where `arrow_type` matches and `native_type` renders. The full per-rule contract lives in the model and is enforced by the connector validator; this published schema is the structural projection. Source of truth: analitiq.contracts.type_map.TypeMapWriteDoc (Pydantic).",
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.analitiq.ai/type-map-write/latest.json",
+      "description": "Schema URL declared by every `type-map-write.json` document.",
+      "title": "$Schema",
+      "type": "string"
     },
-    "oneOf": [
-      {
-        "$ref": "#/$defs/TypeMapWriteExactRule"
+    "direction": {
+      "const": "write",
+      "description": "Fixed direction discriminator for this file.",
+      "title": "Direction",
+      "type": "string"
+    },
+    "rules": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "exact": "#/$defs/TypeMapWriteExactRule",
+            "regex": "#/$defs/TypeMapWriteRegexRule"
+          },
+          "propertyName": "match"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/TypeMapWriteExactRule"
+          },
+          {
+            "$ref": "#/$defs/TypeMapWriteRegexRule"
+          }
+        ]
       },
-      {
-        "$ref": "#/$defs/TypeMapWriteRegexRule"
-      }
-    ]
+      "minItems": 1,
+      "title": "Rules",
+      "type": "array"
+    }
   },
-  "minItems": 1,
+  "required": [
+    "$schema",
+    "direction",
+    "rules"
+  ],
   "title": "Analitiq Type Map (write)",
-  "type": "array",
-  "version": "4.0.0"
+  "type": "object",
+  "version": "5.0.0"
 }

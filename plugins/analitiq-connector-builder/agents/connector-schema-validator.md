@@ -57,7 +57,7 @@ PY
 ```
 
 `--schema-url` is used only as a read/write **direction hint** for an
-ambiguously-named type-map array.
+ambiguously-named type-map document.
 
 ## Findings
 

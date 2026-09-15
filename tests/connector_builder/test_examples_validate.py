@@ -153,10 +153,15 @@ def test_prose_type_map_rules_validate(tmp_path: Path) -> None:
     for path, lineno, direction, rule in rules:
         if direction == "unquotable":
             continue
+        doc = {
+            "$schema": TYPE_MAP_SCHEMAS[f"type-map-{direction}.json"],
+            "direction": direction,
+            "rules": [rule],
+        }
         map_path = tmp_path / f"type-map-{direction}.json"
-        map_path.write_text(json.dumps([rule]), encoding="utf-8")
+        map_path.write_text(json.dumps(doc), encoding="utf-8")
         findings = validate_document(
-            [rule],
+            doc,
             doc_path=map_path.resolve(),
             schema_url=TYPE_MAP_SCHEMAS[f"type-map-{direction}.json"],
         )
