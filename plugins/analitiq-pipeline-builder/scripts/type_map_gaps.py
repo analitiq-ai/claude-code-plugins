@@ -121,13 +121,12 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         return _fail(str(exc))
 
-    # `_load_rules` model-validates the whole envelope, including its `direction`
-    # Literal, so a wrong-direction map fails loud there — but only once its
-    # filename has already routed it into the wrong model. Catch the mismatch
-    # by filename first, before that validation error, so the message names the
-    # actual mistake (a swapped --map/--direction) rather than a generic schema
-    # failure. The two load-bearing filenames declare their direction; hold a
-    # map named either of them to it.
+    # `_load_rules` grades each map against the model `--direction` names, so a
+    # map whose envelope declares the other direction fails there on the
+    # `direction` Literal. Catch a filename/--direction mismatch first, so the
+    # message names the actual mistake (a swapped --map/--direction) rather
+    # than a generic schema failure. The two load-bearing filenames declare
+    # their direction; hold a map named either of them to it.
     load_bearing = {"type-map-read.json": "read", "type-map-write.json": "write"}
     for m in args.maps:
         implied = load_bearing.get(Path(m).name)

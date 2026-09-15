@@ -165,7 +165,7 @@ you are returning.
 {
   "connector": { ...connector body... },
   "type_map_read": {
-    "$schema": "https://schemas.analitiq.ai/type-map-read/latest.json",
+    "$schema": "<the read-map $schema URL — spec-type-maps.md §File shape>",
     "direction": "read",
     "rules": [ ...rules... ]
   },

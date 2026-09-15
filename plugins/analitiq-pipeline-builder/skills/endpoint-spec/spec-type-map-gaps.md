@@ -26,8 +26,8 @@ authoring the connection-scoped maps that close it.
 
 Each file is a whole `{$schema, direction, rules}` document, not a bare rules
 array. `direction` is the same value named in the table above (`read` /
-`write`); the `$schema` value for each is in
-`../pipeline-builder/references/schema-hosts.md`.
+`write`); the `$schema` value for each is in this skill's own `SKILL.md`
+schema-URL table.
 
 The rule shape (exact/regex `match`, matcher vs rendered key per direction,
 `${name}` captures) is identical to the connector's own maps — the connector

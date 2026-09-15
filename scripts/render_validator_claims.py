@@ -611,12 +611,15 @@ def _p_type_map_schema_required() -> list[dict]:
 
 
 def _p_type_map_direction_filename_wins_over_self_declared() -> list[dict]:
-    # The document names its own direction "write" while sitting under the
-    # read-map filename; the filename decides which model grades it, so the
-    # self-declared value is what fails, not the filename.
+    # A fully self-consistent write document ($schema AND direction both name
+    # "write") sitting under the read-map filename. Every content signal
+    # names "write"; only the filename says "read" — so if the finding still
+    # rejects `direction` for not being "read", the filename is what decided
+    # which model graded this document, not its own declared direction (or,
+    # were direction resolved from `$schema` instead, its own declared
+    # `$schema`).
     rules = [{"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"}]
-    doc = _wrap_type_map(rules, "read")
-    doc["direction"] = "write"
+    doc = _wrap_type_map(rules, "write")
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "type-map-read.json"
         path.write_text(json.dumps(doc))
