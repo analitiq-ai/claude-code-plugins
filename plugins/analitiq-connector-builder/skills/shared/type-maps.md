@@ -58,9 +58,9 @@ connector's rendering for every stream on that connection (`RULE-TMAP-018`).
 
 - **Absent file** — no map at that scope; resolution falls through (a
   connection without maps uses the connector maps alone).
-- **Present but empty (`[]`)** — never ship one at either scope; the contract
-  requires at least one rule, so an empty file is a rejected document rather
-  than the fallthrough an absent one gives you.
+- **Present with an empty `rules` array** — never ship one at either scope; the
+  contract requires at least one rule, so a document with no rules is a
+  rejected document rather than the fallthrough an absent file gives you.
 - **The pre-split `type-map.json`** — the engine never reads this filename at
   either scope. A connector ships its maps under the names its `kind` calls
   for (`RULE-PKG-030`).

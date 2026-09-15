@@ -6,6 +6,8 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from analitiq.contracts.type_map import (
+    TYPE_MAP_READ_SCHEMA_URL,
+    TYPE_MAP_WRITE_SCHEMA_URL,
     TypeMapReadDoc,
     TypeMapWriteDoc,
     normalize_native_type,
@@ -51,18 +53,92 @@ def test_normalize_native_type_canonical(raw, expected):
     assert normalize_native_type(raw) == expected
 
 
+def _wrap(adapter, rules):
+    """A bare rule list wrapped in the published `{$schema, direction, rules}`
+    type-map document shape, direction inferred from which adapter it targets."""
+    direction = "read" if adapter is READ else "write"
+    schema_url = TYPE_MAP_READ_SCHEMA_URL if adapter is READ else TYPE_MAP_WRITE_SCHEMA_URL
+    return {
+        "$schema": schema_url,
+        "direction": direction,
+        "rules": rules,
+    }
+
+
 def _accepts(adapter, rules):
-    adapter.validate_python(rules)
+    adapter.validate_python(_wrap(adapter, rules))
 
 
 def _rejects(adapter, rules):
     with pytest.raises(ValidationError):
-        adapter.validate_python(rules)
+        adapter.validate_python(_wrap(adapter, rules))
 
 
 def test_empty_array_rejected():
     _rejects(READ, [])
     _rejects(WRITE, [])
+
+
+# ---------------------------------------------------------------------------
+# The document envelope itself: `$schema` + `direction` + `rules`, each
+# required and each pinned — the shape `_wrap`'s helpers exercise, never
+# their own field-level rejections.
+# ---------------------------------------------------------------------------
+
+_ONE_READ_RULE = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+_ONE_WRITE_RULE = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+
+
+def test_missing_schema_url_rejected():
+    doc = _wrap(READ, _ONE_READ_RULE)
+    del doc["$schema"]
+    with pytest.raises(ValidationError):
+        READ.validate_python(doc)
+
+
+def test_missing_direction_rejected():
+    doc = _wrap(READ, _ONE_READ_RULE)
+    del doc["direction"]
+    with pytest.raises(ValidationError):
+        READ.validate_python(doc)
+
+
+def test_missing_rules_rejected():
+    doc = _wrap(READ, _ONE_READ_RULE)
+    del doc["rules"]
+    with pytest.raises(ValidationError):
+        READ.validate_python(doc)
+
+
+def test_unknown_top_level_key_rejected():
+    doc = _wrap(READ, _ONE_READ_RULE)
+    doc["extra"] = 1
+    with pytest.raises(ValidationError):
+        READ.validate_python(doc)
+
+
+def test_direction_literal_must_match_the_adapter():
+    """The invariant `direction` exists to express: a document loaded via one
+    adapter (by filename, in the validator) whose own `direction` disagrees
+    is a model error, not a silent resolution — see
+    `packages/validator/src/analitiq/validator/connectors.py::_validate_type_map`.
+    """
+    read_doc = _wrap(READ, _ONE_READ_RULE)
+    read_doc["direction"] = "write"
+    with pytest.raises(ValidationError):
+        READ.validate_python(read_doc)
+
+    write_doc = _wrap(WRITE, _ONE_WRITE_RULE)
+    write_doc["direction"] = "read"
+    with pytest.raises(ValidationError):
+        WRITE.validate_python(write_doc)
+
+
+def test_schema_url_literal_must_match_the_direction():
+    read_doc = _wrap(READ, _ONE_READ_RULE)
+    read_doc["$schema"] = _wrap(WRITE, _ONE_WRITE_RULE)["$schema"]
+    with pytest.raises(ValidationError):
+        READ.validate_python(read_doc)
 
 
 def test_match_enum_and_required_keys():
@@ -146,7 +222,7 @@ def test_exact_write_native_render_placeholders_validated():
     # half ("...the native_type DDL it renders MUST carry only well-formed
     # placeholders").
     with pytest.raises(ValidationError) as exc:
-        WRITE.validate_python([{"match": "exact", "arrow_type": "Utf8", "native_type": "VARCHAR(${})"}])
+        WRITE.validate_python(_wrap(WRITE, [{"match": "exact", "arrow_type": "Utf8", "native_type": "VARCHAR(${})"}]))
     assert "RULE-TMAP-008" in str(exc.value)
 
 
@@ -159,8 +235,8 @@ def test_regex_write_native_render_placeholders_validated():
     _rejects(WRITE, [{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+)\)",
                       "native_type": "NUMERIC(${})"}])
     with pytest.raises(ValidationError) as exc:
-        WRITE.validate_python([{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+)\)",
-                               "native_type": "NUMERIC(${})"}])
+        WRITE.validate_python(_wrap(WRITE, [{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+)\)",
+                               "native_type": "NUMERIC(${})"}]))
     assert "RULE-TMAP-009" in str(exc.value)
 
 

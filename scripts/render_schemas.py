@@ -912,12 +912,14 @@ RESOURCES: tuple[Resource, ...] = (
         description=(
             "Public JSON Schema contract for a connector's `type-map-read.json` "
             "— the read direction (native_type → arrow_type) of its type-map pair, "
-            "a top-level array of `{match, native_type, arrow_type}` rules, order "
-            "significant (first match wins). The full per-rule contract (ECMA-262 "
-            "regex, `${name}` capture correspondence, Arrow vocabulary, "
-            "schemaless-container handling) lives in the model and is enforced by "
-            "the connector validator; this published schema is the structural "
-            "projection. Source of truth: analitiq.contracts.type_map.TypeMapReadDoc (Pydantic)."
+            "a top-level object carrying `direction` (fixed `\"read\"`) and an "
+            "ordered, non-empty `rules` array of `{match, native_type, arrow_type}` "
+            "rules, order significant (first match wins). The full per-rule "
+            "contract (ECMA-262 regex, `${name}` capture correspondence, Arrow "
+            "vocabulary, schemaless-container handling) lives in the model and is "
+            "enforced by the connector validator; this published schema is the "
+            "structural projection. Source of truth: "
+            "analitiq.contracts.type_map.TypeMapReadDoc (Pydantic)."
         ),
         adapter=TypeAdapter(TypeMapReadDoc),
         source_paths=(
@@ -930,7 +932,8 @@ RESOURCES: tuple[Resource, ...] = (
         description=(
             "Public JSON Schema contract for a database connector's "
             "`type-map-write.json` — the write direction (arrow_type → native_type "
-            "DDL) of its type-map pair, a top-level array of "
+            "DDL) of its type-map pair, a top-level object carrying `direction` "
+            "(fixed `\"write\"`) and an ordered, non-empty `rules` array of "
             "`{match, native_type, arrow_type}` rules where `arrow_type` matches "
             "and `native_type` renders. "
             "The full per-rule contract lives in the model and is enforced by the "

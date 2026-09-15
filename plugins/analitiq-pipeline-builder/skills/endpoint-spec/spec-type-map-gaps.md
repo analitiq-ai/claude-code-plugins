@@ -24,6 +24,11 @@ authoring the connection-scoped maps that close it.
 | native → Arrow | `connections/<connection-slug>/definition/type-map-read.json` | `--direction read` |
 | Arrow → native DDL | `connections/<connection-slug>/definition/type-map-write.json` | `--direction write` |
 
+Each file is a whole `{$schema, direction, rules}` document, not a bare rules
+array. `direction` is the same value named in the table above (`read` /
+`write`); the `$schema` value for each is in this skill's own `SKILL.md`
+schema-URL table.
+
 The rule shape (exact/regex `match`, matcher vs rendered key per direction,
 `${name}` captures) is identical to the connector's own maps — the connector
 files you resolve against during gap detection are the live reference for it;
@@ -71,8 +76,8 @@ connect or run time.
   anything the connector already covers *overrides* the connector for every
   stream on this connection — never shadow. A write-coverage warning is not a
   reason to add one.
-- **No gaps → no file.** Never write an empty array; when a direction has no
-  gaps, write nothing.
+- **No gaps → no file.** Never write a document with an empty `rules` array;
+  when a direction has no gaps, write nothing.
 - **Extend, never rewrite** (`RULE-TMAP-012`). Append after the rules a
   connection map already carries — they are prior authored behavior on this
   connection.

@@ -1,6 +1,6 @@
 ---
 name: db-connector-creator
-description: Author a database connector package (kind=database) from ProviderFacts and enum classifications — the connector JSON document, the sibling `type-map-read.json` and `type-map-write.json` arrays, and the Python package files (`connector.py`, `__init__.py`, `requirements.txt`, `pyproject.toml`). Loads the connector-spec-db skill. Knows nothing about OAuth flows or HTTP transports. Use when the connector-builder orchestrator has classified a provider as kind=database. Output is a CreatorOutput JSON object — does not write to disk.
+description: Author a database connector package (kind=database) from ProviderFacts and enum classifications — the connector JSON document, the sibling `type-map-read.json` and `type-map-write.json` documents, and the Python package files (`connector.py`, `__init__.py`, `requirements.txt`, `pyproject.toml`). Loads the connector-spec-db skill. Knows nothing about OAuth flows or HTTP transports. Use when the connector-builder orchestrator has classified a provider as kind=database. Output is a CreatorOutput JSON object — does not write to disk.
 tools: Read, Glob, Grep
 skills:
   - connector-spec-db
@@ -11,7 +11,7 @@ color: blue
 
 You author database connector packages: the connector JSON document, the
 sibling `type-map-read.json` (native → Arrow) and `type-map-write.json`
-(Arrow → native) arrays, and the Python package files that make the
+(Arrow → native) documents, and the Python package files that make the
 connector an installable package. You do not write to disk — the
 orchestrator does that. You return a `CreatorOutput` JSON object with
 all artifacts.
@@ -185,20 +185,21 @@ artifacts, not the plugin's.
    - `limits` — from `provider_facts.sql_write_path.identifier_limits`.
      Optional and additive: declare a cap only where the docs establish
      one, and omit the block entirely when they establish none.
-7. **Read map** — author `type_map_read`, the rule array
-   `spec-type-maps.md` § File shape defines, with `native_type` as the matcher,
-   covering the documented native vocabulary. For OLTP databases,
-   expand from your knowledge of the documented native vocabulary; for
-   warehouses and NoSQL stores, restrict to the researched list.
-   **Author read-side regex literals uppercase** (`RULE-TMAP-014`); exact
-   rules are normalized for you. Parameterized natives use regex rules
+7. **Read map** — author `type_map_read`, the `{$schema, direction, rules}`
+   document `spec-type-maps.md` § File shape defines, with `native_type` as
+   the matcher in each rule, covering the documented native vocabulary. For
+   OLTP databases, expand from your knowledge of the documented native
+   vocabulary; for warehouses and NoSQL stores, restrict to the researched
+   list. **Author read-side regex literals uppercase** (`RULE-TMAP-014`);
+   exact rules are normalized for you. Parameterized natives use regex rules
    with named capture groups; see the spec for substitution rules. The
-   orchestrator writes this array to
+   orchestrator writes this document to
    `{connector_id}/definition/type-map-read.json`.
-8. **Write map** — author `type_map_write` (same rule shape, inverted
-   direction: `arrow_type` is the matcher — regex with named captures
-   for parameterized types — and `native_type` is the rendered DDL, with
-   `${name}` substitutions backed by those captures — `RULE-TMAP-016`).
+8. **Write map** — author `type_map_write` (same rule shape nested in the
+   same document envelope, inverted direction: `arrow_type` is the matcher —
+   regex with named captures for parameterized types — and `native_type` is
+   the rendered DDL, with `${name}` substitutions backed by those captures —
+   `RULE-TMAP-016`).
    Cover the full Arrow vocabulary (`RULE-TMAP-017`). Reconcile every
    family the validator's `type-map-write-coverage` warning names, then
    hand-check the families `spec-type-maps.md` lists as unprobed. A family
@@ -325,8 +326,16 @@ disk.
 ```
 {
   "connector": { ...connector body... },
-  "type_map_read": [ ...native → Arrow rules... ],
-  "type_map_write": [ ...Arrow → native rules... ],
+  "type_map_read": {
+    "$schema": "<the read-map $schema URL — spec-type-maps.md §On-disk location>",
+    "direction": "read",
+    "rules": [ ...native → Arrow rules... ]
+  },
+  "type_map_write": {
+    "$schema": "<the write-map $schema URL — spec-type-maps.md §On-disk location>",
+    "direction": "write",
+    "rules": [ ...Arrow → native rules... ]
+  },
   "package_files": {
     "connector_py": "...",
     "init_py": "...",

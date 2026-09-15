@@ -53,8 +53,9 @@ def _fail(message: str) -> "int":
 
 
 def _load_rules(path: Path, direction: str) -> list:
-    """Read one rule-list file and model-validate it against the pinned
-    contract. Validation here is load-bearing, not a courtesy: the resolver
+    """Read one {$schema, direction, rules} type-map document and model-validate
+    it against the pinned contract, returning its `rules` array. Validation
+    here is load-bearing, not a courtesy: the resolver
     mirrors runtime semantics, which *skip* a malformed rule — so a broken
     rule would surface as a false "gap", indistinguishable from a genuinely
     uncovered probe, and a false gap makes the authoring agent shadow the very
@@ -63,8 +64,8 @@ def _load_rules(path: Path, direction: str) -> list:
         doc = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
-    if not isinstance(doc, list):
-        raise ValueError(f"{path} is not a JSON array of rules")
+    if not (isinstance(doc, dict) and "rules" in doc):
+        raise ValueError(f"{path} is not a {{$schema, direction, rules}} type-map document")
     from pydantic import ValidationError
     from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
     model = TypeMapReadDoc if direction == "read" else TypeMapWriteDoc
@@ -74,7 +75,7 @@ def _load_rules(path: Path, direction: str) -> list:
         raise ValueError(
             f"{path} is not a valid {direction} type map — fix it (or, for a "
             f"connector map, raise the defect upstream) before probing: {exc}") from exc
-    return doc
+    return doc["rules"]
 
 
 def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
@@ -108,8 +109,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="read: probes are native types, maps are type-map-read files; "
                              "write: probes are Arrow types, maps are type-map-write files.")
     parser.add_argument("--map", action="append", required=True, dest="maps", metavar="PATH",
-                        help="Rule-list file; repeatable, in precedence order "
-                             "(connection-scoped map first, connector map after).")
+                        help="A {$schema, direction, rules} type-map document; repeatable, "
+                             "in precedence order (connection-scoped map first, connector "
+                             "map after).")
     parser.add_argument("--probes-file", metavar="PATH",
                         help="JSON array of probe strings; defaults to stdin.")
     args = parser.parse_args(argv)
@@ -119,10 +121,12 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         return _fail(str(exc))
 
-    # Read and write rules share the {match, native_type, arrow_type} key set, so a
-    # wrong-direction map would not error — it would resolve, plausibly and
-    # wrongly. The two load-bearing filenames declare their direction; hold a
-    # map named either of them to it.
+    # `_load_rules` grades each map against the model `--direction` names, so a
+    # map whose envelope declares the other direction fails there on the
+    # `direction` Literal. Catch a filename/--direction mismatch first, so the
+    # message names the actual mistake (a swapped --map/--direction) rather
+    # than a generic schema failure. The two load-bearing filenames declare
+    # their direction; hold a map named either of them to it.
     load_bearing = {"type-map-read.json": "read", "type-map-write.json": "write"}
     for m in args.maps:
         implied = load_bearing.get(Path(m).name)

@@ -1,9 +1,11 @@
 """Type-map contract models — the on-disk `type-map-read.json` /
 `type-map-write.json` files a connector ships under its `definition/`.
 
-Each file is a top-level JSON array of `{match, native_type, arrow_type}` rules,
-order significant (first match wins), non-empty. The two directions share the
-rule shape but invert which key is the *matcher* and which is *rendered*:
+Each file is a top-level JSON object `{$schema, direction, rules}`: `direction`
+is the fixed literal naming which file this is (`"read"` / `"write"`), and
+`rules` is an ordered, non-empty array of `{match, native_type, arrow_type}`
+rules (first match wins). The two directions share the rule shape but invert
+which key is the *matcher* and which is *rendered*:
 
 - **read**  (`native_type → arrow_type`): match on `native_type`, render
   `arrow_type` (the rendered side is the Apache Arrow vocabulary).
@@ -22,7 +24,7 @@ from __future__ import annotations
 import re
 from typing import Annotated, Literal
 
-from pydantic import Field, RootModel, model_validator
+from pydantic import Field, model_validator
 
 from analitiq.contracts.arrow_grammar import (
     CONTAINER_CANONICAL_HEADS as _CONTAINER_CANONICAL_HEADS,
@@ -31,8 +33,15 @@ from analitiq.contracts.arrow_grammar import (
     validate_template_bounds,
 )
 from analitiq.contracts.endpoints import ARROW_TYPE_PATTERN
-from analitiq.contracts.shared.common import StrictModel
+from analitiq.contracts.shared.common import StrictModel, schema_url_for
 from analitiq.contracts.shared.rules import violation
+
+#: Per-direction schema URLs declared by every `type-map-read.json` /
+#: `type-map-write.json` document — always a standalone file (never an
+#: embedded API payload), so the field is required, unlike the optional
+#: `$schema` on dual-use models such as `ConnectionAuthored`.
+TYPE_MAP_READ_SCHEMA_URL = schema_url_for("type-map-read")
+TYPE_MAP_WRITE_SCHEMA_URL = schema_url_for("type-map-write")
 
 # A literal `arrow_type` uses the SAME strict Arrow vocabulary the endpoint
 # `arrow_type` does (`ARROW_TYPE_PATTERN`, incl. the `Json`/`Object`/`List`
@@ -410,5 +419,32 @@ TypeMapWriteRule = Annotated[
     Field(discriminator="match"),
 ]
 
-TypeMapReadDoc = RootModel[Annotated[list[TypeMapReadRule], Field(min_length=1)]]
-TypeMapWriteDoc = RootModel[Annotated[list[TypeMapWriteRule], Field(min_length=1)]]
+
+class TypeMapReadDoc(StrictModel):
+    """`type-map-read.json`: the read direction's `$schema` + `direction` +
+    ordered, non-empty `rules` array."""
+
+    schema_url: Literal[TYPE_MAP_READ_SCHEMA_URL] = Field(
+        ...,
+        alias="$schema",
+        description="Schema URL declared by every `type-map-read.json` document.",
+    )
+    direction: Literal["read"] = Field(
+        ..., description="Fixed direction discriminator for this file."
+    )
+    rules: Annotated[list[TypeMapReadRule], Field(min_length=1)]
+
+
+class TypeMapWriteDoc(StrictModel):
+    """`type-map-write.json`: the write direction's `$schema` + `direction` +
+    ordered, non-empty `rules` array."""
+
+    schema_url: Literal[TYPE_MAP_WRITE_SCHEMA_URL] = Field(
+        ...,
+        alias="$schema",
+        description="Schema URL declared by every `type-map-write.json` document.",
+    )
+    direction: Literal["write"] = Field(
+        ..., description="Fixed direction discriminator for this file."
+    )
+    rules: Annotated[list[TypeMapWriteRule], Field(min_length=1)]

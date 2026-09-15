@@ -28,7 +28,7 @@ entry point. This adapter routes each entity as follows:
     which is already known here, guarantees the right model runs and yields
     per-field findings instead.
   * ``type-map`` (with ``--direction {read,write}``) -> ``analitiq.validator.validate_document``
-    over the connection-scoped type-map rule array, after an adapter filename gate:
+    over the connection-scoped type-map document, after an adapter filename gate:
     the engine loads ``connections/<slug>/definition/type-map-{read,write}.json`` by
     exactly those names (and the published validator derives rule direction from
     them, defaulting an unknown name to read), so a misnamed file gets the rename
@@ -250,11 +250,12 @@ def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
     and alone on a mismatch: the published validator derives rule direction from
     the filename, so validating a misnamed file's content could grade it in the
     wrong direction (an unknown filename defaults to read) and bury the one
-    actionable finding (rename it) in noise. A non-list document is likewise
-    gated here — the published dispatch detects by *shape*, so a stray dict
-    under a type-map filename would be graded as some other artifact (a
-    connection document would even pass clean) instead of failing as the
-    non-array the engine's loader will choke on."""
+    actionable finding (rename it) in noise. A doc that is not the published
+    `{$schema, direction, rules}` object is likewise gated here — the published
+    dispatch detects by *shape* (a top-level `rules` key), so a stray dict under
+    a type-map filename with no `rules` key would be graded as some other
+    artifact (a connection document would even pass clean) instead of failing as
+    the malformed document the engine's loader will choke on."""
     expected = _TYPE_MAP_FILENAMES[direction]
     if document_path.name != expected:
         return [_finding(
@@ -262,11 +263,15 @@ def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
             f"file is named {document_path.name!r} but direction {direction!r} requires "
             f"{expected!r} — the engine loads each direction only from its exact "
             f"filename (connections/<slug>/definition/{expected}).")]
-    if not isinstance(doc, list):
+    if not isinstance(doc, dict):
         return [_finding(
             "connection-type-map", "error", "",
-            f"{expected} must be a top-level JSON array of rules, got "
-            f"{type(doc).__name__}.")]
+            f"{expected} must be a top-level JSON object with a `rules` key, "
+            f"got {type(doc).__name__}.")]
+    if "rules" not in doc:
+        return [_finding(
+            "connection-type-map", "error", "",
+            f"{expected} is a JSON object but has no `rules` key.")]
     from analitiq.validator import validate_document
     findings = validate_document(doc, doc_path=_authored_path(document_path))
     if direction == "write":

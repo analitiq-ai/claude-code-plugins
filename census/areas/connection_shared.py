@@ -221,4 +221,44 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="b0ca4da498ef",
         rule_ids=("RULE-TMAP-009",),
     ),
+    ProseObligation(
+        model="TypeMapReadDoc", descriptive=True,
+        prose_hash="88169896781a",
+    ),
+    ProseObligation(
+        model="TypeMapReadDoc", field="direction",
+        prose_hash="729fcf876fa1",
+        structural=(
+            "required field typed `Literal[\"read\"]`; any other value fails"
+        ),
+    ),
+    ProseObligation(
+        model="TypeMapReadDoc", field="schema_url",
+        prose_hash="27c9313dce02",
+        structural=(
+            "required field typed `Literal[TYPE_MAP_READ_SCHEMA_URL]`; a "
+            "type-map file is always standalone, never an embedded API "
+            "payload, so the field carries no optional/absent case to waive"
+        ),
+    ),
+    ProseObligation(
+        model="TypeMapWriteDoc", descriptive=True,
+        prose_hash="c899a236ec99",
+    ),
+    ProseObligation(
+        model="TypeMapWriteDoc", field="direction",
+        prose_hash="729fcf876fa1",
+        structural=(
+            "required field typed `Literal[\"write\"]`; any other value fails"
+        ),
+    ),
+    ProseObligation(
+        model="TypeMapWriteDoc", field="schema_url",
+        prose_hash="2df0cf08a16f",
+        structural=(
+            "required field typed `Literal[TYPE_MAP_WRITE_SCHEMA_URL]`; a "
+            "type-map file is always standalone, never an embedded API "
+            "payload, so the field carries no optional/absent case to waive"
+        ),
+    ),
 )

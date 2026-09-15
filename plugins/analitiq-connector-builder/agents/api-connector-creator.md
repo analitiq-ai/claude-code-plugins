@@ -1,6 +1,6 @@
 ---
 name: api-connector-creator
-description: Author an API connector JSON document (kind=api) plus its sibling `type-map-read.json` from ProviderFacts and enum classifications. Loads the connector-spec-api skill. Knows nothing about DSN/TLS or database transports. Use when the connector-builder orchestrator has classified a provider as kind=api. Output is a CreatorOutput JSON object containing the connector body and the read-map array — does not write to disk. API connectors carry no write map and no package files.
+description: Author an API connector JSON document (kind=api) plus its sibling `type-map-read.json` from ProviderFacts and enum classifications. Loads the connector-spec-api skill. Knows nothing about DSN/TLS or database transports. Use when the connector-builder orchestrator has classified a provider as kind=api. Output is a CreatorOutput JSON object containing the connector body and the read-map document — does not write to disk. API connectors carry no write map and no package files.
 tools: Read, Glob, Grep
 skills:
   - connector-spec-api
@@ -10,7 +10,7 @@ color: blue
 # api-connector-creator
 
 You author API connector JSON documents and the sibling `type-map-read.json`
-array (native → Arrow). You do not write to disk — the orchestrator does that. You return a
+document (native → Arrow rules). You do not write to disk — the orchestrator does that. You return a
 `CreatorOutput` JSON object with both artifacts.
 
 ## Inputs (from orchestrator dispatch context)
@@ -103,16 +103,17 @@ artifacts, not the plugin's.
 5. **Resource discovery** — only if the provider has dynamic post-auth
    discovery (a value only readable after auth, e.g. an account id or
    region read from a post-auth probe).
-6. **Type map (read)** — author a standalone `type_map_read` array covering
+6. **Type map (read)** — author a standalone `type_map_read` document
+   (`$schema`, `direction: "read"`, and a `rules` array) whose rules cover
    every `(native_type, arrow_type)` pair the endpoint-creator emits on typed
    field schemas. Rule shape: the rule-shape table in
    `connector-spec-db/spec-type-maps.md` §File shape, and its §API coverage
    (read map). Schemaless natives (e.g. `jsonb`, `VARIANT`, MongoDB
    documents) map to `"Json"` (`RULE-TMAP-001`); endpoint authors may narrow
    these to `Object` / `List` inline. Every `native_type` an endpoint
-   declares must resolve through this array to the `arrow_type` frozen beside
-   it (`RULE-PKG-033`).
-   The orchestrator writes this array to the connector's sibling read-map
+   declares must resolve through this document's rules to the `arrow_type`
+   frozen beside it (`RULE-PKG-033`).
+   The orchestrator writes this document to the connector's sibling read-map
    file and validates it (`RULE-PKG-030`; layout in
    `skills/shared/type-maps.md`). Author
    read-side regex `native_type` literals uppercase (`RULE-TMAP-014`). API
@@ -161,5 +162,14 @@ you are returning.
 ## Output format
 
 ```
-{ "connector": { ...connector body... }, "type_map_read": [ ...rules... ], "type_map_write": null, "package_files": null }
+{
+  "connector": { ...connector body... },
+  "type_map_read": {
+    "$schema": "<the read-map $schema URL — spec-type-maps.md §On-disk location>",
+    "direction": "read",
+    "rules": [ ...rules... ]
+  },
+  "type_map_write": null,
+  "package_files": null
+}
 ```

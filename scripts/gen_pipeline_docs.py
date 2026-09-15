@@ -118,6 +118,7 @@ def render_schema_urls() -> str:
     from analitiq.contracts.endpoints import DATABASE_ENDPOINT_SCHEMA_URL
     from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
     from analitiq.contracts.stream import STREAM_SCHEMA_URL
+    from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL
 
     rows = [
         ("Pipeline", "pipelines/<slug>/pipeline.json", PIPELINE_SCHEMA_URL),
@@ -125,6 +126,10 @@ def render_schema_urls() -> str:
         ("Connection", "connections/<slug>/connection.json", CONNECTION_SCHEMA_URL),
         ("Database endpoint", "connections/<slug>/definition/endpoints/<endpoint_id>.json",
          DATABASE_ENDPOINT_SCHEMA_URL),
+        ("Connection type map (read)", "connections/<slug>/definition/type-map-read.json",
+         TYPE_MAP_READ_SCHEMA_URL),
+        ("Connection type map (write)", "connections/<slug>/definition/type-map-write.json",
+         TYPE_MAP_WRITE_SCHEMA_URL),
     ]
     out = ["| Entity | Authored file | `$schema` value |", "|---|---|---|"]
     out += [f"| {e} | {_code(f)} | {_code(u)} |" for e, f, u in rows]
@@ -325,6 +330,8 @@ def measured_reachable_connectors_ids() -> set[str]:
     import json
     import tempfile
 
+    from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL
+
     adapter = _pipeline_validate_adapter()
     observed: set[str | None] = set()
 
@@ -351,7 +358,11 @@ def measured_reachable_connectors_ids() -> set[str]:
             {"match": "regex", "native_type": "^duplicate_probe$", "arrow_type": "Utf8"},
         ]
         path = root / "type-map-read.json"
-        path.write_text(json.dumps(read_rules))
+        path.write_text(json.dumps({
+            "$schema": TYPE_MAP_READ_SCHEMA_URL,
+            "direction": "read",
+            "rules": read_rules,
+        }))
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
             "type-map", path, direction="read")["findings"]}
 
@@ -362,7 +373,11 @@ def measured_reachable_connectors_ids() -> set[str]:
         # to the adapter's own output. It does not: excluded below by what
         # this probe observes, not by name.
         path = root / "type-map-write.json"
-        path.write_text(json.dumps([]))
+        path.write_text(json.dumps({
+            "$schema": TYPE_MAP_WRITE_SCHEMA_URL,
+            "direction": "write",
+            "rules": [],
+        }))
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
             "type-map", path, direction="write")["findings"]}
 

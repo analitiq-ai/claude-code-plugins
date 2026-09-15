@@ -18,6 +18,7 @@ import pytest
 from conftest import CLI_DEADLINE_SECONDS
 
 from analitiq.contracts.endpoints import WRITE_MODES
+from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL
 from analitiq.contracts.shared.json_schema import (
     JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
     JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
@@ -511,7 +512,8 @@ def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path,
     (tmp_path / "endpoints").mkdir(parents=True)
     (tmp_path / "connector.json").write_text(json.dumps(connector))
     (tmp_path / "type-map-read.json").write_text(json.dumps(
-        [{"match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean"}]))
+        {"$schema": TYPE_MAP_READ_SCHEMA_URL, "direction": "read",
+         "rules": [{"match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean"}]}))
     (tmp_path / "endpoints" / "widgets.json").write_text(
         json.dumps(_read_endpoint({"paid": STRING_FLAG})))
 
@@ -597,7 +599,8 @@ def test_the_connector_walk_bounds_a_pathological_sample(tmp_path, validator_cli
     (tmp_path / "endpoints").mkdir(parents=True)
     (tmp_path / "connector.json").write_text(json.dumps(connector))
     (tmp_path / "type-map-read.json").write_text(json.dumps(
-        [{"match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean"}]))
+        {"$schema": TYPE_MAP_READ_SCHEMA_URL, "direction": "read",
+         "rules": [{"match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean"}]}))
     (tmp_path / "endpoints" / "widgets.json").write_text(
         json.dumps(_read_endpoint({"code": dict(_RUNAWAY_NODE)})))
 

@@ -22,6 +22,9 @@ import type_map_gaps as G  # noqa: E402
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
+from analitiq.contracts.type_map import (  # noqa: E402
+    TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL,
+)
 
 CONNECTOR_READ = [
     {"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"},
@@ -35,9 +38,14 @@ CONNECTOR_WRITE = [
 ]
 
 
-def _map(tmp_path: Path, name: str, rules: list) -> Path:
+def _tm_doc(rules: list, direction: str) -> dict:
+    schema_url = TYPE_MAP_READ_SCHEMA_URL if direction == "read" else TYPE_MAP_WRITE_SCHEMA_URL
+    return {"$schema": schema_url, "direction": direction, "rules": rules}
+
+
+def _map(tmp_path: Path, name: str, rules: list, direction: str = "read") -> Path:
     p = tmp_path / name
-    p.write_text(json.dumps(rules))
+    p.write_text(json.dumps(_tm_doc(rules, direction)))
     return p
 
 
@@ -69,7 +77,7 @@ def test_read_connection_map_is_primary(tmp_path):
 
 
 def test_write_matches_canonical_case_preserving(tmp_path):
-    m = _map(tmp_path, "w.json", CONNECTOR_WRITE)
+    m = _map(tmp_path, "w.json", CONNECTOR_WRITE, "write")
     result = G.resolve("write", ["Utf8", "utf8", "Decimal128(20, 4)"], [m])
     # write matchers compare the canonical as authored — no normalization
     assert result["resolved"]["Utf8"] == "TEXT"
@@ -79,14 +87,14 @@ def test_write_matches_canonical_case_preserving(tmp_path):
 
 
 def test_write_gap_reported(tmp_path):
-    result = G.resolve("write", ["Duration(SECOND)"], [_map(tmp_path, "w.json", CONNECTOR_WRITE)])
+    result = G.resolve("write", ["Duration(SECOND)"], [_map(tmp_path, "w.json", CONNECTOR_WRITE, "write")])
     assert result["gaps"] == ["Duration(SECOND)"]
 
 
-def test_non_array_map_rejected(tmp_path):
+def test_map_without_rules_key_rejected(tmp_path):
     bad = tmp_path / "r.json"
     bad.write_text('{"match": "exact"}')
-    with pytest.raises(ValueError, match="not a JSON array"):
+    with pytest.raises(ValueError, match=r"not a \{\$schema, direction, rules\} type-map document"):
         G.resolve("read", ["citext"], [bad])
 
 
@@ -138,12 +146,12 @@ def test_malformed_rule_fails_loud(tmp_path):
 
 def test_map_direction_must_match_model(tmp_path):
     # a write regex rule's canonical is a matcher pattern — invalid as a read
-    # rule's rendered Arrow type — so model validation per --direction catches a
-    # write map probed as read even under a neutral filename. (The reverse is not
-    # always model-detectable — rule shapes are symmetric for exact rules — which
-    # is what the CLI filename gate is for.)
+    # rule's rendered Arrow type — so model validation per --direction catches
+    # write-shaped rules under a read envelope even under a neutral filename.
+    # (The reverse is not always model-detectable — rule shapes are symmetric
+    # for exact rules — which is what the CLI filename gate is for.)
     with pytest.raises(ValueError, match="not a valid read type map"):
-        G.resolve("read", ["citext"], [_map(tmp_path, "m.json", CONNECTOR_WRITE)])
+        G.resolve("read", ["citext"], [_map(tmp_path, "m.json", CONNECTOR_WRITE, "read")])
 
 
 def test_cli_rejects_direction_filename_mismatch(tmp_path, capsys):

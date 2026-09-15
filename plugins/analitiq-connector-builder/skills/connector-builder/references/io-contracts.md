@@ -437,7 +437,7 @@ Returned by `api-connector-creator` and `db-connector-creator`.
       "anyOf": [
         {
           "$ref": "https://schemas.analitiq.ai/type-map-read/latest.json",
-          "description": "On-disk shape of the standalone type-map-read.json (native → Arrow): `native_type` is the matcher (regex patterns authored UPPERCASE) and `arrow_type` is the rendered Arrow type (may carry ${name} substitutions backed by named captures in `native_type`). Written by the orchestrator to {connector_id}/definition/type-map-read.json."
+          "description": "On-disk shape of the standalone type-map-read.json (native → Arrow): a `{$schema, direction, rules}` document whose each `rules[]` entry has `native_type` as the matcher (regex patterns authored UPPERCASE) and `arrow_type` as the rendered Arrow type (may carry ${name} substitutions backed by named captures in `native_type`). Written by the orchestrator to {connector_id}/definition/type-map-read.json."
         },
         { "type": "null", "description": "Returned by stub agents that decline to author." }
       ]
@@ -446,7 +446,7 @@ Returned by `api-connector-creator` and `db-connector-creator`.
       "anyOf": [
         {
           "$ref": "https://schemas.analitiq.ai/type-map-write/latest.json",
-          "description": "On-disk shape of the standalone type-map-write.json (Arrow → native DDL render rules). Which kinds must ship it, and which must not: `RULE-PKG-030`. Same rule shape as the read map but the direction inverts: `arrow_type` is the matcher (regex with ECMA named captures for parameterized types) and `native_type` is the rendered DDL (may carry ${name} substitutions backed by captures in `arrow_type`). Arrow-vocabulary coverage, and when a family may be left unrendered: `RULE-TMAP-019`. Written to {connector_id}/definition/type-map-write.json."
+          "description": "On-disk shape of the standalone type-map-write.json: a `{$schema, direction, rules}` document (Arrow → native DDL render rules). Which kinds must ship it, and which must not: `RULE-PKG-030`. Each `rules[]` entry has the same shape as the read map's but the direction inverts: `arrow_type` is the matcher (regex with ECMA named captures for parameterized types) and `native_type` is the rendered DDL (may carry ${name} substitutions backed by captures in `arrow_type`). Arrow-vocabulary coverage, and when a family may be left unrendered: `RULE-TMAP-019`. Written to {connector_id}/definition/type-map-write.json."
         },
         { "type": "null", "description": "kind=api connectors and stub agents return null — the write direction is a database-package concept." }
       ]
