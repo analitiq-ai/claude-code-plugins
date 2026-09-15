@@ -600,6 +600,29 @@ def _p_write_coverage_sample_gap() -> list[dict]:
     return _staged_type_map(rules, "type-map-write.json")
 
 
+def _p_type_map_schema_required() -> list[dict]:
+    rules = [{"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"}]
+    doc = _wrap_type_map(rules, "read")
+    del doc["$schema"]
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "type-map-read.json"
+        path.write_text(json.dumps(doc))
+        return _validate(doc, doc_path=path)
+
+
+def _p_type_map_direction_filename_wins_over_self_declared() -> list[dict]:
+    # The document names its own direction "write" while sitting under the
+    # read-map filename; the filename decides which model grades it, so the
+    # self-declared value is what fails, not the filename.
+    rules = [{"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"}]
+    doc = _wrap_type_map(rules, "read")
+    doc["direction"] = "write"
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "type-map-read.json"
+        path.write_text(json.dumps(doc))
+        return _validate(doc, doc_path=path)
+
+
 def _p_pagination_limit_bare_zero() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["pagination"]["limit"]["default"] = 0
@@ -980,6 +1003,11 @@ PROBES: tuple[Probe, ...] = (
     Probe("write-coverage-sample-gap", "clean", _p_write_coverage_sample_gap,
           forbid_re=r"FixedSizeBinary|Time32|Decimal256",
           require_re=r"no rule rendering"),
+    Probe("type-map-schema-required", "error", _p_type_map_schema_required,
+          message_re=r"Field required"),
+    Probe("type-map-direction-filename-wins-over-self-declared", "error",
+          _p_type_map_direction_filename_wins_over_self_declared,
+          message_re=r"Input should be 'read'"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
           message_re=r"greater than or equal to 1"),
     Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,

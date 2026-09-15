@@ -987,6 +987,13 @@ def _load_type_map(path: Path) -> tuple[Any | None, list[dict]]:
         path, rule="RULE-PKG-030", message_id="type-map-unparseable")
 
 
+def _type_map_rules(doc: Any) -> Any:
+    """`doc["rules"]` when `doc` is a dict carrying one, else `None` — the
+    defensive read shared by every caller that only needs the rules array and
+    must not assume `doc` is the envelope it is nominally supposed to be."""
+    return doc.get("rules") if isinstance(doc, dict) else None
+
+
 def _type_map_findings(doc: Any, direction: str) -> list[dict]:
     """Validate a loaded type-map document: model errors + advisory rule
     warnings + (write-vocabulary coverage on the write direction). The single
@@ -998,7 +1005,7 @@ def _type_map_findings(doc: Any, direction: str) -> list[dict]:
     is all they are handed."""
     adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
     findings = _model_findings(doc, adapter)
-    rules = doc.get("rules") if isinstance(doc, dict) else None
+    rules = _type_map_rules(doc)
     findings.extend(_type_map_rule_warnings(rules, direction))
     if direction == "write" and isinstance(rules, list):
         findings.extend(_write_vocabulary_findings(rules))
@@ -1069,7 +1076,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         findings.extend(load)
         if read_doc is not None:
             findings.extend(_type_map_findings(read_doc, "read"))
-            read_rules = read_doc.get("rules") if isinstance(read_doc, dict) else None
+            read_rules = _type_map_rules(read_doc)
 
     if kind in _DATABASE_KINDS:
         if not write_path.is_file():

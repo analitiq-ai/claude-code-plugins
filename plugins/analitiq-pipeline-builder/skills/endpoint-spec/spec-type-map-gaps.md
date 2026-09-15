@@ -24,6 +24,11 @@ authoring the connection-scoped maps that close it.
 | native → Arrow | `connections/<connection-slug>/definition/type-map-read.json` | `--direction read` |
 | Arrow → native DDL | `connections/<connection-slug>/definition/type-map-write.json` | `--direction write` |
 
+Each file is a whole `{$schema, direction, rules}` document, not a bare rules
+array. `direction` is the same value named in the table above (`read` /
+`write`); the `$schema` value for each is in
+`../pipeline-builder/references/schema-hosts.md`.
+
 The rule shape (exact/regex `match`, matcher vs rendered key per direction,
 `${name}` captures) is identical to the connector's own maps — the connector
 files you resolve against during gap detection are the live reference for it;

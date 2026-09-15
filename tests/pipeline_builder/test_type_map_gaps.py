@@ -91,7 +91,7 @@ def test_write_gap_reported(tmp_path):
     assert result["gaps"] == ["Duration(SECOND)"]
 
 
-def test_non_array_map_rejected(tmp_path):
+def test_map_without_rules_key_rejected(tmp_path):
     bad = tmp_path / "r.json"
     bad.write_text('{"match": "exact"}')
     with pytest.raises(ValueError, match=r"not a \{\$schema, direction, rules\} type-map document"):
@@ -146,12 +146,12 @@ def test_malformed_rule_fails_loud(tmp_path):
 
 def test_map_direction_must_match_model(tmp_path):
     # a write regex rule's canonical is a matcher pattern — invalid as a read
-    # rule's rendered Arrow type — so model validation per --direction catches a
-    # write map probed as read even under a neutral filename. (The reverse is not
-    # always model-detectable — rule shapes are symmetric for exact rules — which
-    # is what the CLI filename gate is for.)
+    # rule's rendered Arrow type — so model validation per --direction catches
+    # write-shaped rules under a read envelope even under a neutral filename.
+    # (The reverse is not always model-detectable — rule shapes are symmetric
+    # for exact rules — which is what the CLI filename gate is for.)
     with pytest.raises(ValueError, match="not a valid read type map"):
-        G.resolve("read", ["citext"], [_map(tmp_path, "m.json", CONNECTOR_WRITE, "write")])
+        G.resolve("read", ["citext"], [_map(tmp_path, "m.json", CONNECTOR_WRITE, "read")])
 
 
 def test_cli_rejects_direction_filename_mismatch(tmp_path, capsys):

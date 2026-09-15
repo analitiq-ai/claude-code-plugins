@@ -1493,6 +1493,9 @@ _BROKEN_READ_MAPS = (
     ("not-a-list",
      json.dumps({"$schema": _TM_READ_SCHEMA, "direction": "read", "rules": {}}),
      "Input should be a valid list"),
+    ("legacy-bare-array",
+     json.dumps([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
+     "Input should be a valid dictionary"),
     ("unparseable", "{ not json", "could not be read or parsed"),
 )
 

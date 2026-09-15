@@ -30,6 +30,9 @@ from _pins import require_contract_models
 
 require_contract_models("analitiq.contracts", "analitiq.validator")
 
+from analitiq.contracts.type_map import (  # noqa: E402
+    TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL,
+)
 from analitiq.validator import validate_document  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,8 +40,8 @@ SKILLS_ROOT = REPO_ROOT / "plugins" / "analitiq-connector-builder" / "skills"
 CONNECTOR_SCHEMA = "https://schemas.analitiq.ai/connector/latest.json"
 ENDPOINT_SCHEMA = "https://schemas.analitiq.ai/api-endpoint/latest.json"
 TYPE_MAP_SCHEMAS = {
-    "type-map-read.json": "https://schemas.analitiq.ai/type-map-read/latest.json",
-    "type-map-write.json": "https://schemas.analitiq.ai/type-map-write/latest.json",
+    "type-map-read.json": TYPE_MAP_READ_SCHEMA_URL,
+    "type-map-write.json": TYPE_MAP_WRITE_SCHEMA_URL,
 }
 
 

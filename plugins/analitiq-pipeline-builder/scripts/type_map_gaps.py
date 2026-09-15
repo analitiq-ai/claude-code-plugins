@@ -109,8 +109,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="read: probes are native types, maps are type-map-read files; "
                              "write: probes are Arrow types, maps are type-map-write files.")
     parser.add_argument("--map", action="append", required=True, dest="maps", metavar="PATH",
-                        help="Rule-list file; repeatable, in precedence order "
-                             "(connection-scoped map first, connector map after).")
+                        help="A {$schema, direction, rules} type-map document; repeatable, "
+                             "in precedence order (connection-scoped map first, connector "
+                             "map after).")
     parser.add_argument("--probes-file", metavar="PATH",
                         help="JSON array of probe strings; defaults to stdin.")
     args = parser.parse_args(argv)
@@ -120,9 +121,12 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         return _fail(str(exc))
 
-    # Read and write rules share the {match, native_type, arrow_type} key set, so a
-    # wrong-direction map would not error — it would resolve, plausibly and
-    # wrongly. The two load-bearing filenames declare their direction; hold a
+    # `_load_rules` model-validates the whole envelope, including its `direction`
+    # Literal, so a wrong-direction map fails loud there — but only once its
+    # filename has already routed it into the wrong model. Catch the mismatch
+    # by filename first, before that validation error, so the message names the
+    # actual mistake (a swapped --map/--direction) rather than a generic schema
+    # failure. The two load-bearing filenames declare their direction; hold a
     # map named either of them to it.
     load_bearing = {"type-map-read.json": "read", "type-map-write.json": "write"}
     for m in args.maps:

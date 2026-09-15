@@ -590,7 +590,7 @@ def test_bundle_unreadable_connection_type_map(tmp_path):
                for f in diag["findings"]), diag["findings"]
 
 
-def test_type_map_entity_rejects_non_array(tmp_path):
+def test_type_map_entity_rejects_dict_without_rules_key(tmp_path):
     # a dict under a load-bearing type-map filename must fail HERE: the published
     # dispatch detects by shape, so a stray connection document would otherwise be
     # graded as a connection and pass clean while the engine's loader chokes
@@ -598,6 +598,21 @@ def test_type_map_entity_rejects_non_array(tmp_path):
     assert not diag["passed"]
     assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
     assert "`rules`" in diag["findings"][0]["message"]
+
+
+def test_type_map_entity_rejects_bare_array(tmp_path):
+    # the legacy pre-envelope shape (a bare rules array, no {$schema, direction,
+    # rules} wrapper) must fail HERE, not just deep inside model validation —
+    # this is the isinstance(doc, dict) gate, one level up from the missing-key
+    # gate above.
+    diag = V.diagnostics_for(
+        "type-map",
+        _write(tmp_path, "type-map-read.json",
+               [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
+        direction="read")
+    assert not diag["passed"]
+    assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
+    assert "top-level JSON object" in diag["findings"][0]["message"]
 
 
 def test_connection_write_map_filters_connector_vocabulary_warning(tmp_path):
