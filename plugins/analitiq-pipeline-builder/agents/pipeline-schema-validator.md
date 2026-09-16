@@ -45,7 +45,6 @@ published contract structurally cannot make (see its module docstring).
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validate.py" \
      --entity <entity> \
      --document <document> \
-     [--direction <direction>] \
      [--bundle-root <bundle_root>]
    ```
 

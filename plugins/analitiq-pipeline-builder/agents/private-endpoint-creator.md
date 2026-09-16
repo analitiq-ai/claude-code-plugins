@@ -109,7 +109,7 @@ One invocation runs exactly one mode.
 
 6. Derive a **fully-qualified** `arrow_type` for **every** column. First resolve
    the distinct native types through the type maps with
-   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/type_map_gaps.py" --direction read`
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/type_map_gaps.py"`
    (maps in precedence order: the
    connection's own `definition/type-map-read.json` if present, then the
    connector's) and freeze the rendered `arrow_type` for every covered
@@ -125,8 +125,8 @@ One invocation runs exactly one mode.
 7. **Author connection-scoped type-map gap rules** per
    `skills/endpoint-spec/spec-type-map-gaps.md`:
    - For every read gap from step 6, a read rule (`RULE-TMAP-021`).
-   - Probe the distinct frozen `arrow_type` strings with `--direction write`
-     against the write maps (connection first if present, then connector); for
+   - Probe the distinct frozen `arrow_type` strings against the write maps
+     (connection first if present, then connector); for
      every write gap, a write rule rendering the discovered native that
      produced the `arrow_type`. When several distinct `native_type`s share one
      uncovered `arrow_type`, do **not** pick — report it in `type_maps.ambiguities` and
@@ -186,7 +186,7 @@ document's columns. Derivation rules: `skills/endpoint-spec/spec-new-table.md`.
 2. Derive the column list from the passed source document per
    `spec-new-table.md`.
 3. Resolve every distinct `arrow_type` through the write maps with
-   `type_map_gaps.py --direction write` (connection map first if present,
+   `type_map_gaps.py` over the write maps (connection map first if present,
    then the connector's): a rendered native becomes the column's
    `native_type`; an uncovered `arrow_type` follows `spec-new-table.md` —
    dialect override → the fallback label the `native_type` field declares

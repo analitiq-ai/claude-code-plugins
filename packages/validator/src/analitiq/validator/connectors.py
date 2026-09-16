@@ -46,7 +46,7 @@ import re
 import reprlib
 import sys
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Annotated, Any, Callable, Iterator, Literal
 
 from ._core import (
     contract_model_domain,
@@ -67,7 +67,7 @@ from ._sample_budget import BudgetedGrader
 # ambient `DOMAIN`).
 try:
     with contract_model_domain():
-        from pydantic import TypeAdapter
+        from pydantic import Field, TypeAdapter
         from analitiq.contracts.connector import Connector
         from analitiq.contracts.endpoints import (
             ApiEndpointDoc,
@@ -112,6 +112,8 @@ except ImportError as exc:  # pragma: no cover - dependency guard
 _READ_MAP_FILENAME = "type-map-read.json"
 _WRITE_MAP_FILENAME = "type-map-write.json"
 _LEGACY_MAP_FILENAME = "type-map.json"
+_MAP_FILENAME_BY_DIRECTION = {"read": _READ_MAP_FILENAME, "write": _WRITE_MAP_FILENAME}
+_DIRECTION_BY_MAP_FILENAME = {v: k for k, v in _MAP_FILENAME_BY_DIRECTION.items()}
 
 _CONNECTOR_SENTINELS = ("transports", "connection_contract", "default_transport", "auth")
 _STORAGE_KINDS = ("file", "s3", "stdout")
@@ -994,20 +996,43 @@ def _type_map_rules(doc: Any) -> Any:
     return doc.get("rules") if isinstance(doc, dict) else None
 
 
-def _type_map_findings(doc: Any, direction: str) -> list[dict]:
-    """Validate a loaded type-map document: model errors + advisory rule
-    warnings + (write-vocabulary coverage on the write direction). The single
-    definition used everywhere a type-map is checked — standalone, or as a
-    connector's sibling. `doc` is nominally the whole `{$schema, direction,
-    rules}` object — a malformed sibling can hand it any JSON-parseable value
-    instead, which `_model_findings` below rejects — the advisory/coverage
-    checks only ever needed the `rules` array, extracted defensively, so that
-    is all they are handed."""
+def type_map_findings(
+    doc: Any,
+    direction: Literal["read", "write"],
+    scope: Literal["connector", "connection"] = "connector",
+) -> list[dict]:
+    """Validate a type-map document as the `direction` the CALLER names: model
+    errors + advisory rule warnings + (write-vocabulary coverage). The definition
+    used wherever a direction is known. `doc` is nominally the whole
+    `{$schema, direction, rules}` object — a malformed sibling can hand it any
+    JSON-parseable value instead, which `_model_findings` rejects — and the
+    advisory/coverage checks only ever needed `rules`.
+
+    Naming the direction IS the assertion, so a caller holding a filename needs
+    no gate of its own: a document declaring the other direction fails the
+    model's `direction` Literal alongside every other defect it carries, where
+    gating first would report the disagreement and nothing else.
+
+    `scope` decides the write vocabulary alone: a connector write map must
+    render all of it, a connection map is gap-only (`RULE-TMAP-018`) and would
+    earn that finding forever."""
+    # An unsupported value would silently select the direction or scope nobody
+    # asked for. It is the caller's own argument rather than anything the document
+    # did, so it raises past the guard instead of arriving as a finding.
+    if direction not in ("read", "write"):
+        raise ValueError(f"direction must be 'read' or 'write', got {direction!r}")
+    if scope not in ("connector", "connection"):
+        raise ValueError(f"scope must be 'connector' or 'connection', got {scope!r}")
+    return _run_guarded(_type_map_document_findings, doc, direction, scope,
+                        crash_label="type-map grading")
+
+
+def _type_map_document_findings(doc: Any, direction: str, scope: str) -> list[dict]:
     adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
     findings = _model_findings(doc, adapter)
     rules = _type_map_rules(doc)
     findings.extend(_type_map_rule_warnings(rules, direction))
-    if direction == "write" and isinstance(rules, list):
+    if direction == "write" and scope == "connector" and isinstance(rules, list):
         findings.extend(_write_vocabulary_findings(rules))
     return findings
 
@@ -1053,7 +1078,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                 doc_, load = _load_type_map(path)
                 findings.extend(load)
                 if doc_ is not None:
-                    findings.extend(_type_map_findings(doc_, direction))
+                    findings.extend(type_map_findings(doc_, direction))
         return findings
 
     # A read map that cannot be rendered from is carried forward rather than
@@ -1075,7 +1100,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         read_doc, load = _load_type_map(read_path)
         findings.extend(load)
         if read_doc is not None:
-            findings.extend(_type_map_findings(read_doc, "read"))
+            findings.extend(type_map_findings(read_doc, "read"))
             read_rules = _type_map_rules(read_doc)
 
     if kind in _DATABASE_KINDS:
@@ -1088,7 +1113,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         write_doc, load = _load_type_map(write_path)
         findings.extend(load)
         if write_doc is not None:
-            findings.extend(_type_map_findings(write_doc, "write"))
+            findings.extend(type_map_findings(write_doc, "write"))
         return findings
 
     # api: no write map, and every endpoint's natives must be covered by the read map.
@@ -1204,6 +1229,14 @@ _API_ENDPOINT_ADAPTER = TypeAdapter(ApiEndpointDoc)
 _DATABASE_ENDPOINT_ADAPTER = TypeAdapter(DatabaseEndpointDoc)
 _READ_MAP_ADAPTER = TypeAdapter(TypeMapReadDoc)
 _WRITE_MAP_ADAPTER = TypeAdapter(TypeMapWriteDoc)
+# For a document whose `direction` is absent or unrecognized: pydantic reports
+# the unusable discriminator itself, instead of every field of a direction
+# nothing chose. Where a direction is known it is the wrong adapter: the union
+# prefixes every error location with the matched tag, surfacing `/$schema` as
+# `/read/$schema`, and in `check_coverage` it would answer for the direction the
+# document declares where the slot's is the one under test.
+_TYPE_MAP_ADAPTER = TypeAdapter(
+    Annotated[TypeMapReadDoc | TypeMapWriteDoc, Field(discriminator="direction")])
 
 
 # ---------------------------------------------------------------------------
@@ -1363,7 +1396,7 @@ def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None =
         declared = doc.get("direction") if isinstance(doc, dict) else None
         ambiguous = declared not in ("read", "write")
         direction = "read" if ambiguous else declared
-    findings = _type_map_findings(doc, direction)
+    findings = type_map_findings(doc, direction)
     if ambiguous and doc_path is not None:
         # informational, no rule: nothing here was violated — the CLI guessed a
         # direction because the filename was ambiguous and the document names no

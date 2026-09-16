@@ -230,12 +230,12 @@ def resolve_type_map_gaps(
     reports an empty `findings` list.
 
     This is a deliberate divergence from `type_map_gaps.py`'s own
-    `_load_rules`, which raises `ValueError` on exactly the same two
-    conditions (an unreadable map, a map failing its model) rather than
-    reporting them: a path-free caller has no filename to name in a raised
-    message the way the plugin's CLI does, and folding both conditions into
-    the same findings list this function already returns means a caller
-    checks one place for every way a probe run can come back incomplete.
+    `_load_rules`, which raises `ValueError` for a map it cannot read and for
+    a map whose findings cost a pass, rather than reporting them: a path-free
+    caller has no filename to name in a raised message the way the plugin's
+    CLI does, and reporting through the findings list this function already
+    returns means a caller checks one place for every way a probe run can come
+    back incomplete.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
