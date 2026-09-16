@@ -56,14 +56,17 @@ than left to the reader.
   answers yes, which is the bump it is already carrying.
 - **A document that release accepted.** One it could have been handed and did
   not reject — where what a call is handed is its whole input: the document,
-  the content of every other file the call reads, and the value of every
-  option the call is given. A verdict is a function of all of it, so the
+  the files available to the call beside it, what each is named and where it
+  sits relative to the others, and the value of every option the call is
+  given. The invocation fixes the input, not what a given release reads from
+  it: a file a later release starts reading was already part of the input the
+  last stable release passed. A verdict is a function of all of it, so the
   question is asked of all of it: a change answers yes when it rejects any
   input the last stable release passed, never only when it rejects the
-  document's bytes on their own. The promise is not keyed on a path. A path is
-  how a call finds the files beside a document, and what it points at changes
-  without any release, so the input is the content the call read, not where it
-  read it from. The validator does not pass a document it cannot identify, so
+  document's bytes on their own. The promise is not keyed on a path. Which
+  location a call is pointed at changes without any release, so the input is
+  what is found there — the content, names and layout — not where it was
+  found. The validator does not pass a document it cannot identify, so
   nothing of a kind no detector claimed was ever accepted.
 
 ## Why the major carries it
@@ -90,12 +93,11 @@ change absent here is decided by the question, not by its absence.
   which it cannot evaluate. It is the arrival that is free and the promotion
   that costs, where the check reports on an input the release accepts; where
   it can only fire on an input already rejected for another reason, promoting
-  it changes no verdict. The promotion reaches past the check's `fail`
-  findings: every finding naming the rule is regraded, including one saying
-  the check could not evaluate it. Ask `rules/SCHEMA.md`, "Findings", what each
-  now costs — an input the check skipped can stop passing with nothing in it
-  newly detected. A rule whose violation breaks a run still arrives as a
-  warning —
+  it changes no verdict. The promotion can reach past the check's `fail`
+  findings — a finding saying the check could not evaluate the rule is one —
+  so ask `rules/SCHEMA.md`, "Findings", what each finding naming the rule now
+  costs: an input the check skipped can stop passing with nothing in it newly
+  detected. A rule whose violation breaks a run still arrives as a warning —
   the promise forbids the rejection, not the finding — and the record's
   `rationale` says what the run does with the violation.
 - **A record gaining a rejecting enforcer.** A record one document settles
@@ -133,8 +135,7 @@ change absent here is decided by the question, not by its absence.
   which this change now fails, answers yes.
 - **An option that relaxes a check.** Say an option lets a draft pass a check
   it would otherwise fail. Adding the option accepts more and answers no.
-  Removing it, or narrowing what it relaxes, rejects an input — the same
-  document with the same option set — that the last stable release passed,
-  and answers yes.
+  Narrowing what it relaxes fails an input — the same document with the same
+  option set — that the last stable release passed, and answers yes.
 - **A loosening, a reworded message, a moved `path`.** Accepting more, or
   saying the same verdict differently, answers no.
