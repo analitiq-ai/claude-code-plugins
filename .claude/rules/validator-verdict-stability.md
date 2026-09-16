@@ -41,11 +41,11 @@ than left to the reader.
   `severity`, since a finding can cost the pass without carrying one. A
   pydantic `ValidationError` reaches the validator as an `error`-severity
   `fail` finding, so a model's refusal reaches the validator as a call that
-  does not pass. A finding carries `error` or `warning` and nothing else,
-  while a record may also declare `info` — so what answers the question is
-  whether a document is rejected, never the label a record declares. A record
-  reaching any severity is a bump only when an enforcer rejects a document
-  with it.
+  does not pass. A finding that carries a `severity` carries `error` or
+  `warning` and nothing else, while a record may also declare `info` — so
+  what answers the question is whether a document is rejected, never the
+  label a record declares. A record reaching any severity is a bump only when
+  an enforcer rejects a document with it.
 - **The last stable release.** The newest release of the packages carrying no
   pre-release suffix. A pre-release is never the reference point: before the
   first stable release there is nothing to preserve, and a pre-release
@@ -91,9 +91,11 @@ change absent here is decided by the question, not by its absence.
   that costs, where the check reports on an input the release accepts; where
   it can only fire on an input already rejected for another reason, promoting
   it changes no verdict. The promotion reaches past the check's `fail`
-  findings: a finding saying the check could not evaluate its rule is graded
-  by that rule's severity as well (`rules/SCHEMA.md`, "Findings"), so an input
-  the check skipped can stop passing with nothing in it newly detected. A rule whose violation breaks a run still arrives as a warning —
+  findings: every finding naming the rule is regraded, including one saying
+  the check could not evaluate it. Ask `rules/SCHEMA.md`, "Findings", what each
+  now costs — an input the check skipped can stop passing with nothing in it
+  newly detected. A rule whose violation breaks a run still arrives as a
+  warning —
   the promise forbids the rejection, not the finding — and the record's
   `rationale` says what the run does with the violation.
 - **A record gaining a rejecting enforcer.** A record one document settles
