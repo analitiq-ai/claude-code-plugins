@@ -994,20 +994,27 @@ def _type_map_rules(doc: Any) -> Any:
     return doc.get("rules") if isinstance(doc, dict) else None
 
 
-def _type_map_findings(doc: Any, direction: str) -> list[dict]:
-    """Validate a loaded type-map document: model errors + advisory rule
-    warnings + (write-vocabulary coverage on the write direction). The single
-    definition used everywhere a type-map is checked — standalone, or as a
-    connector's sibling. `doc` is nominally the whole `{$schema, direction,
-    rules}` object — a malformed sibling can hand it any JSON-parseable value
-    instead, which `_model_findings` below rejects — the advisory/coverage
-    checks only ever needed the `rules` array, extracted defensively, so that
-    is all they are handed."""
+def type_map_findings(doc: Any, direction: str, scope: str = "connector") -> list[dict]:
+    """Validate a type-map document as the `direction` the CALLER names: model
+    errors + advisory rule warnings + (write-vocabulary coverage). The single
+    definition used everywhere a type-map is checked. `doc` is nominally the
+    whole `{$schema, direction, rules}` object — a malformed sibling can hand
+    it any JSON-parseable value instead, which `_model_findings` rejects — and
+    the advisory/coverage checks only ever needed `rules`.
+
+    Naming the direction IS the assertion, so a caller holding a slot needs no
+    gate of its own: a document declaring the other direction fails the model's
+    `direction` Literal alongside every other defect it carries, where gating
+    first would report the disagreement and nothing else.
+
+    `scope` decides the write vocabulary alone: a connector write map must
+    render all of it, a connection map is gap-only by rule and would earn that
+    finding forever."""
     adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
     findings = _model_findings(doc, adapter)
     rules = _type_map_rules(doc)
     findings.extend(_type_map_rule_warnings(rules, direction))
-    if direction == "write" and isinstance(rules, list):
+    if direction == "write" and scope == "connector" and isinstance(rules, list):
         findings.extend(_write_vocabulary_findings(rules))
     return findings
 
@@ -1053,7 +1060,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                 doc_, load = _load_type_map(path)
                 findings.extend(load)
                 if doc_ is not None:
-                    findings.extend(_type_map_findings(doc_, direction))
+                    findings.extend(type_map_findings(doc_, direction))
         return findings
 
     # A read map that cannot be rendered from is carried forward rather than
@@ -1075,7 +1082,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         read_doc, load = _load_type_map(read_path)
         findings.extend(load)
         if read_doc is not None:
-            findings.extend(_type_map_findings(read_doc, "read"))
+            findings.extend(type_map_findings(read_doc, "read"))
             read_rules = _type_map_rules(read_doc)
 
     if kind in _DATABASE_KINDS:
@@ -1088,7 +1095,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         write_doc, load = _load_type_map(write_path)
         findings.extend(load)
         if write_doc is not None:
-            findings.extend(_type_map_findings(write_doc, "write"))
+            findings.extend(type_map_findings(write_doc, "write"))
         return findings
 
     # api: no write map, and every endpoint's natives must be covered by the read map.
@@ -1368,7 +1375,7 @@ def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None =
     declared = doc.get("direction")
     if declared not in ("read", "write"):
         return _model_findings(doc, _TYPE_MAP_ADAPTER)
-    return _type_map_findings(doc, declared)
+    return type_map_findings(doc, declared)
 
 
 def _validate_kindless_connector(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
