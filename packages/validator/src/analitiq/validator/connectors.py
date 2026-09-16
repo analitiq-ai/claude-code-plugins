@@ -1012,8 +1012,8 @@ def type_map_findings(
     first would report the disagreement and nothing else.
 
     `scope` decides the write vocabulary alone: a connector write map must
-    render all of it, a connection map is gap-only by rule and would earn that
-    finding forever."""
+    render all of it, a connection map is gap-only (`RULE-TMAP-018`) and would
+    earn that finding forever."""
     # An unsupported value would silently select the direction or scope nobody
     # asked for. It is the caller's own argument rather than anything the document
     # did, so it raises past the guard instead of arriving as a finding.

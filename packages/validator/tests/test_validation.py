@@ -1332,9 +1332,9 @@ def test_sibling_type_map_is_graded_by_the_slot_it_fills(
     # package's maps are located by their exact filenames, so each slot asserts
     # "this file is that direction's map" and a document declaring the other is
     # rejected — the mirror of the clean standalone verdict above, pinned so the
-    # two routes' disagreement is a decision rather than a surprise. Both slots
-    # are exercised: the sibling holding the correct direction is error-free, so
-    # every error below belongs to the misfiled one. Findings carry no file
+    # two routes' disagreement is a decision rather than a surprise. Each slot is
+    # exercised: the sibling holding the correct direction is error-free, so every
+    # error below belongs to the misfiled one. Findings carry no file
     # identity, so the `direction` Literal in the message is what names which
     # slot rejected — without it the two params assert the same thing.
     # The database and storage families walk their siblings down separate
@@ -1382,6 +1382,22 @@ def test_type_map_findings_scope_decides_the_write_vocabulary_check(validator):
                for f in validator.type_map_findings(doc, "write", scope="connector"))
     assert not any(f.get("rule") == "RULE-TMAP-017"
                    for f in validator.type_map_findings(doc, "write", scope="connection"))
+
+
+def test_type_map_findings_contains_a_crash_as_one_pass_costing_finding(validator, monkeypatch):
+    # The guard is what keeps a grading bug from taking the whole run down with
+    # it, so what it substitutes has to still fail the document: `notApplicable`
+    # naming no rule says nothing here decided whether any rule holds, and
+    # `finding_costs_a_pass` reads that as costing. A crash reported as anything
+    # that clears the bar would publish an ungraded map as a graded one.
+    monkeypatch.setattr(
+        "analitiq.validator.connectors._type_map_document_findings",
+        lambda *a: (_ for _ in ()).throw(RuntimeError("boom")))
+    doc = _type_map_doc([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")
+    findings = validator.type_map_findings(doc, "write")
+    assert [(f["message_id"], f["kind"], f.get("rule")) for f in findings] == [
+        ("check-crashed", "notApplicable", None)]
+    assert validator.finding_costs_a_pass(findings[0])
 
 
 @pytest.mark.parametrize("param,kwargs", [

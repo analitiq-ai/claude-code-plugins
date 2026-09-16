@@ -9,6 +9,7 @@ there are no committed fixtures to drift from the contract.
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -458,8 +459,9 @@ def test_valid_type_map_entity(tmp_path, direction, fname, doc):
 
 
 def test_type_map_entity_rejects_wrong_filename(tmp_path):
-    # the engine loads the maps by exact filename; the gate must fire ALONE — a
-    # misnamed file is no direction's map, however valid its content
+    # a name locating no slot is no direction's map, however valid its content
+    # (`_DIRECTION_BY_FILENAME` in the script under test carries why the name
+    # decides), and the gate must fire ALONE
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", TYPE_MAP_READ))
     assert not diag["passed"]
     assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
@@ -1460,3 +1462,58 @@ def test_bundle_grades_a_connection_scoped_endpoint_document(tmp_path):
     assert any(f.get("severity") == "error"
                and f.get("path") == f"{site}/not_a_declared_field"
                for f in diag["findings"]), diag["findings"]
+
+
+# ---------------------------------------------------------------------------
+# What the scripts borrow from the pinned validator
+
+
+def _validator_imports_in_scripts() -> set[tuple[str, str]]:
+    """(module, name) for every `from analitiq.validator[...] import name` the
+    plugin's scripts execute — read from their syntax so a new borrow is graded
+    without anyone remembering to list it here."""
+    found = set()
+    for script in sorted((ROOT / "scripts").glob("*.py")):
+        for node in ast.walk(ast.parse(script.read_text())):
+            if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("analitiq.validator"):
+                found.update((node.module, a.name) for a in node.names)
+    return found
+
+
+def test_scripts_borrow_published_names_from_the_published_surface():
+    # A name the scripts import from the package root is a dependency on
+    # `analitiq-validator`'s API, and `__all__` is where that package says which
+    # names it owes. One missing from it is a name nothing promised to keep,
+    # importable today because it happens to be bound — so the scripts would
+    # break at every end user's runtime on a release that tidied it away.
+    # Underscore names are the deliberate exception the prober's docstring makes:
+    # private helpers this repo tracks because it moves in lockstep with the pin.
+    import analitiq.validator as pkg
+    root = {name for module, name in _validator_imports_in_scripts()
+            if module == "analitiq.validator"}
+    assert root, "no root-level validator imports found — the scan stopped measuring"
+    public = {n for n in root if not n.startswith("_")}
+    assert public <= set(pkg.__all__), sorted(public - set(pkg.__all__))
+    for name in root - public:
+        assert hasattr(pkg, name), name
+
+
+def test_scripts_borrow_private_names_that_still_exist():
+    # The submodule borrows are private by construction, so `__all__` cannot
+    # grade them; what makes them safe is that this suite runs against the source
+    # the pin tracks, so a rename fails here before it reaches a user.
+    import importlib
+    for module, name in sorted(_validator_imports_in_scripts()):
+        assert hasattr(importlib.import_module(module), name), f"{module}.{name}"
+
+
+def test_type_map_filenames_match_the_validator():
+    # The adapter names the files itself because it reaches connection
+    # directories the published bundle validator cannot see. Two spellings of one
+    # slot would resolve the same document to opposite directions on the two
+    # sides, so the copy is pinned to the side that owns it.
+    from analitiq.validator.connectors import (
+        _LEGACY_MAP_FILENAME, _READ_MAP_FILENAME, _WRITE_MAP_FILENAME,
+    )
+    assert V._TYPE_MAP_FILENAMES == {"read": _READ_MAP_FILENAME, "write": _WRITE_MAP_FILENAME}
+    assert V._LEGACY_TYPE_MAP_FILENAME == _LEGACY_MAP_FILENAME

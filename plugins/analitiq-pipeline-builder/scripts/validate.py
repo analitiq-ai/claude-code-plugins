@@ -95,8 +95,8 @@ from _bootstrap import ensure_deps_or_reexec
 # `test_pipeline_entities_are_a_document_artifact_kind_subset` pins this tuple
 # to `DOCUMENT_ARTIFACT_KINDS` so the two cannot drift apart member by member.
 # `connector` and `api-endpoint` are authored by the connector-builder plugin's
-# own validator route, not this one; a type map's direction is its filename, not
-# a vocabulary member (`analitiq.contracts` keeps one `type-map` kind).
+# own validator route, not this one; the vocabulary keeps one `type-map` kind
+# (`analitiq.contracts`), so a map's direction is not a member of it.
 PIPELINE_ENTITIES = ("connection", "stream", "pipeline", "database-endpoint", "type-map")
 
 # Read of the engine as it stands: it loads connection-scoped type maps by

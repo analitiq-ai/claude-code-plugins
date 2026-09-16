@@ -222,6 +222,22 @@ def test_cli_rejects_a_map_whose_name_holds_no_direction(tmp_path, capsys):
     assert "names no direction" in err.err
 
 
+def test_cli_rejects_a_map_whose_envelope_names_the_other_direction(tmp_path, capsys):
+    # the name locates the slot, and the slot is what the document is graded as,
+    # so one declaring the other direction is rejected rather than probed as what
+    # it calls itself: its rules match nothing the slot's direction resolves, and
+    # every probe would come back a gap that the map does in fact cover.
+    m = _map(tmp_path, "type-map-read.json", CONNECTOR_WRITE, "write")
+    probes = tmp_path / "probes.json"
+    probes.write_text('["citext"]')
+    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
+    assert rc == 2
+    err = capsys.readouterr()
+    assert not err.out
+    assert "not a valid read type map" in err.err
+    assert "/direction" in err.err
+
+
 def test_cli_rejects_maps_holding_different_directions(tmp_path, capsys):
     r = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
     (tmp_path / "w").mkdir()
