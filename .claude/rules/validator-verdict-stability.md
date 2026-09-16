@@ -4,6 +4,8 @@ paths:
   - "packages/*/scripts/**/*"
   - "packages/*/pyproject.toml"
   - "rules/records/*.yaml"
+  - ".github/workflows/contract-models-release.yml"
+  - ".github/workflows/validator-release.yml"
 ---
 
 # Rule: within a major, a passing document keeps passing
