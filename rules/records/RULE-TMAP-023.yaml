@@ -1,0 +1,26 @@
+id: RULE-TMAP-023
+statement: >
+  A type-map document stored under a filename reserved for one direction MUST
+  declare that direction.
+tier: reference
+severity: error
+artifact_kinds: [type-map]
+validator: "analitiq.validator.connectors::_direction_slot_findings"
+owners: [connector-plugin, pipeline-plugin, engine]
+rationale: >
+  Read of the engine as it stands: it selects a connector's and a connection's
+  type maps by exact filename at both scopes, then unwraps the document and
+  reads only its rule array — the declared `direction` reaches nothing that
+  dispatches on it. So a map filed under the other direction's name is neither
+  rejected nor ignored there: it runs as the direction its filename claims,
+  resolving columns through rules written for the opposite one, and the first
+  sign is a column that renders to nothing or to the wrong native type at run
+  time. Neither half shows this alone — the document is internally consistent
+  and the filename is a legal name — so the only place the two meet is a
+  validator holding both, which is why this rule names one rather than leaving
+  the obligation to the engine. Should the engine ever dispatch on the declared
+  `direction` instead, this check fails safe: it would reject a document the
+  engine had begun to handle correctly, which reaches an author as a rejection
+  to fix rather than as a run that quietly moved the wrong data.
+status: active
+superseded_by: null

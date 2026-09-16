@@ -611,9 +611,23 @@ def _p_type_map_schema_required() -> list[dict]:
 
 
 def _p_type_map_direction_from_document() -> list[dict]:
-    # A self-consistent WRITE document laid out under the READ filename. Every
-    # content signal names write and only the name says read, so a clean verdict
-    # is the name deciding nothing; a $schema/direction rejection is it deciding.
+    # A self-consistent WRITE document under a filename naming no slot. Nothing
+    # but `direction` can have selected a model here, and the read model would
+    # reject this document's write `$schema`, so a clean verdict is the
+    # document's own declaration choosing and the path contributing nothing.
+    rules = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
+    doc = _wrap_type_map(rules, "write")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "generic.json"
+        path.write_text(json.dumps(doc))
+        return _validate(doc, doc_path=path)
+
+
+def _p_type_map_slot_disagreement_reported() -> list[dict]:
+    # The same document parked in the READ slot. It is still graded as the write
+    # map it declares — no `$schema` rejection — and the disagreement with the
+    # slot is reported on its own, which is the split this rule exists to keep:
+    # the name reports, it never regrades.
     rules = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
     doc = _wrap_type_map(rules, "write")
     with tempfile.TemporaryDirectory() as tmp:
@@ -1030,6 +1044,8 @@ PROBES: tuple[Probe, ...] = (
     Probe("type-map-schema-required", "error", _p_type_map_schema_required,
           message_re=r"Field required"),
     Probe("type-map-direction-from-document", "clean", _p_type_map_direction_from_document),
+    Probe("type-map-slot-disagreement-reported", "error", _p_type_map_slot_disagreement_reported,
+          message_re=r"type-map-read", forbid_re=r"\$schema"),
     Probe("type-map-direction-not-schema-url", "error", _p_type_map_direction_not_schema_url,
           message_re=r"type-map-read"),
     Probe("type-map-sibling-slot-decides", "error", _p_type_map_sibling_slot_decides,

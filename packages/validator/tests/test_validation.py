@@ -1260,19 +1260,44 @@ def test_is_stem_addressed_endpoint_path_public_helper(validator):
 @pytest.mark.parametrize("direction,filename", [
     ("write", "type-map-read.json"),
     ("read", "type-map-write.json"),
-    ("write", "generic.json"),
 ])
-def test_declared_direction_decides_whatever_the_filename_says(
+def test_a_slot_naming_the_other_direction_is_reported_not_graded_against(
         validator, tmp_path, direction, filename):
-    # A self-consistent document under a filename naming the other direction, or
-    # naming none at all: a clean verdict means the filename contributed nothing.
+    # Two separable questions, and the filename answers only the second. How the
+    # document is graded is what it declares — the write map below still earns
+    # its write-vocabulary check under the read name — so nothing is regraded to
+    # match the slot. Whether the slot AGREES is its own obligation
+    # (`RULE-TMAP-023`), reported against `/direction` and nothing else.
     doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], direction)
     findings = validator.validate_document(doc, doc_path=tmp_path / filename)
-    assert not _errors(findings), findings
+    errors = _errors(findings)
+    assert [(f.get("rule"), f["message_id"], f["path"]) for f in errors] == [
+        ("RULE-TMAP-023", "type-map-direction-slot-mismatch", "/direction")]
+    assert filename in errors[0]["message"] and direction in errors[0]["message"], errors
     if direction == "write":
         # `direction` also selects the write-vocabulary coverage check, not just
         # the envelope model: graded as read, this document earns no TMAP-017.
         assert any(f.get("rule") == "RULE-TMAP-017" for f in findings), findings
+
+
+@pytest.mark.parametrize("filename", ["generic.json", "type-map.json", "Type-Map-Read.json"])
+def test_a_filename_naming_no_slot_has_nothing_to_disagree_with(validator, tmp_path, filename):
+    # Only the two exact slot names state a direction. Anything else — including
+    # the pre-split name and a case variant of a slot — is a file loaded as
+    # neither direction, so there is no slot for the document to contradict and
+    # the agreement check stays silent rather than guessing which was meant.
+    doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write")
+    findings = validator.validate_document(doc, doc_path=tmp_path / filename)
+    assert not _errors(findings), findings
+    assert any(f.get("rule") == "RULE-TMAP-017" for f in findings), findings
+
+
+def test_a_document_with_no_path_leaves_the_slot_unjudged(validator):
+    # Nothing located this document by name, so it fills no slot and the
+    # agreement check has no second term — the case that separates reporting a
+    # disagreement from deriving a direction.
+    doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write")
+    assert not _errors(validator.validate_document(doc))
 
 
 def test_schema_url_hint_does_not_override_the_declared_direction(validator, tmp_path):

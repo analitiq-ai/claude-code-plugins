@@ -56,8 +56,9 @@ def _fail(message: str) -> "int":
 def _load_rules(path: Path, direction: str) -> list:
     """Read one {$schema, direction, rules} type-map document, grade it as the
     direction named, and return its `rules` array. Grading here is load-bearing,
-    not a courtesy: the resolver mirrors runtime semantics, which *skip* a
-    malformed rule — so a broken rule would surface as a false "gap",
+    not a courtesy. Read of the engine as it stands: a malformed rule is *skipped*
+    at resolution rather than failing the run, and the resolver mirrors that — so
+    a broken rule would surface here as a false "gap",
     indistinguishable from a genuinely uncovered probe, and a false gap makes the
     authoring agent shadow the very rule the map intended. Failing loud keeps a
     reported gap unambiguous."""

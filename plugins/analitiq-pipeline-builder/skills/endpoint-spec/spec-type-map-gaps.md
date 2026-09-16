@@ -25,10 +25,10 @@ authoring the connection-scoped maps that close it.
 | Arrow → native DDL | `connections/<connection-slug>/definition/type-map-write.json` |
 
 Each file is a whole `{$schema, direction, rules}` document, not a bare rules
-array, and validates as entity `type-map`. The filename is where each direction
-is located, so it is also what selects the direction a map is graded and probed
-as — `direction` inside the document declares the same value (`read` / `write`)
-and is checked against it; the `$schema` value for each is in this skill's own
+array, and validates as entity `type-map`. This plugin grades and probes a
+connection map as the direction its filename names, that being where each
+direction is located; `direction` inside the document declares the same value
+(`read` / `write`) and is checked against it; the `$schema` value for each is in this skill's own
 `SKILL.md` schema-URL table.
 
 The rule shape (exact/regex `match`, matcher vs rendered key per direction,

@@ -459,9 +459,8 @@ def test_valid_type_map_entity(tmp_path, direction, fname, doc):
 
 
 def test_type_map_entity_rejects_wrong_filename(tmp_path):
-    # a name locating no slot is no direction's map, however valid its content
-    # (`_DIRECTION_BY_FILENAME` in the script under test carries why the name
-    # decides), and the gate must fire ALONE
+    # the slot a filename names is the direction, so a name locating no slot is no
+    # direction's map however valid its content — and the gate must fire ALONE
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", TYPE_MAP_READ))
     assert not diag["passed"]
     assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
@@ -572,9 +571,8 @@ def test_bundle_unreadable_connection_type_map(tmp_path):
 
 
 def test_type_map_entity_rejects_dict_without_rules_key(tmp_path):
-    # naming the slot is what makes this fail: graded by shape a stray connection
-    # document matches the connection detector and passes clean, while the
-    # engine's loader chokes on it under a type-map filename
+    # naming the slot is what makes this fail: graded by shape alone, a stray
+    # connection document matches the connection detector and passes clean
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", CONN_PG))
     assert not diag["passed"]
     assert any(f.get("path") == "/rules" and f.get("message_id") == "missing"
@@ -1486,8 +1484,10 @@ def test_scripts_borrow_published_names_from_the_published_surface():
     # names it owes. One missing from it is a name nothing promised to keep,
     # importable today because it happens to be bound — so the scripts would
     # break at every end user's runtime on a release that tidied it away.
-    # Underscore names are the deliberate exception the prober's docstring makes:
-    # private helpers this repo tracks because it moves in lockstep with the pin.
+    # Underscore names are the deliberate exception: they are borrowed as private
+    # API, so no `__all__` can promise them, and what stands in for that promise is
+    # `test_scripts_borrow_private_names_that_still_exist` below, grading them
+    # against the source this suite runs on.
     import analitiq.validator as pkg
     root = {name for module, name in _validator_imports_in_scripts()
             if module == "analitiq.validator"}
@@ -1508,12 +1508,12 @@ def test_scripts_borrow_private_names_that_still_exist():
 
 
 def test_type_map_filenames_match_the_validator():
-    # The adapter names the files itself because it reaches connection
-    # directories the published bundle validator cannot see. Two spellings of one
-    # slot would resolve the same document to opposite directions on the two
-    # sides, so the copy is pinned to the side that owns it.
+    # The adapter carries its own copy because it reaches connection directories
+    # the published validator never walks. A copy that drifts stops naming the
+    # slots the validator locates, so a map one route rejects passes on the other,
+    # and which of the two is right is not recoverable from either side alone.
     from analitiq.validator.connectors import (
-        _LEGACY_MAP_FILENAME, _READ_MAP_FILENAME, _WRITE_MAP_FILENAME,
+        _LEGACY_MAP_FILENAME, _MAP_FILENAME_BY_DIRECTION,
     )
-    assert V._TYPE_MAP_FILENAMES == {"read": _READ_MAP_FILENAME, "write": _WRITE_MAP_FILENAME}
+    assert V._TYPE_MAP_FILENAMES == _MAP_FILENAME_BY_DIRECTION
     assert V._LEGACY_TYPE_MAP_FILENAME == _LEGACY_MAP_FILENAME

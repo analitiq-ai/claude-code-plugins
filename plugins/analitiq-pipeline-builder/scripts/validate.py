@@ -30,7 +30,7 @@ entry point. This adapter routes each entity as follows:
     per-field findings instead.
   * ``type-map`` -> ``analitiq.validator.type_map_findings`` as the direction
     its filename names, at ``scope="connection"``.
-    ``_connection_type_map_findings`` below, and the engine's loader, both open
+    ``_connection_type_map_findings`` below opens
     ``connections/<slug>/definition/type-map-{read,write}.json`` by exactly those
     names, so the name is what says which direction to grade, and a file named
     neither is no direction's map and gets the rename finding alone.
@@ -221,8 +221,8 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
 
 def _type_map_findings(doc, document_path: Path) -> list[dict]:
     """Validate a connection-scoped type-map file as the direction its filename
-    names. The engine locates each direction's map by exactly that name, so
-    nothing else has to say which direction to grade; a file named neither earns
+    names — `_TYPE_MAP_FILENAMES` above states the reading of the engine that
+    makes the name load-bearing. A file named neither earns
     the rename finding alone, being no direction's map however valid its
     content, and one whose envelope declares the other direction fails the
     model's `direction` Literal."""
@@ -231,9 +231,9 @@ def _type_map_findings(doc, document_path: Path) -> list[dict]:
         names = " or ".join(sorted(_DIRECTION_BY_FILENAME))
         return [_finding(
             "connection-type-map", "error", "",
-            f"file is named {document_path.name!r}; the engine loads a connection's "
-            f"type maps as {names} under connections/<slug>/definition/, so this file "
-            f"is not read as either direction's map.")]
+            f"file is named {document_path.name!r}; a connection's type maps are read "
+            f"from {names} under connections/<slug>/definition/, so this file is no "
+            f"direction's map — rename it.")]
     from analitiq.validator import type_map_findings
     return type_map_findings(doc, direction, scope="connection")
 

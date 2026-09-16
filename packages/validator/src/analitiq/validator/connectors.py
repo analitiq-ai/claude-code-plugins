@@ -112,6 +112,8 @@ except ImportError as exc:  # pragma: no cover - dependency guard
 _READ_MAP_FILENAME = "type-map-read.json"
 _WRITE_MAP_FILENAME = "type-map-write.json"
 _LEGACY_MAP_FILENAME = "type-map.json"
+_MAP_FILENAME_BY_DIRECTION = {"read": _READ_MAP_FILENAME, "write": _WRITE_MAP_FILENAME}
+_DIRECTION_BY_MAP_FILENAME = {v: k for k, v in _MAP_FILENAME_BY_DIRECTION.items()}
 
 _CONNECTOR_SENTINELS = ("transports", "connection_contract", "default_transport", "auth")
 _STORAGE_KINDS = ("file", "s3", "stdout")
@@ -1385,7 +1387,38 @@ def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None =
     declared = doc.get("direction")
     if declared not in ("read", "write"):
         return _model_findings(doc, _TYPE_MAP_ADAPTER)
-    return type_map_findings(doc, declared)
+    return _direction_slot_findings(doc, doc_path) + type_map_findings(doc, declared)
+
+
+def _direction_slot_findings(doc: Any, doc_path: Path | None) -> list[dict]:
+    """Report a document whose declared `direction` contradicts the slot its
+    filename fills (`RULE-TMAP-023`, which owns why that costs anything).
+
+    Kept apart from grading on purpose, and the separation is the design: the
+    document is still graded as the direction it declares, so this reports a
+    disagreement rather than resolving one, and a filename never decides what
+    the rules are measured against. Only a reserved name is a slot — a file
+    located by any other name asserts no direction to disagree with — and a
+    document carrying no usable `direction` is answered on the discriminator
+    before reaching here, two unusable halves naming no disagreement either.
+
+    `check_coverage` needs none of this: it locates each sibling BY the slot, so
+    the slot is what it grades against and a misfiled map fails the `direction`
+    Literal there, alongside everything else wrong with it."""
+    if doc_path is None:
+        return []
+    slot = _DIRECTION_BY_MAP_FILENAME.get(doc_path.name)
+    declared = doc.get("direction")
+    if slot is None or declared not in ("read", "write") or declared == slot:
+        return []
+    return [finding(
+        rule="RULE-TMAP-023",
+        message_id="type-map-direction-slot-mismatch", kind="fail", path="/direction",
+        message=(
+            f"document declares direction {declared!r} but is stored as "
+            f"{doc_path.name!r}, which is the {slot} map's filename, so this file "
+            f"is the one loaded for the {slot} direction. Either store it as "
+            f"{_MAP_FILENAME_BY_DIRECTION[declared]!r} or correct its `direction`."))]
 
 
 def _validate_kindless_connector(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
