@@ -3,8 +3,9 @@ connector-package and pipeline-package requests that carry one.
 
 A malformed argument is refused when the request is built, so every case below
 is a `ValidationError`, never a finding. The published schemas are graded
-against the same keys, so a JSON-Schema-only consumer refuses what the models
-refuse.
+against the same malformed keys, so a JSON-Schema-only consumer refuses the key
+grammar the models refuse; the document-and-directory conflict is enforced by
+the model alone, since JSON Schema cannot express it.
 """
 from __future__ import annotations
 
@@ -63,8 +64,8 @@ def test_accepts_relative_posix_keys(resource):
 
 
 def test_empty_set_is_not_a_request_error(resource):
-    # An empty package is a package missing its root document, which the
-    # validator reports as a finding like any other missing root document.
+    # An empty set is a well-formed request: a package with no root document
+    # is a content problem, not a request error.
     assert REQUESTS[resource].model_validate({"documents": {}}).documents.root == {}
 
 
@@ -99,7 +100,8 @@ def test_published_schema_accepts_what_the_model_accepts(resource):
     ("endpoints", "endpoints/widgets.json"),
     ("connectors/wise/definition/connector.json/extra.json",
      "connectors/wise/definition/connector.json"),
-], ids=["document-then-child", "child-then-document"])
+    ("connectors", "connectors/wise/definition/connector.json"),
+], ids=["document-then-child", "child-then-document", "ancestor-several-levels-up"])
 def test_rejects_key_that_is_a_document_and_a_directory(resource, keys):
     with pytest.raises(ValidationError, match="directory"):
         REQUESTS[resource].model_validate({"documents": {k: "{}" for k in keys}})

@@ -1,10 +1,9 @@
 """Requests to validate a set of authored documents supplied as text.
 
 A request carries the documents, not a location to read them from. These
-models are the one gate on its arguments: a request they refuse is malformed
-and never reaches validation, while everything about a document's content —
-whether it parses, whether it satisfies its contract — is left to the
-validator to report.
+models gate the request's shape only: a request they refuse is malformed,
+and a document's content — whether it parses, whether it satisfies its
+contract — is not judged here.
 """
 from __future__ import annotations
 
@@ -16,7 +15,7 @@ from analitiq.contracts.shared.common import ParseOnly, StrictModel, closed_true
 
 # Coarse guards against an unbounded request, not a policy on package size:
 # each is set far above what a real connector or pipeline package needs, so
-# one that meets a ceiling is a malformed request rather than a large package.
+# one that exceeds a ceiling is a malformed request rather than a large package.
 MAX_DOCUMENTS = 2000
 MAX_DOCUMENT_TEXT_LENGTH = 1_048_576
 
@@ -45,11 +44,10 @@ class DocumentSet(
     """Authored documents keyed by the relative path each occupies in its
     package, each value the document's file text.
 
-    A key is a relative POSIX path spelled one way only: `/`-separated
-    segments, none of them empty, `.` or `..`, with no leading or trailing
-    `/`. A key that names a document may not also be the directory of
-    another key. The text is opaque here; parsing and judging it is the
-    validator's job.
+    A key is a package-relative POSIX path with exactly one spelling per
+    document; the key pattern carries the grammar. A key that names a
+    document may not also be the directory of another key. The text is
+    opaque to this model.
     """
 
     @model_validator(mode="after")

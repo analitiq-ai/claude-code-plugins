@@ -6,14 +6,13 @@ from census.obligation import ProseObligation
 
 _CONTENT_IS_THE_VALIDATORS = (
     "whether the documents actually form the named package is their content, "
-    "which the validator judges and reports as findings; the request model "
-    "gates only the request's shape"
+    "which this model does not judge; it gates only the request's shape"
 )
 
 PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="DocumentSet",
-        prose_hash="49930d4ec90b",
+        prose_hash="f3a84c484d1c",
         structural=(
             "every key is typed DocumentKey, whose DOCUMENT_KEY_PATTERN admits "
             "only `/`-separated segments that are non-empty and neither `.` nor "

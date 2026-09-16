@@ -1077,8 +1077,7 @@ RESOURCES: tuple[Resource, ...] = (
             "Public JSON Schema contract for a request to validate one connector "
             "package supplied as its documents: each document's file text keyed "
             "by its relative path in the package. The schema gates the request's "
-            "shape only; the documents' content is judged by the validator and "
-            "reported as findings. "
+            "shape only; the documents' content is not judged by it. "
             "Source of truth: analitiq.contracts.validation_requests."
             "ValidateConnectorPackageRequest (Pydantic)."
         ),
@@ -1092,8 +1091,7 @@ RESOURCES: tuple[Resource, ...] = (
             "Public JSON Schema contract for a request to validate one pipeline "
             "package supplied as its documents: each document's file text keyed "
             "by its relative path in the package. The schema gates the request's "
-            "shape only; the documents' content is judged by the validator and "
-            "reported as findings. "
+            "shape only; the documents' content is not judged by it. "
             "Source of truth: analitiq.contracts.validation_requests."
             "ValidatePipelinePackageRequest (Pydantic)."
         ),
