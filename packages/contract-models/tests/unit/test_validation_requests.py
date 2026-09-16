@@ -16,7 +16,7 @@ import jsonschema
 import pytest
 from pydantic import ValidationError
 
-from analitiq.contracts.shared.common import DOCUMENT_TEXT_MAX_LENGTH
+from analitiq.contracts.shared.common import DOCUMENT_KEY_MAX_LENGTH, DOCUMENT_TEXT_MAX_LENGTH
 from analitiq.contracts.validation_requests import (
     MAX_DOCUMENTS,
     DocumentSet,
@@ -142,6 +142,22 @@ def test_document_text_ceiling(resource):
     with pytest.raises(ValidationError):
         REQUESTS[resource].model_validate(
             {"documents": {"connector.json": "x" * (DOCUMENT_TEXT_MAX_LENGTH + 1)}})
+
+
+def test_document_key_ceiling(resource):
+    REQUESTS[resource].model_validate(
+        {"documents": {"k" * DOCUMENT_KEY_MAX_LENGTH: "{}"}})
+    with pytest.raises(ValidationError):
+        REQUESTS[resource].model_validate(
+            {"documents": {"k" * (DOCUMENT_KEY_MAX_LENGTH + 1): "{}"}})
+
+
+def test_published_schema_refuses_a_key_over_the_ceiling(resource):
+    published = _published_schema(resource)
+    jsonschema.validate({"documents": {"k" * DOCUMENT_KEY_MAX_LENGTH: "{}"}}, published)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            {"documents": {"k" * (DOCUMENT_KEY_MAX_LENGTH + 1): "{}"}}, published)
 
 
 def test_published_schema_carries_the_ceilings(resource):

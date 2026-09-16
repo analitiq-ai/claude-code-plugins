@@ -91,6 +91,8 @@ TAGS_MAX = 50
 # A coarse guard against an unbounded document, set far above any authored
 # document's size, so text that exceeds it is malformed rather than large.
 DOCUMENT_TEXT_MAX_LENGTH = 500_000
+# Likewise for a document's package-relative path.
+DOCUMENT_KEY_MAX_LENGTH = 1024
 
 
 # Anchored "no leading/trailing whitespace" — the declarative mirror of

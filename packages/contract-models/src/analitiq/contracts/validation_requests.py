@@ -12,6 +12,7 @@ from typing import Annotated
 from pydantic import Field, RootModel, StringConstraints, model_validator
 
 from analitiq.contracts.shared.common import (
+    DOCUMENT_KEY_MAX_LENGTH,
     DocumentText,
     ParseOnly,
     StrictModel,
@@ -28,7 +29,9 @@ MAX_DOCUMENTS = 2000
 _SEGMENT = r"(?:[^/.][^/]*|\.[^/.][^/]*|\.\.[^/]+)"
 DOCUMENT_KEY_PATTERN = rf"^{_SEGMENT}(?:/{_SEGMENT})*$"
 
-DocumentKey = Annotated[str, StringConstraints(pattern=DOCUMENT_KEY_PATTERN)]
+DocumentKey = Annotated[
+    str, StringConstraints(pattern=DOCUMENT_KEY_PATTERN, max_length=DOCUMENT_KEY_MAX_LENGTH)
+]
 
 # `RootModel` cannot inherit `StrictModel` — pydantic rejects an `extra`
 # setting on a root model — so this mixes in the parse-only policy directly,
