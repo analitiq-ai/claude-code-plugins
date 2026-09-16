@@ -4,8 +4,8 @@ name: Publish schemas to schemas.analitiq.ai
 # schemas.<DOMAIN>. The bucket and CDN live in the infra repo's Terraform
 # (terraform/schemas.tf — "this Terraform owns only the SERVING
 # infrastructure"). The publisher IAM role this workflow assumes is specified
-# on the infra side but not yet applied. This workflow is the external uploader
-# that Terraform hands the objects to.
+# and applied on the infra side, granting list/get/put on the bucket. This
+# workflow is the external uploader that Terraform hands the objects to.
 #
 # Auth is OIDC only — this repo is public and stores no static credentials
 # (CLAUDE.md → Credentials). The `schemas` GitHub Environment supplies:
@@ -113,15 +113,16 @@ jobs:
           mutable_cache="public, max-age=300, must-revalidate"
           cd schemas
           expected=$(find . -name '*.json' -type f | wc -l | tr -d ' ')
-          # One listing call replaces a per-file existence probe: the AWS CLI
-          # auto-paginates list-objects-v2, so this is one command even past
-          # 1000 keys. Presence alone decides new-vs-existing; only a key this
-          # says already exists pays for the GET-and-byte-compare below.
-          declare -A EXISTING
-          while IFS= read -r key; do
-            [ -n "$key" ] && EXISTING["$key"]=1
-          done < <(aws s3api list-objects-v2 --bucket "$BUCKET" --query 'Contents[].Key' --output json \
-                     | python3 -c 'import json, sys; [print(k) for k in (json.load(sys.stdin) or [])]')
+          # One bulk pull replaces both the per-file existence probe and the
+          # per-file byte-compare download: `aws s3 sync` fetches everything
+          # already published in one (internally parallel) subprocess, so
+          # every comparison below is a local `cmp`, never a network round
+          # trip. It is a plain command, not a process substitution, so
+          # `set -e` actually sees it fail — a sync failure stops the run
+          # rather than being read as "nothing is published yet", which would
+          # make every pinned file below look new and overwrite it.
+          mkdir -p "$RUNNER_TEMP/published"
+          aws s3 sync "s3://$BUCKET" "$RUNNER_TEMP/published" --no-progress
           while IFS= read -r -d '' f; do
             key="${f#./}"
             case "$(basename "$f")" in
@@ -130,19 +131,12 @@ jobs:
             esac
             if [[ "$(basename "$f")" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.json$ ]]; then
               # Immutable pinned version: first write wins, never overwritten.
-              # Existence comes from the listing above, not a per-file probe.
-              # The byte-compare itself is a GET, deliberately not an ETag
-              # check (ETags stop being MD5s under multipart uploads or
-              # SSE-KMS, and a failed local hash must not read as divergence).
-              # A GET failure here means the listing lied or the object is
-              # unreadable — never re-read as "absent", which would overwrite
-              # an immutable object.
-              if [[ -n "${EXISTING[$key]:-}" ]]; then
-                if ! aws s3api get-object --bucket "$BUCKET" --key "$key" "$RUNNER_TEMP/published.json" >/dev/null; then
-                  echo "::error::$key is listed as published but the GET failed — refusing to treat as absent" >&2
-                  exit 1
-                fi
-                if ! cmp -s "$f" "$RUNNER_TEMP/published.json"; then
+              # Existence and content both come from the local sync mirror —
+              # deliberately not an ETag check (ETags stop being MD5s under
+              # multipart uploads or SSE-KMS, and a failed local hash must not
+              # read as divergence).
+              if [[ -f "$RUNNER_TEMP/published/$key" ]]; then
+                if ! cmp -s "$f" "$RUNNER_TEMP/published/$key"; then
                   echo "::error file=schemas/$key::pinned version differs from the published object — publish a new version triple instead of editing $key in place" >&2
                   exit 1
                 fi
