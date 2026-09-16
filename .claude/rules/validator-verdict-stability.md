@@ -34,15 +34,18 @@ verdict it replaces was right.
 The question carries the whole rule, so each term in it is defined here rather
 than left to the reader.
 
-- **Reject.** The validator answers with a finding at severity `error`, or,
+- **Reject.** A call to the validator rejects when its `passed` is false, or,
   for the contract models used on their own, the model refuses the document.
-  A pydantic `ValidationError` reaches the validator as an `error`-severity
-  `fail` finding, so a model that refuses and a check that reports `error` are
-  one event here. A finding carries `error` or `warning`
-  and nothing else, while a record may also declare `info` — so what answers
-  the question is whether a document is rejected, never the label a record
-  declares. A record reaching any severity is a bump only when an enforcer
-  rejects a document with it.
+  Which findings keep `passed` from being true is owned by `rules/SCHEMA.md`,
+  "Findings", and is not restated here: read the verdict, never a finding's
+  `severity`, since a finding can cost the pass without carrying one. A
+  pydantic `ValidationError` reaches the validator as an `error`-severity
+  `fail` finding, so a model's refusal reaches the validator as a call that
+  does not pass. A finding carries `error` or `warning` and nothing else,
+  while a record may also declare `info` — so what answers the question is
+  whether a document is rejected, never the label a record declares. A record
+  reaching any severity is a bump only when an enforcer rejects a document
+  with it.
 - **The last stable release.** The newest release of the packages carrying no
   pre-release suffix. A pre-release is never the reference point: before the
   first stable release there is nothing to preserve, and a pre-release
@@ -52,8 +55,16 @@ than left to the reader.
   the same way that version's release must, and one preparing the next major
   answers yes, which is the bump it is already carrying.
 - **A document that release accepted.** One it could have been handed and did
-  not reject. The validator answers a document it cannot identify with an
-  `error`, so nothing of a kind no detector claimed was ever accepted.
+  not reject — where what a call is handed is its whole input: the document,
+  the content of every other file the call reads, and the value of every
+  option the call is given. A verdict is a function of all of it, so the
+  question is asked of all of it: a change answers yes when it rejects any
+  input the last stable release passed, never only when it rejects the
+  document's bytes on their own. The promise is not keyed on a path. A path is
+  how a call finds the files beside a document, and what it points at changes
+  without any release, so the input is the content the call read, not where it
+  read it from. The validator does not pass a document it cannot identify, so
+  nothing of a kind no detector claimed was ever accepted.
 
 ## Why the major carries it
 
@@ -75,11 +86,14 @@ falls on is decided once, for the pair.
 These apply the question; they are not a list to check a change against. A
 change absent here is decided by the question, not by its absence.
 
-- **A check promoted to `error`.** Ask which documents the check fires on. It
-  is the arrival that is free and the promotion that costs, where the check
-  reports on a document the release accepts; where it can only fire on a
-  document already rejected for another reason, promoting it changes no
-  verdict. A rule whose violation breaks a run still arrives as a warning —
+- **A check promoted to `error`.** Ask which inputs the check fires on, and
+  which it cannot evaluate. It is the arrival that is free and the promotion
+  that costs, where the check reports on an input the release accepts; where
+  it can only fire on an input already rejected for another reason, promoting
+  it changes no verdict. The promotion reaches past the check's `fail`
+  findings: a finding saying the check could not evaluate its rule is graded
+  by that rule's severity as well (`rules/SCHEMA.md`, "Findings"), so an input
+  the check skipped can stop passing with nothing in it newly detected. A rule whose violation breaks a run still arrives as a warning —
   the promise forbids the rejection, not the finding — and the record's
   `rationale` says what the run does with the violation.
 - **A record gaining a rejecting enforcer.** A record one document settles
@@ -102,7 +116,23 @@ change absent here is decided by the question, not by its absence.
 - **A new finding id.** An id arrives with the check that emits it: a
   registered id with no call site is refused by
   `packages/validator/tests/test_check_registry_census.py`. So the question is
-  asked of that check and the documents it fires on. The id carries no verdict
+  asked of that check and the inputs it fires on. The id carries no verdict
   of its own.
+- **A new finding with no `severity`.** A change whose only effect is a
+  finding that carries no `severity` is not free on that account. Whether it
+  costs the pass is `rules/SCHEMA.md`'s answer, not the missing label's; where
+  it turns an input the last stable release passed into one that does not
+  pass, the change answers yes.
+- **A new check reading beside the document.** Say a check starts reading a
+  file the document names and failing when that file disagrees with it. Asked
+  of the document alone, the change can look free: handed without the files
+  beside it, that document may never have passed. Asked of the whole input, a
+  document together with files the last stable release passed it with, and
+  which this change now fails, answers yes.
+- **An option that relaxes a check.** Say an option lets a draft pass a check
+  it would otherwise fail. Adding the option accepts more and answers no.
+  Removing it, or narrowing what it relaxes, rejects an input — the same
+  document with the same option set — that the last stable release passed,
+  and answers yes.
 - **A loosening, a reworded message, a moved `path`.** Accepting more, or
   saying the same verdict differently, answers no.
