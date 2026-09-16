@@ -94,7 +94,7 @@ def test_write_gap_reported(tmp_path):
 def test_map_without_rules_key_rejected(tmp_path):
     bad = tmp_path / "r.json"
     bad.write_text('{"match": "exact"}')
-    with pytest.raises(ValueError, match=r"not a \{\$schema, direction, rules\} type-map document"):
+    with pytest.raises(ValueError, match="not a valid read type map"):
         G.resolve("read", ["citext"], [bad])
 
 
@@ -102,7 +102,7 @@ def test_cli_end_to_end(tmp_path, capsys):
     m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
     probes = tmp_path / "probes.json"
     probes.write_text(json.dumps(["citext", "vector(3)"]))
-    rc = G.main(["--direction", "read", "--map", str(m), "--probes-file", str(probes)])
+    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
     assert out == {"direction": "read",
@@ -115,7 +115,7 @@ def test_cli_rejects_bad_probes(tmp_path, capsys, probes_payload):
     m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
     probes = tmp_path / "probes.json"
     probes.write_text(probes_payload)
-    rc = G.main(["--direction", "read", "--map", str(m), "--probes-file", str(probes)])
+    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
     assert rc == 2
     assert json.loads(capsys.readouterr().out or "null") is None  # nothing on stdout
 
@@ -123,7 +123,7 @@ def test_cli_rejects_bad_probes(tmp_path, capsys, probes_payload):
 def test_cli_missing_map_is_an_error(tmp_path, capsys):
     probes = tmp_path / "probes.json"
     probes.write_text('["citext"]')
-    rc = G.main(["--direction", "read", "--map", str(tmp_path / "absent.json"),
+    rc = G.main(["--map", str(tmp_path / "type-map-read.json"),
                  "--probes-file", str(probes)])
     assert rc == 2
     assert not capsys.readouterr().out
@@ -154,25 +154,40 @@ def test_map_direction_must_match_model(tmp_path):
         G.resolve("read", ["citext"], [_map(tmp_path, "m.json", CONNECTOR_WRITE, "read")])
 
 
-def test_cli_rejects_direction_filename_mismatch(tmp_path, capsys):
-    m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
+def test_cli_rejects_a_map_whose_name_holds_no_direction(tmp_path, capsys):
+    # nothing to disagree with a flag any more; what remains is a name that
+    # locates no slot, so there is no direction to probe in
+    m = _map(tmp_path, "my-types.json", CONNECTOR_READ)
     probes = tmp_path / "probes.json"
-    probes.write_text('["Utf8"]')
-    rc = G.main(["--direction", "write", "--map", str(m), "--probes-file", str(probes)])
+    probes.write_text('["citext"]')
+    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
     assert rc == 2
     err = capsys.readouterr()
     assert not err.out
-    assert "read-direction map" in err.err
+    assert "names no direction" in err.err
+
+
+def test_cli_rejects_maps_holding_different_directions(tmp_path, capsys):
+    r = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
+    (tmp_path / "w").mkdir()
+    w = _map(tmp_path / "w", "type-map-write.json", CONNECTOR_READ)
+    probes = tmp_path / "probes.json"
+    probes.write_text('["citext"]')
+    rc = G.main(["--map", str(r), "--map", str(w), "--probes-file", str(probes)])
+    assert rc == 2
+    err = capsys.readouterr()
+    assert not err.out
+    assert "same direction" in err.err
 
 
 def test_cli_parse_error_names_the_file(tmp_path, capsys):
-    bad = tmp_path / "broken.json"
+    bad = tmp_path / "type-map-read.json"
     bad.write_text("[ not json")
     probes = tmp_path / "probes.json"
     probes.write_text('["citext"]')
-    rc = G.main(["--direction", "read", "--map", str(bad), "--probes-file", str(probes)])
+    rc = G.main(["--map", str(bad), "--probes-file", str(probes)])
     assert rc == 2
-    assert "broken.json" in capsys.readouterr().err
+    assert str(bad) in capsys.readouterr().err
 
 
 def test_cli_reads_probes_from_stdin(tmp_path, capsys, monkeypatch):
@@ -180,6 +195,6 @@ def test_cli_reads_probes_from_stdin(tmp_path, capsys, monkeypatch):
     import io
     m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
     monkeypatch.setattr("sys.stdin", io.StringIO('["citext"]'))
-    rc = G.main(["--direction", "read", "--map", str(m)])
+    rc = G.main(["--map", str(m)])
     assert rc == 0
     assert json.loads(capsys.readouterr().out)["resolved"] == {"citext": "Utf8"}

@@ -19,13 +19,15 @@ map is the fallback.
 Usage::
 
     printf '%s' '["citext", "vector(3)"]' | python3 type_map_gaps.py \
-        --direction read \
         --map connections/pg/definition/type-map-read.json \
         --map connectors/postgresql/definition/type-map-read.json
 
-Probes are a JSON array of strings on stdin (or --probes-file): provider
-`native_type` labels for ``--direction read``, `arrow_type` strings for
-``--direction write``. Output on stdout::
+Every map is loaded by the exact filename its direction is located under, so
+the names say which direction is being probed and no flag has to repeat it;
+maps naming different directions is a usage error, as is a name that is
+neither. Probes are a JSON array of strings on stdin (or --probes-file):
+provider `native_type` labels reading, `arrow_type` strings writing. Output on
+stdout::
 
     {"direction": "read",
      "resolved": {"citext": null, "vector(3)": null},
@@ -45,6 +47,7 @@ import sys
 from pathlib import Path
 
 from _bootstrap import ensure_deps_or_reexec
+from validate import _DIRECTION_BY_FILENAME
 
 
 def _fail(message: str) -> "int":
@@ -53,28 +56,30 @@ def _fail(message: str) -> "int":
 
 
 def _load_rules(path: Path, direction: str) -> list:
-    """Read one {$schema, direction, rules} type-map document and model-validate
-    it against the pinned contract, returning its `rules` array. Validation
-    here is load-bearing, not a courtesy: the resolver
-    mirrors runtime semantics, which *skip* a malformed rule — so a broken
-    rule would surface as a false "gap", indistinguishable from a genuinely
-    uncovered probe, and a false gap makes the authoring agent shadow the very
-    rule the map intended. Failing loud keeps a reported gap unambiguous."""
+    """Read one {$schema, direction, rules} type-map document, grade it as the
+    direction its slot names, and return its `rules` array. Grading here is
+    load-bearing, not a courtesy: the resolver mirrors runtime semantics, which
+    *skip* a malformed rule — so a broken rule would surface as a false "gap",
+    indistinguishable from a genuinely uncovered probe, and a false gap makes
+    the authoring agent shadow the very rule the map intended. Failing loud
+    keeps a reported gap unambiguous.
+
+    Only a finding that costs a pass is fatal. Probing reads a map for its
+    rules, so how completely it covers a vocabulary is a different question
+    than whether it can be resolved through — which is why it is graded at the
+    gap-only scope this script exists to serve."""
     try:
         doc = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
-    if not (isinstance(doc, dict) and "rules" in doc):
-        raise ValueError(f"{path} is not a {{$schema, direction, rules}} type-map document")
-    from pydantic import ValidationError
-    from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
-    model = TypeMapReadDoc if direction == "read" else TypeMapWriteDoc
-    try:
-        model.model_validate(doc)
-    except ValidationError as exc:
+    from analitiq.validator import finding_costs_a_pass, type_map_findings
+    fatal = [f for f in type_map_findings(doc, direction, scope="connection")
+             if finding_costs_a_pass(f)]
+    if fatal:
+        detail = "; ".join(f"{f.get('path') or '/'}: {f['message']}" for f in fatal)
         raise ValueError(
             f"{path} is not a valid {direction} type map — fix it (or, for a "
-            f"connector map, raise the defect upstream) before probing: {exc}") from exc
+            f"connector map, raise the defect upstream) before probing: {detail}")
     return doc["rules"]
 
 
@@ -105,13 +110,10 @@ def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--direction", required=True, choices=("read", "write"),
-                        help="read: probes are native types, maps are type-map-read files; "
-                             "write: probes are Arrow types, maps are type-map-write files.")
     parser.add_argument("--map", action="append", required=True, dest="maps", metavar="PATH",
-                        help="A {$schema, direction, rules} type-map document; repeatable, "
-                             "in precedence order (connection-scoped map first, connector "
-                             "map after).")
+                        help="A {$schema, direction, rules} type-map document, named for the "
+                             "direction it holds; repeatable, in precedence order "
+                             "(connection-scoped map first, connector map after).")
     parser.add_argument("--probes-file", metavar="PATH",
                         help="JSON array of probe strings; defaults to stdin.")
     args = parser.parse_args(argv)
@@ -121,18 +123,22 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         return _fail(str(exc))
 
-    # `_load_rules` grades each map against the model `--direction` names, so a
-    # map whose envelope declares the other direction fails there on the
-    # `direction` Literal. Catch a filename/--direction mismatch first, so the
-    # message names the actual mistake (a swapped --map/--direction) rather
-    # than a generic schema failure. The two load-bearing filenames declare
-    # their direction; hold a map named either of them to it.
-    load_bearing = {"type-map-read.json": "read", "type-map-write.json": "write"}
+    # The filename is the slot, here as everywhere else a map is located: it
+    # says which direction is being probed, so nothing has to repeat it and
+    # nothing can disagree with it. `_load_rules` then grades each map as that
+    # direction, where a map whose envelope declares the other one fails on the
+    # `direction` Literal.
+    directions = {}
     for m in args.maps:
-        implied = load_bearing.get(Path(m).name)
-        if implied is not None and implied != args.direction:
-            return _fail(f"{m} is a {implied}-direction map (by filename) but "
-                         f"--direction is {args.direction}")
+        implied = _DIRECTION_BY_FILENAME.get(Path(m).name)
+        if implied is None:
+            names = " or ".join(sorted(_DIRECTION_BY_FILENAME))
+            return _fail(f"{m} is named neither {names}, so it names no direction to probe")
+        directions.setdefault(implied, m)
+    if len(directions) > 1:
+        return _fail("every --map must hold the same direction, got "
+                     + ", ".join(f"{m} ({d})" for d, m in sorted(directions.items())))
+    direction = next(iter(directions))
 
     try:
         raw = Path(args.probes_file).read_text() if args.probes_file else sys.stdin.read()
@@ -143,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
         return _fail("probes must be a JSON array of strings")
 
     try:
-        result = resolve(args.direction, probes, [Path(m) for m in args.maps])
+        result = resolve(direction, probes, [Path(m) for m in args.maps])
     except (OSError, ValueError) as exc:
         # _load_rules wraps every per-file failure (read, parse, model) into a
         # file-naming ValueError; OSError is the escape hatch for anything else.
