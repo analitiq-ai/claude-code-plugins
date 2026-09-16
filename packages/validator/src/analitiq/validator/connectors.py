@@ -46,7 +46,7 @@ import re
 import reprlib
 import sys
 from pathlib import Path
-from typing import Any, Callable, Iterator, Literal
+from typing import Annotated, Any, Callable, Iterator, Literal
 
 from ._core import (
     contract_model_domain,
@@ -67,7 +67,7 @@ from ._sample_budget import BudgetedGrader
 # ambient `DOMAIN`).
 try:
     with contract_model_domain():
-        from pydantic import TypeAdapter
+        from pydantic import Field, TypeAdapter
         from analitiq.contracts.connector import Connector
         from analitiq.contracts.endpoints import (
             ApiEndpointDoc,
@@ -80,9 +80,7 @@ try:
             walk_structural_positions,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
-        from analitiq.contracts.type_map import (
-            TYPE_MAP_WRITE_SCHEMA_URL, TypeMapReadDoc, TypeMapWriteDoc,
-        )
+        from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
         # Reuse the contract's regex primitives (ECMA named-group + `${name}`
         # placeholder syntax) from the model so the validator's rule-rendering can't
         # drift from the model's rule-validation.
@@ -1240,6 +1238,13 @@ _API_ENDPOINT_ADAPTER = TypeAdapter(ApiEndpointDoc)
 _DATABASE_ENDPOINT_ADAPTER = TypeAdapter(DatabaseEndpointDoc)
 _READ_MAP_ADAPTER = TypeAdapter(TypeMapReadDoc)
 _WRITE_MAP_ADAPTER = TypeAdapter(TypeMapWriteDoc)
+# For a document whose `direction` is absent or unrecognized: pydantic reports
+# the unusable discriminator itself, instead of every field of a direction
+# nothing chose. Where a direction IS known this is the wrong adapter — the
+# union prefixes every error location with the matched tag, surfacing
+# `/$schema` as `/read/$schema`.
+_TYPE_MAP_ADAPTER = TypeAdapter(
+    Annotated[TypeMapReadDoc | TypeMapWriteDoc, Field(discriminator="direction")])
 
 
 # ---------------------------------------------------------------------------
@@ -1380,15 +1385,19 @@ def _validate_database_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
 
 
 def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    # The engine keys a type map by the document's own `direction`, so the
-    # filename never grades it. `$schema` names the direction too and stands in
-    # when `direction` is missing or invalid, so the rest of the document is
-    # graded against the model its author meant; with neither, the read model
-    # reports the missing `direction` itself.
-    direction = doc.get("direction")
-    if direction not in ("read", "write"):
-        direction = "write" if doc.get("$schema") == TYPE_MAP_WRITE_SCHEMA_URL else "read"
-    return type_map_findings(doc, direction)
+    # A document handed here stands alone, so the only direction it has is the
+    # one it declares. The filename is not read: a name is evidence only where
+    # something located the file by it, which `check_coverage` does and this
+    # does not, and resolving direction from the name means a map whose envelope
+    # is wrong is graded as the thing it is not. With no usable `direction`
+    # there is nothing to grade against either: the union keyed on it answers
+    # once, naming the discriminator, where picking a direction to report
+    # through would tell the author of a write map that its correct `$schema` is
+    # the wrong one.
+    declared = doc.get("direction")
+    if declared not in ("read", "write"):
+        return _model_findings(doc, _TYPE_MAP_ADAPTER)
+    return type_map_findings(doc, declared)
 
 
 def _validate_kindless_connector(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature

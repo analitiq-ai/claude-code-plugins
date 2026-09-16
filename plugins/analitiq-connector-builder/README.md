@@ -80,10 +80,11 @@ contract models (`analitiq-contract-models`), the same models the published JSON
 Schemas are generated from — so there is no schema fetch. It runs:
 
 1. **Contract-model validation** — structure, plus the cross-field rules the
-   models themselves apply, keyed by the document's declared `$schema`:
+   models themselves apply. Discriminating keys in the document body select the
+   model; the `$schema` each kind declares is a field that model then checks:
    - Connector → `https://schemas.analitiq.ai/connector/latest.json`
-   - Read map (`type-map-read.json`) → `https://schemas.analitiq.ai/type-map-read/latest.json`
-   - Write map (`type-map-write.json`, database only) → `https://schemas.analitiq.ai/type-map-write/latest.json`
+   - Read map (`direction: "read"`) → `https://schemas.analitiq.ai/type-map-read/latest.json`
+   - Write map (`direction: "write"`, database only) → `https://schemas.analitiq.ai/type-map-write/latest.json`
    - API endpoint → `https://schemas.analitiq.ai/api-endpoint/latest.json`
    - Database endpoint → `https://schemas.analitiq.ai/database-endpoint/latest.json`
    Every rule an author must satisfy is catalogued by id in

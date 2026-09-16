@@ -613,6 +613,28 @@ def _p_type_map_schema_required() -> list[dict]:
         return _validate(doc, doc_path=path)
 
 
+def _p_type_map_direction_from_document() -> list[dict]:
+    # A self-consistent WRITE document under a filename naming no slot. Nothing
+    # but `direction` can have selected a model here, and the read model would
+    # reject this document's write `$schema`, so a clean verdict is the
+    # document's own declaration choosing and the path contributing nothing.
+    rules = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
+    doc = _wrap_type_map(rules, "write")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "generic.json"
+        path.write_text(json.dumps(doc))
+        return _validate(doc, doc_path=path)
+
+
+def _p_type_map_direction_not_schema_url() -> list[dict]:
+    # `direction` and `$schema` made to disagree, so only one of them can have
+    # chosen the model. Rejecting the WRITE `$schema` against the read model is
+    # `direction` choosing; rejecting `/direction` would be `$schema` choosing.
+    doc = _wrap_type_map([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")
+    doc["direction"] = "read"
+    return _validate(doc)
+
+
 def _p_pagination_limit_bare_zero() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["pagination"]["limit"]["default"] = 0
@@ -996,6 +1018,9 @@ PROBES: tuple[Probe, ...] = (
           require_re=r"no rule rendering"),
     Probe("type-map-schema-required", "error", _p_type_map_schema_required,
           message_re=r"Field required"),
+    Probe("type-map-direction-from-document", "clean", _p_type_map_direction_from_document),
+    Probe("type-map-direction-not-schema-url", "error", _p_type_map_direction_not_schema_url,
+          message_re=r"type-map-read"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
           message_re=r"greater than or equal to 1"),
     Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,
