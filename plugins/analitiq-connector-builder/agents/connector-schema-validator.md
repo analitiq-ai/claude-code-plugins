@@ -29,7 +29,8 @@ artifact.
   direction (`RULE-TMAP-023`), and a direction the connector's `kind` requires
   but ships no map for surfaces as a missing sibling when the **connector** is
   validated (`RULE-PKG-030`). Point this at the draft where it sits rather than
-  at a copy you re-serialized, so what ships is what was graded. This agent validates JSON documents only; a
+  at a copy you re-serialized, so what ships is what was graded. This agent
+  validates JSON documents only; a
   connector's Python package files (`connector.py`, `pyproject.toml`, …) are
   outside its scope — report them as not validated rather than passing judgment
   on them.

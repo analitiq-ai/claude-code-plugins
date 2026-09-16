@@ -645,11 +645,12 @@ def _p_type_map_direction_not_schema_url() -> list[dict]:
     return _validate(doc)
 
 
-def _p_type_map_sibling_slot_decides() -> list[dict]:
-    # The same write-declaring document that validates clean on its own, parked
-    # in a connector's READ slot. Inside a package the slot is the assertion —
-    # a clean verdict here would mean the connector shipped a read map that is
-    # a write map.
+def _p_type_map_sibling_slot_disagreement_reported() -> list[dict]:
+    # The same write-declaring document parked in a connector's READ slot, this
+    # time reached as a sibling rather than on its own. Paired with the probe
+    # above it measures the convergence itself: both routes hold a slot, so both
+    # must answer with the same rule and neither may reject the `$schema` the
+    # document correctly carries for the direction it declares.
     rules = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
     doc = _example_body(DB_EXAMPLE)
     with tempfile.TemporaryDirectory() as tmp:
@@ -1048,8 +1049,9 @@ PROBES: tuple[Probe, ...] = (
           message_re=r"type-map-read", forbid_re=r"\$schema"),
     Probe("type-map-direction-not-schema-url", "error", _p_type_map_direction_not_schema_url,
           message_re=r"type-map-read"),
-    Probe("type-map-sibling-slot-decides", "error", _p_type_map_sibling_slot_decides,
-          message_re=r"type-map-read"),
+    Probe("type-map-sibling-slot-disagreement-reported", "error",
+          _p_type_map_sibling_slot_disagreement_reported,
+          message_re=r"type-map-read", forbid_re=r"\$schema"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
           message_re=r"greater than or equal to 1"),
     Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,

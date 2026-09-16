@@ -1365,6 +1365,14 @@ def test_an_unusable_direction_in_a_slot_is_reported_alone_never_blamed_on_schem
     errors = _errors(validator.validate_document(
         _unusable(bad), doc_path=tmp_path / "type-map-write.json"))
     assert {f["path"] for f in errors} == {"/direction"}, errors
+    # The slot supplies the direction the document failed to, so the answer is
+    # about that one field: the value it must carry, or that it is absent
+    # altogether. The union answer this replaces could name neither — only that
+    # no member matched.
+    if bad is _ABSENT:
+        assert errors[0]["message_id"] == "missing", errors
+    else:
+        assert "'write'" in errors[0]["message"], errors
 
 
 @pytest.mark.parametrize("kind", (*_DATABASE_KINDS, *_STORAGE_KINDS))
@@ -1789,14 +1797,13 @@ def test_unrendered_coverage_is_reported_not_silent(tmp_path, connector_base, va
                 if any(fragment in f["message"] for fragment in _RENDERED_COVERAGE)], findings
 
 
-def test_validating_a_connector_with_no_path_now_fails_closed(validator):
-    """The amended verdict, isolated: on `main` before this change, a
-    connector validated with no filesystem path reported `type-map-coverage`
-    at `severity: warning` for the skipped coverage question, which never
-    flipped `passed`. That question is whether PKG-030/032/033/035 hold, all
-    `error`-tier, and a check that could not even attempt them is not one
-    that found them satisfied — `passed` must be `False` here, where it was
-    `True` before. A model-valid connector is used so this is the ONLY
+def test_validating_a_connector_with_no_path_fails_closed(validator):
+    """The coverage verdict, isolated. A connector validated with no filesystem
+    path cannot be asked whether PKG-030/032/033/035 hold — they are each about
+    a sibling file located by path — and those are all `error`-tier, so a check
+    that could not even attempt them is not one that found them satisfied:
+    `passed` must be `False`. Reporting the skipped question as a `warning`
+    instead would leave `passed` true, which is the failure this pins. A model-valid connector is used so this is the ONLY
     finding in play, unlike `test_endpoint_checks_run_when_read_map_is_broken`'s
     fixtures, which also carry unrelated error findings and so cannot
     isolate this one. Deliberate: see `rules/SCHEMA.md`'s Findings section and

@@ -183,6 +183,25 @@ def test_advisory_finding_does_not_block_probing(tmp_path):
     assert result["gaps"] == ["vector(3)"]
 
 
+def test_a_non_fatal_finding_reaches_stderr_beside_the_gap_it_explains(tmp_path, capsys):
+    # A dead rule resolves nothing while costing no pass, so the probe it was
+    # written to cover comes back a gap. Discarding the advisory leaves that gap
+    # looking uncaused, and the authoring agent's next move is to write the rule
+    # that is already there. stdout stays pure JSON: it is machine-read.
+    dead = {"match": "regex", "native_type": "^vector\\(\\d+\\)$", "arrow_type": "Utf8"}
+    m = _map(tmp_path, "type-map-read.json", [*CONNECTOR_READ, dead])
+    probes = tmp_path / "probes.json"
+    probes.write_text('["vector(3)"]')
+
+    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
+
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert json.loads(captured.out)["gaps"] == ["vector(3)"]
+    assert "RULE-TMAP-014" not in captured.out
+    assert str(m) in captured.err and "/rules/" in captured.err
+
+
 def test_connection_scoped_write_map_probes_without_the_full_vocabulary(tmp_path, monkeypatch):
     # a connection-scoped map fills the gaps its connector map leaves, so the
     # connector scope's write vocabulary is coverage it can never reach.
@@ -237,6 +256,15 @@ def test_cli_rejects_a_map_whose_envelope_names_the_other_direction(tmp_path, ca
     assert not err.out
     assert "not a valid read type map" in err.err
     assert "/direction" in err.err
+    # This route must reach the same verdict as every other slot-holding one, so
+    # it is pinned to what that verdict SAYS, not merely to the field it lands
+    # on. Without the last clause the assertions above pass equally on the
+    # verdict this route used to give — two unattributed Literal errors, one of
+    # them rejecting the `$schema` the document carries correctly for the
+    # direction it declares — and that regression could be reintroduced silently.
+    assert "reserved filename" in err.err
+    assert "type-map-write.json" in err.err
+    assert "$schema" not in err.err
 
 
 def test_cli_rejects_maps_holding_different_directions(tmp_path, capsys):

@@ -1048,6 +1048,13 @@ def type_map_slot_findings(
     A document declaring nothing usable makes no competing claim, so the slot is
     what it is graded against and the discriminator names the value that slot
     requires."""
+    # The caller's own argument, not anything the document did, so an
+    # unsupported slot raises rather than arriving as a finding — the same
+    # boundary `type_map_findings` holds, and without it a bad `slot` would
+    # surface as a KeyError from the message below, but only for a document
+    # that happened to disagree.
+    if slot not in ("read", "write"):
+        raise ValueError(f"slot must be 'read' or 'write', got {slot!r}")
     declared = doc.get("direction") if isinstance(doc, dict) else None
     if declared not in ("read", "write") or declared == slot:
         return type_map_findings(doc, slot, scope)
