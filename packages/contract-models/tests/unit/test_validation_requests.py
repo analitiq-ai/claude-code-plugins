@@ -113,8 +113,10 @@ def test_shared_name_prefix_is_not_a_directory_conflict():
 def test_directory_conflict_check_is_not_quadratic_in_key_depth():
     # Every key at the length ceiling and as deep as that allows, at the count
     # ceiling: a per-depth prefix rebuild takes seconds here.
-    depth = (DOCUMENT_KEY_MAX_LENGTH - len(str(MAX_DOCUMENTS))) // 2
-    documents = {"a/" * depth + str(i): "" for i in range(MAX_DOCUMENTS)}
+    width = len(str(MAX_DOCUMENTS))
+    depth = (DOCUMENT_KEY_MAX_LENGTH - width) // 2
+    documents = {"a/" * depth + f"{i:0{width}}": "" for i in range(MAX_DOCUMENTS)}
+    assert {len(key) for key in documents} == {DOCUMENT_KEY_MAX_LENGTH}
     started = time.perf_counter()
     _validate(documents)
     assert time.perf_counter() - started < 1.0

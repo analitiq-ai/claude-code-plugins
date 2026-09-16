@@ -55,9 +55,9 @@ from typing import Any, Callable, Literal
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # The authored public contract models, published as `analitiq-contract-models`.
-# Public schemas render from these and ONLY these: only the resources
-# registered in `RESOURCES`, and `Resource.__post_init__` asserts a registered
-# model tree never leaves `analitiq.contracts`.
+# Public schemas render from these and ONLY these: every versioned resource is
+# a `RESOURCES` entry, and `Resource.__post_init__` asserts a registered model
+# tree never leaves `analitiq.contracts`.
 CONTRACTS_SRC = REPO_ROOT / "packages" / "contract-models" / "src"
 sys.path.insert(0, str(CONTRACTS_SRC))
 
