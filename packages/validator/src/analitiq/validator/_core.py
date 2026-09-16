@@ -298,9 +298,8 @@ def validate_document(doc: Any, doc_path: Path | None = None,
                       schema_url: str | None = None) -> list[dict]:
     """Detect the document kind, validate via its model, add cross-file checks.
 
-    `schema_url` is a direction hint for a type-map document whose filename is
-    ambiguous (a caller passing `--schema-url .../type-map-write/latest.json`
-    from a temp file): it disambiguates read vs write when the filename can't.
+    `schema_url` is accepted so every registered validator shares one signature
+    and an existing invocation keeps working; no validator reads it.
     """
     return _run_guarded(_dispatch, doc, doc_path, schema_url, crash_label="document validation")
 
@@ -360,11 +359,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Validate an Analitiq connector/endpoint/type-map document.")
     parser.add_argument("--document", required=True, help="Path to the JSON document to validate.")
     # Accepted for backward compatibility with existing invocations. Validation
-    # is now always model-driven and offline, so these are no-ops.
-    parser.add_argument("--schema-url", help="Used only as a read/write direction hint for an "
-                        "ambiguously-named type-map document; otherwise not fetched (validation is model-driven).")
-    parser.add_argument("--semantic-only", action="store_true", help="(ignored) always offline now.")
-    parser.add_argument("--json-only", action="store_true", help="(ignored) always offline now.")
+    # is always model-driven and offline, so these are no-ops.
+    parser.add_argument("--schema-url", help="(ignored) no schema is fetched.")
+    parser.add_argument("--semantic-only", action="store_true", help="(ignored) always offline.")
+    parser.add_argument("--json-only", action="store_true", help="(ignored) always offline.")
     parser.add_argument("--no-cache", action="store_true", help="(ignored) no schema cache.")
     args = parser.parse_args()
 

@@ -619,8 +619,10 @@ def _findings(entity: str, document: Any, tmp_path: Path,
 
     Path and filename are inputs to the contract, not bookkeeping: a connector
     is validated from `definition/connector.json` so the sibling walk reaches
-    its endpoints and type maps, an endpoint is named by the id it derives, and
-    a type map is read as the direction its filename names.
+    its endpoints and type maps, and an endpoint is named by the id it derives.
+    A type map is the exception: its `direction` travels in the envelope and is
+    what decides the grading, so the `{entity}.json` it is written under is
+    layout rather than an input to the verdict.
     """
     if entity == "connector":
         assert host is not None, "a connector is graded inside its staged package"

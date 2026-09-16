@@ -1376,41 +1376,20 @@ def _validate_database_endpoint(doc: Any, doc_path: Path | None, schema_url: str
     return findings
 
 
-def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:
-    # Direction from the filename, then the --schema-url hint, wins whenever
-    # either names one: the engine loads each direction only from its exact
-    # filename regardless of what the document's own `direction` says, so a
-    # doc whose declared direction disagrees with its filename must surface as
-    # a model error (the chosen adapter's `direction: Literal[...]` rejects
-    # it), not be silently resolved by trusting the content over the name.
-    # Only when NEITHER signal is available does the document's own
-    # self-declared `direction` get to decide, before defaulting to read.
-    by_name = doc_path.name if doc_path is not None else ""
-    if by_name == _WRITE_MAP_FILENAME or (
-        by_name != _READ_MAP_FILENAME and isinstance(schema_url, str) and "type-map-write" in schema_url
-    ):
-        direction, ambiguous = "write", False
-    elif by_name == _READ_MAP_FILENAME or (isinstance(schema_url, str) and "type-map-read" in schema_url):
-        direction, ambiguous = "read", False
-    else:
-        declared = doc.get("direction") if isinstance(doc, dict) else None
-        ambiguous = declared not in ("read", "write")
-        direction = "read" if ambiguous else declared
-    findings = type_map_findings(doc, direction)
-    if ambiguous and doc_path is not None:
-        # informational, no rule: nothing here was violated — the CLI guessed a
-        # direction because the filename was ambiguous and the document names no
-        # valid `direction` either, which is a fact about how this run proceeded,
-        # not about the document (rules/SCHEMA.md's generalized ruleless-fail
-        # case's informational sibling).
-        findings.append(finding(
-            message_id="type-map-direction-defaulted",
-            kind="informational", path="/",
-            message=(
-                f"rule direction defaulted to 'read': filename {doc_path.name!r} is "
-                f"neither {_READ_MAP_FILENAME!r} nor {_WRITE_MAP_FILENAME!r}, and the "
-                "document names no valid `direction` (pass --schema-url to disambiguate).")))
-    return findings
+def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+    # A document handed here stands alone, so the only direction it has is the
+    # one it declares. The filename is not read: a name is evidence only where
+    # something located the file by it, which `check_coverage` does and this
+    # does not, and resolving direction from the name means a map whose envelope
+    # is wrong is graded as the thing it is not. With no usable `direction`
+    # there is nothing to grade against either: the union keyed on it answers
+    # once, naming the discriminator, where picking a direction to report
+    # through would tell the author of a write map that its correct `$schema` is
+    # the wrong one.
+    declared = doc.get("direction")
+    if declared not in ("read", "write"):
+        return _model_findings(doc, _TYPE_MAP_ADAPTER)
+    return type_map_findings(doc, declared)
 
 
 def _validate_kindless_connector(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
