@@ -5,7 +5,7 @@ statement: >
 tier: reference
 severity: error
 artifact_kinds: [type-map]
-validator: "analitiq.validator.connectors::_direction_slot_findings"
+validator: "analitiq.validator.connectors::type_map_slot_findings"
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   Read of the engine as it stands: it selects a connector's and a connection's

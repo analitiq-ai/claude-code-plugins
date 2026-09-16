@@ -54,29 +54,38 @@ def _fail(message: str) -> "int":
 
 
 def _load_rules(path: Path, direction: str) -> list:
-    """Read one {$schema, direction, rules} type-map document, grade it as the
-    direction named, and return its `rules` array. Grading here is load-bearing,
-    not a courtesy. Read of the engine as it stands: a malformed rule is *skipped*
-    at resolution rather than failing the run, and the resolver mirrors that — so
-    a broken rule would surface here as a false "gap",
+    """Read one {$schema, direction, rules} type-map document filling the
+    `direction` slot, grade it, and return its `rules` array. Grading here is
+    load-bearing, not a courtesy. Read of the engine as it stands: a malformed
+    rule is *skipped* at resolution rather than failing the run, and the resolver
+    mirrors that — so a broken rule would surface here as a false "gap",
     indistinguishable from a genuinely uncovered probe, and a false gap makes the
-    authoring agent shadow the very rule the map intended. Failing loud keeps a
-    reported gap unambiguous."""
+    authoring agent shadow the very rule the map intended.
+
+    So every finding reaches the operator, at the severity that decides how:
+    a pass-costing one stops the probe, because a gap reported over a map that
+    failed to load means nothing. Everything else is a map that resolves while
+    something about it is still wrong — an advisory that is most often the
+    explanation for a gap reported below it, and dropping it leaves the gap
+    looking uncaused."""
     try:
         doc = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
-    from analitiq.validator import finding_costs_a_pass, type_map_findings
+    from analitiq.validator import finding_costs_a_pass, type_map_slot_findings
     # The connection scope is the one both maps can meet: a connection map covers
     # only the gaps it fills, and a connector map rendering the whole vocabulary
     # clears the weaker bar too.
-    fatal = [f for f in type_map_findings(doc, direction, scope="connection")
-             if finding_costs_a_pass(f)]
+    findings = type_map_slot_findings(doc, direction, scope="connection")
+    fatal = [f for f in findings if finding_costs_a_pass(f)]
     if fatal:
         detail = "; ".join(f"{f.get('path') or '/'}: {f['message']}" for f in fatal)
         raise ValueError(
             f"{path} is not a valid {direction} type map — fix it (or, for a "
             f"connector map, raise the defect upstream) before probing: {detail}")
+    for f in findings:
+        print(f"type_map_gaps: {path}: {f.get('path') or '/'}: {f['message']}",
+              file=sys.stderr)
     return doc["rules"]
 
 

@@ -1282,7 +1282,7 @@ def test_a_slot_naming_the_other_direction_is_reported_not_graded_against(
 
 @pytest.mark.parametrize("filename", ["generic.json", "type-map.json", "Type-Map-Read.json"])
 def test_a_filename_naming_no_slot_has_nothing_to_disagree_with(validator, tmp_path, filename):
-    # Only the two exact slot names state a direction. Anything else — including
+    # Only a reserved slot name states a direction. Anything else — including
     # the pre-split name and a case variant of a slot — is a file loaded as
     # neither direction, so there is no slot for the document to contradict and
     # the agreement check stays silent rather than guessing which was meant.
@@ -1332,36 +1332,54 @@ def test_declared_direction_selects_the_rule_model_not_just_the_envelope(validat
                for f in _errors(findings)), findings
 
 
-@pytest.mark.parametrize("bad", ["Write", "", None, 5, _ABSENT])
-def test_an_unusable_direction_is_reported_alone_never_blamed_on_schema(validator, tmp_path, bad):
-    # With no usable `direction` there is no direction to grade against, so the
-    # document is handed to the discriminated union and answered once, on the
-    # discriminator. Picking a direction to report through instead would tell
-    # the author of a write map that its correct `$schema` is the wrong one.
+def _unusable(bad):
     doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write")
     if bad is _ABSENT:
         del doc["direction"]
     else:
         doc["direction"] = bad
-    errors = _errors(validator.validate_document(doc, doc_path=tmp_path / "type-map-write.json"))
+    return doc
+
+
+@pytest.mark.parametrize("bad", ["Write", "", None, 5, _ABSENT])
+def test_an_unusable_direction_outside_a_slot_is_answered_on_the_discriminator(
+        validator, tmp_path, bad):
+    # Nothing located this file by a direction and the document names none, so
+    # there is no direction to grade against: the discriminated union answers
+    # once, on the discriminator. Picking one to report through instead would
+    # tell the author of a write map that its correct `$schema` is the wrong one.
+    errors = _errors(validator.validate_document(
+        _unusable(bad), doc_path=tmp_path / "generic.json"))
     assert [f["message_id"] for f in errors] in (
         ["union_tag_invalid"], ["union_tag_not_found"]), errors
     assert "direction" in errors[0]["message"], errors
+
+
+@pytest.mark.parametrize("bad", ["Write", "", None, 5, _ABSENT])
+def test_an_unusable_direction_in_a_slot_is_reported_alone_never_blamed_on_schema(
+        validator, tmp_path, bad):
+    # A slot supplies the direction the document failed to, so grading against it
+    # says which value this file must carry rather than that no union member
+    # matched. The `$schema` this map correctly carries for that direction stays
+    # unreported: blaming a correct field is what sends an author editing it.
+    errors = _errors(validator.validate_document(
+        _unusable(bad), doc_path=tmp_path / "type-map-write.json"))
+    assert {f["path"] for f in errors} == {"/direction"}, errors
 
 
 @pytest.mark.parametrize("kind", (*_DATABASE_KINDS, *_STORAGE_KINDS))
 @pytest.mark.parametrize("slot,declared", [("read", "write"), ("write", "read")])
 def test_sibling_type_map_is_graded_by_the_slot_it_fills(
         validator, tmp_path, kind, slot, declared):
-    # Standalone, `direction` decides. As a connector's sibling it does not: a
-    # package's maps are located by their exact filenames, so each slot asserts
+    # A package's maps are located by their exact filenames, so each slot asserts
     # "this file is that direction's map" and a document declaring the other is
-    # rejected — the mirror of the clean standalone verdict above, pinned so the
-    # two routes' disagreement is a decision rather than a surprise. Each slot is
-    # exercised: the sibling holding the correct direction is error-free, so every
-    # error below belongs to the misfiled one. Findings carry no file
-    # identity, so the `direction` Literal in the message is what names which
-    # slot rejected — without it the two params assert the same thing.
+    # rejected — under the same rule id a document reaching the validator alone
+    # earns, because both routes hold a slot and both reach the one entry point
+    # that decides what a misfiled map costs. Each slot is exercised: the sibling
+    # holding the correct direction is error-free, so every error below belongs
+    # to the misfiled one. Findings carry no file identity, so the filename in
+    # the message is what names which slot rejected — without it the two params
+    # assert the same thing.
     # The database and storage families walk their siblings down separate
     # branches, so each family is graded here: a branch that skipped the grading,
     # or passed the document's own `direction` back to it, returns no error at
@@ -1373,9 +1391,9 @@ def test_sibling_type_map_is_graded_by_the_slot_it_fills(
     (tmp_path / f"type-map-{other}.json").write_text(json.dumps(_type_map_doc(rules, other)))
     errors = _errors(validator.check_coverage(
         _min_connector(kind), tmp_path / "connector.json"))
-    assert {f["path"] for f in errors} == {"/$schema", "/direction"}, errors
-    assert any(f["path"] == "/direction" and repr(slot) in f["message"]
-               for f in errors), (slot, errors)
+    assert [(f["rule"], f["path"]) for f in errors] == [
+        ("RULE-TMAP-023", "/direction")], errors
+    assert f"type-map-{slot}.json" in errors[0]["message"], (slot, errors)
 
 
 # --- type_map_findings, the definition every direction-holding caller shares ---

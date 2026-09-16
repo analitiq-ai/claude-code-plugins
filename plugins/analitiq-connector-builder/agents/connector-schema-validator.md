@@ -24,12 +24,12 @@ artifact.
 - `schema_url` — the published `https://schemas.analitiq.ai/<resource>/latest.json`
   URL the orchestrator passes for the document under validation. Pass it
   through; it selects nothing.
-- `document_path` — absolute path to the draft JSON document. Validating a type
-  map runs no package-level check under any name — those run when the
-  **connector** is validated, and a misnamed map surfaces there as a missing
-  sibling only for a direction the connector's `kind` requires (RULE-PKG-030).
-  Point this at the draft where it sits rather than at a copy you re-serialized,
-  so what ships is what was graded. This agent validates JSON documents only; a
+- `document_path` — absolute path to the draft JSON document. The filename is
+  read: a type map stored under a direction's reserved name must declare that
+  direction (`RULE-TMAP-023`), and a direction the connector's `kind` requires
+  but ships no map for surfaces as a missing sibling when the **connector** is
+  validated (`RULE-PKG-030`). Point this at the draft where it sits rather than
+  at a copy you re-serialized, so what ships is what was graded. This agent validates JSON documents only; a
   connector's Python package files (`connector.py`, `pyproject.toml`, …) are
   outside its scope — report them as not validated rather than passing judgment
   on them.
