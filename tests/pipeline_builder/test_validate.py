@@ -535,6 +535,25 @@ def test_type_map_entity_direction_mismatch_is_caught(tmp_path):
     assert any(f.get("validator") == "connection-type-map" for f in diag["findings"]), diag["findings"]
 
 
+@pytest.mark.parametrize("direction,fname,rules,declared", [
+    ("read", "type-map-read.json", TYPE_MAP_WRITE, "write"),
+    ("write", "type-map-write.json", TYPE_MAP_READ, "read"),
+])
+def test_correctly_named_map_declaring_the_other_direction_is_caught(
+        tmp_path, direction, fname, rules, declared):
+    # The filename gate passes — the name matches --direction — so the only
+    # thing left to catch a map declaring the other direction is its own
+    # `direction`, checked against the caller's here. Without that check the
+    # document is graded in the direction it declares and never in the one the
+    # slot exists for: submitted as the write map, a read-declaring document is
+    # graded read and passes entirely clean, taking the write-vocabulary
+    # coverage with it. Both directions are gated, so both are pinned.
+    diag = V.diagnostics_for(
+        "type-map", _write(tmp_path, fname, _tm(rules, declared)), direction=direction)
+    assert not diag["passed"], diag["findings"]
+    assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
+
+
 @pytest.mark.parametrize("doc", [
     _tm([], "read"),                                              # empty rules — model min_length error
     _tm([{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "read"),  # lowercase canonical fails the Arrow pattern

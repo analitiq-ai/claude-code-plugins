@@ -118,10 +118,11 @@ def test_unknown_top_level_key_rejected():
 
 
 def test_direction_literal_must_match_the_adapter():
-    """The invariant `direction` exists to express: a document loaded via one
-    adapter (by filename, in the validator) whose own `direction` disagrees
-    is a model error, not a silent resolution — see
-    `packages/validator/src/analitiq/validator/connectors.py::_validate_type_map`.
+    """The invariant `direction` exists to express: a document graded against
+    one direction's adapter whose own `direction` names the other is a model
+    error, not a silent resolution. That is what lets a caller holding a
+    direction of its own — a connector package's read/write slot — grade a map
+    against it and have the disagreement reported.
     """
     read_doc = _wrap(READ, _ONE_READ_RULE)
     read_doc["direction"] = "write"

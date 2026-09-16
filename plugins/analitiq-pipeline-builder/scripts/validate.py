@@ -29,10 +29,10 @@ entry point. This adapter routes each entity as follows:
     per-field findings instead.
   * ``type-map`` (with ``--direction {read,write}``) -> ``analitiq.validator.validate_document``
     over the connection-scoped type-map document, after an adapter filename gate:
-    the engine loads ``connections/<slug>/definition/type-map-{read,write}.json`` by
-    exactly those names (and the published validator derives rule direction from
-    them, defaulting an unknown name to read), so a misnamed file gets the rename
-    finding alone rather than findings that could be graded in the wrong direction.
+    ``_connection_type_map_findings`` below, and the engine's loader, both open
+    ``connections/<slug>/definition/type-map-{read,write}.json`` by exactly those
+    names, so a misnamed file is not found as either direction's
+    map and gets the rename finding alone rather than whatever its content earned.
     The published write-vocabulary-coverage warning (``RULE-TMAP-017``) is
     filtered out here for ``--direction write``: it presumes a connector's
     full-vocabulary write map, which a gap-only connection map deliberately is
@@ -247,22 +247,29 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
 
 def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
     """Validate a connection-scoped type-map file. The filename gate runs first
-    and alone on a mismatch: the published validator derives rule direction from
-    the filename, so validating a misnamed file's content could grade it in the
-    wrong direction (an unknown filename defaults to read) and bury the one
-    actionable finding (rename it) in noise. A doc that is not the published
-    `{$schema, direction, rules}` object is likewise gated here — the published
-    dispatch detects by *shape* (a top-level `rules` key), so a stray dict under
-    a type-map filename with no `rules` key would be graded as some other
-    artifact (a connection document would even pass clean) instead of failing as
-    the malformed document the engine's loader will choke on."""
+    and alone on a mismatch: a bundle's read and write maps are located by their
+    exact filenames, so a misnamed file is not found as either direction's map
+    however valid its content is, and the one actionable finding (rename it)
+    would be buried in whatever its content earned. The document's own
+    `direction` is gated the same way, because a standalone map is graded as the
+    direction it declares and NOT as the one it was submitted for — so without
+    this gate a map declaring the other direction is graded in that other
+    direction and never in the one this slot exists for. Submitted as the write
+    map, a read-declaring document is graded read and passes clean, and the
+    write-vocabulary coverage the write slot exists to run never runs at all.
+    A doc that is not the published `{$schema, direction, rules}`
+    object is likewise gated here — the
+    published dispatch detects by *shape* (a top-level `rules` key), so a stray
+    dict under a type-map filename with no `rules` key would be graded as some
+    other artifact (a connection document would even pass clean) instead of
+    failing as the malformed document it is."""
     expected = _TYPE_MAP_FILENAMES[direction]
     if document_path.name != expected:
         return [_finding(
             "connection-type-map", "error", "",
             f"file is named {document_path.name!r} but direction {direction!r} requires "
-            f"{expected!r} — the engine loads each direction only from its exact "
-            f"filename (connections/<slug>/definition/{expected}).")]
+            f"{expected!r} — each direction's map is located by its exact filename "
+            f"(connections/<slug>/definition/{expected}).")]
     if not isinstance(doc, dict):
         return [_finding(
             "connection-type-map", "error", "",
@@ -272,6 +279,15 @@ def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
         return [_finding(
             "connection-type-map", "error", "",
             f"{expected} is a JSON object but has no `rules` key.")]
+    if doc.get("direction") != direction:
+        # json.dumps, not repr: the author is reading their own JSON, where the
+        # value is `null` and `"write"`, not `None` and `'write'`.
+        declares = (f"declares direction {json.dumps(doc['direction'])}" if "direction" in doc
+                    else "declares no `direction`")
+        return [_finding(
+            "connection-type-map", "error", "",
+            f"{expected} {declares}; this connection's {direction} map must declare "
+            f'"direction": "{direction}".')]
     from analitiq.validator import validate_document
     findings = validate_document(doc, doc_path=_authored_path(document_path))
     if direction == "write":
