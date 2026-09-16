@@ -113,16 +113,14 @@ jobs:
           mutable_cache="public, max-age=300, must-revalidate"
           cd schemas
           expected=$(find . -name '*.json' -type f | wc -l | tr -d ' ')
-          # One bulk pull replaces both the per-file existence probe and the
-          # per-file byte-compare download: `aws s3 sync` fetches everything
-          # already published in one (internally parallel) subprocess, so
-          # every comparison below is a local `cmp`, never a network round
-          # trip. It is a plain command, not a process substitution, so
+          # Existence and content for every pinned file come from one bulk
+          # pull, so every comparison below is a local `cmp`, never a network
+          # round trip. It is a plain command, not a process substitution, so
           # `set -e` actually sees it fail — a sync failure stops the run
           # rather than being read as "nothing is published yet", which would
           # make every pinned file below look new and overwrite it.
           mkdir -p "$RUNNER_TEMP/published"
-          aws s3 sync "s3://$BUCKET" "$RUNNER_TEMP/published" --no-progress
+          aws s3 sync "s3://$BUCKET" "$RUNNER_TEMP/published" --only-show-errors
           while IFS= read -r -d '' f; do
             key="${f#./}"
             case "$(basename "$f")" in
