@@ -242,9 +242,9 @@ def test_cli_rejects_a_map_whose_name_holds_no_direction(tmp_path, capsys):
 
 
 def test_cli_rejects_a_map_whose_envelope_names_the_other_direction(tmp_path, capsys):
-    # The name locates the slot, and the slot is what the document is graded as,
-    # so one declaring the other direction is rejected rather than probed as what
-    # it calls itself. Read-resolving a write rule does not simply fail: each direction
+    # The name locates the slot, and a document declaring the other direction is
+    # reported against the slot it fills rather than probed as what it calls
+    # itself. Read-resolving a write rule does not simply fail: each direction
     # keys on the member the other renders, so it matches the wrong things, and
     # every verdict would be computed from rules that mean something else.
     m = _map(tmp_path, "type-map-read.json", CONNECTOR_WRITE, "write")
@@ -256,6 +256,15 @@ def test_cli_rejects_a_map_whose_envelope_names_the_other_direction(tmp_path, ca
     assert not err.out
     assert "not a valid read type map" in err.err
     assert "/direction" in err.err
+    # This route must reach the same verdict as every other slot-holding one, so
+    # it is pinned to what that verdict SAYS, not merely to the field it lands
+    # on. Without the last clause the assertions above pass equally on the
+    # verdict this route used to give — two unattributed Literal errors, one of
+    # them rejecting the `$schema` the document carries correctly for the
+    # direction it declares — and that regression could be reintroduced silently.
+    assert "reserved filename" in err.err
+    assert "type-map-write.json" in err.err
+    assert "$schema" not in err.err
 
 
 def test_cli_rejects_maps_holding_different_directions(tmp_path, capsys):

@@ -623,6 +623,19 @@ def _p_type_map_direction_from_document() -> list[dict]:
         return _validate(doc, doc_path=path)
 
 
+def _p_type_map_slot_disagreement_reported() -> list[dict]:
+    # The same document parked in the READ slot. It is still graded as the write
+    # map it declares — no `$schema` rejection — and the disagreement with the
+    # slot is reported on its own, which is the split this rule exists to keep:
+    # the name reports, it never regrades.
+    rules = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
+    doc = _wrap_type_map(rules, "write")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "type-map-read.json"
+        path.write_text(json.dumps(doc))
+        return _validate(doc, doc_path=path)
+
+
 def _p_type_map_direction_not_schema_url() -> list[dict]:
     # `direction` and `$schema` made to disagree, so only one of them can have
     # chosen the model. Rejecting the WRITE `$schema` against the read model is
@@ -630,6 +643,23 @@ def _p_type_map_direction_not_schema_url() -> list[dict]:
     doc = _wrap_type_map([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")
     doc["direction"] = "read"
     return _validate(doc)
+
+
+def _p_type_map_sibling_slot_disagreement_reported() -> list[dict]:
+    # The same write-declaring document parked in a connector's READ slot, this
+    # time reached as a sibling rather than on its own. Paired with the probe
+    # above it measures the convergence itself: both routes hold a slot, so both
+    # must answer with the same rule and neither may reject the `$schema` the
+    # document correctly carries for the direction it declares.
+    rules = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
+    doc = _example_body(DB_EXAMPLE)
+    with tempfile.TemporaryDirectory() as tmp:
+        definition = Path(tmp) / "definition"
+        definition.mkdir()
+        (definition / "connector.json").write_text(json.dumps(doc))
+        (definition / "type-map-read.json").write_text(json.dumps(_wrap_type_map(rules, "write")))
+        shutil.copy(DB_EXAMPLE / "type-map-write.json", definition / "type-map-write.json")
+        return _validate(doc, doc_path=definition / "connector.json")
 
 
 def _p_pagination_limit_bare_zero() -> list[dict]:
@@ -1015,8 +1045,13 @@ PROBES: tuple[Probe, ...] = (
     Probe("type-map-schema-required", "error", _p_type_map_schema_required,
           message_re=r"Field required"),
     Probe("type-map-direction-from-document", "clean", _p_type_map_direction_from_document),
+    Probe("type-map-slot-disagreement-reported", "error", _p_type_map_slot_disagreement_reported,
+          message_re=r"type-map-read", forbid_re=r"\$schema"),
     Probe("type-map-direction-not-schema-url", "error", _p_type_map_direction_not_schema_url,
           message_re=r"type-map-read"),
+    Probe("type-map-sibling-slot-disagreement-reported", "error",
+          _p_type_map_sibling_slot_disagreement_reported,
+          message_re=r"type-map-read", forbid_re=r"\$schema"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
           message_re=r"greater than or equal to 1"),
     Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,

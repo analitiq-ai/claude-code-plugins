@@ -14,7 +14,10 @@ at `severity: "error"`.
 holding an unidentified document. A caller that knows what a document is meant
 to be says so instead: `type_map_findings(doc, direction, scope)` grades a type
 map as the direction named, reporting a disagreeing `direction` alongside every
-other defect rather than grading the document as what it claims to be.
+other defect rather than grading the document as what it claims to be. One whose
+direction came from the document's own reserved filename calls
+`type_map_slot_findings(doc, slot, scope)`, which names that disagreement as
+itself before grading the document as what it declares.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which self-registers its detector→validator
@@ -51,6 +54,7 @@ from .connectors import (  # skipcq: PY-W2000
     check_coverage,
     endpoint_filename_findings,
     type_map_findings,
+    type_map_slot_findings,
     is_api_endpoint_doc,
     is_connector_doc,
     is_addressed_endpoint_path,
@@ -86,6 +90,7 @@ __all__ = [
     "check_coverage",
     "endpoint_filename_findings",
     "type_map_findings",
+    "type_map_slot_findings",
     "is_stem_addressed_endpoint_path",
     "is_addressed_endpoint_path",
     "is_api_endpoint_doc",

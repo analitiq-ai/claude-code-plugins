@@ -188,6 +188,7 @@ def test_measured_reachable_connectors_ids_matches_expectation():
     nothing here for a rename to go stale against."""
     assert G.measured_reachable_connectors_ids() == {
         "RULE-DBEP-011", "RULE-PKG-031", "RULE-TMAP-014", "RULE-TMAP-022",
+        "RULE-TMAP-023",
     }
 
 

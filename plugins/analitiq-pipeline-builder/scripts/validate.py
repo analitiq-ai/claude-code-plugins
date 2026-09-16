@@ -28,7 +28,7 @@ entry point. This adapter routes each entity as follows:
     "unrecognized artifact" finding. Routing by the caller-supplied ``--entity``,
     which is already known here, guarantees the right model runs and yields
     per-field findings instead.
-  * ``type-map`` -> ``analitiq.validator.type_map_findings`` as the direction
+  * ``type-map`` -> ``analitiq.validator.type_map_slot_findings`` as the direction
     its filename names, at ``scope="connection"``.
     ``_connection_type_map_findings`` below opens
     ``connections/<slug>/definition/type-map-{read,write}.json`` by exactly those
@@ -223,9 +223,9 @@ def _type_map_findings(doc, document_path: Path) -> list[dict]:
     """Validate a connection-scoped type-map file as the direction its filename
     names — `_TYPE_MAP_FILENAMES` above states the reading of the engine that
     makes the name load-bearing. A file named neither earns the rename finding
-    alone, being no direction's map however valid its content, and one whose
-    envelope declares the other direction fails the model's `direction`
-    Literal alongside every other defect it carries."""
+    alone, being no direction's map however valid its content; one filling a
+    slot is handed to the validator's slot entry point, so an envelope naming
+    the other direction is reported here exactly as it is anywhere else."""
     direction = _DIRECTION_BY_FILENAME.get(document_path.name)
     if direction is None:
         names = " or ".join(sorted(_DIRECTION_BY_FILENAME))
@@ -234,8 +234,8 @@ def _type_map_findings(doc, document_path: Path) -> list[dict]:
             f"file is named {document_path.name!r}; a connection's type maps are read "
             f"from {names} under connections/<slug>/definition/, so this file is no "
             f"direction's map — rename it.")]
-    from analitiq.validator import type_map_findings
-    return type_map_findings(doc, direction, scope="connection")
+    from analitiq.validator import type_map_slot_findings
+    return type_map_slot_findings(doc, direction, scope="connection")
 
 
 def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:

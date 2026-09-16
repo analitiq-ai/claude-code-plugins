@@ -1008,10 +1008,10 @@ def type_map_findings(
     JSON-parseable value instead, which `_model_findings` rejects — and the
     advisory/coverage checks only ever needed `rules`.
 
-    Naming the direction IS the assertion, so a caller holding a filename needs
-    no gate of its own: a document declaring the other direction fails the
-    model's `direction` Literal alongside every other defect it carries, where
-    gating first would report the disagreement and nothing else.
+    Naming the direction IS the assertion: a document declaring another one
+    fails the model's `direction` Literal like any other field. A caller whose
+    direction came from the document's own slot wants `type_map_slot_findings`
+    instead, which names that disagreement as itself before grading.
 
     `scope` decides the write vocabulary alone: a connector write map must
     render all of it, a connection map is gap-only (`RULE-TMAP-018`) and would
@@ -1025,6 +1025,48 @@ def type_map_findings(
         raise ValueError(f"scope must be 'connector' or 'connection', got {scope!r}")
     return _run_guarded(_type_map_document_findings, doc, direction, scope,
                         crash_label="type-map grading")
+
+
+def type_map_slot_findings(
+    doc: Any,
+    slot: Literal["read", "write"],
+    scope: Literal["connector", "connection"] = "connector",
+) -> list[dict]:
+    """Validate a type-map document filling the `slot` direction's reserved
+    filename. The definition used wherever a caller located the document BY its
+    slot rather than by reading it, so what a misfiled map earns is decided once
+    for every such caller.
+
+    A document declaring the other direction is reported against `RULE-TMAP-023`
+    (which owns why that costs anything) and then graded as the direction it
+    declares. Both halves are load-bearing: the disagreement is named once, as
+    itself, and the rest of the verdict is about the document the author
+    actually wrote — where grading a write map through the read adapter reports
+    its correct `$schema` as wrong and buries every real defect under a
+    direction it never claimed.
+
+    A document declaring nothing usable makes no competing claim, so the slot is
+    what it is graded against and the discriminator names the value that slot
+    requires."""
+    # The caller's own argument, not anything the document did, so an
+    # unsupported slot raises rather than arriving as a finding — the same
+    # boundary `type_map_findings` holds, and without it a bad `slot` would
+    # surface as a KeyError from the message below, but only for a document
+    # that happened to disagree.
+    if slot not in ("read", "write"):
+        raise ValueError(f"slot must be 'read' or 'write', got {slot!r}")
+    declared = doc.get("direction") if isinstance(doc, dict) else None
+    if declared not in ("read", "write") or declared == slot:
+        return type_map_findings(doc, slot, scope)
+    return [finding(
+        rule="RULE-TMAP-023",
+        message_id="type-map-direction-slot-mismatch", kind="fail", path="/direction",
+        message=(
+            f"document declares direction {declared!r} but is stored as "
+            f"{_MAP_FILENAME_BY_DIRECTION[slot]!r}, which is the {slot} direction's "
+            f"reserved filename. Either store it as "
+            f"{_MAP_FILENAME_BY_DIRECTION[declared]!r} or correct its `direction`."),
+    )] + type_map_findings(doc, declared, scope)
 
 
 def _type_map_document_findings(doc: Any, direction: str, scope: str) -> list[dict]:
@@ -1078,7 +1120,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                 doc_, load = _load_type_map(path)
                 findings.extend(load)
                 if doc_ is not None:
-                    findings.extend(type_map_findings(doc_, direction))
+                    findings.extend(type_map_slot_findings(doc_, direction))
         return findings
 
     # A read map that cannot be rendered from is carried forward rather than
@@ -1100,7 +1142,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         read_doc, load = _load_type_map(read_path)
         findings.extend(load)
         if read_doc is not None:
-            findings.extend(type_map_findings(read_doc, "read"))
+            findings.extend(type_map_slot_findings(read_doc, "read"))
             read_rules = _type_map_rules(read_doc)
 
     if kind in _DATABASE_KINDS:
@@ -1113,7 +1155,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         write_doc, load = _load_type_map(write_path)
         findings.extend(load)
         if write_doc is not None:
-            findings.extend(type_map_findings(write_doc, "write"))
+            findings.extend(type_map_slot_findings(write_doc, "write"))
         return findings
 
     # api: no write map, and every endpoint's natives must be covered by the read map.
@@ -1377,15 +1419,17 @@ def _validate_database_endpoint(doc: Any, doc_path: Path | None, schema_url: str
 
 
 def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    # A document handed here stands alone, so the only direction it has is the
-    # one it declares. The filename is not read: a name is evidence only where
-    # something located the file by it, which `check_coverage` does and this
-    # does not, and resolving direction from the name means a map whose envelope
-    # is wrong is graded as the thing it is not. With no usable `direction`
-    # there is nothing to grade against either: the union keyed on it answers
-    # once, naming the discriminator, where picking a direction to report
-    # through would tell the author of a write map that its correct `$schema` is
-    # the wrong one.
+    # A filename is evidence only where it is one of the reserved names: that is
+    # what a slot is, and holding one is what `type_map_slot_findings` is for.
+    # Any other name — or no path at all — fills no slot and asserts no
+    # direction, leaving what the document declares as the only direction it
+    # has. With none usable there is nothing to grade against either: the union
+    # keyed on `direction` answers once, naming the discriminator, where picking
+    # a direction to report through would tell the author of a write map that
+    # its correct `$schema` is the wrong one.
+    slot = _DIRECTION_BY_MAP_FILENAME.get(doc_path.name) if doc_path is not None else None
+    if slot is not None:
+        return type_map_slot_findings(doc, slot)
     declared = doc.get("direction")
     if declared not in ("read", "write"):
         return _model_findings(doc, _TYPE_MAP_ADAPTER)

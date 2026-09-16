@@ -380,6 +380,20 @@ def measured_reachable_connectors_ids() -> set[str]:
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
             "type-map", path)["findings"]}
 
+        # RULE-TMAP-023: a map stored under one direction's reserved filename
+        # while declaring the other. Staged misfiled on purpose — every map
+        # above agrees with its filename, so none of them can reach this id,
+        # and a measurement that only ever stages agreeing maps records the
+        # adapter as unable to emit something it emits.
+        path = root / "type-map-write.json"
+        path.write_text(json.dumps({
+            "$schema": TYPE_MAP_READ_SCHEMA_URL,
+            "direction": "read",
+            "rules": [{"match": "exact", "native_type": "INT", "arrow_type": "Int32"}],
+        }))
+        observed |= {f.get("rule") for f in adapter.diagnostics_for(
+            "type-map", path)["findings"]}
+
         # RULE-PKG-031: an endpoint document under a connection's
         # `definition/endpoints/` whose filename does not carry its
         # endpoint_id. Laid out on disk rather than calling the gate directly,

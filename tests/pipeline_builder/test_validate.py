@@ -485,15 +485,18 @@ def test_write_shaped_rules_under_the_read_filename_fail_the_read_model(tmp_path
     ("type-map-read.json", TYPE_MAP_WRITE, "write"),
     ("type-map-write.json", TYPE_MAP_READ, "read"),
 ])
-def test_map_declaring_the_other_direction_is_graded_as_the_slot(
+def test_map_declaring_the_other_direction_is_reported_against_the_slot(
         tmp_path, fname, rules, declared):
-    # The filename names the slot, so the document is graded as that direction
-    # and its disagreeing `direction` fails the model — reported WITH whatever
-    # else the document got wrong, never instead of it.
+    # The filename names the slot, so a document declaring the other direction is
+    # rejected here — and with the same rule id the standalone route uses, because
+    # both reach the one slot entry point. It is graded as what it declares, so
+    # the `$schema` it correctly carries for that direction is not also reported
+    # wrong: a second finding blaming a correct field is what sends an author
+    # editing it.
     diag = V.diagnostics_for("type-map", _write(tmp_path, fname, _tm(rules, declared)))
     assert not diag["passed"], diag["findings"]
-    paths = {f.get("path") for f in diag["findings"]}
-    assert {"/direction", "/$schema"} <= paths, diag["findings"]
+    assert [(f.get("rule"), f.get("path")) for f in diag["findings"]] == [
+        ("RULE-TMAP-023", "/direction")], diag["findings"]
 
 
 def test_a_slot_mismatch_never_hides_the_rest_of_the_document(tmp_path):

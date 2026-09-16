@@ -298,8 +298,18 @@ def validate_document(doc: Any, doc_path: Path | None = None,
                       schema_url: str | None = None) -> list[dict]:
     """Detect the document kind, validate via its model, add cross-file checks.
 
-    `schema_url` is accepted so every registered validator shares one signature
-    and an existing invocation keeps working; no validator reads it.
+    Every kind is detected from discriminating keys in the document's own body
+    — never from `$schema`, which is a field the selected model then grades —
+    so `schema_url` selects nothing and no registered validator reads it
+    (`test_schema_url_is_inert_for_every_registered_kind` holds that). It stays
+    in the signature because the published CLI accepts `--schema-url` and
+    existing callers pass it; it is threaded through unread.
+
+    Detection is content-only; grading is not. A connector is graded partly by
+    walking the siblings beside `doc_path`, a database endpoint partly by its
+    filename, and a type map stored under a direction's reserved filename is
+    held to declaring that direction — so a document validated without its
+    package around it is graded by less than one validated inside it.
     """
     return _run_guarded(_dispatch, doc, doc_path, schema_url, crash_label="document validation")
 
@@ -360,7 +370,9 @@ def main() -> int:
     parser.add_argument("--document", required=True, help="Path to the JSON document to validate.")
     # Accepted for backward compatibility with existing invocations. Validation
     # is always model-driven and offline, so these are no-ops.
-    parser.add_argument("--schema-url", help="(ignored) no schema is fetched.")
+    parser.add_argument("--schema-url", help="(ignored) discriminating keys in the document "
+                        "body select the model; `$schema` is graded by it, never used to "
+                        "pick it. Never fetched.")
     parser.add_argument("--semantic-only", action="store_true", help="(ignored) always offline.")
     parser.add_argument("--json-only", action="store_true", help="(ignored) always offline.")
     parser.add_argument("--no-cache", action="store_true", help="(ignored) no schema cache.")
