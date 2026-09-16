@@ -11,13 +11,17 @@ from typing import Annotated
 
 from pydantic import Field, RootModel, StringConstraints, model_validator
 
-from analitiq.contracts.shared.common import ParseOnly, StrictModel, closed_true_end_keys
+from analitiq.contracts.shared.common import (
+    DocumentText,
+    ParseOnly,
+    StrictModel,
+    closed_true_end_keys,
+)
 
-# Coarse guards against an unbounded request, not a policy on package size:
-# each is set far above what a real connector or pipeline package needs, so
-# one that exceeds a ceiling is a malformed request rather than a large package.
+# A coarse guard against an unbounded request, not a policy on package size:
+# set far above what a real connector or pipeline package needs, so a set that
+# exceeds it is a malformed request rather than a large package.
 MAX_DOCUMENTS = 2000
-MAX_DOCUMENT_TEXT_LENGTH = 1_048_576
 
 # A segment is any run of non-`/` characters except `.` and `..`. Written
 # without lookahead, which pydantic-core's regex engine refuses.
@@ -25,7 +29,6 @@ _SEGMENT = r"(?:[^/.][^/]*|\.[^/.][^/]*|\.\.[^/]+)"
 DOCUMENT_KEY_PATTERN = rf"^{_SEGMENT}(?:/{_SEGMENT})*$"
 
 DocumentKey = Annotated[str, StringConstraints(pattern=DOCUMENT_KEY_PATTERN)]
-DocumentText = Annotated[str, StringConstraints(max_length=MAX_DOCUMENT_TEXT_LENGTH)]
 
 # `RootModel` cannot inherit `StrictModel` — pydantic rejects an `extra`
 # setting on a root model — so this mixes in the parse-only policy directly,

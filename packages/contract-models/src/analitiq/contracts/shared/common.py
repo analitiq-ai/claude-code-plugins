@@ -88,6 +88,9 @@ DESCRIPTION_MAX = 2000
 TAG_MIN_LEN = 1
 TAG_MAX_LEN = 64
 TAGS_MAX = 50
+# A coarse guard against an unbounded document, set far above any authored
+# document's size, so text that exceeds it is malformed rather than large.
+DOCUMENT_TEXT_MAX_LENGTH = 500_000
 
 
 # Anchored "no leading/trailing whitespace" — the declarative mirror of
@@ -126,6 +129,8 @@ TrimmedTag = Annotated[
 NonEmptyStr = Annotated[
     str, StringConstraints(min_length=1, pattern=r"\S")
 ]
+
+DocumentText = Annotated[str, StringConstraints(max_length=DOCUMENT_TEXT_MAX_LENGTH)]
 
 
 # --- Field-shape validators -------------------------------------------------

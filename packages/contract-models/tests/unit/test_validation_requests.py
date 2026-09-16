@@ -16,8 +16,8 @@ import jsonschema
 import pytest
 from pydantic import ValidationError
 
+from analitiq.contracts.shared.common import DOCUMENT_TEXT_MAX_LENGTH
 from analitiq.contracts.validation_requests import (
-    MAX_DOCUMENT_TEXT_LENGTH,
     MAX_DOCUMENTS,
     DocumentSet,
     ValidateConnectorPackageRequest,
@@ -138,18 +138,18 @@ def test_document_count_ceiling(resource):
 
 def test_document_text_ceiling(resource):
     REQUESTS[resource].model_validate(
-        {"documents": {"connector.json": "x" * MAX_DOCUMENT_TEXT_LENGTH}})
+        {"documents": {"connector.json": "x" * DOCUMENT_TEXT_MAX_LENGTH}})
     with pytest.raises(ValidationError):
         REQUESTS[resource].model_validate(
-            {"documents": {"connector.json": "x" * (MAX_DOCUMENT_TEXT_LENGTH + 1)}})
+            {"documents": {"connector.json": "x" * (DOCUMENT_TEXT_MAX_LENGTH + 1)}})
 
 
 def test_published_schema_carries_the_ceilings(resource):
     document_set = DocumentSet.model_json_schema()
     assert document_set["maxProperties"] == MAX_DOCUMENTS
     (value_schema,) = document_set["patternProperties"].values()
-    assert value_schema["maxLength"] == MAX_DOCUMENT_TEXT_LENGTH
+    assert value_schema["maxLength"] == DOCUMENT_TEXT_MAX_LENGTH
     published = _published_schema(resource)
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(
-            {"documents": {"connector.json": "x" * (MAX_DOCUMENT_TEXT_LENGTH + 1)}}, published)
+            {"documents": {"connector.json": "x" * (DOCUMENT_TEXT_MAX_LENGTH + 1)}}, published)
