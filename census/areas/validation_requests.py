@@ -12,13 +12,17 @@ _CONTENT_IS_NOT_JUDGED_HERE = (
 PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="DocumentSet",
-        prose_hash="f3a84c484d1c",
+        prose_hash="bca16856d263",
         structural=(
             "every key is typed DocumentKey, whose DOCUMENT_KEY_PATTERN admits "
             "only `/`-separated segments that are non-empty and neither `.` nor "
             "`..`; the `_no_document_is_a_directory` model validator refuses a "
-            "key that is also the directory of another; each value is typed "
+            "key that is also a directory of another; each value is typed "
             "DocumentText, a length-bounded string left unparsed"
+        ),
+        waiver=(
+            "that each key is the path its document occupies and each value that "
+            "document's text is the caller's content, which this model does not judge"
         ),
     ),
     ProseObligation(

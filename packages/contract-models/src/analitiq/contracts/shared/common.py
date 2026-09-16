@@ -88,10 +88,11 @@ DESCRIPTION_MAX = 2000
 TAG_MIN_LEN = 1
 TAG_MAX_LEN = 64
 TAGS_MAX = 50
-# A coarse guard against an unbounded document, set far above any authored
-# document's size, so text that exceeds it is malformed rather than large.
+# Coarse guards against an unbounded request, not a size policy: each is set
+# far above what an authored document needs, so exceeding one is a request
+# error. The text ceiling bounds a document's text; the key ceiling bounds the
+# package-relative path it is supplied under.
 DOCUMENT_TEXT_MAX_LENGTH = 500_000
-# Likewise for a document's package-relative path.
 DOCUMENT_KEY_MAX_LENGTH = 1024
 
 
@@ -258,8 +259,7 @@ MediaType = Annotated[
 # which a JSON-Schema-only consumer would ACCEPT the off-grammar keys the model
 # rejects (patternProperties constrains matching keys; non-matching keys fall
 # through to an unset additionalProperties). This callable closes two gaps so
-# schema and model agree — the schema-parity discipline every
-# `json_schema_extra` mirror in the contract follows:
+# schema and model agree:
 #
 # 1. Inject `additionalProperties: false` as a sibling, so off-grammar keys
 #    are rejected rather than falling through.

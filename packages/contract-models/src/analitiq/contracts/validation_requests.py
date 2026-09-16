@@ -20,8 +20,8 @@ from analitiq.contracts.shared.common import (
 )
 
 # A coarse guard against an unbounded request, not a policy on package size:
-# set far above what a real connector or pipeline package needs, so a set that
-# exceeds it is a malformed request rather than a large package.
+# set far above what a real connector or pipeline package needs, so exceeding
+# it is a request error rather than a large package.
 MAX_DOCUMENTS = 2000
 
 # A segment is any run of non-`/` characters except `.` and `..`. Written
@@ -33,11 +33,10 @@ DocumentKey = Annotated[
     str, StringConstraints(pattern=DOCUMENT_KEY_PATTERN, max_length=DOCUMENT_KEY_MAX_LENGTH)
 ]
 
+
 # `RootModel` cannot inherit `StrictModel` — pydantic rejects an `extra`
-# setting on a root model — so this mixes in the parse-only policy directly,
-# as `CredentialsFile` does.
-
-
+# setting on a root model — so `DocumentSet` mixes in the parse-only policy
+# directly, as `CredentialsFile` does.
 class DocumentSet(
     ParseOnly,
     RootModel[
@@ -52,23 +51,24 @@ class DocumentSet(
 
     A key is a package-relative POSIX path with exactly one spelling per
     document; the key pattern carries the grammar. A key that names a
-    document may not also be the directory of another key. The text is
-    opaque to this model.
+    document may not also be an ancestor directory of another key. The text
+    is opaque to this model.
     """
 
     @model_validator(mode="after")
     def _no_document_is_a_directory(self) -> DocumentSet:
         # Every key is a file path in one package, so a key that is also a
-        # directory prefix of another describes a tree no filesystem holds.
-        keys = self.root.keys()
-        for key in sorted(keys):
-            parts = key.split("/")
-            for depth in range(1, len(parts)):
-                directory = "/".join(parts[:depth])
-                if directory in keys:
-                    raise ValueError(
-                        f"key {directory!r} names a document and is also the "
-                        f"directory of key {key!r}")
+        # directory of another describes a tree no filesystem holds. Sorted as
+        # segment tuples, a path's descendants follow it directly — nothing
+        # else sorts between a tuple and its extensions — so comparing
+        # neighbours finds every conflict. Sorting the strings would not:
+        # `-` and `.` sort before `/`.
+        paths = sorted(tuple(key.split("/")) for key in self.root)
+        for path, following in zip(paths, paths[1:]):
+            if following[:len(path)] == path:
+                raise ValueError(
+                    f"key {'/'.join(path)!r} names a document and is also a "
+                    f"directory of key {'/'.join(following)!r}")
         return self
 
 

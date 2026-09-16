@@ -1,15 +1,16 @@
 """Request models for validating a document set: `DocumentSet` and the
 package request that carries one.
 
-A malformed argument is refused when the request is built, so every case below
-is a `ValidationError`. The published schema is graded against the same
-malformed keys, so a JSON-Schema-only consumer refuses the key grammar the
-models refuse; the document-and-directory conflict is enforced by
-the model alone, since JSON Schema cannot express it.
+A malformed argument is refused when the request is built, as a
+`ValidationError`. The published schema is graded against the same malformed
+keys, so a JSON-Schema-only consumer refuses the key grammar the models refuse;
+the document-and-directory conflict is enforced by the model alone, since JSON
+Schema cannot express it.
 """
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import jsonschema
@@ -23,10 +24,16 @@ from analitiq.contracts.validation_requests import (
     ValidatePackageRequest,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+PUBLISHED_SCHEMA = json.loads(
+    (Path(__file__).resolve().parents[4] / "schemas" / "validate-package-request"
+     / "latest.json").read_text())
 
-REQUESTS = {
-    "validate-package-request": ValidatePackageRequest,
+WELL_FORMED_DOCUMENTS = {
+    "connector.json": "{}",
+    "endpoints/widgets.json": "{}",
+    ".hidden/a.json": "not json at all",
+    "..a/b..json": "",
+    "endpoints/.b": "",
 }
 
 MALFORMED_KEYS = {
@@ -41,42 +48,37 @@ MALFORMED_KEYS = {
 }
 
 
-def _published_schema(resource: str) -> dict:
-    return json.loads((REPO_ROOT / "schemas" / resource / "latest.json").read_text())
+def _validate(documents: dict) -> ValidatePackageRequest:
+    return ValidatePackageRequest.model_validate({"documents": documents})
 
 
-@pytest.fixture(params=sorted(REQUESTS))
-def resource(request) -> str:
-    return request.param
+def _publish_validate(documents: dict) -> None:
+    jsonschema.validate({"documents": documents}, PUBLISHED_SCHEMA)
 
 
-def test_accepts_relative_posix_keys(resource):
-    documents = {
-        "connector.json": "{}",
-        "endpoints/widgets.json": "{}",
-        ".hidden/a.json": "not json at all",
-        "..a/b..json": "",
-    }
-    request = REQUESTS[resource].model_validate({"documents": documents})
-    assert request.documents.root == documents
+def test_accepts_relative_posix_keys():
+    assert _validate(WELL_FORMED_DOCUMENTS).documents.root == WELL_FORMED_DOCUMENTS
 
 
-def test_empty_set_is_not_a_request_error(resource):
-    # An empty set is a well-formed request: a package with no root document
-    # is a content problem, not a request error.
-    assert REQUESTS[resource].model_validate({"documents": {}}).documents.root == {}
+def test_published_schema_accepts_what_the_model_accepts():
+    _publish_validate(WELL_FORMED_DOCUMENTS)
+
+
+def test_empty_set_is_not_a_request_error():
+    # A package with no root document is a content problem, not a request error.
+    assert _validate({}).documents.root == {}
 
 
 @pytest.mark.parametrize("key", list(MALFORMED_KEYS.values()), ids=list(MALFORMED_KEYS))
-def test_rejects_malformed_key(resource, key):
+def test_rejects_malformed_key(key):
     with pytest.raises(ValidationError):
-        REQUESTS[resource].model_validate({"documents": {key: "{}"}})
+        _validate({key: "{}"})
 
 
 @pytest.mark.parametrize("key", list(MALFORMED_KEYS.values()), ids=list(MALFORMED_KEYS))
-def test_published_schema_rejects_malformed_key(resource, key):
+def test_published_schema_rejects_malformed_key(key):
     with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate({"documents": {key: "{}"}}, _published_schema(resource))
+        _publish_validate({key: "{}"})
 
 
 def test_rendered_document_set_refuses_off_grammar_keys():
@@ -88,82 +90,81 @@ def test_rendered_document_set_refuses_off_grammar_keys():
     assert key_pattern.endswith(r"(?![\s\S])")
 
 
-def test_published_schema_accepts_what_the_model_accepts(resource):
-    jsonschema.validate(
-        {"documents": {"connector.json": "{}", "endpoints/w.json": "{}"}},
-        _published_schema(resource))
-
-
 @pytest.mark.parametrize("keys", [
     ("endpoints", "endpoints/widgets.json"),
     ("connectors/wise/definition/connector.json/extra.json",
      "connectors/wise/definition/connector.json"),
     ("connectors", "connectors/wise/definition/connector.json"),
-], ids=["document-then-child", "child-then-document", "ancestor-several-levels-up"])
-def test_rejects_key_that_is_a_document_and_a_directory(resource, keys):
+    # `-` and `.` sort before `/`, so a sibling sharing the document's name as a
+    # prefix lands between the document and its descendant in string order.
+    ("endpoints", "endpoints-v2.json", "endpoints.json", "endpoints/widgets.json"),
+], ids=["document-then-child", "child-then-document", "ancestor-several-levels-up",
+        "sibling-sorts-between"])
+def test_rejects_key_that_is_a_document_and_a_directory(keys):
     with pytest.raises(ValidationError, match="directory"):
-        REQUESTS[resource].model_validate({"documents": {k: "{}" for k in keys}})
+        _validate({k: "{}" for k in keys})
 
 
-def test_shared_name_prefix_is_not_a_directory_conflict(resource):
+def test_shared_name_prefix_is_not_a_directory_conflict():
     documents = {"endpoints": "{}", "endpoints.json": "{}", "endpoints-v2/a.json": "{}"}
-    assert REQUESTS[resource].model_validate({"documents": documents}).documents.root == documents
+    assert _validate(documents).documents.root == documents
+
+
+def test_directory_conflict_check_is_not_quadratic_in_key_depth():
+    # Every key at the length ceiling and as deep as that allows, at the count
+    # ceiling: a per-depth prefix rebuild takes seconds here.
+    depth = (DOCUMENT_KEY_MAX_LENGTH - len(str(MAX_DOCUMENTS))) // 2
+    documents = {"a/" * depth + str(i): "" for i in range(MAX_DOCUMENTS)}
+    started = time.perf_counter()
+    _validate(documents)
+    assert time.perf_counter() - started < 1.0
 
 
 @pytest.mark.parametrize("value", ["1", "{}", "[]", "null", "true"])
-def test_rejects_non_string_value(resource, value):
+def test_rejects_non_string_value(value):
     with pytest.raises(ValidationError):
-        REQUESTS[resource].model_validate_json(f'{{"documents": {{"connector.json": {value}}}}}')
+        ValidatePackageRequest.model_validate_json(
+            f'{{"documents": {{"connector.json": {value}}}}}')
 
 
-def test_rejects_unknown_field(resource):
+def test_rejects_unknown_field():
     with pytest.raises(ValidationError):
-        REQUESTS[resource].model_validate({"documents": {}, "entity": "connector"})
+        ValidatePackageRequest.model_validate({"documents": {}, "entity": "connector"})
 
 
-def test_rejects_missing_documents(resource):
+def test_rejects_missing_documents():
     with pytest.raises(ValidationError):
-        REQUESTS[resource].model_validate({})
+        ValidatePackageRequest.model_validate({})
 
 
-def test_document_count_ceiling(resource):
+def test_document_count_ceiling():
     at_ceiling = {f"endpoints/{i}.json": "{}" for i in range(MAX_DOCUMENTS)}
-    REQUESTS[resource].model_validate({"documents": at_ceiling})
+    _validate(at_ceiling)
+    _publish_validate(at_ceiling)
+    over = at_ceiling | {"connector.json": "{}"}
     with pytest.raises(ValidationError):
-        REQUESTS[resource].model_validate(
-            {"documents": at_ceiling | {"connector.json": "{}"}})
-
-
-def test_document_text_ceiling(resource):
-    REQUESTS[resource].model_validate(
-        {"documents": {"connector.json": "x" * DOCUMENT_TEXT_MAX_LENGTH}})
-    with pytest.raises(ValidationError):
-        REQUESTS[resource].model_validate(
-            {"documents": {"connector.json": "x" * (DOCUMENT_TEXT_MAX_LENGTH + 1)}})
-
-
-def test_document_key_ceiling(resource):
-    REQUESTS[resource].model_validate(
-        {"documents": {"k" * DOCUMENT_KEY_MAX_LENGTH: "{}"}})
-    with pytest.raises(ValidationError):
-        REQUESTS[resource].model_validate(
-            {"documents": {"k" * (DOCUMENT_KEY_MAX_LENGTH + 1): "{}"}})
-
-
-def test_published_schema_refuses_a_key_over_the_ceiling(resource):
-    published = _published_schema(resource)
-    jsonschema.validate({"documents": {"k" * DOCUMENT_KEY_MAX_LENGTH: "{}"}}, published)
+        _validate(over)
     with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(
-            {"documents": {"k" * (DOCUMENT_KEY_MAX_LENGTH + 1): "{}"}}, published)
+        _publish_validate(over)
 
 
-def test_published_schema_carries_the_ceilings(resource):
-    document_set = DocumentSet.model_json_schema()
-    assert document_set["maxProperties"] == MAX_DOCUMENTS
-    (value_schema,) = document_set["patternProperties"].values()
-    assert value_schema["maxLength"] == DOCUMENT_TEXT_MAX_LENGTH
-    published = _published_schema(resource)
+def test_document_text_ceiling():
+    at_ceiling = {"connector.json": "x" * DOCUMENT_TEXT_MAX_LENGTH}
+    _validate(at_ceiling)
+    _publish_validate(at_ceiling)
+    over = {"connector.json": "x" * (DOCUMENT_TEXT_MAX_LENGTH + 1)}
+    with pytest.raises(ValidationError):
+        _validate(over)
     with pytest.raises(jsonschema.ValidationError):
-        jsonschema.validate(
-            {"documents": {"connector.json": "x" * (DOCUMENT_TEXT_MAX_LENGTH + 1)}}, published)
+        _publish_validate(over)
+
+
+def test_document_key_ceiling():
+    at_ceiling = {"k" * DOCUMENT_KEY_MAX_LENGTH: "{}"}
+    _validate(at_ceiling)
+    _publish_validate(at_ceiling)
+    over = {"k" * (DOCUMENT_KEY_MAX_LENGTH + 1): "{}"}
+    with pytest.raises(ValidationError):
+        _validate(over)
+    with pytest.raises(jsonschema.ValidationError):
+        _publish_validate(over)

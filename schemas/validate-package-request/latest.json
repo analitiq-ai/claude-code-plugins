@@ -2,7 +2,7 @@
   "$defs": {
     "DocumentSet": {
       "additionalProperties": false,
-      "description": "Authored documents keyed by the relative path each occupies in its\npackage, each value the document's file text.\n\nA key is a package-relative POSIX path with exactly one spelling per\ndocument; the key pattern carries the grammar. A key that names a\ndocument may not also be the directory of another key. The text is\nopaque to this model.",
+      "description": "Authored documents keyed by the relative path each occupies in its\npackage, each value the document's file text.\n\nA key is a package-relative POSIX path with exactly one spelling per\ndocument; the key pattern carries the grammar. A key that names a\ndocument may not also be an ancestor directory of another key. The text\nis opaque to this model.",
       "maxProperties": 2000,
       "patternProperties": {
         "^(?:[^/.][^/]*|\\.[^/.][^/]*|\\.\\.[^/]+)(?:/(?:[^/.][^/]*|\\.[^/.][^/]*|\\.\\.[^/]+))*(?![\\s\\S])": {
