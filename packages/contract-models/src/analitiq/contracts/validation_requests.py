@@ -72,13 +72,8 @@ class DocumentSet(
         return self
 
 
-class ValidateConnectorPackageRequest(StrictModel):
-    """A request to validate one connector package, supplied as its documents."""
-
-    documents: DocumentSet
-
-
-class ValidatePipelinePackageRequest(StrictModel):
-    """A request to validate one pipeline package, supplied as its documents."""
+class ValidatePackageRequest(StrictModel):
+    """A request to validate one connector or pipeline package, supplied as its
+    documents."""
 
     documents: DocumentSet

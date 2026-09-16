@@ -17,10 +17,10 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.analitiq.ai/validate-connector-package-request/latest.json",
+  "$id": "https://schemas.analitiq.ai/validate-package-request/latest.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Public JSON Schema contract for a request to validate one connector package supplied as its documents: each document's file text keyed by its relative path in the package. The schema gates the request's shape only; the documents' content is not judged by it. Source of truth: analitiq.contracts.validation_requests.ValidateConnectorPackageRequest (Pydantic).",
+  "description": "Public JSON Schema contract for a request to validate one connector or pipeline package supplied as its documents: each document's file text keyed by its relative path in the package. The schema gates the request's shape only; the documents' content is not judged by it. Source of truth: analitiq.contracts.validation_requests.ValidatePackageRequest (Pydantic).",
   "properties": {
     "documents": {
       "$ref": "#/$defs/DocumentSet"
@@ -29,7 +29,7 @@
   "required": [
     "documents"
   ],
-  "title": "Analitiq Validate Connector Package Request",
+  "title": "Analitiq Validate Package Request",
   "type": "object",
   "version": "1.0.0"
 }

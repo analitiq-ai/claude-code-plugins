@@ -1,10 +1,10 @@
 """Request models for validating a document set: `DocumentSet` and the
-connector-package and pipeline-package requests that carry one.
+package request that carries one.
 
 A malformed argument is refused when the request is built, so every case below
-is a `ValidationError`. The published schemas are graded
-against the same malformed keys, so a JSON-Schema-only consumer refuses the key
-grammar the models refuse; the document-and-directory conflict is enforced by
+is a `ValidationError`. The published schema is graded against the same
+malformed keys, so a JSON-Schema-only consumer refuses the key grammar the
+models refuse; the document-and-directory conflict is enforced by
 the model alone, since JSON Schema cannot express it.
 """
 from __future__ import annotations
@@ -20,15 +20,13 @@ from analitiq.contracts.shared.common import DOCUMENT_KEY_MAX_LENGTH, DOCUMENT_T
 from analitiq.contracts.validation_requests import (
     MAX_DOCUMENTS,
     DocumentSet,
-    ValidateConnectorPackageRequest,
-    ValidatePipelinePackageRequest,
+    ValidatePackageRequest,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
 REQUESTS = {
-    "validate-connector-package-request": ValidateConnectorPackageRequest,
-    "validate-pipeline-package-request": ValidatePipelinePackageRequest,
+    "validate-package-request": ValidatePackageRequest,
 }
 
 MALFORMED_KEYS = {

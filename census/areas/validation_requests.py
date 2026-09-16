@@ -1,11 +1,11 @@
 """Census entries for ``validation_requests``: the document set and the
-package requests that carry one."""
+package request that carries one."""
 from __future__ import annotations
 
 from census.obligation import ProseObligation
 
 _CONTENT_IS_NOT_JUDGED_HERE = (
-    "whether the documents actually form the named package is their content, "
+    "which package the documents form, and whether they form one, is their content, "
     "which this model does not judge; it gates only the request's shape"
 )
 
@@ -22,14 +22,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="ValidateConnectorPackageRequest",
-        prose_hash="14bf72dead5e",
-        structural="`documents` is a required DocumentSet under extra='forbid'",
-        waiver=_CONTENT_IS_NOT_JUDGED_HERE,
-    ),
-    ProseObligation(
-        model="ValidatePipelinePackageRequest",
-        prose_hash="274fbf44824c",
+        model="ValidatePackageRequest",
+        prose_hash="68a6572fde0c",
         structural="`documents` is a required DocumentSet under extra='forbid'",
         waiver=_CONTENT_IS_NOT_JUDGED_HERE,
     ),

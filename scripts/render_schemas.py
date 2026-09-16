@@ -110,8 +110,7 @@ from analitiq.contracts.pipelines.data_sync import (  # noqa: E402
 )
 from analitiq.contracts.stream import StreamInput  # noqa: E402
 from analitiq.contracts.validation_requests import (  # noqa: E402
-    ValidateConnectorPackageRequest,
-    ValidatePipelinePackageRequest,
+    ValidatePackageRequest,
 )
 SCHEMAS_ROOT = REPO_ROOT / "schemas"
 
@@ -1071,31 +1070,17 @@ RESOURCES: tuple[Resource, ...] = (
         source_paths=(f"{_CONTRACTS_PREFIX}/pipelines/data_sync.py",),
     ),
     Resource(
-        name="validate-connector-package-request",
-        title="Analitiq Validate Connector Package Request",
+        name="validate-package-request",
+        title="Analitiq Validate Package Request",
         description=(
             "Public JSON Schema contract for a request to validate one connector "
-            "package supplied as its documents: each document's file text keyed "
-            "by its relative path in the package. The schema gates the request's "
-            "shape only; the documents' content is not judged by it. "
+            "or pipeline package supplied as its documents: each document's file "
+            "text keyed by its relative path in the package. The schema gates the "
+            "request's shape only; the documents' content is not judged by it. "
             "Source of truth: analitiq.contracts.validation_requests."
-            "ValidateConnectorPackageRequest (Pydantic)."
+            "ValidatePackageRequest (Pydantic)."
         ),
-        adapter=TypeAdapter(ValidateConnectorPackageRequest),
-        source_paths=(f"{_CONTRACTS_PREFIX}/validation_requests.py",),
-    ),
-    Resource(
-        name="validate-pipeline-package-request",
-        title="Analitiq Validate Pipeline Package Request",
-        description=(
-            "Public JSON Schema contract for a request to validate one pipeline "
-            "package supplied as its documents: each document's file text keyed "
-            "by its relative path in the package. The schema gates the request's "
-            "shape only; the documents' content is not judged by it. "
-            "Source of truth: analitiq.contracts.validation_requests."
-            "ValidatePipelinePackageRequest (Pydantic)."
-        ),
-        adapter=TypeAdapter(ValidatePipelinePackageRequest),
+        adapter=TypeAdapter(ValidatePackageRequest),
         source_paths=(f"{_CONTRACTS_PREFIX}/validation_requests.py",),
     ),
 )
