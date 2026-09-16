@@ -19,15 +19,15 @@ authoring the connection-scoped maps that close it.
 
 ## Files
 
-| Direction | File | Validates as entity `type-map` with |
-|---|---|---|
-| native → Arrow | `connections/<connection-slug>/definition/type-map-read.json` | `--direction read` |
-| Arrow → native DDL | `connections/<connection-slug>/definition/type-map-write.json` | `--direction write` |
+| `direction` | File |
+|---|---|
+| `read` (native → Arrow) | `connections/<connection-slug>/definition/type-map-read.json` |
+| `write` (Arrow → native DDL) | `connections/<connection-slug>/definition/type-map-write.json` |
 
 Each file is a whole `{$schema, direction, rules}` document, not a bare rules
-array. `direction` is the same value named in the table above (`read` /
-`write`); the `$schema` value for each is in this skill's own `SKILL.md`
-schema-URL table.
+array, and validates as entity `type-map`. Its own `direction` is what says
+which row of the table it is; the `$schema` value for each is in this skill's
+own `SKILL.md` schema-URL table.
 
 The rule shape (exact/regex `match`, matcher vs rendered key per direction,
 `${name}` captures) is identical to the connector's own maps — the connector
@@ -44,7 +44,6 @@ maps in precedence order (connection first, when one exists, then connector):
 
 ```bash
 printf '%s' '["citext", "vector(3)"]' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/type_map_gaps.py" \
-  --direction read \
   --map connections/<slug>/definition/type-map-read.json \
   --map connectors/<connector-slug>/definition/type-map-read.json
 ```
@@ -54,8 +53,9 @@ printf '%s' '["citext", "vector(3)"]' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/t
 - **Write probes** — the distinct `arrow_type` strings frozen into the endpoint
   documents, after read-side resolution and judgment are complete.
 
-`resolved` gives the rendered value per covered probe; `gaps` lists the
-uncovered ones. Pass only map files that exist.
+Every `--map` in one call declares the same direction, and that is the
+direction probed. `resolved` gives the rendered value per covered probe; `gaps`
+lists the uncovered ones. Pass only map files that exist.
 
 ## Registered rules for a type map
 

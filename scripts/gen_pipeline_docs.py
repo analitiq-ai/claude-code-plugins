@@ -323,8 +323,9 @@ def measured_reachable_connectors_ids() -> set[str]:
     such a document, so those checks are never even probed), and separately
     by naming one the adapter never surfaces because of the scope it grades a
     connection map at (`_type_map_findings` in `validate.py`) — probing entity
-    `type-map` with `direction="write"` through the adapter's own
-    `diagnostics_for` is what proves that exclusion instead of asserting it.
+    `type-map` with a document declaring the write direction, through the
+    adapter's own `diagnostics_for`, is what proves that exclusion instead of
+    asserting it.
     """
     import json
     import tempfile
@@ -363,7 +364,7 @@ def measured_reachable_connectors_ids() -> set[str]:
             "rules": read_rules,
         }))
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
-            "type-map", path, direction="read")["findings"]}
+            "type-map", path)["findings"]}
 
         # RULE-TMAP-017 (write-vocabulary coverage) fires in the published
         # validator on an empty CONNECTOR write map — reachable at that layer
@@ -378,7 +379,7 @@ def measured_reachable_connectors_ids() -> set[str]:
             "rules": [],
         }))
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
-            "type-map", path, direction="write")["findings"]}
+            "type-map", path)["findings"]}
 
         # RULE-PKG-031: an endpoint document under a connection's
         # `definition/endpoints/` whose filename does not carry its
