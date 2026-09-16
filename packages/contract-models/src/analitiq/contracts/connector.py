@@ -38,6 +38,7 @@ from analitiq.contracts.shared.rules import (
 )
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
+    closed_true_end_keys,
     HEADER_NAME_PROPERTY_NAMES,
     HeaderName,
     MediaType,
@@ -1626,36 +1627,9 @@ ErrorCategory = Literal[
 _KEY_ATTR_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
 _HTTP_STATUS_KEY_PATTERN = r"^[1-5][0-9]{2}$"
 
-# Pydantic renders a patterned-key dict as `patternProperties` alone, under
-# which a JSON-Schema-only consumer would ACCEPT the off-grammar keys the model
-# rejects (patternProperties constrains matching keys; non-matching keys fall
-# through to an unset additionalProperties). This callable closes two gaps so
-# schema and model agree — the same schema-parity discipline as the
-# `json_schema_extra` mirrors above:
-#
-# 1. Inject `additionalProperties: false` as a sibling, so off-grammar keys
-#    are rejected rather than falling through.
-# 2. Publish the key patterns with a true-end assertion `(?![\s\S])` in place
-#    of the trailing `$`. Python-`re`-based schema validators (`jsonschema`)
-#    let `$` match before a trailing newline, admitting keys like `"429\n"`
-#    that pydantic-core's Rust regex (end-of-haystack `$`) and conformant
-#    ECMA validators reject; the lookahead is true-end in BOTH regex
-#    dialects. Lookahead cannot live in the StringConstraints pattern —
-#    pydantic-core's Rust regex rejects it — so, as with the DSN
-#    `url_template` pattern above, the ECMA-safe form goes in the published
-#    schema only and the Rust `$` (already true-end) is the runtime mirror.
-#
-def _closed_true_end_keys(schema: dict[str, Any]) -> None:
-    pattern_props = schema.pop("patternProperties", None)
-    if pattern_props:
-        schema["patternProperties"] = {
-            (key[:-1] + r"(?![\s\S])" if key.endswith("$") else key): value
-            for key, value in pattern_props.items()
-        }
-    schema["additionalProperties"] = False
 _HttpStatusFamily = Annotated[
     dict[Annotated[str, StringConstraints(pattern=_HTTP_STATUS_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra=_closed_true_end_keys),
+    Field(json_schema_extra=closed_true_end_keys),
 ]
 # `key_attrs`: an ordered, non-empty tuple of identifier-shaped strings — a
 # minimum of one, since an empty tuple would mean "read nothing", which is
@@ -1934,7 +1908,7 @@ _AdbcBulkMechanism = Literal[
 # `"sqlalchemy": null` the engine parser refuses (a declared mechanism is a
 # string; absence of the KEY is the only "none"). Collapse the published field
 # to the bare per-family enum so schema and model refuse null identically —
-# the same schema-parity discipline as `_closed_true_end_keys` above. The
+# the same schema-parity discipline as `closed_true_end_keys`. The
 # model-side mirror is `SqlBulkLoad._null_is_not_a_mechanism`. Exactly one
 # non-null branch must exist: if the field annotation ever changes shape, the
 # render fails loudly here instead of publishing a silently merged schema.

@@ -45,7 +45,7 @@ Facts that have to hold and stay held, so they are pinned here:
    `re.search`-based patterns letting `$` match before a trailing newline —
    is closed at the source for `http`'s dict key: the published pattern
    carries a true-end `(?![\s\S])` assertion in place of the trailing `$`
-   (`_closed_true_end_keys`), which is end-of-string in BOTH regex dialects,
+   (`closed_true_end_keys`), which is end-of-string in BOTH regex dialects,
    so every schema consumer rejects `"429\n"` exactly as the model does.
    `key_attrs`' identifier pattern does NOT get this treatment — like every
    other plain (non-dict-key) `StringConstraints(pattern=...)` field in this
@@ -203,7 +203,7 @@ EXPECTED_KEY_ATTR_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
 EXPECTED_HTTP_KEY_PATTERN = r"^[1-5][0-9]{2}$"
 # What the PUBLISHED schema carries for `http`: the same grammar with the
 # trailing `$` replaced by the dialect-portable true-end assertion
-# (`_closed_true_end_keys` — Python `re`'s `$` would admit a trailing newline
+# (`closed_true_end_keys` — Python `re`'s `$` would admit a trailing newline
 # that pydantic-core's Rust regex rejects). Pinned VERBATIM, not derived by
 # re-running the transform, so a transform bug fails here instead of
 # replicating into the expectation.
@@ -440,7 +440,7 @@ def test_trailing_newline_http_keys_rejected_by_both_layers():
     # `$` also matches before a final newline — which would let this key
     # through a schema-only consumer while pydantic-core's Rust regex
     # (end-of-string `$`) rejects it. The published pattern therefore ends in
-    # the dialect-portable `(?![\s\S])` (`_closed_true_end_keys`), so BOTH
+    # the dialect-portable `(?![\s\S])` (`closed_true_end_keys`), so BOTH
     # layers reject. Would fail if the transform were dropped. `codes` carries
     # no such mechanism at all — its keys are open strings by design, so a
     # trailing-newline `codes` key is legal, not tested here.
