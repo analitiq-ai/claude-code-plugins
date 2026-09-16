@@ -22,12 +22,12 @@ Usage::
         --map connections/pg/definition/type-map-read.json \
         --map connectors/postgresql/definition/type-map-read.json
 
-Every map is loaded by the exact filename its direction is located under, so
-the names say which direction is being probed and no flag has to repeat it;
-maps naming different directions is a usage error, as is a name that is
-neither. Probes are a JSON array of strings on stdin (or --probes-file):
-provider `native_type` labels reading, `arrow_type` strings writing. Output on
-stdout::
+Each map's direction is located from its filename, so the names say which
+direction is being probed and no flag has to repeat it; maps whose filenames
+name different directions are a usage error, as is a filename naming neither
+direction. Probes
+are a JSON array of strings on stdin (or --probes-file): provider `native_type`
+labels reading, `arrow_type` strings writing. Output on stdout::
 
     {"direction": "read",
      "resolved": {"citext": null, "vector(3)": null},
@@ -64,16 +64,15 @@ def _load_rules(path: Path, direction: str) -> list:
     the authoring agent shadow the very rule the map intended. Failing loud
     keeps a reported gap unambiguous.
 
-    Only a finding that costs a pass is fatal. Probing reads a map for its
-    rules, so how completely it covers a vocabulary is a different question
-    than whether it can be resolved through — which is why it is graded at the
-    gap-only scope this script exists to serve."""
+    Only a finding that costs a pass is read here, and the vocabulary-coverage
+    check is advisory, so which vocabulary a map is held to cannot reach this
+    verdict."""
     try:
         doc = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
     from analitiq.validator import finding_costs_a_pass, type_map_findings
-    fatal = [f for f in type_map_findings(doc, direction, scope="connection")
+    fatal = [f for f in type_map_findings(doc, direction)
              if finding_costs_a_pass(f)]
     if fatal:
         detail = "; ".join(f"{f.get('path') or '/'}: {f['message']}" for f in fatal)
@@ -123,9 +122,8 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         return _fail(str(exc))
 
-    # The filename is the slot, here as everywhere else a map is located: it
-    # says which direction is being probed, so nothing has to repeat it and
-    # nothing can disagree with it. `_load_rules` then grades each map as that
+    # The filename is the slot: it says which direction is being probed, so no
+    # CLI flag can disagree with it. `_load_rules` then grades each map as that
     # direction, where a map whose envelope declares the other one fails on the
     # `direction` Literal.
     directions = {}

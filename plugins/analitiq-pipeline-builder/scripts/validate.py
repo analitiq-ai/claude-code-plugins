@@ -29,7 +29,7 @@ entry point. This adapter routes each entity as follows:
     which is already known here, guarantees the right model runs and yields
     per-field findings instead.
   * ``type-map`` -> ``analitiq.validator.type_map_findings`` as the direction
-    the document's own filename names, at ``scope="connection"``.
+    of the slot the file sits in, at ``scope="connection"``.
     ``_connection_type_map_findings`` below, and the engine's loader, both open
     ``connections/<slug>/definition/type-map-{read,write}.json`` by exactly those
     names, so the name is the slot: it says which direction to grade, and a file
@@ -219,11 +219,12 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
 
 
 def _type_map_findings(doc, document_path: Path) -> list[dict]:
-    """Validate a connection-scoped type-map file as the direction its filename
-    names. The engine locates each direction's map by exactly that name, so the
-    name IS the slot and nothing else has to say which direction to grade; a
+    """Validate a connection-scoped type-map file as the direction of the slot
+    it sits in. The engine locates each direction's map by exactly that name, so
+    the name IS the slot and nothing else has to say which direction to grade; a
     file named neither earns the rename finding alone, being no direction's map
-    however valid its content."""
+    however valid its content, and one whose envelope declares the other
+    direction fails the model's `direction` Literal."""
     direction = _DIRECTION_BY_FILENAME.get(document_path.name)
     if direction is None:
         names = " or ".join(sorted(_DIRECTION_BY_FILENAME))
@@ -260,7 +261,7 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                 f"{_LEGACY_TYPE_MAP_FILENAME} is the pre-split filename; the engine never "
                 "reads it. Split it into type-map-read.json (native → Arrow) and, for the "
                 "write direction, type-map-write.json (Arrow → native)."))
-    for direction, fname in _TYPE_MAP_FILENAMES.items():
+    for fname in _TYPE_MAP_FILENAMES.values():
         path = definition / fname
         with _contained(findings, f"{site}/{fname}"):
             if not (path.exists() or path.is_symlink()):
@@ -718,11 +719,11 @@ def main(argv: list[str] | None = None) -> int:
         output = json.dumps(diagnostics, indent=2)
         passed = diagnostics["passed"]
     except Exception as exc:
-        # Not through `_diagnostics`: the crash being contained here may BE the
-        # self-install failing, leaving `analitiq.validator` unimportable and
-        # its `finding_costs_a_pass` out of reach. A crash finding costs a pass
-        # under that predicate anyway, so this states the verdict it would
-        # reach rather than risking a second, uncontained failure reporting it.
+        # Not through `_diagnostics`: whatever crashed here may leave
+        # `analitiq.validator` unimportable and its `finding_costs_a_pass` out
+        # of reach. A crash finding costs a pass under that predicate anyway,
+        # so this states the verdict it would reach rather than risking a
+        # second, uncontained failure reporting it.
         print(json.dumps({"passed": False, "findings": [_crash_finding("", exc)]}, indent=2))
         return 1
 

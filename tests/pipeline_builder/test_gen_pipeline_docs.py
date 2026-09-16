@@ -191,16 +191,13 @@ def test_measured_reachable_connectors_ids_matches_expectation():
     }
 
 
-def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
-    """RULE-TMAP-017 is bound to `connectors.py` and genuinely fires in the
-    published validator, but `measured_reachable_connectors_ids` must not
-    include it: `validate.py`'s own write-coverage filter strips it before it
-    ever reaches this adapter's output. This is the case a hand-typed
-    allowlist got wrong once (excluded by name, correctly, but with nothing
-    checking the exclusion stayed correct) — asserting both halves here means
-    a future change that stops filtering it, or starts filtering something
-    else the same way, has to update this test consciously rather than drift
-    past it."""
+def test_write_vocabulary_finding_fires_in_the_package_but_not_at_connection_scope():
+    """RULE-TMAP-017 fires in the published validator on this document, yet
+    `measured_reachable_connectors_ids` must not report it: the adapter grades a
+    connection's write map at connection scope, where the write-vocabulary check
+    does not run. Pinning the package-level firing beside the exclusion is what
+    keeps the exclusion a measurement — a probe that fails to trip the check at
+    all would produce the same empty result."""
     from analitiq.validator import validate_document
 
     raw = validate_document(
@@ -208,8 +205,8 @@ def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
          "direction": "write", "rules": []},
         doc_path=Path("type-map-write.json"))
     assert "RULE-TMAP-017" in {f.get("rule") for f in raw}, (
-        "probe stopped triggering the write-vocabulary check at the package "
-        "level — this test no longer measures the filter it claims to"
+        "probe does not trip the write-vocabulary check at the package level "
+        "— the exclusion below would then hold for the wrong reason"
     )
     assert "RULE-TMAP-017" not in G.measured_reachable_connectors_ids()
 

@@ -46,7 +46,7 @@ import re
 import reprlib
 import sys
 from pathlib import Path
-from typing import Annotated, Any, Callable, Iterator
+from typing import Annotated, Any, Callable, Iterator, Literal
 
 from ._core import (
     contract_model_domain,
@@ -994,13 +994,17 @@ def _type_map_rules(doc: Any) -> Any:
     return doc.get("rules") if isinstance(doc, dict) else None
 
 
-def type_map_findings(doc: Any, direction: str, scope: str = "connector") -> list[dict]:
+def type_map_findings(
+    doc: Any,
+    direction: Literal["read", "write"],
+    scope: Literal["connector", "connection"] = "connector",
+) -> list[dict]:
     """Validate a type-map document as the `direction` the CALLER names: model
-    errors + advisory rule warnings + (write-vocabulary coverage). The single
-    definition used everywhere a type-map is checked. `doc` is nominally the
-    whole `{$schema, direction, rules}` object — a malformed sibling can hand
-    it any JSON-parseable value instead, which `_model_findings` rejects — and
-    the advisory/coverage checks only ever needed `rules`.
+    errors + advisory rule warnings + (write-vocabulary coverage). The definition
+    used wherever a direction is known. `doc` is nominally the whole
+    `{$schema, direction, rules}` object — a malformed sibling can hand it any
+    JSON-parseable value instead, which `_model_findings` rejects — and the
+    advisory/coverage checks only ever needed `rules`.
 
     Naming the direction IS the assertion, so a caller holding a slot needs no
     gate of its own: a document declaring the other direction fails the model's
@@ -1010,6 +1014,12 @@ def type_map_findings(doc: Any, direction: str, scope: str = "connector") -> lis
     `scope` decides the write vocabulary alone: a connector write map must
     render all of it, a connection map is gap-only by rule and would earn that
     finding forever."""
+    # An unsupported value silently selects the other branch below, so it is
+    # rejected rather than graded as the direction/scope nobody asked for.
+    if direction not in ("read", "write"):
+        raise ValueError(f"direction must be 'read' or 'write', got {direction!r}")
+    if scope not in ("connector", "connection"):
+        raise ValueError(f"scope must be 'connector' or 'connection', got {scope!r}")
     adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
     findings = _model_findings(doc, adapter)
     rules = _type_map_rules(doc)
@@ -1213,12 +1223,12 @@ _READ_MAP_ADAPTER = TypeAdapter(TypeMapReadDoc)
 _WRITE_MAP_ADAPTER = TypeAdapter(TypeMapWriteDoc)
 # For a document whose `direction` is absent or unrecognized: pydantic reports
 # the unusable discriminator itself, instead of every field of a direction
-# nothing chose. Never used where a direction IS known, for two reasons that
+# nothing chose. Never used where a direction IS known, for reasons that
 # have nothing to do with which model gets selected (the union selects the one
 # `direction` names): pydantic prefixes every error location with the matched
 # tag, so `/$schema` would surface as `/read/$schema`, and the advisory rule
 # warnings and write-vocabulary coverage need the direction as a value no
-# adapter carries. `check_coverage` has a third reason — the direction it holds
+# adapter carries. `check_coverage` has a further reason — the direction it holds
 # is its slot's, which the union would discard for the document's own.
 _TYPE_MAP_ADAPTER = TypeAdapter(
     Annotated[TypeMapReadDoc | TypeMapWriteDoc, Field(discriminator="direction")])

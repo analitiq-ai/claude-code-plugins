@@ -25,6 +25,9 @@ pytest.importorskip("analitiq.validator",
 from analitiq.contracts.type_map import (  # noqa: E402
     TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL,
 )
+from analitiq.validator import (  # noqa: E402
+    finding_costs_a_pass, type_map_findings,
+)
 
 CONNECTOR_READ = [
     {"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"},
@@ -110,6 +113,23 @@ def test_cli_end_to_end(tmp_path, capsys):
                    "gaps": ["vector(3)"]}
 
 
+def test_cli_connection_map_beats_connector_map(tmp_path, capsys):
+    # the documented invocation: both maps carry the direction-naming filename,
+    # so precedence is argument order alone
+    conn_dir, base_dir = tmp_path / "connection", tmp_path / "connector"
+    conn_dir.mkdir()
+    base_dir.mkdir()
+    connection = _map(conn_dir, "type-map-read.json",
+                      [{"match": "exact", "native_type": "CITEXT", "arrow_type": "LargeUtf8"}])
+    connector = _map(base_dir, "type-map-read.json", CONNECTOR_READ)
+    probes = tmp_path / "probes.json"
+    probes.write_text('["citext"]')
+    rc = G.main(["--map", str(connection), "--map", str(connector),
+                 "--probes-file", str(probes)])
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out)["resolved"] == {"citext": "LargeUtf8"}
+
+
 @pytest.mark.parametrize("probes_payload", ['{"not": "a list"}', '["ok", 1]', "[ broken"])
 def test_cli_rejects_bad_probes(tmp_path, capsys, probes_payload):
     m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
@@ -144,19 +164,32 @@ def test_malformed_rule_fails_loud(tmp_path):
         G.resolve("read", ["citext"], [bad])
 
 
+def test_advisory_finding_does_not_block_probing(tmp_path):
+    # a read pattern whose lowercase literal can never meet an uppercased
+    # native is dead but well-formed: it costs no pass, so the map still
+    # resolves and its uncovered probe is a gap, not a refusal.
+    dead = {"match": "regex", "native_type": "^vector\\(\\d+\\)$", "arrow_type": "Utf8"}
+    m = _map(tmp_path, "r.json", [*CONNECTOR_READ, dead])
+    findings = type_map_findings(json.loads(m.read_text()), "read")
+    assert [f.get("rule") for f in findings] == ["RULE-TMAP-014"]
+    assert not any(finding_costs_a_pass(f) for f in findings)
+
+    result = G.resolve("read", ["citext", "vector(3)"], [m])
+    assert result["resolved"] == {"citext": "Utf8", "vector(3)": None}
+    assert result["gaps"] == ["vector(3)"]
+
+
 def test_map_direction_must_match_model(tmp_path):
-    # a write regex rule's canonical is a matcher pattern — invalid as a read
-    # rule's rendered Arrow type — so model validation per --direction catches
-    # write-shaped rules under a read envelope even under a neutral filename.
-    # (The reverse is not always model-detectable — rule shapes are symmetric
-    # for exact rules — which is what the CLI filename gate is for.)
+    # a write regex rule's arrow_type is a matcher pattern — invalid as a read
+    # rule's rendered Arrow type — so grading a map as the direction asked for
+    # rejects write-shaped rules under a read envelope.
     with pytest.raises(ValueError, match="not a valid read type map"):
         G.resolve("read", ["citext"], [_map(tmp_path, "m.json", CONNECTOR_WRITE, "read")])
 
 
 def test_cli_rejects_a_map_whose_name_holds_no_direction(tmp_path, capsys):
-    # nothing to disagree with a flag any more; what remains is a name that
-    # locates no slot, so there is no direction to probe in
+    # the filename is the sole statement of direction, so a name locating no
+    # slot leaves no direction to probe in
     m = _map(tmp_path, "my-types.json", CONNECTOR_READ)
     probes = tmp_path / "probes.json"
     probes.write_text('["citext"]')

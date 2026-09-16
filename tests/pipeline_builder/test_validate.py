@@ -364,12 +364,6 @@ def test_cli_usage_error(tmp_path):
     assert excinfo.value.code == 2
 
 
-def test_cli_direction_with_non_type_map_entity_is_a_usage_error():
-    with pytest.raises(SystemExit) as excinfo:
-        V.main(["--entity", "connection", "--direction", "read", "--document", "x.json"])
-    assert excinfo.value.code == 2
-
-
 def test_endpoint_id_helper(capsys):
     import endpoint_id  # sibling of validate.py on sys.path
     rc = endpoint_id.main(["--schema", "public", "--name", "orders"])
@@ -426,9 +420,10 @@ def test_bundle_non_dict_sibling(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Connection-scoped type maps: the "type-map" entity's two --direction values
-# plus the bundle's file-level checks. Rule *content* findings come from the
-# published validator; the adapter owns only the filename gates.
+# Connection-scoped type maps: the `type-map` entity, whose direction the
+# filename selects, plus the bundle's file-level checks. Rule *content*
+# findings come from the published validator; the adapter owns only the
+# filename gates.
 # ---------------------------------------------------------------------------
 
 TYPE_MAP_READ = [
@@ -438,10 +433,9 @@ TYPE_MAP_READ = [
     {"match": "regex", "native_type": "^VECTOR\\((?<n>[0-9]+)\\)$", "arrow_type": "Json"},
 ]
 # Deliberately direction-ASYMMETRIC: the regex rule's canonical is a matcher
-# pattern, which is a contract-model error under read grading — so the "valid as
-# --direction write" assertions below pin that the adapter actually grades in
-# the write direction (a regression to the read default would fail them). An
-# exact-rule-only fixture validates clean under either direction and pins nothing.
+# pattern, a contract-model error under read grading. A fixture valid under
+# either direction passes whichever model ran, so only an asymmetric one grades
+# that the filename is what selects the model.
 TYPE_MAP_WRITE = [
     {"match": "exact", "arrow_type": "Json", "native_type": "JSONB"},
     {"match": "regex", "arrow_type": "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$",
@@ -473,8 +467,8 @@ def test_type_map_entity_rejects_wrong_filename(tmp_path):
 
 
 def test_write_shaped_rules_under_the_read_filename_fail_the_read_model(tmp_path):
-    # no flag to disagree with any more: the name says read, so the read model
-    # grades it and write-shaped rules fail it as content, not as a slot dispute
+    # the read filename selects the read model, so write-shaped rules fail it
+    # as content, not as a slot dispute
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", TYPE_MAP_WRITE))
     assert not diag["passed"]
     assert any(f.get("kind") == "fail" for f in diag["findings"]), diag["findings"]
@@ -498,9 +492,8 @@ def test_map_declaring_the_other_direction_is_graded_as_the_slot(
 
 
 def test_a_slot_mismatch_never_hides_the_rest_of_the_document(tmp_path):
-    # The defect this closes: a stale `direction` used to short-circuit, so an
-    # author fixed it, reran, and only then met the rule defect that was there
-    # all along. Both arrive in one run.
+    # short-circuiting on the mismatched `direction` would cost the author a
+    # rerun to reach the rule defect that was there all along
     doc = _tm([{"match": {"arrow_type": "string"}, "exact": "VARCHAR${"}], "read")
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-write.json", doc))
     assert not diag["passed"], diag["findings"]
@@ -757,6 +750,24 @@ def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, m
     assert len(crash) == 1, out["findings"]
     assert crash[0]["message"] == "MemoryError"
     assert not crash[0]["message"].endswith(": ")
+
+
+def test_main_contains_a_crash_that_leaves_the_validator_unimportable(monkeypatch, capsys):
+    # main()'s outermost guard builds its envelope literally rather than through
+    # `_diagnostics`: a crash bootstrapping the dependencies can leave
+    # `finding_costs_a_pass` unimportable, so reaching for it to report that
+    # failure would raise a second, uncontained one.
+    def boom(_path):
+        raise RuntimeError("bootstrap failed")
+
+    monkeypatch.setattr(V, "ensure_deps_or_reexec", boom)
+    monkeypatch.setitem(sys.modules, "analitiq.validator", None)  # poisoned: import raises
+
+    rc = V.main(["--entity", "pipeline", "--document", "x.json"])
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert out["passed"] is False
+    assert _ids(out["findings"]) == ["adapter-crash"], out["findings"]
 
 
 def test_endpoint_route_crash_before_validate_document_contained(tmp_path, monkeypatch, capsys):
