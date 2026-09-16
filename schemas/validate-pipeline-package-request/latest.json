@@ -1,0 +1,32 @@
+{
+  "$defs": {
+    "DocumentSet": {
+      "additionalProperties": false,
+      "description": "Authored documents keyed by the relative path each occupies in its\npackage, each value the document's file text.\n\nA key is a relative POSIX path spelled one way only: `/`-separated\nsegments, none of them empty, `.` or `..`, with no leading or trailing\n`/`. A key that names a document may not also be the directory of\nanother key. The text is opaque here; parsing and judging it is the\nvalidator's job.",
+      "maxProperties": 2000,
+      "patternProperties": {
+        "^(?:[^/.][^/]*|\\.[^/.][^/]*|\\.\\.[^/]+)(?:/(?:[^/.][^/]*|\\.[^/.][^/]*|\\.\\.[^/]+))*(?![\\s\\S])": {
+          "maxLength": 1048576,
+          "type": "string"
+        }
+      },
+      "title": "DocumentSet",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.analitiq.ai/validate-pipeline-package-request/latest.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public JSON Schema contract for a request to validate one pipeline package supplied as its documents: each document's file text keyed by its relative path in the package. The schema gates the request's shape only; the documents' content is judged by the validator and reported as findings. Source of truth: analitiq.contracts.validation_requests.ValidatePipelinePackageRequest (Pydantic).",
+  "properties": {
+    "documents": {
+      "$ref": "#/$defs/DocumentSet"
+    }
+  },
+  "required": [
+    "documents"
+  ],
+  "title": "Analitiq Validate Pipeline Package Request",
+  "type": "object",
+  "version": "1.0.0"
+}

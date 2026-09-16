@@ -59,8 +59,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #
 # In the infra repo this renderer also reached into the private `alq.models.*`
 # layer to emit ~40 internal-audience schemas. That half stayed behind: this
-# copy renders the 13 public resources, and `Resource.__post_init__` asserts a
-# registered model tree never leaves `analitiq.contracts`.
+# copy renders only the public resources registered in `RESOURCES`, and
+# `Resource.__post_init__` asserts a registered model tree never leaves
+# `analitiq.contracts`.
 CONTRACTS_SRC = REPO_ROOT / "packages" / "contract-models" / "src"
 sys.path.insert(0, str(CONTRACTS_SRC))
 
@@ -108,6 +109,10 @@ from analitiq.contracts.pipelines.data_sync import (  # noqa: E402
     PipelineTerminateResponse,
 )
 from analitiq.contracts.stream import StreamInput  # noqa: E402
+from analitiq.contracts.validation_requests import (  # noqa: E402
+    ValidateConnectorPackageRequest,
+    ValidatePipelinePackageRequest,
+)
 SCHEMAS_ROOT = REPO_ROOT / "schemas"
 
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -1064,6 +1069,36 @@ RESOURCES: tuple[Resource, ...] = (
         mode="serialization",
         post_process=_data_sync_response_post_process,
         source_paths=(f"{_CONTRACTS_PREFIX}/pipelines/data_sync.py",),
+    ),
+    Resource(
+        name="validate-connector-package-request",
+        title="Analitiq Validate Connector Package Request",
+        description=(
+            "Public JSON Schema contract for a request to validate one connector "
+            "package supplied as its documents: each document's file text keyed "
+            "by its relative path in the package. The schema gates the request's "
+            "shape only; the documents' content is judged by the validator and "
+            "reported as findings. "
+            "Source of truth: analitiq.contracts.validation_requests."
+            "ValidateConnectorPackageRequest (Pydantic)."
+        ),
+        adapter=TypeAdapter(ValidateConnectorPackageRequest),
+        source_paths=(f"{_CONTRACTS_PREFIX}/validation_requests.py",),
+    ),
+    Resource(
+        name="validate-pipeline-package-request",
+        title="Analitiq Validate Pipeline Package Request",
+        description=(
+            "Public JSON Schema contract for a request to validate one pipeline "
+            "package supplied as its documents: each document's file text keyed "
+            "by its relative path in the package. The schema gates the request's "
+            "shape only; the documents' content is judged by the validator and "
+            "reported as findings. "
+            "Source of truth: analitiq.contracts.validation_requests."
+            "ValidatePipelinePackageRequest (Pydantic)."
+        ),
+        adapter=TypeAdapter(ValidatePipelinePackageRequest),
+        source_paths=(f"{_CONTRACTS_PREFIX}/validation_requests.py",),
     ),
 )
 
