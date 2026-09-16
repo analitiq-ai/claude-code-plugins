@@ -29,11 +29,11 @@ entry point. This adapter routes each entity as follows:
     which is already known here, guarantees the right model runs and yields
     per-field findings instead.
   * ``type-map`` -> ``analitiq.validator.type_map_findings`` as the direction
-    of the slot the file sits in, at ``scope="connection"``.
+    its filename names, at ``scope="connection"``.
     ``_connection_type_map_findings`` below, and the engine's loader, both open
     ``connections/<slug>/definition/type-map-{read,write}.json`` by exactly those
-    names, so the name is the slot: it says which direction to grade, and a file
-    named neither is no direction's map and gets the rename finding alone.
+    names, so the name is what says which direction to grade, and a file named
+    neither is no direction's map and gets the rename finding alone.
     ``scope`` is how the gap-only nature of a connection map reaches the
     published check, which otherwise expects a connector's full write
     vocabulary.
@@ -99,9 +99,10 @@ from _bootstrap import ensure_deps_or_reexec
 # a vocabulary member (`analitiq.contracts` keeps one `type-map` kind).
 PIPELINE_ENTITIES = ("connection", "stream", "pipeline", "database-endpoint", "type-map")
 
-# The engine loads connection-scoped type maps by these exact filenames under
-# connections/<slug>/definition/ — a differently-named file is silently ignored
-# at runtime, so the name is what says which direction a map is graded as.
+# Read of the engine as it stands: it loads connection-scoped type maps by
+# these exact filenames under connections/<slug>/definition/, and a file named
+# otherwise is read as neither direction's map — which is why the name is what
+# says which direction a map is graded as.
 _TYPE_MAP_FILENAMES = {"read": "type-map-read.json", "write": "type-map-write.json"}
 _DIRECTION_BY_FILENAME = {v: k for k, v in _TYPE_MAP_FILENAMES.items()}
 # The pre-split filename: the engine never reads it, at either scope. The
@@ -219,12 +220,12 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
 
 
 def _type_map_findings(doc, document_path: Path) -> list[dict]:
-    """Validate a connection-scoped type-map file as the direction of the slot
-    it sits in. The engine locates each direction's map by exactly that name, so
-    the name IS the slot and nothing else has to say which direction to grade; a
-    file named neither earns the rename finding alone, being no direction's map
-    however valid its content, and one whose envelope declares the other
-    direction fails the model's `direction` Literal."""
+    """Validate a connection-scoped type-map file as the direction its filename
+    names. The engine locates each direction's map by exactly that name, so
+    nothing else has to say which direction to grade; a file named neither earns
+    the rename finding alone, being no direction's map however valid its
+    content, and one whose envelope declares the other direction fails the
+    model's `direction` Literal."""
     direction = _DIRECTION_BY_FILENAME.get(document_path.name)
     if direction is None:
         names = " or ".join(sorted(_DIRECTION_BY_FILENAME))

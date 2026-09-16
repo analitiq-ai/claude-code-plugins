@@ -140,13 +140,17 @@ def test_cli_rejects_bad_probes(tmp_path, capsys, probes_payload):
     assert json.loads(capsys.readouterr().out or "null") is None  # nothing on stdout
 
 
-def test_cli_missing_map_is_an_error(tmp_path, capsys):
+def test_cli_missing_map_names_the_file(tmp_path, capsys):
+    # naming the file separates an unreadable map from a rejected one: both
+    # exit 2 with nothing on stdout
+    missing = tmp_path / "type-map-read.json"
     probes = tmp_path / "probes.json"
     probes.write_text('["citext"]')
-    rc = G.main(["--map", str(tmp_path / "type-map-read.json"),
-                 "--probes-file", str(probes)])
+    rc = G.main(["--map", str(missing), "--probes-file", str(probes)])
     assert rc == 2
-    assert not capsys.readouterr().out
+    err = capsys.readouterr()
+    assert not err.out
+    assert str(missing) in err.err
 
 
 def test_duplicate_probes_deduped(tmp_path):
@@ -177,6 +181,24 @@ def test_advisory_finding_does_not_block_probing(tmp_path):
     result = G.resolve("read", ["citext", "vector(3)"], [m])
     assert result["resolved"] == {"citext": "Utf8", "vector(3)": None}
     assert result["gaps"] == ["vector(3)"]
+
+
+def test_connection_scoped_write_map_probes_without_the_full_vocabulary(tmp_path, monkeypatch):
+    # a connection-scoped map fills the gaps its connector map leaves, so the
+    # connector scope's write vocabulary is coverage it can never reach.
+    gap_only = [{"match": "exact", "arrow_type": "Duration(SECOND)", "native_type": "INTERVAL"}]
+    m = _map(tmp_path, "w.json", gap_only, "write")
+    assert [f.get("rule") for f in
+            type_map_findings(json.loads(m.read_text()), "write", scope="connector")] \
+        == ["RULE-TMAP-017"]
+
+    # the scope the prober grades at is what keeps such a map probeable, not the
+    # coverage finding's severity: hold every finding fatal and a map graded at
+    # the connector scope is refused, while this one still resolves.
+    monkeypatch.setattr("analitiq.validator.finding_costs_a_pass", lambda f: True)
+    result = G.resolve("write", ["Duration(SECOND)", "Utf8"], [m])
+    assert result["resolved"] == {"Duration(SECOND)": "INTERVAL", "Utf8": None}
+    assert result["gaps"] == ["Utf8"]
 
 
 def test_map_direction_must_match_model(tmp_path):

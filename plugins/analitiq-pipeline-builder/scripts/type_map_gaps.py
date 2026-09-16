@@ -23,21 +23,19 @@ Usage::
         --map connectors/postgresql/definition/type-map-read.json
 
 Each map's direction is located from its filename, so the names say which
-direction is being probed and no flag has to repeat it; maps whose filenames
-name different directions are a usage error, as is a filename naming neither
-direction. Probes
-are a JSON array of strings on stdin (or --probes-file): provider `native_type`
-labels reading, `arrow_type` strings writing. Output on stdout::
+direction is being probed; maps whose filenames name different directions are a
+usage error, as is a filename naming neither direction. Probes are a JSON array
+of strings on stdin (or --probes-file): provider `native_type` labels reading,
+`arrow_type` strings writing. Output on stdout::
 
     {"direction": "read",
      "resolved": {"citext": null, "vector(3)": null},
      "gaps": ["citext", "vector(3)"]}
 
-``resolved`` maps each probe (verbatim) to its rendered value — the Arrow
-Arrow type (read) or the native DDL (write) — or ``null`` when no rule in any
-map matches; ``gaps`` lists the null probes. Exit status is ``0`` on a clean
-run regardless of gaps (a gap is a result, not an error), ``2`` on a CLI /
-input error.
+``resolved`` maps each probe (verbatim) to its rendered value — the Arrow type
+(read) or the native DDL (write) — or ``null`` when no rule in any map matches;
+``gaps`` lists the null probes. Exit status is ``0`` on a clean run regardless
+of gaps (a gap is a result, not an error), ``2`` on a CLI / input error.
 """
 from __future__ import annotations
 
@@ -57,22 +55,21 @@ def _fail(message: str) -> "int":
 
 def _load_rules(path: Path, direction: str) -> list:
     """Read one {$schema, direction, rules} type-map document, grade it as the
-    direction its slot names, and return its `rules` array. Grading here is
-    load-bearing, not a courtesy: the resolver mirrors runtime semantics, which
-    *skip* a malformed rule — so a broken rule would surface as a false "gap",
-    indistinguishable from a genuinely uncovered probe, and a false gap makes
-    the authoring agent shadow the very rule the map intended. Failing loud
-    keeps a reported gap unambiguous.
-
-    Only a finding that costs a pass is read here, and the vocabulary-coverage
-    check is advisory, so which vocabulary a map is held to cannot reach this
-    verdict."""
+    direction named, and return its `rules` array. Grading here is load-bearing,
+    not a courtesy: the resolver mirrors runtime semantics, which *skip* a
+    malformed rule — so a broken rule would surface as a false "gap",
+    indistinguishable from a genuinely uncovered probe, and a false gap makes the
+    authoring agent shadow the very rule the map intended. Failing loud keeps a
+    reported gap unambiguous."""
     try:
         doc = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
     from analitiq.validator import finding_costs_a_pass, type_map_findings
-    fatal = [f for f in type_map_findings(doc, direction)
+    # The connection scope is the one both maps can meet: a connection map covers
+    # only the gaps it fills, and a connector map rendering the whole vocabulary
+    # clears the weaker bar too.
+    fatal = [f for f in type_map_findings(doc, direction, scope="connection")
              if finding_costs_a_pass(f)]
     if fatal:
         detail = "; ".join(f"{f.get('path') or '/'}: {f['message']}" for f in fatal)
@@ -122,10 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         return _fail(str(exc))
 
-    # The filename is the slot: it says which direction is being probed, so no
-    # CLI flag can disagree with it. `_load_rules` then grades each map as that
-    # direction, where a map whose envelope declares the other one fails on the
-    # `direction` Literal.
+    # The filename names the direction being probed.
     directions = {}
     for m in args.maps:
         implied = _DIRECTION_BY_FILENAME.get(Path(m).name)

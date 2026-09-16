@@ -26,13 +26,13 @@ artifact.
   through; it selects nothing.
 - `document_path` — absolute path to the draft JSON document. Validating a type
   map runs no package-level check under any name — those run when the
-  **connector** is validated, and that is where a misnamed map surfaces, as a
-  missing sibling. Point this at the draft where it sits rather than at a copy
-  you re-serialized, so what ships is what was graded.
-  This agent validates JSON documents
-  only; a connector's Python
-  package files (`connector.py`, `pyproject.toml`, …) are outside its scope —
-  report them as not validated rather than passing judgment on them.
+  **connector** is validated, and a misnamed map surfaces there as a missing
+  sibling only for a direction the connector's `kind` requires (RULE-PKG-030).
+  Point this at the draft where it sits rather than at a copy you re-serialized,
+  so what ships is what was graded. This agent validates JSON documents only; a
+  connector's Python package files (`connector.py`, `pyproject.toml`, …) are
+  outside its scope — report them as not validated rather than passing judgment
+  on them.
 
 ## Running the validator
 

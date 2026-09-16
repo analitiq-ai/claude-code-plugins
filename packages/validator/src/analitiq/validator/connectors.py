@@ -1014,12 +1014,18 @@ def type_map_findings(
     `scope` decides the write vocabulary alone: a connector write map must
     render all of it, a connection map is gap-only by rule and would earn that
     finding forever."""
-    # An unsupported value silently selects the other branch below, so it is
-    # rejected rather than graded as the direction/scope nobody asked for.
+    # An unsupported value would silently select the direction or scope nobody
+    # asked for. It is the caller's own argument rather than anything the document
+    # did, so it raises past the guard instead of arriving as a finding.
     if direction not in ("read", "write"):
         raise ValueError(f"direction must be 'read' or 'write', got {direction!r}")
     if scope not in ("connector", "connection"):
         raise ValueError(f"scope must be 'connector' or 'connection', got {scope!r}")
+    return _run_guarded(_type_map_document_findings, doc, direction, scope,
+                        crash_label="type-map grading")
+
+
+def _type_map_document_findings(doc: Any, direction: str, scope: str) -> list[dict]:
     adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
     findings = _model_findings(doc, adapter)
     rules = _type_map_rules(doc)
@@ -1223,13 +1229,10 @@ _READ_MAP_ADAPTER = TypeAdapter(TypeMapReadDoc)
 _WRITE_MAP_ADAPTER = TypeAdapter(TypeMapWriteDoc)
 # For a document whose `direction` is absent or unrecognized: pydantic reports
 # the unusable discriminator itself, instead of every field of a direction
-# nothing chose. Never used where a direction IS known, for reasons that
-# have nothing to do with which model gets selected (the union selects the one
-# `direction` names): pydantic prefixes every error location with the matched
-# tag, so `/$schema` would surface as `/read/$schema`, and the advisory rule
-# warnings and write-vocabulary coverage need the direction as a value no
-# adapter carries. `check_coverage` has a further reason — the direction it holds
-# is its slot's, which the union would discard for the document's own.
+# nothing chose. Where a direction is known it is the wrong adapter: the union
+# prefixes every error location with the matched tag, surfacing `/$schema` as
+# `/read/$schema`, and in `check_coverage` it would answer for the direction the
+# document declares where the slot's is the one under test.
 _TYPE_MAP_ADAPTER = TypeAdapter(
     Annotated[TypeMapReadDoc | TypeMapWriteDoc, Field(discriminator="direction")])
 
@@ -1372,16 +1375,13 @@ def _validate_database_endpoint(doc: Any, doc_path: Path | None, schema_url: str
 
 
 def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    # A document handed here stands alone, so the only direction it has is the
-    # one it declares — its name is the caller's, and nothing here knows what
-    # the caller meant by it. With no usable `direction` there is no direction
-    # to grade against either: the union keyed on it answers once, naming the
-    # discriminator, where choosing a direction to report through would tell
-    # the author of a write map that its correct `$schema` is the wrong one.
-    #
-    # `check_coverage` is the other route and resolves direction differently,
-    # because it is asking a different question: a package's maps are located
-    # by their exact filenames, so there the slot IS the assertion under test.
+    # A document handed here stands alone, so the only direction it has is the one
+    # it declares: this route does not read the filename, because a name is evidence
+    # only where something located the file by it, which `check_coverage` does and
+    # this does not. With no usable `direction` there is no direction to grade
+    # against either: the union keyed on it answers once, naming the discriminator,
+    # where choosing a direction to report through would tell the author of a write
+    # map that its correct `$schema` is the wrong one.
     declared = doc.get("direction")
     if declared not in ("read", "write"):
         return _model_findings(doc, _TYPE_MAP_ADAPTER)

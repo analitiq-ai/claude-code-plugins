@@ -1324,9 +1324,10 @@ def test_an_unusable_direction_is_reported_alone_never_blamed_on_schema(validato
     assert "direction" in errors[0]["message"], errors
 
 
+@pytest.mark.parametrize("kind", (*_DATABASE_KINDS, *_STORAGE_KINDS))
 @pytest.mark.parametrize("slot,declared", [("read", "write"), ("write", "read")])
 def test_sibling_type_map_is_graded_by_the_slot_it_fills(
-        validator, tmp_path, slot, declared):
+        validator, tmp_path, kind, slot, declared):
     # Standalone, `direction` decides. As a connector's sibling it does not: a
     # package's maps are located by their exact filenames, so each slot asserts
     # "this file is that direction's map" and a document declaring the other is
@@ -1336,13 +1337,17 @@ def test_sibling_type_map_is_graded_by_the_slot_it_fills(
     # every error below belongs to the misfiled one. Findings carry no file
     # identity, so the `direction` Literal in the message is what names which
     # slot rejected — without it the two params assert the same thing.
+    # The database and storage families walk their siblings down separate
+    # branches, so each family is graded here: a branch that skipped the grading,
+    # or passed the document's own `direction` back to it, returns no error at
+    # all for the misfiled slot.
     (tmp_path / "endpoints").mkdir()
     rules = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
     other = "write" if slot == "read" else "read"
     (tmp_path / f"type-map-{slot}.json").write_text(json.dumps(_type_map_doc(rules, declared)))
     (tmp_path / f"type-map-{other}.json").write_text(json.dumps(_type_map_doc(rules, other)))
     errors = _errors(validator.check_coverage(
-        _min_connector("database"), tmp_path / "connector.json"))
+        _min_connector(kind), tmp_path / "connector.json"))
     assert {f["path"] for f in errors} == {"/$schema", "/direction"}, errors
     assert any(f["path"] == "/direction" and repr(slot) in f["message"]
                for f in errors), (slot, errors)
@@ -1382,10 +1387,13 @@ def test_type_map_findings_scope_decides_the_write_vocabulary_check(validator):
 @pytest.mark.parametrize("param,kwargs", [
     ("direction", {"direction": "Write"}),
     ("scope", {"direction": "write", "scope": "conector"}),
+    ("scope", {"direction": "read", "scope": "conector"}),
 ])
 def test_type_map_findings_rejects_an_unsupported_direction_or_scope(validator, param, kwargs):
     # Each parameter selects one of two branches by inequality, so an
     # unrecognized value would silently grade the document as the other one.
+    # `scope` is rejected under either direction: only the write branch reads it,
+    # and a guard sitting inside that branch would pass a read map anything.
     doc = _type_map_doc([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")
     with pytest.raises(ValueError, match=rf"{param}.*{re.escape(repr(kwargs[param]))}"):
         validator.type_map_findings(doc, **kwargs)
@@ -1545,9 +1553,8 @@ def test_write_vocabulary_gap_warns(validator, tmp_path):
 
 
 def test_coverage_grades_the_sibling_write_map_at_connector_scope(validator, tmp_path):
-    # The sibling walk is the route `type_map_findings`' default scope exists
-    # for, and the only one that reaches the check with a connector in hand —
-    # every other exercise of the rule grades a standalone document.
+    # The connector's sibling walk is the route that reaches the write-vocabulary
+    # check with a connector in hand, at `type_map_findings`' default scope.
     (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
         [{"match": "exact", "native_type": "TEXT", "arrow_type": "Utf8"}], "read")))
     (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(

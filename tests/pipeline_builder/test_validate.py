@@ -459,7 +459,7 @@ def test_valid_type_map_entity(tmp_path, direction, fname, doc):
 
 def test_type_map_entity_rejects_wrong_filename(tmp_path):
     # the engine loads the maps by exact filename; the gate must fire ALONE — a
-    # misnamed file's content would otherwise be graded in the wrong direction
+    # misnamed file is no direction's map, however valid its content
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", TYPE_MAP_READ))
     assert not diag["passed"]
     assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
@@ -468,10 +468,16 @@ def test_type_map_entity_rejects_wrong_filename(tmp_path):
 
 def test_write_shaped_rules_under_the_read_filename_fail_the_read_model(tmp_path):
     # the read filename selects the read model, so write-shaped rules fail it
-    # as content, not as a slot dispute
-    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", TYPE_MAP_WRITE))
+    # as content, not as a slot dispute — the envelope agrees with its slot, and
+    # the write map's regex rule renders a matcher pattern where the read model
+    # reads a canonical
+    diag = V.diagnostics_for(
+        "type-map", _write(tmp_path, "type-map-read.json", _tm(TYPE_MAP_WRITE, "read")))
     assert not diag["passed"]
-    assert any(f.get("kind") == "fail" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("rule") == "RULE-TMAP-006" and f.get("path") == "/rules/1/regex"
+               for f in diag["findings"]), diag["findings"]
+    assert not any(f.get("path") in {"/direction", "/$schema"}
+                   for f in diag["findings"]), diag["findings"]
 
 
 @pytest.mark.parametrize("fname,rules,declared", [
@@ -484,7 +490,7 @@ def test_map_declaring_the_other_direction_is_graded_as_the_slot(
     # and its disagreeing `direction` fails the model — reported WITH whatever
     # else the document got wrong, never instead of it. Grading it as the
     # direction it declares would pass a read map submitted as the write map
-    # entirely clean, taking the write-vocabulary coverage with it.
+    # entirely clean.
     diag = V.diagnostics_for("type-map", _write(tmp_path, fname, _tm(rules, declared)))
     assert not diag["passed"], diag["findings"]
     paths = {f.get("path") for f in diag["findings"]}
@@ -502,14 +508,20 @@ def test_a_slot_mismatch_never_hides_the_rest_of_the_document(tmp_path):
     assert any(p and p.startswith("/rules/") for p in paths), diag["findings"]
 
 
-@pytest.mark.parametrize("doc", [
-    _tm([], "read"),                                              # empty rules — model min_length error
-    _tm([{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "read"),  # lowercase canonical fails the Arrow pattern
+@pytest.mark.parametrize("doc,path,message_id", [
+    (_tm([], "read"), "/rules", "too_short"),
+    (_tm([{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "read"),
+     "/rules/0/exact/arrow_type", "string_pattern_mismatch"),
 ])
-def test_invalid_type_map_content(tmp_path, doc):
+def test_invalid_type_map_content(tmp_path, doc, path, message_id):
+    # the defect each fixture carries, not merely that something failed: a slot
+    # dispute alone would satisfy a `kind == "fail"` assertion without the model
+    # ever reaching the rules
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", doc))
     assert not diag["passed"]
-    assert any(f.get("rule") is None and f.get("kind") == "fail" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("rule") is None and f.get("kind") == "fail"
+               and f.get("path") == path and f.get("message_id") == message_id
+               for f in diag["findings"]), diag["findings"]
 
 
 def test_bundle_with_valid_connection_type_maps(tmp_path):
@@ -563,7 +575,8 @@ def test_type_map_entity_rejects_dict_without_rules_key(tmp_path):
     # engine's loader chokes on it under a type-map filename
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", CONN_PG))
     assert not diag["passed"]
-    assert "/rules" in {f.get("path") for f in diag["findings"]}, diag["findings"]
+    assert any(f.get("path") == "/rules" and f.get("message_id") == "missing"
+               for f in diag["findings"]), diag["findings"]
 
 
 def test_type_map_entity_rejects_bare_array(tmp_path):
@@ -574,7 +587,8 @@ def test_type_map_entity_rejects_bare_array(tmp_path):
         _write(tmp_path, "type-map-read.json",
                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]))
     assert not diag["passed"]
-    assert any(f.get("kind") == "fail" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("message_id") == "model_type" and f.get("path") == "/"
+               for f in diag["findings"]), diag["findings"]
 
 
 def test_connection_write_map_is_not_held_to_the_connector_vocabulary(tmp_path):
