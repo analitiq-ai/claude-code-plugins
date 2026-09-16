@@ -10,6 +10,12 @@ bundle** for cross-document referential integrity. Output is a JSON report
 also fails closed on an unchecked error-tier rule, not only a `fail` finding
 at `severity: "error"`.
 
+`validate_document` detects a document's kind from its own body, for a caller
+holding an unidentified document. A caller that knows what a document is meant
+to be says so instead: `type_map_findings(doc, direction, scope)` grades a type
+map as the direction named, reporting a disagreeing `direction` alongside every
+other defect rather than grading the document as what it claims to be.
+
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which self-registers its detector→validator
 pairs with the core dispatch registry — a new kind is a new module registering
@@ -41,6 +47,7 @@ from . import streams  # noqa: F401  — imported for its self-registration side
 from .connectors import (  # skipcq: PY-W2000
     check_coverage,
     endpoint_filename_findings,
+    type_map_findings,
     is_api_endpoint_doc,
     is_connector_doc,
     is_addressed_endpoint_path,
@@ -69,6 +76,7 @@ __all__ = [
     "validate_single_document",
     "check_coverage",
     "endpoint_filename_findings",
+    "type_map_findings",
     "is_stem_addressed_endpoint_path",
     "is_addressed_endpoint_path",
     "is_api_endpoint_doc",

@@ -92,10 +92,28 @@ def test_write_gap_reported(tmp_path):
 
 
 def test_map_without_rules_key_rejected(tmp_path):
+    # the prober keeps no shape gate of its own: the published grader names every
+    # part of the envelope that is missing, so the message says what to author
     bad = tmp_path / "r.json"
     bad.write_text('{"match": "exact"}')
-    with pytest.raises(ValueError, match=r"not a \{\$schema, direction, rules\} type-map document"):
+    with pytest.raises(ValueError, match=r"is not a valid read type map") as exc:
         G.resolve("read", ["citext"], [bad])
+    for field in ("/$schema", "/direction", "/rules"):
+        assert field in str(exc.value), exc.value
+
+
+def test_a_crashed_check_is_not_reported_as_an_authoring_defect(tmp_path, monkeypatch):
+    # a crash stops the probe for the same reason a defect does — nothing graded
+    # the map — but telling the author to fix their map would send them after a
+    # defect it does not have
+    from analitiq.validator import connectors
+    monkeypatch.setattr(connectors, "_type_map_rule_warnings",
+                        lambda *a, **k: (_ for _ in ()).throw(TypeError("boom")))
+    m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
+    with pytest.raises(ValueError, match=r"could not be graded") as exc:
+        G.resolve("read", ["citext"], [m])
+    assert "fix it" not in str(exc.value), exc.value
+    assert "validator bug" in str(exc.value), exc.value
 
 
 def test_cli_end_to_end(tmp_path, capsys):

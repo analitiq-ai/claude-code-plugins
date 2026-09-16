@@ -1726,3 +1726,67 @@ def test_endpoint_findings_name_the_file_on_both_routes(tmp_path, connector_base
     assert via_connector and via_endpoint, (via_connector, via_endpoint)
     assert "widgets.json" in via_connector[0]["message"], via_connector[0]
     assert "widgets.json" in via_endpoint[0]["message"], via_endpoint[0]
+
+
+# ---------------------------------------------------------------------------
+# type_map_findings — the published entry point for a caller that already knows
+# what direction a document is meant to be.
+# ---------------------------------------------------------------------------
+
+def test_type_map_findings_scope_decides_the_write_vocabulary_alone(validator):
+    # the whole reason `scope` exists: a connector write map must render the
+    # canonical vocabulary, a connection map is gap-only and would earn
+    # RULE-TMAP-017 forever
+    gap_only = _type_map_doc(
+        [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")
+    at_connector = validator.type_map_findings(gap_only, "write", scope="connector")
+    at_connection = validator.type_map_findings(gap_only, "write", scope="connection")
+    assert [f.get("rule") for f in at_connector] == ["RULE-TMAP-017"], at_connector
+    assert at_connection == [], at_connection
+
+
+def test_type_map_findings_scope_does_not_reach_the_read_direction(validator):
+    # nothing about a read map differs by scope; a divergence here would mean
+    # `scope` had grown a second meaning
+    doc = _type_map_doc([{"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"}])
+    assert (validator.type_map_findings(doc, "read", scope="connector")
+            == validator.type_map_findings(doc, "read", scope="connection"))
+
+
+def test_type_map_findings_reports_a_disagreeing_direction_alongside_the_rest(validator):
+    # naming the direction is the assertion, so a document declaring the other
+    # one is graded anyway — the disagreement is reported WITH its other defects,
+    # never instead of them
+    doc = _type_map_doc([{"match": "regex", "native_type": "^vector\\(", "arrow_type": "Utf8"}],
+                        "write")
+    findings = validator.type_map_findings(doc, "read")
+    assert "/direction" in {f["path"] for f in findings}, findings
+    assert len({f["path"] for f in findings}) > 1, findings
+
+
+@pytest.mark.parametrize("kwargs,expected", [
+    ({"direction": "READ"}, "direction must be"),
+    ({"direction": None}, "direction must be"),
+    ({"direction": "read", "scope": "Connection"}, "scope must be"),
+])
+def test_type_map_findings_rejects_its_own_bad_arguments(validator, kwargs, expected):
+    # a typo'd direction would silently grade the document as the one nobody
+    # asked for. It is the caller's mistake, not the document's, so it raises
+    # past the crash guard instead of arriving as a finding about the map.
+    with pytest.raises(ValueError, match=expected):
+        validator.type_map_findings(_type_map_doc([]), **kwargs)
+
+
+def test_type_map_findings_reports_its_own_crash_as_unchecked(validator, monkeypatch):
+    # a crash leaves the model errors and every advisory rule unevaluated
+    # together, so the finding names no rule — and that is exactly what makes it
+    # cost a pass rather than read as "nothing was wrong"
+    from analitiq.validator import connectors
+    monkeypatch.setattr(connectors, "_type_map_rule_warnings",
+                        lambda *a, **k: (_ for _ in ()).throw(TypeError("boom")))
+    findings = validator.type_map_findings(_type_map_doc([]), "read")
+    assert len(findings) == 1, findings
+    assert findings[0].get("rule") is None, findings[0]
+    assert findings[0]["message_id"] == "check-crashed", findings[0]
+    assert findings[0]["kind"] == "notApplicable", findings[0]
+    assert validator.finding_costs_a_pass(findings[0]) is True
