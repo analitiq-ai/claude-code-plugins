@@ -15,8 +15,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="bca16856d263",
         structural=(
             "every key is typed DocumentKey, whose DOCUMENT_KEY_PATTERN admits "
-            "only `/`-separated segments that are non-empty and neither `.` nor "
-            "`..`; the `_no_document_is_a_directory` model validator refuses a "
+            "only `/`-separated segments that are non-empty, hold no NUL, and are "
+            "neither `.` nor `..`; the `_no_document_is_a_directory` model validator refuses a "
             "key that is also a directory of another; each value is typed "
             "DocumentText, a length-bounded string left unparsed"
         ),

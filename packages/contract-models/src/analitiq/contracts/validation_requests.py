@@ -24,9 +24,10 @@ from analitiq.contracts.shared.common import (
 # it is a request error rather than a large package.
 MAX_DOCUMENTS = 2000
 
-# A segment is any run of non-`/` characters except `.` and `..`. Written
-# without lookahead, which pydantic-core's regex engine refuses.
-_SEGMENT = r"(?:[^/.][^/]*|\.[^/.][^/]*|\.\.[^/]+)"
+# A segment is any run of characters other than `/` and NUL — the two a POSIX
+# filename cannot hold — except `.` and `..`. Written without lookahead, which
+# pydantic-core's regex engine refuses.
+_SEGMENT = r"(?:[^/.\x00][^/\x00]*|\.[^/.\x00][^/\x00]*|\.\.[^/\x00]+)"
 DOCUMENT_KEY_PATTERN = rf"^{_SEGMENT}(?:/{_SEGMENT})*$"
 
 DocumentKey = Annotated[

@@ -45,6 +45,9 @@ MALFORMED_KEYS = {
     "inner dot segment": "endpoints/./widgets.json",
     "dot-dot segment": "endpoints/../connector.json",
     "bare dot-dot": "..",
+    "nul in segment": "endpoints/a\x00b.json",
+    "nul after dot": ".\x00",
+    "nul after dot-dot": "..\x00",
 }
 
 
