@@ -113,6 +113,15 @@ jobs:
           mutable_cache="public, max-age=300, must-revalidate"
           cd schemas
           expected=$(find . -name '*.json' -type f | wc -l | tr -d ' ')
+          # One listing call replaces a per-file existence probe: the AWS CLI
+          # auto-paginates list-objects-v2, so this is one command even past
+          # 1000 keys. Presence alone decides new-vs-existing; only a key this
+          # says already exists pays for the GET-and-byte-compare below.
+          declare -A EXISTING
+          while IFS= read -r key; do
+            [ -n "$key" ] && EXISTING["$key"]=1
+          done < <(aws s3api list-objects-v2 --bucket "$BUCKET" --query 'Contents[].Key' --output json \
+                     | python3 -c 'import json, sys; [print(k) for k in (json.load(sys.stdin) or [])]')
           while IFS= read -r -d '' f; do
             key="${f#./}"
             case "$(basename "$f")" in
@@ -121,26 +130,24 @@ jobs:
             esac
             if [[ "$(basename "$f")" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.json$ ]]; then
               # Immutable pinned version: first write wins, never overwritten.
-              # The probe downloads the published object and byte-compares —
-              # deliberately not an ETag check (ETags stop being MD5s under
-              # multipart uploads or SSE-KMS, and a failed local hash must not
-              # read as divergence). Only a definite missing-object error may
-              # fall through to the upload; anything else (403, throttling,
-              # network) stops the run rather than being misread as "absent"
-              # and overwriting an immutable object.
-              rc=0
-              err=$(aws s3api get-object --bucket "$BUCKET" --key "$key" \
-                      "$RUNNER_TEMP/published.json" 2>&1 >/dev/null) || rc=$?
-              if [ "$rc" -eq 0 ]; then
+              # Existence comes from the listing above, not a per-file probe.
+              # The byte-compare itself is a GET, deliberately not an ETag
+              # check (ETags stop being MD5s under multipart uploads or
+              # SSE-KMS, and a failed local hash must not read as divergence).
+              # A GET failure here means the listing lied or the object is
+              # unreadable — never re-read as "absent", which would overwrite
+              # an immutable object.
+              if [[ -n "${EXISTING[$key]:-}" ]]; then
+                if ! aws s3api get-object --bucket "$BUCKET" --key "$key" "$RUNNER_TEMP/published.json" >/dev/null; then
+                  echo "::error::$key is listed as published but the GET failed — refusing to treat as absent" >&2
+                  exit 1
+                fi
                 if ! cmp -s "$f" "$RUNNER_TEMP/published.json"; then
                   echo "::error file=schemas/$key::pinned version differs from the published object — publish a new version triple instead of editing $key in place" >&2
                   exit 1
                 fi
                 skipped=$((skipped + 1))
                 continue
-              elif [[ "$err" != *NoSuchKey* && "$err" != *"(404)"* && "$err" != *"Not Found"* ]]; then
-                echo "::error::probe failed for $key (not a missing-object error — refusing to treat as absent): $err" >&2
-                exit 1
               fi
               cache="public, max-age=31536000, immutable"
             else
