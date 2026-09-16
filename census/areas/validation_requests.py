@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from census.obligation import ProseObligation
 
-_CONTENT_IS_THE_VALIDATORS = (
+_CONTENT_IS_NOT_JUDGED_HERE = (
     "whether the documents actually form the named package is their content, "
     "which this model does not judge; it gates only the request's shape"
 )
@@ -25,12 +25,12 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="ValidateConnectorPackageRequest",
         prose_hash="14bf72dead5e",
         structural="`documents` is a required DocumentSet under extra='forbid'",
-        waiver=_CONTENT_IS_THE_VALIDATORS,
+        waiver=_CONTENT_IS_NOT_JUDGED_HERE,
     ),
     ProseObligation(
         model="ValidatePipelinePackageRequest",
         prose_hash="274fbf44824c",
         structural="`documents` is a required DocumentSet under extra='forbid'",
-        waiver=_CONTENT_IS_THE_VALIDATORS,
+        waiver=_CONTENT_IS_NOT_JUDGED_HERE,
     ),
 )

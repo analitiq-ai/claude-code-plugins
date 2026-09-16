@@ -2,7 +2,7 @@
 connector-package and pipeline-package requests that carry one.
 
 A malformed argument is refused when the request is built, so every case below
-is a `ValidationError`, never a finding. The published schemas are graded
+is a `ValidationError`. The published schemas are graded
 against the same malformed keys, so a JSON-Schema-only consumer refuses the key
 grammar the models refuse; the document-and-directory conflict is enforced by
 the model alone, since JSON Schema cannot express it.
