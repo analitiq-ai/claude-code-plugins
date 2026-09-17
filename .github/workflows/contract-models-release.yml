@@ -118,6 +118,7 @@ jobs:
           import analitiq.contracts as c
           import analitiq.contracts.endpoints as ep
           import analitiq.contracts.arrow_grammar as ag
+          from analitiq.contracts.shared.rule_fixtures import fixture_mismatch, rule_fixtures
           from analitiq.contracts.shared.rules import all_rules
 
           staged = pathlib.Path(os.environ['STAGED']) / 'analitiq'
@@ -137,6 +138,11 @@ jobs:
           assert all_rules(), 'rules.json shipped empty'
           print('wheel imports; grammar loaded:', len(ag.FAMILY_NAMES), 'families')
           print('rule registry loaded:', len(all_rules()), 'rules')
+          fixtures = rule_fixtures()
+          assert fixtures, 'rule fixture corpus shipped empty'
+          mismatches = [m for m in map(fixture_mismatch, fixtures) if m]
+          assert not mismatches, mismatches
+          print('rule fixtures graded:', len(fixtures))
           "
 
       - name: Publish to PyPI (Trusted Publishing, OIDC)

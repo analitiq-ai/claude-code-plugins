@@ -39,7 +39,7 @@ this registry exists to remove (`.claude/rules/no-drift-surfaces.md`).
 | `fields` | no | The model fields a shape rule's `mechanism` rides on, so the rendered reference can print the members off the live model instead of restating them. Resolved against the target, so a renamed field fails the build. |
 | `symbol` | no | The dotted `module::NAME` holding the constant a `mechanism: pattern` or `mechanism: reserved_names` rule is about — a regex, or a frozenset of forbidden literal strings — so the rendered reference can print the form the statement points at. Read from the record rather than off the field, because a field carries one device per rule that grades it and nothing in the shape says which is whose — printing them all under each rule states what the field must satisfy and never what the rule requires. Resolved by import like `validator`, so a renamed constant fails the build. Refused on a record whose `mechanism` is anything else. |
 | `mechanism` | no | Which shape device a shape rule is **about**, from the vocabulary `MECHANISMS` declares in `analitiq.contracts.shared.rule_record` — not merely which one the target carries, since a model usually carries several. `literal_enum` says the members *are* the rule, and is what makes the rendered reference print them off the live model. Not derivable, which is why it is written down: `Schedule.type` is a `Literal` with a default, so a rule about omitting fields that default and a rule about an enum's legal values read the same annotation and want opposite answers. |
-| `fixture_model` | no | The concrete model the shared fixture corpus validates against. Naming one is how a rule joins the corpus; absent means it ships no fixtures, and the tests assert both directions. |
+| `fixture_model` | no | The concrete model the shared fixture corpus validates against. Naming one is how a rule joins the corpus, `packages/contract-models/src/analitiq/contracts/shared/fixtures/<RULE-ID>/{valid,invalid}/*.json`, which ships in the `analitiq-contract-models` wheel and is read through `analitiq.contracts.shared.rule_fixtures`; absent means it ships no fixtures, and the tests assert both directions. |
 | `rationale` | yes | Why the rule exists, and — when nothing mechanizes it — what would have to be read to catch a violation, and how far away that is. |
 | `status` | yes | `draft` \| `active` \| `deprecated` \| `retired`. The lifecycle, and the reason no record carries a boolean — `active` is not the opposite of any one thing. A `draft` is written down but not yet in force; a `deprecated` rule still binds while authors are moved off it, so prose citing it still resolves; a `retired` record stays on disk because the id must never be reused, and the record is the only thing that proves it was taken. |
 | `superseded_by` | no | The id that replaced this one. Required when `status: retired`. |
@@ -219,8 +219,11 @@ emits one.
   is some rule's enforcer or carries a written exemption, that a record bound
   to a pydantic validator — on the class it names, or on a mixin its targets
   inherit — declares `error`, that a retired id is never reissued, and that
-  each rule naming a `fixture_model` is rejected by its own invalid fixtures
-  and by no other constraint.
+  each rule naming a `fixture_model` accepts its valid fixtures and rejects
+  its invalid ones with that rule among the ids its enforcers raised. The id is
+  read off the raised `RuleViolation` objects
+  (`analitiq.contracts.shared.rules.violated_rule_ids`), never searched for in
+  the error text, which can cite an id no enforcer raised.
 - `packages/validator/tests/test_check_registry_census.py` — the same
   enforcer→registry direction over the other enforcement home: every rule id a
   `finding()` call in `analitiq.validator` names resolves to a live record,

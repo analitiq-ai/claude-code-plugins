@@ -1,15 +1,15 @@
 """Rule registry — engine, registry integrity, and shared-fixture gate.
 
 This is the drift-prevention linchpin that replaces the removed CUE layer: every
-relational rule ships a corpus of valid/invalid instance fixtures, and this suite
-asserts the registry-driven Pydantic enforcement agrees with them. A non-Python
+relational rule ships a corpus of valid/invalid instance fixtures inside the
+package (`analitiq.contracts.shared.rule_fixtures`), and this suite asserts the
+registry-driven Pydantic enforcement agrees with them through the same
+`fixture_mismatch` a consumer of the wheel calls. A non-Python
 re-implementation reconciles against the same JSON fixtures.
 """
 from __future__ import annotations
 
-import json
 import re
-from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -20,6 +20,7 @@ from analitiq.contracts import connection, connector, endpoints, stream, type_ma
 from analitiq.contracts.pipelines import config as pipeline_config
 from analitiq.contracts.pipelines import data_sync
 from analitiq.contracts.shared import common
+from analitiq.contracts.shared import rule_fixtures as corpus
 from analitiq.contracts.shared.rules import all_rules
 from analitiq.contracts.shared.rule_record import (
     DESCRIPTIVE_TIER,
@@ -35,11 +36,6 @@ from analitiq.contracts.shared.rule_record import (
     RuleRecord,
 )
 
-
-# tests/unit/<this file> -> parents[1] is tests/, which holds the fixtures.
-# (In the infra repo this reached up to the repo root and back down through
-# contract-models/; here the test already lives inside the package.)
-FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "rules"
 
 _MODULES = (
     connection, connector, endpoints, stream, type_map,
@@ -64,15 +60,6 @@ RULES = {r.id: r for r in all_rules()}
 #: concrete model to validate a fixture against. A non-Python re-implementation
 #: reconciles against the same JSON.
 FIXTURED_RULES = [r for r in all_rules() if r.fixture_model]
-
-
-def _iter_fixtures():
-    for rule_dir in sorted(FIXTURES_DIR.glob("*")):
-        if not rule_dir.is_dir():
-            continue
-        for group in ("valid", "invalid"):
-            for path in sorted((rule_dir / group).glob("*.json")):
-                yield pytest.param(rule_dir.name, group, path, id=f"{rule_dir.name}/{group}/{path.stem}")
 
 
 # --- Registry integrity -----------------------------------------------------
@@ -714,43 +701,62 @@ def test_shape_rules_do_not_restate_the_values_they_point_at():
 
 def test_every_fixtured_rule_has_fixtures():
     """Fail closed: a rule naming a fixture_model carries >=2 valid and >=2 invalid."""
+    fixtures = corpus.rule_fixtures()
     for rule in FIXTURED_RULES:
-        for group, minimum in (("valid", 2), ("invalid", 2)):
-            found = list((FIXTURES_DIR / rule.id / group).glob("*.json"))
+        for verdict, minimum in (("valid", 2), ("invalid", 2)):
+            found = [f for f in fixtures if f.rule_id == rule.id and f.verdict == verdict]
             assert len(found) >= minimum, (
-                f"{rule.id}: {len(found)} {group} fixtures, need >= {minimum}"
+                f"{rule.id}: {len(found)} {verdict} fixtures, need >= {minimum}"
             )
 
 
-def test_no_orphan_fixture_directories():
+def _write_fixture(root, rule_id: str, group: str, name: str) -> None:
+    target = root / rule_id / group
+    target.mkdir(parents=True, exist_ok=True)
+    (target / name).write_text("{}", encoding="utf-8")
+
+
+def test_no_orphan_fixture_directories(monkeypatch, tmp_path):
     """The other direction: a corpus directory belongs to a rule that claims it.
 
     Without this, dropping `fixture_model` from a record would quietly retire
     its fixtures — the rule leaves the corpus and the files stay on disk
-    exercising nothing.
+    exercising nothing. The accessor refuses to load such a corpus.
     """
-    claimed = {r.id for r in FIXTURED_RULES}
-    for rule_dir in FIXTURES_DIR.glob("*"):
-        if rule_dir.is_dir():
-            assert rule_dir.name in claimed, (
-                f"fixtures for {rule_dir.name!r}, which names no fixture_model"
-            )
+    unclaimed = next(r.id for r in all_rules() if r.fixture_model is None)
+    _write_fixture(tmp_path, unclaimed, "valid", "a.json")
+    monkeypatch.setattr(corpus, "FIXTURES_DIR", tmp_path)
+    with pytest.raises(ValueError, match=unclaimed):
+        corpus.rule_fixtures()
 
 
-@pytest.mark.parametrize("rule_id, group, path", list(_iter_fixtures()))
-def test_fixture_matches_enforcement(rule_id, group, path):
-    rule = RULES[rule_id]
-    model = MODEL_INDEX[rule.fixture_model]
-    payload = json.loads(path.read_text())
-    if group == "valid":
-        model.model_validate(payload)  # must not raise
-    else:
-        with pytest.raises(ValidationError) as exc:
-            model.model_validate(payload)
-        # Unconditional: a fixture proves the rule only if this rule is what
-        # rejected it. Some other constraint failing first would pass a bare
-        # `raises`, and the corpus would certify a rule nothing enforces.
-        # `violation()` puts the id in the message, so every enforcer can.
-        assert rule_id in str(exc.value), (
-            f"{rule_id} invalid fixture rejected, but not by this rule"
-        )
+def test_a_fixture_outside_a_verdict_group_is_refused(monkeypatch, tmp_path):
+    _write_fixture(tmp_path, FIXTURED_RULES[0].id, "maybe", "a.json")
+    monkeypatch.setattr(corpus, "FIXTURES_DIR", tmp_path)
+    with pytest.raises(ValueError, match="maybe"):
+        corpus.rule_fixtures()
+
+
+def test_a_fixture_that_is_not_json_is_refused(monkeypatch, tmp_path):
+    _write_fixture(tmp_path, FIXTURED_RULES[0].id, "valid", "a.yaml")
+    monkeypatch.setattr(corpus, "FIXTURES_DIR", tmp_path)
+    with pytest.raises(ValueError, match="a.yaml"):
+        corpus.rule_fixtures()
+
+
+@pytest.mark.parametrize(
+    "fixture", corpus.rule_fixtures(),
+    ids=lambda f: f"{f.rule_id}/{f.verdict}/{f.name}",
+)
+def test_fixture_matches_enforcement(fixture):
+    # An invalid fixture proves the rule only if this rule is what rejected
+    # it: some other constraint failing first would pass a bare `raises`, and
+    # the corpus would certify a rule nothing enforces.
+    assert corpus.fixture_mismatch(fixture) is None
+
+
+@pytest.mark.parametrize("name", ["NoSuchContractModel", "Batching"])
+def test_a_fixture_model_must_name_exactly_one_class(name):
+    """`Batching` is a class name more than one contract module defines."""
+    with pytest.raises(ValueError, match=name):
+        corpus._model_named(name)
