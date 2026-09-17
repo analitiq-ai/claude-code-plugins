@@ -218,9 +218,9 @@ def test_bundle_endpoint_missing_id_warns(tmp_path):
 
 def test_diagnostics_fails_closed_on_a_published_notapplicable_finding():
     """`_diagnostics` reduces published `analitiq.validator` findings through
-    `_finding_costs_a_pass`, this adapter's local copy of
-    `analitiq.validator.finding_costs_a_pass`, not a second predicate that only
-    ever knew about `severity`. A `notApplicable` naming an error-tier rule
+    `analitiq.validator.finding_costs_a_pass` itself, not a second predicate
+    that only ever knew about `severity`. A `notApplicable` naming an error-tier
+    rule
     carries no `severity` at all — the bug this pins is that check reading its
     absence as "fine" instead of as "unchecked, and error-tier rules don't get
     that benefit of the doubt."""
@@ -237,37 +237,6 @@ def test_diagnostics_fails_closed_on_a_published_notapplicable_finding():
     assert V._diagnostics([published])["passed"] is False
     assert V._diagnostics([local_ok])["passed"] is True
     assert V._diagnostics([local_bad])["passed"] is False
-
-
-def test_finding_costs_a_pass_matches_the_published_predicate():
-    """`_finding_costs_a_pass` is a local copy, kept because this adapter
-    installs a released `analitiq-validator` that predates the export
-    (`_finding_costs_a_pass`'s own docstring says why) — this is what holds the
-    copy to the source it was copied from. Running from source
-    (`ANALITIQ_VALIDATOR_FROM_SOURCE`, set by the repo-root `conftest.py`) puts
-    both on `sys.path` at once, so this compares outputs directly rather than
-    trusting the two reads stayed in sync."""
-    from analitiq.contracts.shared.rules import all_rules
-    from analitiq.validator import finding_costs_a_pass
-
-    error_rule = next((r for r in all_rules() if r.severity == "error"), None)
-    warning_rule = next((r for r in all_rules() if r.severity == "warning"), None)
-    assert error_rule is not None and warning_rule is not None, (
-        "the registry no longer has both an error- and a warning-tier rule — "
-        "the fixture this test needs no longer exists in rules/records/*.yaml"
-    )
-    cases = [
-        {"kind": "fail", "severity": "error"},
-        {"kind": "fail", "severity": "warning"},
-        {"kind": "notApplicable", "rule": error_rule.id},
-        {"kind": "notApplicable", "rule": warning_rule.id},
-        {"kind": "notApplicable"},
-        {"kind": "informational", "rule": error_rule.id},
-        {"severity": "error"},
-        {"severity": "warning"},
-    ]
-    for case in cases:
-        assert V._finding_costs_a_pass(case) == finding_costs_a_pass(case), case
 
 
 def _add_wise_endpoint(root: Path, endpoint_id: str = "transfers") -> None:
@@ -416,7 +385,7 @@ def test_diagnostics_for_requires_direction_with_type_map_entity(tmp_path):
 
 def test_diagnostics_for_rejects_an_unsupported_direction_value(tmp_path):
     # Membership, not just presence: a non-null value outside {read, write}
-    # must not slip past the guard into _TYPE_MAP_FILENAMES[direction].
+    # must not slip past the guard into TYPE_MAP_FILENAMES[direction].
     with pytest.raises(ValueError, match="direction must be"):
         V.diagnostics_for("type-map", tmp_path / "type-map-read.json", direction="bogus")
 
@@ -533,12 +502,15 @@ def test_type_map_entity_rejects_wrong_filename(tmp_path):
 ])
 def test_type_map_entity_rejects_a_document_declaring_the_other_direction(
         tmp_path, direction, fname, declared_rules, declared):
-    # the published validator grades by the declared direction, so a valid map
-    # of the other direction passes it; the adapter holds it to --direction
+    # the name asserts a direction, so a document declaring the other one
+    # contradicts the slot it sits in. The disagreement is reported where it
+    # is written — the fields naming the direction — not as an adapter verdict
+    # over a document the published grader already rejects.
     doc = _tm(declared_rules, declared)
     diag = V.diagnostics_for("type-map", _write(tmp_path, fname, doc), direction=direction)
     assert not diag["passed"]
-    assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
+    assert "connection-type-map" not in _ids(diag["findings"]), diag["findings"]
+    assert {f.get("path") for f in diag["findings"]} >= {"/$schema", "/direction"}, diag["findings"]
 
 
 def test_type_map_entity_direction_mismatch_is_caught(tmp_path):
@@ -603,35 +575,52 @@ def test_bundle_unreadable_connection_type_map(tmp_path):
                for f in diag["findings"]), diag["findings"]
 
 
+def test_type_map_entity_forwards_the_published_findings_verbatim(tmp_path):
+    # the adapter holds no type-map judgment of its own past the filename: what
+    # the published grader says at this direction and scope IS the output. A
+    # reintroduced filter, re-shape or scope drift fails here.
+    from analitiq.validator import type_map_findings
+    # The map earns a finding at connection scope, so the equality has content:
+    # over a clean document both sides are empty and a reintroduced filter passes.
+    doc = _tm(TYPE_MAP_WRITE + [{"match": "exact", "arrow_type": "Json",
+                                 "native_type": "JSON"}], "write")
+    published = type_map_findings(doc, "write", scope="connection")
+    assert published, "the document must earn a finding or this asserts nothing"
+    diag = V.diagnostics_for(
+        "type-map", _write(tmp_path, "type-map-write.json", doc), direction="write")
+    assert diag["findings"] == published
+
+
 def test_type_map_entity_rejects_dict_without_rules_key(tmp_path):
-    # a dict under a load-bearing type-map filename must fail HERE: the published
-    # dispatch detects by shape, so a stray connection document would otherwise be
-    # graded as a connection and pass clean while the engine's loader chokes
+    # naming the direction is the assertion, so a stray connection document under
+    # a type-map filename is graded as the type map it claims to be — it never
+    # reaches the shape-detecting dispatch that would grade it as a connection
+    # and pass it clean while the engine's loader chokes
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", CONN_PG), direction="read")
     assert not diag["passed"]
-    assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
-    assert "`rules`" in diag["findings"][0]["message"]
+    missing = {f["path"] for f in diag["findings"] if f.get("message_id") == "missing"}
+    assert "/rules" in missing, diag["findings"]
 
 
 def test_type_map_entity_rejects_bare_array(tmp_path):
     # the legacy pre-envelope shape (a bare rules array, no {$schema, direction,
-    # rules} wrapper) must fail HERE, not just deep inside model validation —
-    # this is the isinstance(doc, dict) gate, one level up from the missing-key
-    # gate above.
+    # rules} wrapper) is rejected as the wrong type for the document itself,
+    # rather than by an adapter gate that only knew it was not a dict
     diag = V.diagnostics_for(
         "type-map",
         _write(tmp_path, "type-map-read.json",
                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
         direction="read")
     assert not diag["passed"]
-    assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
-    assert "top-level JSON object" in diag["findings"][0]["message"]
+    assert [(f["path"], f.get("message_id")) for f in diag["findings"]] == [("/", "model_type")], \
+        diag["findings"]
 
 
-def test_connection_write_map_filters_connector_vocabulary_warning(tmp_path):
-    # the published RULE-TMAP-017 warning presumes a connector's
-    # full-vocabulary write map; a gap-only connection map never satisfies it by
-    # design, so the adapter filters it — for the entity run and the bundle alike
+def test_connection_write_map_is_not_held_to_the_connector_vocabulary(tmp_path):
+    # RULE-TMAP-017 presumes a connector's full-vocabulary write map; a gap-only
+    # connection map never satisfies it by design. The adapter says so by naming
+    # the scope it is grading at, rather than by discarding the finding after the
+    # fact — for the entity run and the bundle alike
     diag = V.diagnostics_for(
         "type-map", _write(tmp_path, "type-map-write.json", _tm(TYPE_MAP_WRITE, "write")), direction="write")
     assert diag["passed"], diag["findings"]
@@ -1368,7 +1357,7 @@ def test_pipeline_entities_are_a_document_artifact_kind_subset():
 
 def test_cli_main_type_map_entities(tmp_path, capsys):
     # the agents drive the CLI, and diagnostics_for-level routing keys off
-    # _TYPE_MAP_FILENAMES — only this pins that PIPELINE_ENTITIES exposes the
+    # TYPE_MAP_FILENAMES — only this pins that PIPELINE_ENTITIES exposes the
     # new entity plus the --direction split
     path = _write(tmp_path, "type-map-write.json", _tm(TYPE_MAP_WRITE, "write"))
     rc = V.main(["--entity", "type-map", "--direction", "write", "--document", str(path)])

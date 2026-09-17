@@ -321,11 +321,10 @@ def measured_reachable_connectors_ids() -> set[str]:
     naming a function this adapter's entities never route to at all (an
     api-endpoint/connector-package check — this function never constructs
     such a document, so those checks are never even probed), and separately
-    by naming one whose finding the adapter's own write-vocabulary filter
-    (`_type_map_findings` in `validate.py`) discards before it ever reaches
-    output — probing entity `type-map` with `direction="write"` through the
-    adapter's own `diagnostics_for`, filter included, is what proves that
-    exclusion instead of asserting it.
+    by naming one the adapter never surfaces because of the scope it grades a
+    connection map at (`_type_map_findings` in `validate.py`) — probing entity
+    `type-map` with `direction="write"` through the adapter's own
+    `diagnostics_for` is what proves that exclusion instead of asserting it.
     """
     import json
     import tempfile
@@ -367,11 +366,11 @@ def measured_reachable_connectors_ids() -> set[str]:
             "type-map", path, direction="read")["findings"]}
 
         # RULE-TMAP-017 (write-vocabulary coverage) fires in the published
-        # validator on an empty write map — reachable at that layer — but
-        # going through the adapter's own diagnostics_for exercises its
-        # write-coverage filter too, so this measures whether the id survives
-        # to the adapter's own output. It does not: excluded below by what
-        # this probe observes, not by name.
+        # validator on an empty CONNECTOR write map — reachable at that layer
+        # — but the adapter grades a connection map at connection scope, where
+        # the check does not apply, so this measures whether the id survives to
+        # the adapter's own output. It does not: excluded below by what this
+        # probe observes, not by name.
         path = root / "type-map-write.json"
         path.write_text(json.dumps({
             "$schema": TYPE_MAP_WRITE_SCHEMA_URL,

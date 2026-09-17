@@ -8,8 +8,9 @@ Diagnostics envelope: ``{"passed": bool, "findings": [...]}``, `passed` fails
 closed over every finding — a locally minted one (`validator`, `severity`,
 `path`, `message`) or one forwarded unchanged from `analitiq.validator`
 (`rule`, `message_id`, `kind`, `path`, `message`, `severity` only for
-`kind: "fail"`) — through `_finding_costs_a_pass` (`skills/pipeline-builder/references/io-contracts.md`'s
-`Diagnostics` section owns the shape and the predicate in full).
+`kind: "fail"`) — through the published `analitiq.validator.finding_costs_a_pass`
+(`skills/pipeline-builder/references/io-contracts.md`'s `Diagnostics` section
+owns the shape and the predicate in full).
 
 The published package exposes one single-document entry point plus one bundle
 entry point. This adapter routes each entity as follows:
@@ -27,15 +28,14 @@ entry point. This adapter routes each entity as follows:
     "unrecognized artifact" finding. Routing by the caller-supplied ``--entity``,
     which is already known here, guarantees the right model runs and yields
     per-field findings instead.
-  * ``type-map`` (with ``--direction {read,write}``) -> ``analitiq.validator.validate_document``
-    over the connection-scoped type-map document, after an adapter filename gate:
-    each direction is authored as ``connections/<slug>/definition/type-map-{read,write}.json``,
-    so a file not named for ``--direction`` is a swapped invocation or a misfiled
-    document, and gets the rename finding alone.
-    The published write-vocabulary-coverage warning (``RULE-TMAP-017``) is
-    filtered out here for ``--direction write``: it presumes a connector's
-    full-vocabulary write map, which a gap-only connection map deliberately is
-    not (see ``_type_map_findings``).
+  * ``type-map`` (with ``--direction {read,write}``) ->
+    ``analitiq.validator.type_map_findings`` at ``scope="connection"``, after an
+    adapter filename gate: each direction is authored under the name for that
+    direction in ``connections/<slug>/definition/``, so a file under any other
+    name means the invocation and the file disagree, and it gets the rename
+    finding alone rather than content findings that bury it. ``scope`` is how the gap-only nature of a connection map
+    (``RULE-TMAP-018``) reaches the published check, which otherwise holds a
+    write map to a connector's full vocabulary (``RULE-TMAP-017``).
   * ``pipeline`` with ``--bundle-root`` -> additionally
     ``analitiq.validator.validate_pipeline_bundle`` over the on-disk bundle, for the
     cross-document referential integrity no single document can verify. A draft
@@ -70,7 +70,7 @@ Validation is offline — no schema is fetched. Usage::
     python3 plugins/analitiq-pipeline-builder/scripts/validate.py --entity pipeline --document path/to/pipeline.json --bundle-root .
     python3 plugins/analitiq-pipeline-builder/scripts/validate.py --entity type-map --direction write --document path/to/type-map-write.json
 
-Exit status is ``0`` iff ``passed`` (``_finding_costs_a_pass`` owns the full
+Exit status is ``0`` iff ``passed`` (``finding_costs_a_pass`` owns the full
 predicate — a ``fail`` finding at ``severity: "error"``, or an unchecked
 error-tier rule, both cost it), ``1`` on an unreadable document, ``2`` on a CLI
 usage error.
@@ -99,10 +99,11 @@ from _bootstrap import ensure_deps_or_reexec
 # native<->Arrow direction is this adapter's own dispatch).
 PIPELINE_ENTITIES = ("connection", "stream", "pipeline", "database-endpoint", "type-map")
 
-# Each direction's connection-scoped type map is authored under this filename in
-# connections/<slug>/definition/; the adapter gates the name like the endpoint
-# filename gate does.
-_TYPE_MAP_FILENAMES = {"read": "type-map-read.json", "write": "type-map-write.json"}
+# A connection's map for a direction is authored under the name for that
+# direction, under connections/<slug>/definition/, so the adapter gates the name
+# like the endpoint filename gate does. The gap prober reads this same mapping
+# backwards, so one direction is named in one place.
+TYPE_MAP_FILENAMES = {"read": "type-map-read.json", "write": "type-map-write.json"}
 # The pre-split filename: the engine never reads it, at either scope. The
 # published validator rejects it beside a connector; the adapter mirrors that
 # for connections, where the published bundle validator cannot see files.
@@ -117,36 +118,9 @@ def _finding(validator: str, severity: str, path: str, message: str) -> dict:
     return {"validator": validator, "severity": severity, "path": path, "message": message}
 
 
-def _finding_costs_a_pass(f: dict) -> bool:
-    """A local copy of ``analitiq.validator.finding_costs_a_pass``.
-
-    Not imported: this adapter self-installs ``analitiq-validator`` at
-    ``VALIDATOR_PIN`` (``_bootstrap.py``), a released version that predates
-    this predicate's addition, so importing it would raise ``ImportError`` in
-    every normal (non-source) run. ``test_finding_costs_a_pass_matches_the_published_predicate``
-    holds this copy to the source one so the two cannot silently diverge; fold
-    this back into an import once the pin reaches a release that carries it.
-    """
-    kind = f.get("kind", "fail")
-    if kind == "fail":
-        return f.get("severity") == "error"
-    if kind == "notApplicable":
-        rule = f.get("rule")
-        if rule is None:
-            return True
-        from analitiq.contracts.shared.rules import rule_by_id
-        return rule_by_id(rule).severity == "error"
-    return False
-
-
 def _diagnostics(findings: list[dict]) -> dict:
-    # A published finding can now be notApplicable against a rule this
-    # predicate looks up, which a bare `severity == "error"` check reads past
-    # silently. This adapter's own locally-minted findings (no `kind` key) are
-    # unaffected — `_finding_costs_a_pass` grades those exactly as this line
-    # always did.
-    passed = not any(_finding_costs_a_pass(f) for f in findings)
-    return {"passed": passed, "findings": findings}
+    from analitiq.validator import finding_costs_a_pass
+    return {"passed": not any(finding_costs_a_pass(f) for f in findings), "findings": findings}
 
 
 def _crash_finding(path: str, exc: BaseException) -> dict:
@@ -244,55 +218,23 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
 
 
 def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
-    """Validate a connection-scoped type-map file. The filename gate runs first
-    and alone on a mismatch, so the one actionable finding (rename it, or fix the
-    `--direction`) is not buried under findings about the content. A doc that is not the published
-    `{$schema, direction, rules}` object is likewise gated here — the published
-    dispatch detects by *shape* (a top-level `rules` key), so a stray dict under
-    a type-map filename with no `rules` key would be graded as some other
-    artifact (a connection document would even pass clean) instead of failing as
-    the malformed document the engine's loader will choke on."""
-    expected = _TYPE_MAP_FILENAMES[direction]
+    """Validate a connection-scoped type-map file as the direction named. The
+    filename gate runs first and alone on a mismatch: each direction is authored
+    under the name for that direction, so a file under any other name means the
+    invocation and the file disagree, and grading its content would bury the one
+    actionable finding under noise. What the file *contains* needs no gate here —
+    naming the direction is the assertion, and the published grader rejects
+    anything that is not a `{$schema, direction, rules}` document of that
+    direction, at the field that is wrong, or at the document itself when it is
+    not an object."""
+    expected = TYPE_MAP_FILENAMES[direction]
     if document_path.name != expected:
         return [_finding(
             "connection-type-map", "error", "",
             f"file is named {document_path.name!r} but direction {direction!r} requires "
             f"{expected!r} (connections/<slug>/definition/{expected}).")]
-    if not isinstance(doc, dict):
-        return [_finding(
-            "connection-type-map", "error", "",
-            f"{expected} must be a top-level JSON object with a `rules` key, "
-            f"got {type(doc).__name__}.")]
-    if "rules" not in doc:
-        return [_finding(
-            "connection-type-map", "error", "",
-            f"{expected} is a JSON object but has no `rules` key.")]
-    # The declared direction is held to --direction just as the filename is:
-    # whether the validator's model choice would also catch it varies by release.
-    declared = doc.get("direction")
-    if declared in ("read", "write") and declared != direction:
-        return [_finding(
-            "connection-type-map", "error", "/direction",
-            f"{expected} declares direction {declared!r}; it must declare {direction!r}.")]
-    from analitiq.validator import validate_document
-    findings = validate_document(doc, doc_path=_authored_path(document_path))
-    if direction == "write":
-        # The published write-vocabulary coverage warning presumes a CONNECTOR
-        # write map, which must cover the full canonical vocabulary. A connection
-        # map is gap-only by rule (spec-type-map-gaps.md) — the warning would fire
-        # on every authored connection write map forever, and its remedy ("add
-        # rules") is exactly the shadowing the gap-only rule forbids. Filtering it
-        # is the same adapter-adapts-published-behavior move as require_runnable.
-        # Checked both ways: the currently-pinned release predates the `rule`
-        # axis and still names this check `validator="type-map-write-coverage"`;
-        # a release carrying the `rule` axis names it `rule="RULE-TMAP-017"`
-        # instead and drops `validator` entirely.
-        findings = [
-            f for f in findings
-            if f.get("validator") != "type-map-write-coverage"
-            and f.get("rule") != "RULE-TMAP-017"
-        ]
-    return findings
+    from analitiq.validator import type_map_findings
+    return type_map_findings(doc, direction, scope="connection")
 
 
 def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
@@ -319,7 +261,7 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                 f"{_LEGACY_TYPE_MAP_FILENAME} is the pre-split filename; the engine never "
                 "reads it. Split it into type-map-read.json (native → Arrow) and, for the "
                 "write direction, type-map-write.json (Arrow → native)."))
-    for direction, fname in _TYPE_MAP_FILENAMES.items():
+    for direction, fname in TYPE_MAP_FILENAMES.items():
         path = definition / fname
         with _contained(findings, f"{site}/{fname}"):
             if not (path.exists() or path.is_symlink()):
@@ -793,7 +735,12 @@ def main(argv: list[str] | None = None) -> int:
         output = json.dumps(diagnostics, indent=2)
         passed = diagnostics["passed"]
     except Exception as exc:
-        print(json.dumps(_diagnostics([_crash_finding("", exc)]), indent=2))
+        # Not through `_diagnostics`: whatever crashed here may leave
+        # `analitiq.validator` unimportable and its `finding_costs_a_pass` out
+        # of reach. A crash finding costs a pass under that predicate anyway,
+        # so this states the verdict it would reach rather than risking a
+        # second, uncontained failure reporting it.
+        print(json.dumps({"passed": False, "findings": [_crash_finding("", exc)]}, indent=2))
         return 1
 
     print(output)

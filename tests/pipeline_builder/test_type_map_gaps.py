@@ -92,10 +92,64 @@ def test_write_gap_reported(tmp_path):
 
 
 def test_map_without_rules_key_rejected(tmp_path):
+    # the prober keeps no shape gate of its own: the published grader names every
+    # part of the envelope that is missing, so the message says what to author
     bad = tmp_path / "r.json"
     bad.write_text('{"match": "exact"}')
-    with pytest.raises(ValueError, match=r"not a \{\$schema, direction, rules\} type-map document"):
+    with pytest.raises(ValueError, match=r"is not a valid read type map") as exc:
         G.resolve("read", ["citext"], [bad])
+    for field in ("/$schema", "/direction", "/rules"):
+        assert field in str(exc.value), exc.value
+
+
+def test_a_connection_write_map_is_not_held_to_a_connector_vocabulary(tmp_path, capsys):
+    # A connection map fills the gaps its connector left, so holding it to the
+    # whole Arrow vocabulary earns the coverage warning on every run. The
+    # authoring agent is told to add rules for families the connector already
+    # renders, and shadows them.
+    G.resolve("write", ["Utf8"], [_map(tmp_path, "type-map-write.json", CONNECTOR_WRITE, "write")])
+    assert capsys.readouterr().err == ""
+
+
+def test_an_advisory_reaches_the_operator_over_a_map_that_resolves(tmp_path, capsys):
+    # The gap and the rule that was meant to fill it are reported together: a
+    # duplicate is unreachable, so the probe it was written for comes back
+    # uncovered and reads as a vocabulary the connector simply lacks.
+    p = tmp_path / "type-map-read.json"
+    p.write_text(json.dumps(_tm_doc(CONNECTOR_READ + [CONNECTOR_READ[0]], "read")))
+    result = G.resolve("read", ["citext", "vector(3)"], [p])
+    assert result["gaps"] == ["vector(3)"]
+    assert "duplicate rule" in capsys.readouterr().err
+
+
+def test_an_advisory_reaches_the_operator_even_when_something_fatal_stops_the_probe(
+        tmp_path, capsys):
+    # An advisory is most often the explanation for a gap reported below it, so
+    # withholding it until the fatal finding is fixed costs a round trip: the
+    # author repairs the envelope, re-runs, and only then learns the rule they
+    # wrote could never have matched.
+    p = tmp_path / "type-map-read.json"
+    p.write_text(json.dumps({
+        "$schema": TYPE_MAP_WRITE_SCHEMA_URL,   # the write schema under a read declaration
+        "direction": "read",
+        "rules": CONNECTOR_READ + [CONNECTOR_READ[0]]}))
+    with pytest.raises(ValueError, match=r"is not a valid read type map"):
+        G.resolve("read", ["citext"], [p])
+    assert "duplicate rule" in capsys.readouterr().err
+
+
+def test_a_crashed_check_is_not_reported_as_an_authoring_defect(tmp_path, monkeypatch):
+    # a crash stops the probe for the same reason a defect does — nothing graded
+    # the map — but telling the author to fix their map would send them after a
+    # defect it does not have
+    from analitiq.validator import connectors
+    monkeypatch.setattr(connectors, "_type_map_rule_warnings",
+                        lambda *a, **k: (_ for _ in ()).throw(TypeError("boom")))
+    m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
+    with pytest.raises(ValueError, match=r"could not be graded") as exc:
+        G.resolve("read", ["citext"], [m])
+    assert "fix it" not in str(exc.value), exc.value
+    assert "validator bug" in str(exc.value), exc.value
 
 
 def test_cli_end_to_end(tmp_path, capsys):

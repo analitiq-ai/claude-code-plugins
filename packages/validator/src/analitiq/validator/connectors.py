@@ -46,7 +46,7 @@ import re
 import reprlib
 import sys
 from pathlib import Path
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterator, Literal
 
 from ._core import (
     contract_model_domain,
@@ -996,20 +996,54 @@ def _type_map_rules(doc: Any) -> Any:
     return doc.get("rules") if isinstance(doc, dict) else None
 
 
-def _type_map_findings(doc: Any, direction: str) -> list[dict]:
-    """Validate a loaded type-map document: model errors + advisory rule
-    warnings + (write-vocabulary coverage on the write direction). The single
-    definition used everywhere a type-map is checked — standalone, or as a
-    connector's sibling. `doc` is nominally the whole `{$schema, direction,
-    rules}` object — a malformed sibling can hand it any JSON-parseable value
-    instead, which `_model_findings` below rejects — the advisory/coverage
-    checks only ever needed the `rules` array, extracted defensively, so that
-    is all they are handed."""
+def type_map_findings(
+    doc: Any,
+    direction: Literal["read", "write"],
+    scope: Literal["connector", "connection"] = "connector",
+) -> list[dict]:
+    """Validate a type-map document as the `direction` the CALLER names: model
+    errors + advisory rule warnings + (write-vocabulary coverage). The definition
+    used wherever a direction is known. `doc` is nominally the whole
+    `{$schema, direction, rules}` object — a malformed sibling can hand it any
+    JSON-parseable value instead, which `_model_findings` rejects — and the
+    advisory/coverage checks only ever needed `rules`.
+
+    Naming the direction IS the assertion: a document declaring the other
+    direction fails the model's `direction` Literal alongside every other defect
+    the model finds, where refusing to grade it at all would report the
+    disagreement and nothing else. Its advisories are keyed for the direction it
+    declares, so they are not run.
+
+    `scope` decides the write vocabulary alone: a connector write map must
+    render all of it, a connection map is gap-only (`RULE-TMAP-018`) and would
+    earn the write-vocabulary finding (`RULE-TMAP-017`) forever."""
+    # An unsupported value would silently select the direction or scope nobody
+    # asked for. It is the caller's own argument rather than anything the document
+    # did, so it raises past the guard instead of arriving as a finding.
+    if direction not in ("read", "write"):
+        raise ValueError(f"direction must be 'read' or 'write', got {direction!r}")
+    if scope not in ("connector", "connection"):
+        raise ValueError(f"scope must be 'connector' or 'connection', got {scope!r}")
+    return _run_guarded(_type_map_document_findings, doc, direction, scope,
+                        crash_label="type-map grading")
+
+
+def _type_map_document_findings(doc: Any, direction: str, scope: str) -> list[dict]:
     adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
     findings = _model_findings(doc, adapter)
+    # A rule carries both keys whichever direction it is for — one matches, the
+    # other renders — so grading it as the other direction reads the render side
+    # as the matcher: Arrow types legitimately rendering to one native DDL read
+    # as duplicates of each other. The advisories would mint defects the document
+    # does not have, burying the disagreement the model states above them. A
+    # direction that is missing or unusable disagrees with nothing, and is graded
+    # as named.
+    declared = doc.get("direction") if isinstance(doc, dict) else None
+    if declared in ("read", "write") and declared != direction:
+        return findings
     rules = _type_map_rules(doc)
     findings.extend(_type_map_rule_warnings(rules, direction))
-    if direction == "write" and isinstance(rules, list):
+    if direction == "write" and scope == "connector" and isinstance(rules, list):
         findings.extend(_write_vocabulary_findings(rules))
     return findings
 
@@ -1055,7 +1089,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                 doc_, load = _load_type_map(path)
                 findings.extend(load)
                 if doc_ is not None:
-                    findings.extend(_type_map_findings(doc_, direction))
+                    findings.extend(type_map_findings(doc_, direction))
         return findings
 
     # A read map that cannot be rendered from is carried forward rather than
@@ -1077,7 +1111,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         read_doc, load = _load_type_map(read_path)
         findings.extend(load)
         if read_doc is not None:
-            findings.extend(_type_map_findings(read_doc, "read"))
+            findings.extend(type_map_findings(read_doc, "read"))
             read_rules = _type_map_rules(read_doc)
 
     if kind in _DATABASE_KINDS:
@@ -1090,7 +1124,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         write_doc, load = _load_type_map(write_path)
         findings.extend(load)
         if write_doc is not None:
-            findings.extend(_type_map_findings(write_doc, "write"))
+            findings.extend(type_map_findings(write_doc, "write"))
         return findings
 
     # api: no write map, and every endpoint's natives must be covered by the read map.
@@ -1354,7 +1388,7 @@ def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq
     direction = doc.get("direction")
     if direction not in ("read", "write"):
         direction = "write" if doc.get("$schema") == TYPE_MAP_WRITE_SCHEMA_URL else "read"
-    return _type_map_findings(doc, direction)
+    return type_map_findings(doc, direction)
 
 
 def _validate_kindless_connector(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature

@@ -31,11 +31,10 @@ Probes are a JSON array of strings on stdin (or --probes-file): provider
      "resolved": {"citext": null, "vector(3)": null},
      "gaps": ["citext", "vector(3)"]}
 
-``resolved`` maps each probe (verbatim) to its rendered value — the Arrow
-Arrow type (read) or the native DDL (write) — or ``null`` when no rule in any
-map matches; ``gaps`` lists the null probes. Exit status is ``0`` on a clean
-run regardless of gaps (a gap is a result, not an error), ``2`` on a CLI /
-input error.
+``resolved`` maps each probe (verbatim) to its rendered value — the Arrow type
+(read) or the native DDL (write) — or ``null`` when no rule in any map matches;
+``gaps`` lists the null probes. Exit status is ``0`` on a clean run regardless
+of gaps (a gap is a result, not an error), ``2`` on a CLI / input error.
 """
 from __future__ import annotations
 
@@ -45,6 +44,7 @@ import sys
 from pathlib import Path
 
 from _bootstrap import ensure_deps_or_reexec
+from validate import TYPE_MAP_FILENAMES
 
 
 def _fail(message: str) -> "int":
@@ -53,28 +53,50 @@ def _fail(message: str) -> "int":
 
 
 def _load_rules(path: Path, direction: str) -> list:
-    """Read one {$schema, direction, rules} type-map document and model-validate
-    it against the pinned contract, returning its `rules` array. Validation
-    here is load-bearing, not a courtesy: the resolver
-    mirrors runtime semantics, which *skip* a malformed rule — so a broken
-    rule would surface as a false "gap", indistinguishable from a genuinely
-    uncovered probe, and a false gap makes the authoring agent shadow the very
-    rule the map intended. Failing loud keeps a reported gap unambiguous."""
+    """Read one {$schema, direction, rules} type-map document, grade it as the
+    direction named, and return its `rules` array. Grading here is
+    load-bearing, not a courtesy. Read of the engine as it stands: a malformed
+    rule is *skipped* at resolution rather than failing the run, and the resolver
+    mirrors that — so a broken rule would surface here as a false "gap",
+    indistinguishable from a genuinely uncovered probe, and a false gap makes the
+    authoring agent shadow the very rule the map intended.
+
+    So every finding reaches the operator, and the severity decides what happens
+    after: a pass-costing one also stops the probe, because a gap reported over a
+    map that did not grade clean means nothing. Everything else is a map that
+    resolves while something about it is still wrong — an advisory that is most
+    often the explanation for a gap reported below it, and dropping it leaves the
+    gap looking uncaused."""
     try:
         doc = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
-    if not (isinstance(doc, dict) and "rules" in doc):
-        raise ValueError(f"{path} is not a {{$schema, direction, rules}} type-map document")
-    from pydantic import ValidationError
-    from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
-    model = TypeMapReadDoc if direction == "read" else TypeMapWriteDoc
-    try:
-        model.model_validate(doc)
-    except ValidationError as exc:
+    from analitiq.validator import finding_costs_a_pass, type_map_findings
+    # The connection scope is the one either kind of map can meet: a connection
+    # map covers only the gaps it fills, and a connector map rendering the whole
+    # vocabulary clears the weaker bar too.
+    findings = type_map_findings(doc, direction, scope="connection")
+    fatal, advisory = [], []
+    for f in findings:
+        (fatal if finding_costs_a_pass(f) else advisory).append(f)
+    # Reported before anything raises: a fatal finding elsewhere in the same
+    # document is no reason to make the author fix that first and rediscover this
+    # one on the next run. The fatal ones travel in the raise below instead, which
+    # names the file they were found in.
+    for f in advisory:
+        print(f"type_map_gaps: {path}: {f.get('path') or '/'}: {f['message']}",
+              file=sys.stderr)
+    if fatal:
+        detail = "; ".join(f"{f.get('path') or '/'}: {f['message']}" for f in fatal)
+        # A check that crashed stops the probe for the same reason a defect does
+        # — nothing graded the map — but it is not something the author wrote, so
+        # telling them to fix it would send them after a defect the map does not
+        # have.
+        if any(f.get("message_id") == "check-crashed" for f in fatal):
+            raise ValueError(f"{path} could not be graded: {detail}")
         raise ValueError(
             f"{path} is not a valid {direction} type map — fix it (or, for a "
-            f"connector map, raise the defect upstream) before probing: {exc}") from exc
+            f"connector map, raise the defect upstream) before probing: {detail}")
     return doc["rules"]
 
 
@@ -125,9 +147,8 @@ def main(argv: list[str] | None = None) -> int:
     # map whose envelope declares the other direction fails there on the
     # `direction` Literal. Catch a filename/--direction mismatch first, so the
     # message names the actual mistake (a swapped --map/--direction) rather
-    # than a generic schema failure. The two conventional filenames each name a
-    # direction; hold a map named either of them to it.
-    named_for = {"type-map-read.json": "read", "type-map-write.json": "write"}
+    # than a generic schema failure. Hold a map named for a direction to it.
+    named_for = {name: d for d, name in TYPE_MAP_FILENAMES.items()}
     for m in args.maps:
         implied = named_for.get(Path(m).name)
         if implied is not None and implied != args.direction:
@@ -145,8 +166,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = resolve(args.direction, probes, [Path(m) for m in args.maps])
     except (OSError, ValueError) as exc:
-        # _load_rules wraps every per-file failure (read, parse, model) into a
-        # file-naming ValueError; OSError is the escape hatch for anything else.
+        # _load_rules names the file in a ValueError for every way one can fail
+        # — unreadable, unparseable, or graded fatal — which is the only path
+        # that opens a file here; OSError guards an open that fails outside it.
         return _fail(str(exc))
 
     print(json.dumps(result, indent=2))
