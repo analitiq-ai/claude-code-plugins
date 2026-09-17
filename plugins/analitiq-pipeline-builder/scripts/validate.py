@@ -267,6 +267,13 @@ def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
         return [_finding(
             "connection-type-map", "error", "",
             f"{expected} is a JSON object but has no `rules` key.")]
+    # The published validator grades a map by the direction it declares, so a
+    # valid map of the other direction would pass it under this filename.
+    declared = doc.get("direction")
+    if declared in ("read", "write") and declared != direction:
+        return [_finding(
+            "connection-type-map", "error", "/direction",
+            f"{expected} declares direction {declared!r}; it must declare {direction!r}.")]
     from analitiq.validator import validate_document
     findings = validate_document(doc, doc_path=_authored_path(document_path))
     if direction == "write":
