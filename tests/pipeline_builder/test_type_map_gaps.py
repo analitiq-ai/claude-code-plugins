@@ -321,6 +321,24 @@ def test_cli_rejects_a_map_declaring_no_usable_direction(tmp_path, capsys):
     assert "declares direction 'sideways'" in err.err
 
 
+def test_cli_bounds_the_direction_it_echoes(tmp_path, capsys):
+    # The rejected value is whatever the document held, so echoing it whole puts
+    # an attacker-sized string on the operator's terminal. Clipped to the one
+    # width every borrowed diagnostic in the validator is clipped to.
+    from analitiq.validator._core import _bounded
+
+    oversized = "s" * 5000
+    m = tmp_path / "type-map-read.json"
+    m.write_text(json.dumps({**_tm_doc(CONNECTOR_READ, "read"), "direction": oversized}))
+    probes = tmp_path / "probes.json"
+    probes.write_text('["citext"]')
+    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert oversized not in err, len(err)
+    assert _bounded(repr(oversized)) in err, err
+
+
 def test_cli_rejects_maps_holding_different_directions(tmp_path, capsys):
     r = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
     (tmp_path / "w").mkdir()
@@ -336,6 +354,26 @@ def test_cli_rejects_maps_holding_different_directions(tmp_path, capsys):
     # declare it: a later map naming the same direction changes nothing about
     # which document the author is pointed at.
     assert str(r) in err.err and str(w) in err.err, err.err
+
+
+def test_cli_names_the_first_map_that_declared_a_direction(tmp_path, capsys):
+    # Precedence order is the argument order, so the map an author is pointed at
+    # for a direction is the one that claimed it first. A later map declaring the
+    # same direction is the fallback, not the document whose declaration created
+    # the conflict, and naming it would send the author to the wrong file.
+    primary = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
+    (tmp_path / "fallback").mkdir()
+    fallback = _map(tmp_path / "fallback", "type-map-read.json", CONNECTOR_READ)
+    (tmp_path / "w").mkdir()
+    w = _map(tmp_path / "w", "type-map-write.json", CONNECTOR_WRITE, "write")
+    probes = tmp_path / "probes.json"
+    probes.write_text('["citext"]')
+    rc = G.main(["--map", str(primary), "--map", str(fallback), "--map", str(w),
+                 "--probes-file", str(probes)])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert str(primary) in err, err
+    assert str(fallback) not in err, err
 
 
 def test_cli_parse_error_names_the_file(tmp_path, capsys):

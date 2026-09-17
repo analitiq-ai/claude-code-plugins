@@ -897,10 +897,10 @@ def test_type_map_entity_crash_preserves_legacy_finding_and_sibling_direction(tm
 
     original = V._type_map_findings
 
-    def boom(doc_, document_path):
-        if document_path.name == "type-map-read.json":
+    def boom(doc_):
+        if doc_.get("direction") == "read":
             raise TypeError("simulated crash")
-        return original(doc_, document_path)
+        return original(doc_)
 
     monkeypatch.setattr(V, "_type_map_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
@@ -961,7 +961,7 @@ def test_bundle_findings_crash_unrelated_to_exclusion_does_not_mislabel_it(tmp_p
     (tmp_path / "pipelines/p/streams/orphan.json").write_text("{not valid json")  # ordinary error
     _write(tmp_path, "connections/postgresql/definition/type-map-read.json", TYPE_MAP_READ)
 
-    def boom(entity, doc_, path):
+    def boom(doc_):
         raise TypeError("simulated crash")
 
     monkeypatch.setattr(V, "_type_map_findings", boom)

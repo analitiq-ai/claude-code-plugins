@@ -63,9 +63,13 @@ def _declared_direction(path: Path) -> str:
         raise ValueError(f"{path}: {exc}") from exc
     declared = doc.get("direction") if isinstance(doc, dict) else None
     if declared not in ("read", "write"):
+        # The rejected value is whatever the document held, so it is clipped to
+        # the width the validator clips every borrowed diagnostic to.
+        from analitiq.validator._core import _bounded
+
         raise ValueError(
-            f"{path} declares direction {declared!r}; a type-map document declares "
-            "'read' or 'write', and nothing else says which vocabulary to probe")
+            f"{path} declares direction {_bounded(repr(declared))}; a type-map document "
+            "declares 'read' or 'write', and nothing else says which vocabulary to probe")
     return declared
 
 

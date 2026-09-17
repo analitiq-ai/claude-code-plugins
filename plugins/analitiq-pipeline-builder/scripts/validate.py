@@ -209,9 +209,9 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
     return validate_document(doc, doc_path=_authored_path(document_path))
 
 
-def _type_map_findings(doc, document_path: Path) -> list[dict]:  # skipcq: PYL-W0613 — uniform per-entity signature
+def _type_map_findings(doc) -> list[dict]:
     """Validate a connection-scoped type-map document as the direction it
-    declares. The path is not read: a name selects which files are type-map
+    declares. It takes no path: a name selects which files are type-map
     documents and nothing further, so the declaration is the only direction a
     document has.
 
@@ -269,7 +269,7 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
     # the whole directory says it is the map for its direction: a second
     # declaration arriving later takes the direction from both, and a defect
     # already reported against the earlier one could not be taken back.
-    collected: list[tuple[str, Path, object, str | None]] = []
+    collected: list[tuple[str, object, str | None]] = []
     for path in type_map_sibling_paths(definition):
         fname = path.name
         with _contained(findings, f"{site}/{fname}"):
@@ -291,18 +291,18 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                 continue
             declared, held_by = directions.claim(fname, doc)
             if held_by is not None:
-                collected[:] = [e for e in collected if e[3] != declared]
+                collected[:] = [e for e in collected if e[2] != declared]
                 findings.append(_finding(
                     "connection-type-map", "error", f"{site}/{fname}",
                     f"{held_by} and {fname} both declare direction {declared!r}; a "
                     "connection carries one type-map document per direction, and "
                     "neither of these is it."))
                 continue
-            collected.append((fname, path, doc, declared))
-    for fname, path, doc, _ in collected:
+            collected.append((fname, doc, declared))
+    for fname, doc, _ in collected:
         with _contained(findings, f"{site}/{fname}"):
             findings.extend({**f, "path": f"{site}/{fname}{f.get('path', '')}"}
-                            for f in _type_map_findings(doc, path))
+                            for f in _type_map_findings(doc))
 
 
 def _at_site(site: str, findings: list[dict]) -> list[dict]:
@@ -686,7 +686,7 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     if entity == "database-endpoint":
         findings = _endpoint_findings(doc, document_path)
     elif entity == "type-map":
-        findings = _type_map_findings(doc, document_path)
+        findings = _type_map_findings(doc)
     else:
         findings = _model_findings(entity, doc)
         if entity == "pipeline" and bundle_root is not None:

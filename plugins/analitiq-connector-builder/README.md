@@ -85,9 +85,9 @@ Schemas are generated from — so there is no schema fetch. It runs:
    Discriminating keys in the document body select the model — a type map by its
    own `direction`, not by its filename and not by its `$schema`. A connector
    package's maps are collected by pattern and counted toward the directions
-   they declare, so a name says which siblings are maps and the slot names for
-   each direction are a convention an author follows (`RULE-PKG-030`)
-   (`skills/connector-builder/references/metadata-and-versioning.md`). Each kind
+   they declare (`RULE-PKG-030`), so a name says which siblings are maps and
+   nothing more; the slot name each direction is authored under is a convention,
+   stated per scope in `skills/shared/type-maps.md`. Each kind
    is graded against the model behind this schema:
    - Connector → `https://schemas.analitiq.ai/connector/latest.json`
    - Read map (`direction: "read"`) → `https://schemas.analitiq.ai/type-map-read/latest.json`

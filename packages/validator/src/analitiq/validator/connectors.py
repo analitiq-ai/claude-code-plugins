@@ -1390,7 +1390,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             # the actionable findings with a generic "validator bug" via _run_guarded).
             continue
         # The rendering is the one check here that needs the sibling map; a map
-        # that did not load skips it, and the connector-level warning says so.
+        # that did not load skips it, and the notApplicable finding raised beside
+        # the connector says the coverage question went unanswered.
         if isinstance(read_rules, list):
             for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
                 rendered = _render_arrow_type(native, read_rules)

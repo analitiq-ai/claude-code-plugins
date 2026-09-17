@@ -25,6 +25,7 @@ from analitiq.validator.connectors import (
     _DATABASE_KINDS,
     _READ_MAP_FILENAME,
     _STORAGE_KINDS,
+    _TYPE_MAP_GLOB,
     _WRITE_MAP_FILENAME,
 )
 
@@ -1267,17 +1268,24 @@ def test_coverage_reads_a_type_map_under_any_matching_filename(tmp_path, kind, v
     assert [e["path"] for e in errors] == ["/rules/0/exact/arrow_type"], errors
 
 
-def test_a_coverage_finding_names_the_map_it_was_rendered_from(tmp_path, connector_base, validator):
+@pytest.mark.parametrize("native_type, arrow_type, message_id", [
+    ("UNCOVERED", "Utf8", "native-type-unresolved"),
+    ("BIGINT", "Utf8", "native-type-arrow-mismatch"),
+])
+def test_a_coverage_finding_names_the_map_it_was_rendered_from(
+        tmp_path, connector_base, native_type, arrow_type, message_id, validator):
     # The message sends an author to a file, so it names the one the rules came
     # from. Naming the conventional filename instead would send them to a
-    # document the package does not carry.
+    # document the package does not carry. Every verdict the endpoint walk
+    # renders off the read map sends the author to it, not only the one where no
+    # rule matched.
     _write_tree(tmp_path, connector_base, _read_rules(),
-                {"widgets.json": _endpoint("UNCOVERED", "Utf8")})
+                {"widgets.json": _endpoint(native_type, arrow_type)})
     (tmp_path / "type-map-read.json").rename(tmp_path / "type-map-natives.json")
     errors = _errors(validator.check_coverage(connector_base, tmp_path / "connector.json"))
-    unresolved = [e for e in errors if e["message_id"] == "native-type-unresolved"]
-    assert unresolved, errors
-    assert "type-map-natives.json" in unresolved[0]["message"], unresolved[0]
+    named = [e for e in errors if e["message_id"] == message_id]
+    assert named, errors
+    assert "type-map-natives.json" in named[0]["message"], named[0]
 
 
 def test_coverage_rejects_two_maps_declaring_one_direction(tmp_path, validator):
@@ -2260,7 +2268,7 @@ def test_type_map_sibling_paths_orders_what_the_directory_hands_back(validator):
     # a real one cannot be made to hand back an unsorted listing on demand.
     class _Scrambled:
         def glob(self, pattern):
-            assert pattern == "type-map-*.json"
+            assert pattern == _TYPE_MAP_GLOB
             return iter(Path(f"/d/type-map-{c}.json") for c in "cabd")
 
     assert [p.name for p in validator.type_map_sibling_paths(_Scrambled())] == [
