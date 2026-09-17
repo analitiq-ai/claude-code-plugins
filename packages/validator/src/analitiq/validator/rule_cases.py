@@ -2,9 +2,8 @@
 
 A rule enforced by a check in this package can carry cases under
 ``cases/<RULE-ID>/valid/<case-name>/`` and ``cases/<RULE-ID>/invalid/<case-name>/``.
-A case directory is a document set written to disk (`document_set.DocumentSet`):
-each file's path relative to the case root is its key. The entry file at the
-case root decides how the case is validated, and a case root holds exactly one:
+The entry file at the case root decides how the case is validated, and a case
+root holds exactly one:
 
 - ``connector.json`` — a connector package, validated at its path so its
   sibling type maps and ``endpoints/*.json`` are read beside it;

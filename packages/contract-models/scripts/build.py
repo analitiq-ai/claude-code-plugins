@@ -83,7 +83,7 @@ def read_version() -> str:
 
 def _source_files() -> list[Path]:
     """Every Python module of the package — what the AST guards parse."""
-    return [p for p in tracked_files(PKG_SRC) if p.suffix == ".py"]
+    return tracked_files(PKG_SRC, "*.py", expected="Python modules")
 
 
 def dependency_guard() -> None:

@@ -71,7 +71,7 @@ def _top_level_imports(source: str) -> set[str]:
 def _source_files(src_dir: Path = SRC_DIR) -> list[Path]:
     """Every tracked `*.py` module of the source package — what the import
     guards parse."""
-    return [path for path in tracked_files(src_dir) if path.suffix == ".py"]
+    return tracked_files(src_dir, "*.py", expected="Python modules")
 
 
 def check_public_safe(src_dir: Path = SRC_DIR) -> list[str]:

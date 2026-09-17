@@ -37,8 +37,10 @@ def git_executable() -> str:
     return exe
 
 
-def tracked_files(root: Path) -> list[Path]:
-    """Every git-tracked file under `root` — exactly what `stage_tree()` copies.
+def tracked_files(
+    root: Path, pathspec: str = ".", *, expected: str = "files"
+) -> list[Path]:
+    """Git-tracked files under `root` matching `pathspec`, sorted.
 
     Tracking, not presence on disk, decides what ships. A tree filtered only by
     `__pycache__` publishes whatever happens to be sitting in it when the build
@@ -47,20 +49,33 @@ def tracked_files(root: Path) -> list[Path]:
     removed. It is also where the decision belongs: `git add` puts the file in
     a diff a reviewer reads, which a line in `pyproject.toml` does not.
 
-    This is what lets a wheel ship a whole tree without enumerating it.
+    Narrowing is git's job here rather than the caller's, so that an empty
+    answer stops the build for the question that was actually asked. A caller
+    that took the whole tree and filtered afterwards would clear this guard on
+    a tree holding only files it discards — and the callers that narrow are the
+    import guards, which then parse nothing and report the source clean.
+    `expected` names the subset in that message, because "no tracked files" and
+    "no tracked Python modules" send a reader to different causes.
     """
-    listing = subprocess.run(
-        [git_executable(), "-C", str(root), "ls-files", "-z", "--", "."],
+    result = subprocess.run(
+        [git_executable(), "-C", str(root), "ls-files", "-z", "--", pathspec],
         capture_output=True,
         text=True,
-        check=True,
-    ).stdout
-    names = [name for name in listing.split("\0") if name]
+        check=False,
+    )
+    if result.returncode != 0:
+        # git's own words: the reasons live in its stderr ("not a git
+        # repository", a bad pathspec), and the exit status alone names none
+        # of them.
+        detail = result.stderr.strip() or f"exit status {result.returncode}"
+        raise SystemExit(f"build: `git ls-files` failed under {root}: {detail}")
+    names = [name for name in result.stdout.split("\0") if name]
     if not names:
         raise SystemExit(
-            f"build: git reports no tracked files under {root} — a package is "
-            "never empty, so this is a path that stopped matching or a tree "
-            "that is not a checkout, not a package with nothing in it"
+            f"build: git reports no tracked {expected} under {root} (pathspec "
+            f"{pathspec!r}) — a package is never empty, so this is a path that "
+            "stopped matching or a tree that is not a checkout, not a package "
+            "with nothing in it"
         )
     return sorted(root / name for name in names)
 

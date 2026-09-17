@@ -44,6 +44,19 @@ def data_files(staged: pathlib.Path) -> list[pathlib.Path]:
     )
 
 
+def _member_names(archive: pathlib.Path) -> list[str]:
+    """Member names of one built archive, opened by its extension.
+
+    A wheel is a zip and an sdist a tarball; `archived_names` asks the same
+    question of both, and this is the only place the two formats differ.
+    """
+    if archive.suffix == ".whl":
+        with zipfile.ZipFile(archive) as zf:
+            return zf.namelist()
+    with tarfile.open(archive) as tf:
+        return tf.getnames()
+
+
 def archived_names(dist: pathlib.Path) -> list[str]:
     """Every member name of every wheel and sdist in `dist`.
 
@@ -54,11 +67,7 @@ def archived_names(dist: pathlib.Path) -> list[str]:
     archives = sorted(dist.glob("*.whl")) + sorted(dist.glob("*.tar.gz"))
     if not archives:
         raise SystemExit(f"smoke: no wheel or sdist in {dist} — nothing was checked")
-    names = [n for whl in dist.glob("*.whl") for n in zipfile.ZipFile(whl).namelist()]
-    for sdist in dist.glob("*.tar.gz"):
-        with tarfile.open(sdist) as archive:
-            names += archive.getnames()
-    return names
+    return [name for archive in archives for name in _member_names(archive)]
 
 
 def main() -> int:
