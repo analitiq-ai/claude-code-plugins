@@ -19,6 +19,7 @@ from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ValidationError
 
+from .introspect import contract_classes
 from .rules import rule_by_id, violated_rule_ids
 
 FIXTURES_DIR = Path(__file__).with_name("fixtures")
@@ -95,13 +96,7 @@ def _fixture_model(rule_id: str) -> type[BaseModel]:
 
 
 def _model_named(name: str) -> type[BaseModel]:
-    """The one contract class called ``name``.
-
-    ``introspect`` is imported here, not at module level: it imports every
-    module under ``analitiq.contracts``, this one included.
-    """
-    from .introspect import contract_classes
-
+    """The one contract class called ``name``."""
     matches = [cls for cls in contract_classes() if cls.__name__ == name]
     if len(matches) != 1:
         raise ValueError(

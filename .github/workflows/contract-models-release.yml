@@ -102,14 +102,16 @@ jobs:
         # The data-file check is DERIVED from the staged tree rather than
         # listing filenames, so a file committed later is covered without
         # anyone remembering this step. It has to be a comparison against the
-        # installed tree because the two files here are reached differently:
-        # the vendored grammar loads at import, so a wheel without it cannot
-        # import at all, while the rule registry loads on first use and only
-        # through `violation()` — a wheel without THAT imports, and validates a
-        # VALID document, exactly like a correct one. It raises FileNotFoundError
-        # in place of the finding, for the first document that breaks an
-        # in-process rule. The explicit loads below then prove the two files are
-        # readable, not merely present.
+        # installed tree because the data files are reached differently: the
+        # vendored grammar loads at import, so a wheel without it cannot import
+        # at all, while the rule registry loads on first use and only through
+        # `violation()` — a wheel without THAT imports, and validates a VALID
+        # document, exactly like a correct one. It raises FileNotFoundError in
+        # place of the finding, for the first document that breaks an
+        # in-process rule. The rule fixture corpus is read only when a consumer
+        # asks for it. The explicit loads below then prove the grammar and the
+        # registry are readable, not merely present, and grade every shipped
+        # fixture against the installed models.
         run: |
           python -m venv "${{ runner.temp }}/cm-smoke"
           "${{ runner.temp }}/cm-smoke/bin/pip" install --quiet "${{ runner.temp }}"/cm-dist/*.whl

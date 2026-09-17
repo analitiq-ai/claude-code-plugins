@@ -1,11 +1,9 @@
 """Rule registry — engine, registry integrity, and shared-fixture gate.
 
-This is the drift-prevention linchpin that replaces the removed CUE layer: every
-relational rule ships a corpus of valid/invalid instance fixtures inside the
-package (`analitiq.contracts.shared.rule_fixtures`), and this suite asserts the
-registry-driven Pydantic enforcement agrees with them through the same
-`fixture_mismatch` a consumer of the wheel calls. A non-Python
-re-implementation reconciles against the same JSON fixtures.
+Every rule whose record names a `fixture_model` ships a corpus of valid/invalid
+instance fixtures inside the package (`analitiq.contracts.shared.rule_fixtures`),
+and this suite asserts the registry-driven Pydantic enforcement agrees with them
+through the same `fixture_mismatch` a consumer of the wheel calls.
 """
 from __future__ import annotations
 
@@ -56,10 +54,8 @@ def _model_index() -> dict[str, type[BaseModel]]:
 
 
 MODEL_INDEX = _model_index()
-RULES = {r.id: r for r in all_rules()}
 #: The rules the shared fixture corpus covers — the ones whose record names the
-#: concrete model to validate a fixture against. A non-Python re-implementation
-#: reconciles against the same JSON.
+#: concrete model to validate a fixture against.
 FIXTURED_RULES = [r for r in all_rules() if r.fixture_model]
 
 
@@ -728,6 +724,13 @@ def test_no_orphan_fixture_directories(monkeypatch, tmp_path):
     _write_fixture(tmp_path, unclaimed, "valid", "a.json")
     monkeypatch.setattr(corpus, "FIXTURES_DIR", tmp_path)
     with pytest.raises(ValueError, match=unclaimed):
+        corpus.rule_fixtures()
+
+
+def test_a_fixture_directory_for_an_unknown_rule_is_refused(monkeypatch, tmp_path):
+    _write_fixture(tmp_path, "RULE-NONE-999", "valid", "a.json")
+    monkeypatch.setattr(corpus, "FIXTURES_DIR", tmp_path)
+    with pytest.raises(ValueError, match="RULE-NONE-999"):
         corpus.rule_fixtures()
 
 
