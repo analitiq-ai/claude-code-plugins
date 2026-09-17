@@ -148,3 +148,14 @@ def test_a_case_needs_exactly_one_entry_file(monkeypatch, tmp_path, entries):
     with pytest.raises(ValueError, match="entry file"):
         _load_from(monkeypatch, tmp_path)
 
+
+
+def test_a_bundle_case_holding_another_file_is_refused(monkeypatch, tmp_path):
+    """A bundle is validated from `bundle.json` alone, so a document beside it
+    would grade nothing."""
+    _write_case(tmp_path, "RULE-PIPE-011", "valid", "a", "bundle.json")
+    stray = tmp_path / "RULE-PIPE-011" / "valid" / "a" / "endpoints" / "x.json"
+    stray.parent.mkdir()
+    stray.write_text("{}")
+    with pytest.raises(ValueError, match="endpoints/x.json"):
+        _load_from(monkeypatch, tmp_path)

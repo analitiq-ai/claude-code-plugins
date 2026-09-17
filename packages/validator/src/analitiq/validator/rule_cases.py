@@ -8,7 +8,8 @@ case root decides how the case is validated, and a case root holds exactly one:
 
 - ``connector.json`` — a connector package, validated at its path so its
   sibling type maps and ``endpoints/*.json`` are read beside it;
-- ``bundle.json`` — a pipeline bundle, validated as the CLI validates one.
+- ``bundle.json`` — a pipeline bundle, validated as the CLI validates one,
+  and the only file its case root holds: a bundle carries its documents inline.
 
 :func:`rule_cases` loads the corpus and :func:`case_mismatch` grades one case
 against the installed validator, so a consumer checks the validator it pins
@@ -47,8 +48,9 @@ def rule_cases() -> tuple[RuleCase, ...]:
 
     Raises ``ValueError`` for a corpus that cannot be graded as laid out: a
     directory for an id no record defines or for a rule no check in
-    ``analitiq.validator`` enforces, a group other than a verdict, or a case
-    root without exactly one entry file.
+    ``analitiq.validator`` enforces, a group other than a verdict, a case
+    root without exactly one entry file, or a bundle case root holding any
+    other file.
     """
     cases: list[RuleCase] = []
     for rule_dir in sorted(CASES_DIR.iterdir()):
@@ -57,7 +59,8 @@ def rule_cases() -> tuple[RuleCase, ...]:
             if group_dir.name not in get_args(Verdict):
                 raise ValueError(f"{group_dir}: a case group is one of {get_args(Verdict)}")
             for root in sorted(group_dir.iterdir()):
-                _entry_file(root)
+                if _entry_file(root).name == _BUNDLE_ENTRY:
+                    _require_bundle_alone(root)
                 cases.append(RuleCase(
                     rule_id=rule_dir.name, verdict=group_dir.name, name=root.name, root=root))
     return tuple(cases)
@@ -107,6 +110,15 @@ def _require_validator_check(rule_id: str) -> None:
         raise ValueError(
             f"cases for {rule_id!r}, whose validator {validator!r} is not a check "
             "in analitiq.validator")
+
+
+def _require_bundle_alone(root: Path) -> None:
+    others = sorted(
+        str(path.relative_to(root)) for path in root.rglob("*")
+        if path.is_file() and path != root / _BUNDLE_ENTRY
+    )
+    if others:
+        raise ValueError(f"{root}: a bundle case holds only {_BUNDLE_ENTRY}, found {others}")
 
 
 def _entry_file(root: Path) -> Path:
