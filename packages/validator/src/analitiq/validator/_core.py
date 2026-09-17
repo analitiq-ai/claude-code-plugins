@@ -195,33 +195,25 @@ def finding_costs_a_pass(f: dict) -> bool:
 def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     """Validate `doc` against a contract model; map each error to a finding.
 
-    A rejection raised through `rules.violation` carries its `rule_id` and
-    `message_id` as attributes on a `RuleViolation`. Pydantic re-wraps that
-    raised `ValueError` — prefixing the rendered message with `"Value error, "`
-    and flattening its `err["type"]` to the generic `"value_error"` — but
-    preserves the original exception at `err["ctx"]["error"]`, which is where
-    this reads the two back rather than parsing the wrapped string pydantic
-    itself defeats. A field constraint pydantic enforces on its own — no
-    `violation` call behind it — carries no such context, and the finding's
-    `rule` is `None` for it (`rules/SCHEMA.md`'s "a field constraint on a
-    contract model rejected, and no record claims it"); its `message_id` is
-    pydantic's own error-type string (`err["type"]`, e.g. `"missing"`,
-    `"string_pattern_mismatch"`) — an existing, already-stable vocabulary
-    reused rather than a second one invented beside it.
+    A rejection raised through `rules.violation` carries its `rule_id`,
+    `message_id`, `message` and optional `path` as attributes on a
+    `RuleViolation`, and an enforcer that walks a whole document and finds
+    several unrelated complaints raises one `MultiRuleViolation` carrying
+    every one — a `@model_validator` returns the model or raises, nothing
+    between. `rules.rule_violations` unpacks either shape from the pydantic
+    error, and each violation becomes its own finding: its own attributes
+    rather than the joined `err["msg"]` pydantic rendered for the raise, and
+    its `path` extending `err["loc"]` when it set one.
 
-    An enforcer that walks a whole document and finds several unrelated
-    complaints cannot raise once per complaint — a `@model_validator` returns
-    the model or raises, nothing between — so it raises one
-    `MultiRuleViolation` carrying every `RuleViolation` it found, tagged or
-    not. That expands into one finding PER ENTRY here, each keeping its own
-    `rule_id`/`message_id`/`message` rather than the single joined `err["msg"]`
-    pydantic rendered for the whole raise, and each `path` extended past
-    `err["loc"]` by the entry's own `path` suffix when it set one. A raise
-    with only one complaint — a bare `RuleViolation`, a bare `ValueError` —
-    takes the branch below instead, its own separate path through this
-    function.
+    A field constraint pydantic enforces on its own — no `violation` call
+    behind it — carries no violation, and the finding's `rule` is `None` for
+    it (`rules/SCHEMA.md`'s "a field constraint on a contract model rejected,
+    and no record claims it"); its `message_id` is pydantic's own error-type
+    string (`err["type"]`, e.g. `"missing"`, `"string_pattern_mismatch"`) — an
+    existing, already-stable vocabulary reused rather than a second one
+    invented beside it.
     """
-    from analitiq.contracts.shared.rules import MultiRuleViolation, RuleViolation
+    from analitiq.contracts.shared.rules import rule_violations
     try:
         adapter.validate_python(doc)
         return []
@@ -229,28 +221,22 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
         findings: list[dict] = []
         for err in exc.errors():
             base_path = "/" + "/".join(str(p) for p in err["loc"])
-            original = err.get("ctx", {}).get("error")
-            if isinstance(original, MultiRuleViolation):
-                for v in original.violations:
-                    findings.append(finding(
-                        rule=v.rule_id,
-                        message_id=v.message_id,
-                        kind="fail",
-                        path=base_path + (v.path or ""),
-                        message=v.message,
-                    ))
-                continue
-            if isinstance(original, RuleViolation):
-                rule, message_id = original.rule_id, original.message_id
-            else:
-                rule, message_id = None, err["type"]
-            findings.append(finding(
-                rule=rule,
-                message_id=message_id,
-                kind="fail",
-                path=base_path,
-                message=err["msg"],
-            ))
+            violations = rule_violations(err)
+            if not violations:
+                findings.append(finding(
+                    message_id=err["type"],
+                    kind="fail",
+                    path=base_path,
+                    message=err["msg"],
+                ))
+            for v in violations:
+                findings.append(finding(
+                    rule=v.rule_id,
+                    message_id=v.message_id,
+                    kind="fail",
+                    path=base_path + (v.path or ""),
+                    message=v.message,
+                ))
         return findings
 
 
