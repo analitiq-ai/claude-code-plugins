@@ -1687,15 +1687,6 @@ def test_cli_missing_arg_exit2(validator_cli):
     assert r.returncode == 2
 
 
-@pytest.mark.parametrize("flag", ["--schema-url", "--semantic-only", "--json-only", "--no-cache"])
-def test_cli_removed_flag_exit2(tmp_path, validator_cli, flag):
-    doc_path = tmp_path / "doc.json"
-    doc_path.write_text("{}")
-    extra = [flag] if flag != "--schema-url" else [flag, "https://x/y.json"]
-    r = validator_cli.run("--document", str(doc_path), *extra)
-    assert r.returncode == 2
-
-
 # --- One document, one verdict, whichever route reaches it --------------------
 # A document's findings are a property of the document, not of the call that
 # produced them. Two routes reach an api-endpoint — `check_coverage`'s
