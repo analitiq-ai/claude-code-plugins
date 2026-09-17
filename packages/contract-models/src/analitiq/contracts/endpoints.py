@@ -78,6 +78,7 @@ from analitiq.contracts.shared.json_schema import (
     DeclaredPathError,
     SchemaResolutionError,
     _declares_a_type,
+    declared_type_leaves,
     materialize_node,
     pointer_position,
     resolve_declared_path,
@@ -4674,27 +4675,44 @@ def _validate_cursor_fields_in_record_shape(
         field = _check_cursor_field_in_node(
             _cursor_field_of(cm), items, where="items", root=root
         )
-        _check_cursor_field_holds_the_mapping(cm, field)
+        _check_cursor_field_holds_the_mapping(cm, field, root)
+
+
+def _json_types_of(node: Any) -> list[str]:
+    """The JSON types a single declaration names, `null` included."""
+    declared = node.get("type") if isinstance(node, dict) else None
+    if isinstance(declared, str):
+        return [declared]
+    if isinstance(declared, list):
+        return [t for t in declared if isinstance(t, str)]
+    return []
 
 
 def _check_cursor_field_holds_the_mapping(
-    cm: SingleCursorMapping | WindowCursorMapping, field: Any
+    cm: SingleCursorMapping | WindowCursorMapping, field: Any, root: Any
 ) -> None:
     """The cursor field's own declaration must say how a stored cursor reads
-    back, and the mapping must be one that reading can render."""
-    declared = field.get("type") if isinstance(field, dict) else None
-    if isinstance(declared, str):
-        types = [declared]
-    elif isinstance(declared, list):
-        types = [t for t in declared if isinstance(t, str) and t != "null"]
-    else:
-        types = []
+    back, and the mapping must be one that reading can render.
+
+    Read through `anyOf`/`oneOf` (`declared_type_leaves`), because that is how
+    a nullable field is written: `{"anyOf": [{"type": "string"}, {"type":
+    "null"}]}` states what `{"type": ["string", "null"]}` states, and the
+    reader is left one non-null type either way. Which spelling the author
+    picked must not decide the verdict.
+    """
+    leaves = declared_type_leaves(field, root) or []
+    types = sorted({
+        declared
+        for leaf in leaves
+        for declared in _json_types_of(leaf)
+        if declared != "null"
+    })
     if len(types) != 1:
         raise violation(
             "RULE-ENDP-074", "cursor-field-not-one-json-type",
-            f"replication cursor_field {cm.cursor_field!r} declares type "
-            f"{declared!r}; a cursor field declares one JSON type in its own "
-            "`type`, optionally beside null"
+            f"replication cursor_field {cm.cursor_field!r} declares "
+            f"{types or 'no JSON type'!r}; a cursor field declares one JSON "
+            "type, optionally beside null"
         )
     if types[0] not in CURSOR_JSON_TYPES:
         raise violation(
@@ -4704,9 +4722,19 @@ def _check_cursor_field_holds_the_mapping(
         )
     if types[0] != "integer":
         return
-    field_format = field.get("format")
-    if not isinstance(field_format, str):
-        field_format = None
+    formats = {
+        leaf.get("format") if isinstance(leaf.get("format"), str) else None
+        for leaf in leaves
+        if "integer" in _json_types_of(leaf)
+    }
+    if len(formats) > 1:
+        raise violation(
+            "RULE-ENDP-078", "integer-cursor-field-two-formats",
+            f"replication cursor_field {cm.cursor_field!r} declares "
+            f"{sorted(f or '(none)' for f in formats)!r} across its branches; "
+            "an integer cursor declares one epoch format, or none at all"
+        )
+    field_format = formats.pop() if formats else None
     if field_format in EPOCH_CURSOR_FORMATS:
         return
     if field_format in CURSOR_FORMATS:

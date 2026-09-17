@@ -4372,7 +4372,7 @@
   },
   {
    "id": "RULE-ENDP-074",
-   "statement": "Every replication cursor field MUST resolve to a record-shape node whose own `type` names exactly one JSON type besides `null`, and that type MUST be one that can hold a cursor: a string moment or an integer.\n",
+   "statement": "Every replication cursor field MUST resolve to a record-shape node whose declaration names exactly one JSON type besides `null` — in its own `type`, or across every branch of an `anyOf`/`oneOf` — and that type MUST be one that can hold a cursor: a string moment or an integer.\n",
    "tier": "coherence",
    "severity": "error",
    "artifact_kinds": [
@@ -4391,7 +4391,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": "ReadOperation",
-   "rationale": "The stored cursor is the last record's value for this field, and as the engine reads it today, the field's own `type` is what says how that value reads back on the next run: a string as an ISO moment, an integer as epoch ticks or a monotonic id. A field whose `type` names no real type or a union of them gives the reader nothing to choose, and the engine refuses it before the first request. A number, boolean or container field is worse: it is refused only when a stored cursor is read back, after the first run has read everything and committed a checkpoint the stream can never resume from. A field typed only through `anyOf` or a `native_type`/`arrow_type` pair satisfies the typedness rule for other paths and still gives the cursor reader nothing to read. The predicate also stands on the contract alone: a watermark whose type the document leaves open cannot be compared, whatever reads it.\n",
+   "rationale": "The stored cursor is the last record's value for this field, and as the engine reads it today, the field's own `type` is what says how that value reads back on the next run: a string as an ISO moment, an integer as epoch ticks or a monotonic id. A field whose `type` names no real type or a union of them gives the reader nothing to choose, and the engine refuses it before the first request. A number, boolean or container field is worse: it is refused only when a stored cursor is read back, after the first run has read everything and committed a checkpoint the stream can never resume from. Which spelling the author used is not part of the question: `{\"anyOf\": [{\"type\": \"string\"}, {\"type\": \"null\"}]}` states what `{\"type\": [\"string\", \"null\"]}` states, and both leave the reader one non-null type, so the union is read through and the two get one verdict. A field typed only by a `native_type`/`arrow_type` pair is the case that stays refused: it satisfies the typedness rule other paths ask about and still names no JSON type for the cursor reader to read back. The predicate also stands on the contract alone: a watermark whose type the document leaves open cannot be compared, whatever reads it.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4491,7 +4491,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": "ReadOperation",
-   "rationale": "An integer cursor is either a moment counted in epoch ticks or an id counted in records, and the cursor field's `format` is the only thing that says which. A calendar format on an integer claims a moment the value cannot spell. An id has no \"now\", so a window over it has no end, and a mapping `format` over it asks for an id rendered as a date. As the engine reads it today, each of these is refused when the first stored cursor is read back, which is after the whole first read has run and committed its checkpoint. Refusing it here moves that failure to authoring time; the predicate reads only the document, so a stale reading of the engine can make this rule stricter than needed but never lets through a pairing whose meaning the document leaves undecided.\n",
+   "rationale": "An integer cursor is either a moment counted in epoch ticks or an id counted in records, and the cursor field's `format` is the only thing that says which. A calendar format on an integer claims a moment the value cannot spell. An id has no \"now\", so a window over it has no end, and a mapping `format` over it asks for an id rendered as a date. As the engine reads it today, each of these is refused when the first stored cursor is read back, which is after the whole first read has run and committed its checkpoint. A field whose `anyOf`/`oneOf` branches name DIFFERENT formats for the integer declares neither one epoch format nor none: there is one stored value, and the document does not say which scale reads it back. Refusing it here moves that failure to authoring time; the predicate reads only the document, so a stale reading of the engine can make this rule stricter than needed but never lets through a pairing whose meaning the document leaves undecided.\n",
    "status": "active",
    "superseded_by": null
   },
