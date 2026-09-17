@@ -207,10 +207,10 @@ def test_example_connector_validates(example_dir: Path, tmp_path: Path) -> None:
 def test_example_type_maps_validate(example_dir: Path, tmp_path: Path) -> None:
     """Validate each type map as a standalone document, under its own filename.
 
-    This is the invocation `connector-schema-validator` documents (each map
-    under its RULE-PKG-030 filename, direction resolved from the document's own
-    `direction`/`$schema`), so it should be exercised directly rather than only
-    through the connector's sibling walk. It also localizes a failure to the
+    This is the invocation `connector-schema-validator` documents (each map under
+    its conventional filename, direction resolved from the document's own
+    `direction`), so it should be exercised directly rather than only through
+    the connector's sibling walk. It also localizes a failure to the
     map instead of surfacing it on the connector.
 
     It does NOT close the database read-map gap: rule-shape errors are already

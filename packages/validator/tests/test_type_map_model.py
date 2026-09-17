@@ -121,10 +121,10 @@ def test_direction_literal_must_match_the_adapter():
     """The invariant `direction` exists to express: a document graded against
     one direction's adapter whose own `direction` names the other is a model
     error, not a silent resolution. That is what lets a caller holding a
-    direction of its own — anything that located the map by a slot rather than
-    by reading it, a connector package's read/write filename or a connection
-    naming the direction it is grading — grade a map against that direction and
-    have the disagreement reported.
+    direction from somewhere other than the document — an external caller of
+    `type_map_findings`, which takes the direction to grade against as an
+    argument — grade a map against that direction and have the disagreement
+    reported.
     """
     read_doc = _wrap(READ, _ONE_READ_RULE)
     read_doc["direction"] = "write"

@@ -661,9 +661,9 @@ def test_bundle_rejects_two_connection_maps_declaring_one_direction(tmp_path):
 
 
 def test_bundle_grades_a_connection_map_under_any_collected_filename(tmp_path):
-    # Which files are maps is the name's whole say, and the name it has to have
-    # is only `type-map-*.json` — so a map under an unconventional one is graded
-    # like any other rather than sitting beside the connection unread.
+    # Selecting the candidates is the name's whole say, so a collected map under
+    # an unconventional name is graded like any other rather than sitting beside
+    # the connection unread.
     doc = _build_bundle(tmp_path)
     _write(tmp_path, "connections/postgresql/definition/type-map-natives.json",
            _tm([{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "read"))

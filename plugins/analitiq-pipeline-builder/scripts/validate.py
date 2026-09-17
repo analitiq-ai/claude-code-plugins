@@ -61,8 +61,8 @@ cannot make it:
   * ``connection-type-map`` — the published bundle validator receives assembled
     documents, never a connection's directory, so it cannot see the type-map
     files the engine loads beside ``connection.json``. The bundle pass therefore
-    collects every ``type-map-*.json`` beside it the way the published validator
-    collects a connector's, validates in full (via the published validator) every
+    collects every type-map sibling beside it through the published
+    ``type_map_sibling_paths``, validates in full (via the published validator) every
     document it read except the ones a second declaration of one direction took
     that direction from, and rejects the dead pre-split ``type-map.json``
     filename with a migration finding, mirroring the published connector-side

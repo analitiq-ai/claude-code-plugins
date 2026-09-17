@@ -274,8 +274,8 @@ paths. The connector root IS the Python package for database connectors:
 `ProviderFacts` + creator logic, so hand edits to a connector are not
 preserved.
 
-Never write a `type-map.json` — the read and write directions ship under
-the filenames `RULE-PKG-030` requires.
+Never write a `type-map.json` — it is the pre-split name, collected as no
+direction's map (`RULE-PKG-030`). Each direction ships as its own document.
 
 Write each endpoint to `endpoints/{endpoint_id}.json` (`RULE-PKG-031`) —
 never renamed, aliased, or nested. The engine resolves an endpoint by id
