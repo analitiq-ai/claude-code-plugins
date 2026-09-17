@@ -131,9 +131,11 @@ either kind.
 ### 4. Validate the domain (barrier)
 
 Invoke `connector-schema-validator` over the connector body and type
-map(s); it detects each document's kind from its own shape. Validate each
-map the connector's `kind` calls for, under the filename that kind requires
-(`RULE-PKG-030`), so the connector's sibling walk can find it.
+map(s); it detects each document's kind from its own shape, and grades a map
+as the direction the map itself declares. Author each map the connector's
+`kind` calls for under the filename that kind requires (`RULE-PKG-030`) — the
+name is read when the connector is validated and its siblings are in hand,
+not when a map is validated on its own.
 
 Validation covers the JSON documents above; the package files are
 governed by rules of their own (`RULE-PKG-007`, `RULE-PKG-009`,

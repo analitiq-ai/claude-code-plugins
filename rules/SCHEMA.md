@@ -178,7 +178,7 @@ it.
 |---|---|
 | `fail` | the document violates the rule; `severity` names the cost |
 | `notApplicable` | the check knew which rule it was evaluating but could not evaluate the document against it — a sibling file was unreachable, a path could not be resolved — and reports nothing about whether that rule holds. It still carries `rule`: a consumer that cannot tell which obligation went unchecked cannot route or count it. |
-| `informational` | something worth surfacing whose cost is not `error`/`warning` — either nothing here violates a rule at all, or the violated rule is `info`-tier, whose citation carries what a `severity` field would |
+| `informational` | something worth surfacing whose cost is not `error`/`warning` — either nothing here violates a rule at all (a default was silently applied, say), or the violated rule is `info`-tier, whose citation carries what a `severity` field would |
 
 A `notApplicable` or `informational` finding never carries a `severity` of
 its own, but a `notApplicable` finding is not costless: an unchecked
@@ -201,7 +201,7 @@ could not run it this time:
 | A structural precondition rejected the document before any rule-specific check could run, and no record claims it — a contract model's own field constraint, or a hand-written shape guard ahead of a check with no model behind it (a pipeline bundle malformed enough that no referential check could run over it, say) | `fail` | `error` |
 | No detector recognised the document | `fail` | `error` |
 | A check failed before it identified which rule applies | `notApplicable` | none |
-| Something worth surfacing about how a check proceeded, with no rule to bind it. No shipped check emits one; the kind is reserved for the type-map gap report `analitiq.validator.document_set.resolve_type_map_gaps` specifies, which names the probes no map rendered. | `informational` | none |
+| Something worth surfacing about how a check proceeded, with no rule to bind it | `informational` | none |
 
 The rows above are the framework reporting something no rule describes, not a
 new kind of rule — and not license to leave `rule` off anywhere else a check

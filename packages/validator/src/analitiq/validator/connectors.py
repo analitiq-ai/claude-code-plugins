@@ -1396,8 +1396,25 @@ def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq
     # the wrong one.
     declared = doc.get("direction")
     if declared not in ("read", "write"):
-        return _model_findings(doc, _TYPE_MAP_ADAPTER)
+        return _type_map_discriminator_findings(doc)
     return type_map_findings(doc, declared)
+
+
+# Pydantic locates a discriminator failure at the document root: no member was
+# entered, so there is no member field to locate it inside. The finding is about
+# `direction` all the same, and `path` is what a consumer routes on — an editor
+# placing a marker, an adapter re-rooting the finding onto a file site. Leaving
+# it at the root would point the same class of defect at two different places
+# depending on whether the direction was wrong or unusable.
+_DISCRIMINATOR_MESSAGE_IDS = ("union_tag_not_found", "union_tag_invalid")
+
+
+def _type_map_discriminator_findings(doc: Any) -> list[dict]:
+    findings = _model_findings(doc, _TYPE_MAP_ADAPTER)
+    for f in findings:
+        if f.get("message_id") in _DISCRIMINATOR_MESSAGE_IDS and f.get("path") == "/":
+            f["path"] = "/direction"
+    return findings
 
 
 def _validate_kindless_connector(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature

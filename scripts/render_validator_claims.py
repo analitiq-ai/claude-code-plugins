@@ -614,14 +614,15 @@ def _p_type_map_schema_required() -> list[dict]:
 
 
 def _p_type_map_direction_from_document() -> list[dict]:
-    # A self-consistent WRITE document under a filename naming no slot. Nothing
-    # but `direction` can have selected a model here, and the read model would
-    # reject this document's write `$schema`, so a clean verdict is the
-    # document's own declaration choosing and the path contributing nothing.
+    # A self-consistent WRITE document written under the READ slot's filename.
+    # Grading by name would measure it against the read model, which rejects
+    # this document's write `$schema`; both `direction` and `$schema` land on
+    # write. So a clean verdict is the name contributing nothing — which a name
+    # naming no slot at all could not have shown.
     rules = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
     doc = _wrap_type_map(rules, "write")
     with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "generic.json"
+        path = Path(tmp) / "type-map-read.json"
         path.write_text(json.dumps(doc))
         return _validate(doc, doc_path=path)
 
