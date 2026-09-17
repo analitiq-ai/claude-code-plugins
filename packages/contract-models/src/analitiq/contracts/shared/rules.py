@@ -115,12 +115,10 @@ class MultiRuleViolation(ValueError):
 
     def __init__(self, violations: list[RuleViolation]) -> None:
         if not violations:
-            # An empty list has nothing for `_model_findings` to expand into a
-            # finding — pydantic still recorded a `ValidationError` for this
-            # raise, so a caller reaching here with nothing to report would
-            # make that rejection surface as zero findings, and a document
-            # pydantic refused would read as passed. Refusing to construct is
-            # what keeps that impossible rather than merely unlikely.
+            # The raise would still reject the document, and with no violation
+            # to attribute, `_model_findings` reports a `fail` naming no rule
+            # and carrying no complaint — a rejection nobody can act on, and
+            # not one of the rule-less cases `rules/SCHEMA.md` names.
             raise ValueError("MultiRuleViolation requires at least one RuleViolation")
         super().__init__("; ".join(v.message for v in violations))
         self.violations = violations

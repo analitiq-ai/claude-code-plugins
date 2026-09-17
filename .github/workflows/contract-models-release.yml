@@ -18,7 +18,8 @@ name: Publish analitiq-contract-models
 #      `contract-models-v1.0.0rc2`. Checkout below resolves the tag, so the
 #      commit need not be on main yet.
 #   3. This workflow asserts tag == pyproject version, runs the build guards,
-#      builds sdist+wheel from the rendered package, and publishes to PyPI.
+#      builds sdist+wheel from the staged package, installs that wheel and
+#      grades every shipped rule fixture against it, and publishes to PyPI.
 #   4. Merge with a MERGE COMMIT — squashing would orphan the commit this tag
 #      points at.
 #
@@ -87,7 +88,7 @@ jobs:
       - name: Build guards (version match, minimal, no alq/private leak, boto3-free)
         run: python packages/contract-models/scripts/build.py --check --expect-version "${{ steps.ver.outputs.version }}"
 
-      - name: Stage the rendered public package
+      - name: Stage the public package
         run: python packages/contract-models/scripts/build.py --dist "${{ runner.temp }}/cm-src"
 
       - name: Build sdist + wheel

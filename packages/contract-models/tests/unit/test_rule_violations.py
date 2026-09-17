@@ -23,7 +23,7 @@ from analitiq.contracts.shared.rules import (
 class _RaisesOne(BaseModel):
     @model_validator(mode="after")
     def _one(self):
-        # The detail cites a second id, which the text match counted as raised.
+        # The detail cites RULE-HTTP-002, which no enforcer raised here.
         raise violation("RULE-HTTP-001", "probe", "detail citing RULE-HTTP-002")
 
 
