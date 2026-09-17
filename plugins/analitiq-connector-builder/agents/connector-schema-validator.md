@@ -21,12 +21,14 @@ artifact.
 
 ## Inputs
 
-- `document_path` — absolute path to the draft JSON document. Validating a type
-  map on its own runs no package-level check under any name — those run when the
-  **connector** is validated, and a direction the connector's `kind` requires but
-  ships no map for surfaces there as a missing sibling (`RULE-PKG-030`). Point
-  this at the draft where it sits rather than at a copy you re-serialized, so
-  what ships is what was graded. This agent validates JSON documents only; a
+- `document_path` — absolute path to the draft JSON document.
+  <!-- PROBE: type-map-direction-from-document, type-map-slot-grades-the-sibling -->
+  Validating a type map on its own runs no package-level check under any name —
+  those run when the **connector** is validated, off the maps sitting beside it
+  under the slot filenames its `kind` requires, and a direction it requires but
+  ships no map for surfaces there as a missing sibling (`RULE-PKG-030`). So
+  point this at the draft where it sits in the package rather than at a copy you
+  re-serialized: what is beside it decides as much as what is in it. This agent validates JSON documents only; a
   connector's Python package files (`connector.py`, `pyproject.toml`, …) are
   outside its scope — report them as not validated rather than passing judgment
   on them.

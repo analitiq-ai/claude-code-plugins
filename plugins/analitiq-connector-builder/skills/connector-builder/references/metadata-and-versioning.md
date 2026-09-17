@@ -69,7 +69,7 @@ Authored connector files declare `$schema` (`RULE-SHRD-003`) as
 
 The document families differ, so don't generalize from one to another:
 
-<!-- PROBE: connector-schema-optional, endpoint-schema-host-locked, type-map-schema-required, type-map-direction-from-document, type-map-direction-not-schema-url -->
+<!-- PROBE: connector-schema-optional, endpoint-schema-host-locked, type-map-schema-required, type-map-direction-from-document, type-map-direction-not-schema-url, type-map-slot-grades-the-sibling -->
 | Document | `$schema` | Enforced? |
 |---|---|---|
 | Connector | Author it; matched by pattern, tolerating any environment host (`schemas.analitiq.<tld>`). | Partly. The *pattern* is enforced when present, but the field is optional — a connector omitting `$schema` entirely validates clean. Always writing it is our convention, not a contract rule. |

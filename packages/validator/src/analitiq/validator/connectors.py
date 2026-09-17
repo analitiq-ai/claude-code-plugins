@@ -1400,20 +1400,39 @@ def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq
     return type_map_findings(doc, declared)
 
 
-# Pydantic locates a discriminator failure at the document root: no member was
-# entered, so there is no member field to locate it inside. The finding is about
-# `direction` all the same, and `path` is what a consumer routes on — an editor
-# placing a marker, an adapter re-rooting the finding onto a file site. Leaving
-# it at the root would point the same class of defect at two different places
-# depending on whether the direction was wrong or unusable.
 _DISCRIMINATOR_MESSAGE_IDS = ("union_tag_not_found", "union_tag_invalid")
+
+# Pydantic's sentence for an absent discriminator names the field and stops: it
+# does not say the field is missing, and it does not name the values that would
+# resolve it. For a tag that is present and wrong it already names both, so only
+# the absent case is replaced.
+_TAG_NOT_FOUND_MESSAGE = "no `direction`; a type map declares 'read' or 'write'"
+
+# Either way nothing past the discriminator was measured, and a report that does
+# not say so reads as one defect rather than one defect so far.
+_UNGRADED_TAIL = (". Nothing else in the document was graded — `direction` "
+                  "selects the model the rest is measured against.")
 
 
 def _type_map_discriminator_findings(doc: Any) -> list[dict]:
+    """The answer for a type map whose `direction` resolves to no model.
+
+    Pydantic locates a discriminator failure at the document root: no member was
+    entered, so there is no member field to locate it inside. The finding is
+    about `direction` all the same, and `path` is what a consumer routes on —
+    the pipeline plugin's validate script concatenates it onto a file site to
+    place the finding. Leaving it at the root would point the same class of
+    defect at two different places depending on whether the direction was wrong
+    or unusable."""
     findings = _model_findings(doc, _TYPE_MAP_ADAPTER)
     for f in findings:
-        if f.get("message_id") in _DISCRIMINATOR_MESSAGE_IDS and f.get("path") == "/":
+        if f.get("message_id") not in _DISCRIMINATOR_MESSAGE_IDS:
+            continue
+        if f.get("path") == "/":
             f["path"] = "/direction"
+        if f["message_id"] == "union_tag_not_found":
+            f["message"] = _TAG_NOT_FOUND_MESSAGE
+        f["message"] += _UNGRADED_TAIL
     return findings
 
 

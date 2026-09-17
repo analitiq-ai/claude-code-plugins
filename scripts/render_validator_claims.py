@@ -627,6 +627,24 @@ def _p_type_map_direction_from_document() -> list[dict]:
         return _validate(doc, doc_path=path)
 
 
+def _p_type_map_slot_grades_the_sibling() -> list[dict]:
+    # The same document the standalone route passes under this name: it declares
+    # write and its `$schema` agrees. Located as the read slot's sibling, the
+    # slot is what it is graded as, so the write `$schema` is rejected — the
+    # filename deciding, which is what the package route has that the standalone
+    # route does not.
+    rules = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
+    misfiled = _wrap_type_map(rules, "write")
+    doc = _example_body(DB_EXAMPLE)
+    with tempfile.TemporaryDirectory() as tmp:
+        definition = Path(tmp) / "definition"
+        definition.mkdir()
+        (definition / "connector.json").write_text(json.dumps(doc))
+        (definition / "type-map-read.json").write_text(json.dumps(misfiled))
+        shutil.copy(DB_EXAMPLE / "type-map-write.json", definition / "type-map-write.json")
+        return _validate(doc, doc_path=definition / "connector.json")
+
+
 def _p_type_map_direction_not_schema_url() -> list[dict]:
     # `direction` and `$schema` made to disagree, so only one of them can have
     # chosen the model. Rejecting the WRITE `$schema` against the read model is
@@ -1020,6 +1038,8 @@ PROBES: tuple[Probe, ...] = (
     Probe("type-map-schema-required", "error", _p_type_map_schema_required,
           message_re=r"Field required"),
     Probe("type-map-direction-from-document", "clean", _p_type_map_direction_from_document),
+    Probe("type-map-slot-grades-the-sibling", "error", _p_type_map_slot_grades_the_sibling,
+          message_re=r"type-map-read/latest\.json"),
     Probe("type-map-direction-not-schema-url", "error", _p_type_map_direction_not_schema_url,
           message_re=r"type-map-read"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,

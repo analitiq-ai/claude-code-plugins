@@ -227,7 +227,7 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
                     message_id=err["type"],
                     kind="fail",
                     path=base_path,
-                    message=err["msg"],
+                    message=_bounded(err["msg"]),
                 ))
             for v in violations:
                 findings.append(finding(

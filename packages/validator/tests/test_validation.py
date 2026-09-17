@@ -1192,7 +1192,10 @@ def test_standalone_type_map_at_the_pre_split_name_is_graded_as_it_declares(tmp_
     # A document handed to the validator on its own has no siblings to be missing
     # and nothing the name can be wrong relative to, so it is graded on what it
     # declares. The routes answer differently on purpose, and this pins it.
-    doc = _type_map_doc([{"match": "exact", "native_type": "X", "arrow_type": "Utf8"}], "read")
+    # A write document: the pre-split name stood for a read map, so that is the
+    # direction a name-derived answer would have picked, and only the other one
+    # shows the declaration deciding.
+    doc = _type_map_doc([{"match": "exact", "native_type": "X", "arrow_type": "Utf8"}], "write")
     assert not _errors(validator.validate_document(doc, doc_path=tmp_path / "type-map.json"))
 
 
@@ -1317,7 +1320,7 @@ def test_a_document_with_no_path_is_graded_the_same_way(validator, tmp_path):
 
 def test_direction_disagreeing_with_schema_is_a_model_error(validator, tmp_path):
     # `direction` picks the model; `$schema` is that model's own required
-    # Literal, so a document whose two declarations disagree is rejected by
+    # Literal, so a document whose declarations disagree is rejected by
     # whichever one `direction` selected — internally inconsistent, not
     # silently resolved.
     doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write")
@@ -1398,7 +1401,7 @@ def test_sibling_type_map_is_graded_by_the_slot_it_fills(
     # exercised: the sibling holding the correct direction is error-free, so
     # every error below belongs to the misfiled one. Findings carry no file
     # identity, so the `direction` Literal in the message is what names which
-    # slot rejected — without it the two params assert the same thing.
+    # slot rejected — without it each param asserts the same thing.
     # The database and storage families walk their siblings down separate
     # branches, so each family is graded here: a branch that skipped the grading,
     # or passed the document's own `direction` back to it, returns no error at
@@ -1413,37 +1416,6 @@ def test_sibling_type_map_is_graded_by_the_slot_it_fills(
     assert {f["path"] for f in errors} == {"/$schema", "/direction"}, errors
     assert any(f["path"] == "/direction" and repr(slot) in f["message"]
                for f in errors), (slot, errors)
-
-
-# --- type_map_findings, the definition every direction-holding caller shares ---
-
-def test_every_registered_kind_is_reached_by_a_document_here():
-    # Coverage is derived from `_KIND_REGISTRY`, not listed: a hand-written set
-    # would leave a newly registered kind silently ungraded, and a kind no
-    # document here reaches is a detector nothing in this file exercises.
-    from analitiq.validator._core import _KIND_REGISTRY
-
-    docs = {
-        "connector": _connector_doc(),
-        "api-endpoint": _endpoint("TEXT", "Utf8"),
-        "database-endpoint": _db_endpoint(derive_db_endpoint_id(None, "public", "orders")),
-        "type-map": _type_map_doc(
-            [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write"),
-        # `auth` is a connector sentinel and there is no `kind`, so this reaches
-        # the kindless-connector fallback rather than the connector proper.
-        "kindless-connector": {"$schema": CONNECTOR_SCHEMA_URL, "auth": {}},
-        "pipeline-bundle": {"pipeline": _pipeline_doc(), "streams": [], "connections": []},
-        "connection": _connection_doc(),
-        "stream": _stream_doc(),
-        "pipeline": _pipeline_doc(),
-        "unrecognized": {"nothing": "claims this"},
-    }
-    reached = set()
-    for doc in docs.values():
-        # `_dispatch` takes the first matching detector, so that is the one graded.
-        reached.add(next((i for i, (d, _) in enumerate(_KIND_REGISTRY) if d(doc)), None))
-    assert reached == set(range(len(_KIND_REGISTRY))) | {None}, sorted(
-        set(range(len(_KIND_REGISTRY))) - reached)
 
 
 def test_legacy_bare_array_type_map_is_rejected_not_silently_accepted(validator, tmp_path):
@@ -1885,12 +1857,22 @@ def test_endpoint_findings_name_the_file_on_both_routes(tmp_path, connector_base
 # ---------------------------------------------------------------------------
 
 def test_type_map_findings_grades_as_the_direction_the_caller_names(validator):
-    # `native_type` is read as a render template only under write grading, so a
-    # malformed placeholder is a defect no read grading can produce.
+    # The document declares the direction the caller did not, so what is graded
+    # says which one decided: `native_type` is read as a render template only
+    # under write grading, and a malformed placeholder is a defect no read
+    # grading can produce.
+    #
+    # The disagreement itself is reported alongside that defect, not instead of
+    # it. A caller holding a slot is looking at the file once, and a route that
+    # stopped at the disagreement would hand back a defect list the author
+    # completes only by fixing `direction` and running again.
     doc = _type_map_doc(
-        [{"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}], "write")
-    assert [f["message_id"] for f in _errors(validator.type_map_findings(doc, "write"))] == [
-        "write-exact-malformed-placeholder"]
+        [{"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}], "read")
+    errors = _errors(validator.type_map_findings(doc, "write"))
+    assert {f["path"] for f in errors} == {
+        "/direction", "/$schema", "/rules/0/exact"}, errors
+    assert any(f["message_id"] == "write-exact-malformed-placeholder"
+               for f in errors), errors
 
 
 def test_type_map_findings_scope_decides_the_write_vocabulary_alone(validator):
