@@ -239,6 +239,17 @@ def test_a_validate_spec_entity_is_optional():
     assert _problems({"validate": [{"glob": "a.json"}]}) == []
 
 
+def test_a_validate_spec_bundle_root_without_entity_is_refused():
+    # bundle_root is only read on the entity route; naming it alone is a
+    # silent no-op the shape check must catch instead of blessing.
+    problems = _problems({"validate": [{"glob": "a.json", "bundle_root": "b"}]})
+    assert any("bundle_root" in p and "entity" in p for p in problems)
+
+
+def test_a_validate_spec_bundle_root_with_entity_is_accepted():
+    assert _problems({"validate": [{"glob": "a.json", "entity": "pipeline", "bundle_root": "b"}]}) == []
+
+
 def test_a_seed_source_that_does_not_exist_is_refused():
     problems = _problems({"seed": [{"from": "no/such/file.json", "to": "a.json"}]})
     assert any("does not exist" in p for p in problems)

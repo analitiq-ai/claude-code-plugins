@@ -373,6 +373,9 @@ def _scenario_problems(scenario: dict, path: Path) -> list[str]:
                             f"{unknown}; expected a subset of glob/entity/bundle_root")
         if "glob" not in spec:
             problems.append(f"validate spec {spec!r} is missing required key 'glob'")
+        if "bundle_root" in spec and "entity" not in spec:
+            problems.append(f"validate spec {spec.get('glob')!r} names 'bundle_root' with no "
+                            f"'entity'; bundle_root is only read on the entity route")
     for item in scenario.get("seed", []):
         if not (REPO_ROOT / item["from"]).is_file():
             problems.append(f"seed source {item['from']} does not exist")
