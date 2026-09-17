@@ -4777,24 +4777,27 @@ def _cursor_node_as_the_engine_reads_it(
     reproduced exactly:
 
     * The lookup is FLAT. A dotted `cursor_field` matches no key there, so it
-      is not walked here either. (The value read is flat too — `generic.py`
-      takes ``records[-1].get(cursor_field)`` — so a dotted cursor would
-      checkpoint nothing and the stream would silently never advance.)
+      is not walked here either. The engine raises when it prepares the read,
+      before the first request; refusing it here moves that to authoring
+      time. (The value read is flat too — `generic.py` takes
+      ``records[-1].get(cursor_field)`` — so nothing downstream would rescue
+      it either.)
     * The declaration is returned AS AUTHORED. Resolving it would read a
       `type` or a `format` the engine cannot see, which is the whole reason
       this function exists rather than re-using
       :func:`_check_cursor_field_in_node`'s answer.
 
     The third is not, deliberately. The engine reads `properties` off the
-    `items` node itself, so a record shape written as a bare `$ref` stops it
-    before any cursor is read — but the contract accepts that shape on
-    purpose, because RULE-ENDP-026 tells authors to put a non-local schema in
-    this document's `$defs` and an author who complies must get a working
-    connector. Refusing it here would punish them for following the rule. So
-    the record SHAPE is resolved when it has no `properties` of its own, and
-    only the FIELD is read as authored. Where the shape declares the field
-    itself, that own declaration wins, which is what the engine reads whatever
-    a `$ref` base or an `allOf` branch alongside also says about it.
+    `items` node itself, so a record shape assembled from a `$ref` or an
+    `allOf` stops it before any cursor is read. The contract follows such a
+    shape anyway, because RULE-ENDP-026 tells authors to put a non-local
+    schema in this document's `$defs`, and refusing the shape that rule
+    steers them into would make the two rules contradict each other. This
+    does NOT mean the document runs: it is accepted here and refused there,
+    an engine gap this rule declines to paper over by refusing the author
+    instead. Only the FIELD is read as authored. Where the shape declares the
+    field itself, that own declaration wins, which is what the engine reads
+    whatever a `$ref` base or an `allOf` branch alongside also says about it.
     """
     properties = items.get("properties")
     if not isinstance(properties, dict):

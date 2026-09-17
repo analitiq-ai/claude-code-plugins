@@ -459,9 +459,9 @@ class TestCursorFieldsInRecordShape:
         # The path resolves in the document, so RULE-ENDP-013 passes — and the
         # engine still cannot read a cursor out of it. `record_field_declaration`
         # looks the name up WHOLE under the record shape's `properties`, so
-        # "metadata.updated_at" matches no key and raises; the value read is
-        # flat too (`records[-1].get(cursor_field)`), so even a lenient reader
-        # would checkpoint nothing and the stream would silently never advance.
+        # "metadata.updated_at" matches no key and raises when the read is
+        # prepared, before the first request. Refusing it here moves that
+        # failure to authoring time.
         with pytest.raises(ValidationError, match="names no key on the record shape"):
             parse_endpoint(self._payload_with_cursor_field(
                 "metadata.updated_at",
@@ -495,11 +495,13 @@ class TestCursorFieldsInRecordShape:
         parse_endpoint(payload)
 
     def test_a_cursor_field_through_a_ref_record_shape_is_read_as_authored(self):
-        # The record SHAPE is resolved — RULE-ENDP-026 tells authors to put a
-        # non-local schema in `$defs`, so this spelling has to keep working —
-        # but the field found there is still graded as written. `$defs/Rec`
-        # declares `updated_at` only through a `$ref`, which the cursor reader
-        # cannot see.
+        # The record SHAPE is resolved — refusing it would contradict
+        # RULE-ENDP-026, which steers authors into `$defs` — but the field
+        # found through it is still graded as written. `$defs/Rec` declares
+        # `updated_at` only through a `$ref`, which the cursor reader cannot
+        # see. (The engine cannot read a `$ref` record shape at all today;
+        # that gap is the engine's, and this test pins the field grading, not
+        # a claim that the document runs.)
         payload = self._payload_with_cursor_field("updated_at", {})
         schema = payload["operations"]["read"]["response"]["schema"]
         schema["$defs"] = {
