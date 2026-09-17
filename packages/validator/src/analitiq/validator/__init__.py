@@ -18,21 +18,18 @@ the same way, without touching `_core`. The public surface is re-exported here.
 `document_set` declares the path-free document-set API's types and
 signatures ahead of their implementation — every function it exports
 currently raises `NotImplementedError`; see that module's docstring and
-`__all__` below for what it contributes to this package's surface.
+`__all__` below for what it contributes to this package's surface. Its entry
+points take the request models in `analitiq.contracts.validation_requests`,
+which own the document-set shape and are where a malformed argument is
+refused.
 """
 from ._core import finding, finding_costs_a_pass, main, validate_document
 from .document_set import (
-    DocumentSet,
-    DocumentSetValue,
-    Entity,
     Finding,
-    FindingsEnvelope,
     ValidationEnvelope,
-    diagnostics,
-    resolve_type_map_gaps,
-    validate_connector_tree,
-    validate_pipeline_tree,
-    validate_tree,
+    validate_connector_package,
+    validate_pipeline_package,
+    validate_single_document,
 )
 from . import connectors  # noqa: F401  — imported for its self-registration side effect
 from . import pipelines  # noqa: F401  — imported for its self-registration side effect
@@ -65,17 +62,11 @@ __all__ = [
     "finding_costs_a_pass",
     "main",
     "validate_document",
-    "DocumentSet",
-    "DocumentSetValue",
-    "Entity",
     "Finding",
-    "FindingsEnvelope",
     "ValidationEnvelope",
-    "diagnostics",
-    "resolve_type_map_gaps",
-    "validate_connector_tree",
-    "validate_pipeline_tree",
-    "validate_tree",
+    "validate_connector_package",
+    "validate_pipeline_package",
+    "validate_single_document",
     "check_coverage",
     "endpoint_filename_findings",
     "is_stem_addressed_endpoint_path",

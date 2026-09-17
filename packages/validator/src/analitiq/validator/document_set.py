@@ -10,55 +10,63 @@ filesystem — a hosted validator wrapping this package as a remote tool,
 registry CI, any caller handed document content directly rather than a
 directory to read it from — cannot use either route.
 
-This module fixes the contract such a consumer calls instead: a `DocumentSet`
-of already-loaded content, keyed by the relative path each document would
-have occupied on disk, in and out. Every function below raises
-`NotImplementedError` — the behaviour they must satisfy is fixed by
-`packages/validator/tests/test_document_set.py`, whose fixture cases are
-`xfail` until an implementation PR replaces these bodies and removes the
-markers one case at a time.
+This module fixes the contract such a consumer calls instead. Each entry point
+takes the request model that names the unit being submitted
+(`analitiq.contracts.validation_requests`) and answers in one
+`ValidationEnvelope`. A caller states what it is sending by choosing the
+function: nothing here reads content to work out whether it was handed one
+document or a package, or which kind of package, and no entry point takes a
+parameter that selects between them. One package request model serves every
+package entry point precisely because the function carries the kind.
+
+**The request model is the argument gate.** A key outside the document-key
+grammar, a value that is not text, a key that is also a directory of another,
+a package past the document ceiling, an `entity` outside the published document
+schema names — each is a `pydantic.ValidationError` raised at construction, for
+an in-process caller and a remote one alike, so there is one gate rather than
+one per transport. `bytes` and `bytearray` are what the model does not refuse:
+pydantic decodes them to `str` in lax mode, byte-order mark included, so a
+caller that read its files as bytes has that document reported as unreadable
+*content* rather than as a malformed argument. Nothing below re-checks an
+argument the model already refuses, and a malformed argument never becomes a
+finding.
+Document *content* is the opposite and is what this module exists to judge:
+unparseable text, a wrong shape, a contract-model failure or a cross-file
+inconsistency is a finding rather than a raised error.
+
+An exception raised by this module's own assembly or scoping is a defect in
+this package: it propagates. Turning one into a finding would fail an author's
+document for a bug the author cannot fix. `_run_guarded` in
+`analitiq.validator._core` is a separate, older mechanism and is untouched: it
+contains a crash inside a check bound to one rule, and inside whole-document
+dispatch where `validate_document` applies it, as a `check-crashed`
+`notApplicable` finding — so a crash inside the path-based route this module
+delegates a single document to still comes back as a finding.
+
+Every function below raises `NotImplementedError` — the behaviour they must
+satisfy is fixed by `packages/validator/tests/test_document_set.py`, whose
+fixture cases are `xfail` until an implementation replaces these bodies and
+removes the markers one case at a time.
 """
 from __future__ import annotations
 
-from typing import Any, Literal, TypedDict, Union
+from typing import TYPE_CHECKING, Literal, TypedDict
 
-#: The value half of a `DocumentSet` entry: text, raw bytes (decoded as UTF-8
-#: with a BOM stripped if present — no encoding-guessing), or a value already
-#: parsed into the `dict`/`list` shape `analitiq.validator.validate_document`
-#: itself expects for `doc`. A value that is none of these is reported as an
-#: `invalid-value` finding on its own key, never raised.
-DocumentSetValue = Union[str, bytes, dict, list]
-
-#: A path-free bundle of documents: POSIX-relative-path-shaped string keys
-#: (e.g. `"connections/foo/connection.json"`, `"endpoints/widgets.json"`) mapped
-#: to already-loaded content. A leading `./` is normalized away; an absolute
-#: key, a key containing `..`, or the empty string is reported as an
-#: `invalid-key` finding rather than raised. Every function below that takes or
-#: produces a document set uses this one shape, so `validate_tree`'s
-#: `documents` and `resolve_type_map_gaps`'s `maps` share one value type rather
-#: than two independently-typed mappings.
-DocumentSet = dict[str, DocumentSetValue]
-
-#: This API's document-kind vocabulary — a literal tuple, not a runtime import
-#: of `DOCUMENT_ARTIFACT_KINDS`: a `Literal`'s members must be spelled out for
-#: the type checker, which a name resolved at import time is not. Mirrors
-#: `plugins/analitiq-pipeline-builder/scripts/validate.py`'s `PIPELINE_ENTITIES`,
-#: which is a hand-spelled tuple for a different reason — it must not import
-#: `DOCUMENT_ARTIFACT_KINDS` at module level, since argparse evaluates its
-#: `--entity` `choices=` before that module's own self-install bootstrap runs
-#: — and is pinned the same way against drift.
-#: `test_document_set.py::test_entity_matches_document_artifact_kinds`
-#: pins this tuple to `DOCUMENT_ARTIFACT_KINDS` so the two cannot drift apart
-#: member by member.
-Entity = Literal[
-    "connector",
-    "api-endpoint",
-    "database-endpoint",
-    "type-map",
-    "stream",
-    "pipeline",
-    "connection",
-]
+if TYPE_CHECKING:
+    # Annotation-only. `from __future__ import annotations` defers every
+    # annotation here to a string, and no body below needs a model at runtime,
+    # so nothing imports the contract package when this module loads. That is
+    # what keeps the import order safe: this module is imported before
+    # `connectors`, whose `try/except ImportError` around its contract-model
+    # imports turns a missing `analitiq-contract-models` into the structured
+    # "missing dependency" diagnostic, and an unconditional import here would
+    # pre-empt that guard with a raw traceback instead. The cost is that these
+    # annotations do not resolve at run time: `typing.get_type_hints` on the
+    # entry points below needs the request models handed to it as a namespace.
+    from analitiq.contracts.validation_requests import (
+        ValidatePackageRequest,
+        ValidateSingleDocumentRequest,
+    )
 
 
 class _FindingRequired(TypedDict):
@@ -74,172 +82,95 @@ class _FindingRequired(TypedDict):
 class Finding(_FindingRequired, total=False):
     """One entry of a `ValidationEnvelope`'s `findings` list — the shape
     `rules/SCHEMA.md`'s "Findings" section defines and
-    `analitiq.validator.finding` already constructs, plus `direction`, which
-    only `resolve_type_map_gaps` below sets (see its docstring for which
-    finding kinds carry it). Restated here only so this module's signatures
-    are checkable; the shape itself stays owned by `finding()`, and
-    `test_document_set.py::
-    test_finding_matches_the_keys_finding_builder_produces` pins both the
-    restated keys and which of them are required to what `finding()`
-    actually produces."""
+    `analitiq.validator.finding` already constructs. Restated here only so this
+    module's signatures are checkable; the shape itself stays owned by
+    `finding()`, and `test_document_set.py::
+    test_finding_matches_the_keys_finding_builder_produces` pins the restated
+    keys, and which of them are required, to what `finding()` actually
+    produces."""
 
     rule: str
     severity: Literal["error", "warning"]
-    direction: Literal["read", "write"]
 
 
 class ValidationEnvelope(TypedDict):
-    """The result of validating a whole document set: flat, not a nested
-    per-document breakdown — each finding's own `path` carries its file key, so
-    a document validated this way and the same document validated through the
-    existing path-based single-document route report through one shape."""
+    """The result of every entry point below: flat, not a nested per-document
+    breakdown — a finding carries the `path` the check that produced it
+    reports, so a document validated this way and the same document validated
+    through the path-based single-document route report through one shape. The
+    one `path` this module decides itself is an embedded connector subtree's,
+    scoped under that subtree's key prefix. `passed` is `False` exactly when
+    `findings` holds one that `finding_costs_a_pass` accepts, which is not the
+    same as "a finding at `severity: error`": an unchecked error-tier rule
+    costs a pass too."""
 
     passed: bool
     findings: list[Finding]
 
 
-class FindingsEnvelope(TypedDict):
-    """The `{"findings"}`-only result `resolve_type_map_gaps` returns. No
-    `passed`: resolving a type map's gaps is not itself a pass/fail verdict on
-    a document — a caller wanting one runs the returned findings through
-    `analitiq.validator.finding_costs_a_pass`, the same reduction `passed` in
-    `ValidationEnvelope` is built from."""
+def validate_single_document(
+        request: ValidateSingleDocumentRequest) -> ValidationEnvelope:
+    """Validate one document supplied as its file text.
 
-    findings: list[Finding]
+    `request.entity` names the published document schema the caller says the
+    text is written against. It is checked, not trusted: the core registry's
+    own detection still runs, and a document whose detected schema is not the
+    declared one is reported as a finding rather than validated as whatever it
+    resembles. Text the JSON parser cannot read is a finding on the document,
+    not a raised error.
+
+    Resolving a detected schema name for a type map means reading the
+    document's own `direction` the way `analitiq.validator.connectors`
+    already does — the core registry detects a type map by shape and does not
+    itself separate the read direction from the write one, while `entity`'s
+    vocabulary names them separately. It is that resolution being reused, not a
+    second direction rule.
+
+    Wraps the path-based route's bare findings list in a `ValidationEnvelope`,
+    so every entry point in this module answers in one shape.
+
+    Not yet implemented — raises `NotImplementedError`. Signature and
+    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
+    """
+    raise NotImplementedError(
+        "validate_single_document is not yet implemented — see "
+        "packages/validator/tests/test_document_set.py for the fixed contract.")
 
 
-def validate_connector_tree(documents: DocumentSet) -> ValidationEnvelope:
-    """Validate a connector package supplied as an in-memory `DocumentSet`
-    instead of files on disk: the connector document, its sibling type maps,
-    and its `endpoints/*.json` files, cross-checked the way
+def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnvelope:
+    """Validate a connector package supplied as in-memory documents instead of
+    files on disk: the connector document, its sibling type maps, and — for an
+    api connector — its `endpoints/*.json` files, cross-checked the way
     `analitiq.validator.check_coverage` already does from a filesystem path.
 
-    This is the connector package-kind's root-shape entry, called directly —
-    it never walks the registry `validate_tree` walks, so it can never itself
-    report an `ambiguous-layout` or `unrecognized-layout` finding.
-
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
     """
     raise NotImplementedError(
-        "validate_connector_tree is not yet implemented — see "
+        "validate_connector_package is not yet implemented — see "
         "packages/validator/tests/test_document_set.py for the fixed contract.")
 
 
-def validate_pipeline_tree(documents: DocumentSet) -> ValidationEnvelope:
-    """Validate a pipeline bundle supplied as an in-memory `DocumentSet`
-    instead of files on disk: the pipeline document, its sibling
-    `streams/*.json`, and every `connections/*/connection.json` (plus their
-    scoped endpoints and type maps) — assembled the way `plugins/
-    analitiq-pipeline-builder/scripts/validate.py`'s `_assemble_bundle`
-    already does from a filesystem root, then checked for referential
-    integrity.
+def validate_pipeline_package(request: ValidatePackageRequest) -> ValidationEnvelope:
+    """Validate a pipeline package supplied as in-memory documents instead of
+    files on disk: the pipeline document, its sibling `streams/*.json`, and
+    every `connections/*/connection.json` (plus their scoped endpoints and type
+    maps) — assembled the way `plugins/analitiq-pipeline-builder/scripts/
+    validate.py`'s `_assemble_bundle` already does from a filesystem root, then
+    checked for referential integrity.
 
-    Any `connectors/<slug>/definition/...` subtree is validated separately, by
-    resolving it against the same package-kind registry `validate_tree`
-    walks and scoping its findings' `path` under the subtree's key prefix —
-    so an embedded connector's own coverage findings (native-type coverage,
-    `transport_ref` resolution, duplicate endpoint ids) are reported. Today's
-    plugin never resolves this subtree that way at all: `_assemble_bundle`
-    itself reads only that subtree's `connector.json`, and only for its
-    `connector_id` (the referential check that the identity is bundled); a
-    separate function, `_connector_endpoint_sets`, reads the subtree's
-    endpoint ids for stream-ref resolution — neither reports the subtree's
-    own coverage findings the way this function must.
-
-    This is the pipeline package-kind's root-shape entry, called directly — it
-    never walks the registry, so it can never itself report an
-    `ambiguous-layout` or `unrecognized-layout` finding.
+    A `connectors/<slug>/definition/...` subtree is validated by calling
+    `validate_connector_package` on it and scoping the returned findings'
+    `path` under the subtree's key prefix, so an embedded connector reports its
+    own coverage findings — native-type coverage, `transport_ref` resolution,
+    duplicate endpoint ids. Today's plugin never reports those at all:
+    `_assemble_bundle` reads such a subtree's `connector.json` only for its
+    `connector_id`, and `_connector_endpoint_sets` reads the subtree's endpoint
+    ids only for stream-ref resolution.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
     """
     raise NotImplementedError(
-        "validate_pipeline_tree is not yet implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
-
-
-def validate_tree(documents: DocumentSet) -> ValidationEnvelope:
-    """Detect which package kind `documents` forms, and validate it.
-
-    Walks a package-kind registry mirroring `analitiq.validator`'s own
-    single-document `_KIND_REGISTRY`: each entry pairs a root-shape detector
-    with the function that validates a document set matching it
-    (`validate_connector_tree`, `validate_pipeline_tree`). No entry's detector
-    matches reports an `unrecognized-layout` finding; more than one matching
-    reports `ambiguous-layout`; exactly one dispatches to it — the same
-    fallthrough shape the single-document dispatcher already uses when no
-    registered kind claims a document (`unrecognized-document`).
-
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
-    """
-    raise NotImplementedError(
-        "validate_tree is not yet implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
-
-
-def diagnostics(target: Any, entity: Entity | None = None) -> ValidationEnvelope:
-    """Auto-detect whether `target` is a single already-parsed document or a
-    `DocumentSet`, and dispatch to `analitiq.validator.validate_document` or
-    `validate_tree` accordingly — replacing the pipeline-builder plugin's
-    private `diagnostics_for()`, which takes an explicit `entity` argument
-    naming the document's kind rather than detecting it. `entity` plays no
-    part in detecting or validating a document SET, which is identified by
-    its shape alone. What it does for the single-document route is not
-    defined by this specification: `validate_document` takes no such
-    parameter today, and wiring `entity` into that route (or into whichever
-    replaces it) is implementation, not contract — out of scope here the same
-    way implementing this function's body is.
-
-    Wraps a single-document result in a `ValidationEnvelope` (`{"passed":
-    finding_costs_a_pass`-reduction, "findings": ...}`) rather than returning
-    `validate_document`'s bare list, so a caller gets one result shape
-    regardless of which route this dispatched to — the same wrapping the
-    plugin's own `diagnostics_for` already does over `validate_document`'s
-    list result today.
-
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
-    """
-    raise NotImplementedError(
-        "diagnostics is not yet implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
-
-
-def resolve_type_map_gaps(
-        maps: DocumentSet,
-        direction: Literal["read", "write"],
-        probes: list[str]) -> FindingsEnvelope:
-    """The path-free form of the pipeline-builder plugin's private
-    `type_map_gaps.py`: given one or more type-map documents in precedence
-    order (`maps`, keyed and ordered the same way a `DocumentSet` is — the
-    first key whose map renders a probe wins) and a list of native-type
-    `probes` to resolve in `direction`, report what each probe resolved to.
-
-    Never raises. Returns `{"findings"}` only — no `resolved`, no top-level
-    `direction`. Finding kinds sharing that list: `type-map-unreadable`
-    (`fail`/`error`, no `direction` — a map that is invalid JSON or not a
-    `{$schema, direction, rules}` object, a failure prior to any
-    direction-specific check); `invalid-type-map`
-    (`fail`/`error`, `direction` = this call's `direction` — a map that fails
-    its `TypeMapReadDoc`/`TypeMapWriteDoc` model,
-    `analitiq.contracts.type_map`); `type-map-gap` (`informational`, no
-    severity, no rule, `direction` = this call's `direction` — a probe none of
-    `maps` resolved; never costs a pass). A run in which every probe resolved
-    reports an empty `findings` list.
-
-    This is a deliberate divergence from `type_map_gaps.py`'s own
-    `_load_rules`, which raises `ValueError` on exactly the same two
-    conditions (an unreadable map, a map failing its model) rather than
-    reporting them: a path-free caller has no filename to name in a raised
-    message the way the plugin's CLI does, and folding both conditions into
-    the same findings list this function already returns means a caller
-    checks one place for every way a probe run can come back incomplete.
-
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
-    """
-    raise NotImplementedError(
-        "resolve_type_map_gaps is not yet implemented — see "
+        "validate_pipeline_package is not yet implemented — see "
         "packages/validator/tests/test_document_set.py for the fixed contract.")

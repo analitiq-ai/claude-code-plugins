@@ -22,6 +22,7 @@ from analitiq.contracts.validation_requests import (
     MAX_DOCUMENTS,
     DocumentSet,
     ValidatePackageRequest,
+    ValidateSingleDocumentRequest,
 )
 
 PUBLISHED_SCHEMA = json.loads(
@@ -130,6 +131,34 @@ def test_rejects_non_string_value(value):
     with pytest.raises(ValidationError):
         ValidatePackageRequest.model_validate_json(
             f'{{"documents": {{"connector.json": {value}}}}}')
+
+
+@pytest.mark.parametrize("cast", [bytes, bytearray])
+def test_bytes_like_value_is_coerced_to_text_with_its_byte_order_mark_intact(cast):
+    """`bytes` and `bytearray` are what `DocumentText` does not refuse: pydantic
+    decodes them in lax mode, byte-order mark and all. Pinned because it is a
+    documented property of the request models rather than an accident — a
+    consumer that read its files as bytes has its document graded as unreadable
+    *content*, not rejected as a malformed argument — and because nothing else
+    would notice the coercion tightening under a dependency bump.
+    `model_validate_json` cannot reach it: no JSON source produces either.
+    """
+    text = "\ufeff{}"
+    request = ValidatePackageRequest(
+        documents={"connector.json": cast(text.encode())})
+    assert request.documents.root["connector.json"] == text
+
+    single = ValidateSingleDocumentRequest(document=cast(b"{}"), entity="connector")
+    assert single.document == "{}"
+
+
+def test_other_buffer_shapes_are_still_refused():
+    """The coercion above reaches those two and stops, so the sentences
+    describing it name them rather than a bytes-like category: a `memoryview`
+    over the same bytes is refused.
+    """
+    with pytest.raises(ValidationError):
+        ValidatePackageRequest(documents={"connector.json": memoryview(b"{}")})
 
 
 def test_rejects_unknown_field():
