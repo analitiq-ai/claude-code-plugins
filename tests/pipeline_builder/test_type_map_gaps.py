@@ -102,6 +102,22 @@ def test_map_without_rules_key_rejected(tmp_path):
         assert field in str(exc.value), exc.value
 
 
+def test_an_advisory_reaches_the_operator_even_when_something_fatal_stops_the_probe(
+        tmp_path, capsys):
+    # An advisory is most often the explanation for a gap reported below it, so
+    # withholding it until the fatal finding is fixed costs a round trip: the
+    # author repairs the envelope, re-runs, and only then learns the rule they
+    # wrote could never have matched.
+    p = tmp_path / "type-map-read.json"
+    p.write_text(json.dumps({
+        "$schema": "https://schemas.analitiq.ai/type-map-write/latest.json",
+        "direction": "read",
+        "rules": CONNECTOR_READ + [CONNECTOR_READ[0]]}))
+    with pytest.raises(ValueError, match=r"is not a valid read type map"):
+        G.resolve("read", ["citext"], [p])
+    assert "duplicate rule" in capsys.readouterr().err
+
+
 def test_a_crashed_check_is_not_reported_as_an_authoring_defect(tmp_path, monkeypatch):
     # a crash stops the probe for the same reason a defect does — nothing graded
     # the map — but telling the author to fix their map would send them after a

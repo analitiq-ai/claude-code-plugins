@@ -60,12 +60,12 @@ def _load_rules(path: Path, direction: str) -> list:
     indistinguishable from a genuinely uncovered probe, and a false gap makes the
     authoring agent shadow the very rule the map intended.
 
-    So every finding reaches the operator, at the severity that decides how:
-    a pass-costing one stops the probe, because a gap reported over a map that
-    failed to load means nothing. Everything else is a map that resolves while
-    something about it is still wrong — an advisory that is most often the
-    explanation for a gap reported below it, and dropping it leaves the gap
-    looking uncaused."""
+    So every finding reaches the operator, and the severity decides what happens
+    after: a pass-costing one also stops the probe, because a gap reported over a
+    map that did not grade clean means nothing. Everything else is a map that
+    resolves while something about it is still wrong — an advisory that is most
+    often the explanation for a gap reported below it, and dropping it leaves the
+    gap looking uncaused."""
     try:
         doc = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -75,6 +75,12 @@ def _load_rules(path: Path, direction: str) -> list:
     # map covers only the gaps it fills, and a connector map rendering the whole
     # vocabulary clears the weaker bar too.
     findings = type_map_findings(doc, direction, scope="connection")
+    # Reported before anything raises: an advisory usually explains the gap
+    # reported below it, and a fatal finding elsewhere in the same document is
+    # no reason to make the author fix that first and rediscover this one.
+    for f in findings:
+        print(f"type_map_gaps: {path}: {f.get('path') or '/'}: {f['message']}",
+              file=sys.stderr)
     fatal = [f for f in findings if finding_costs_a_pass(f)]
     if fatal:
         detail = "; ".join(f"{f.get('path') or '/'}: {f['message']}" for f in fatal)
@@ -87,9 +93,6 @@ def _load_rules(path: Path, direction: str) -> list:
         raise ValueError(
             f"{path} is not a valid {direction} type map — fix it (or, for a "
             f"connector map, raise the defect upstream) before probing: {detail}")
-    for f in findings:
-        print(f"type_map_gaps: {path}: {f.get('path') or '/'}: {f['message']}",
-              file=sys.stderr)
     return doc["rules"]
 
 
