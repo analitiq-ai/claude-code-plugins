@@ -1,23 +1,29 @@
 id: RULE-ENDP-030
 statement: >
-  A write operation's response expressions MUST NOT reference
-  `response.record_count`, a scope only a read response carries.
+  A write operation's response expressions MUST read `response` only through
+  the scopes a write response carries — `body`, `headers`, `status` and
+  `metadata` — and so MUST NOT reference `response.record_count`,
+  `response.records` or any other sub-scope.
 tier: coherence
 severity: error
 artifact_kinds: [api-endpoint]
-validator: "analitiq.contracts.endpoints::WriteResponse._reject_record_count"
+validator: "analitiq.contracts.endpoints::WriteResponse._reads_only_write_scopes"
 owners: [connector-plugin, engine]
 targets: [WriteResponse]
 fields: [success_when, error, affected_records, generated_keys, metadata]
+fixture_model: WriteResponse
 rationale: >
-  The record count is a read-path quantity — the write scope never declares
-  it — so a write-side reference to it names nothing, and a `success_when`
-  built over it is written against a scope the document does not have. The
-  author is usually adapting a read response block to the write side, where
-  the quantity silently stops existing; refusing the reference at authoring
-  time keeps the declaration honest about the scope it reads from. The
-  pinned contract-consumption manifest claims no read of the
-  write-response block, and it has no effect on a run today: the refusal
-  at authoring time is the whole of what the rule buys.
+  A write's declared response is read against the scope the provider's
+  answer fills: its body, its headers, its status, and the metadata keys the
+  block itself declares. The record count and the records belong to a read's
+  page, so a write-side reference to either names nothing, and neither does
+  a misspelled sub-scope; a `success_when` built over one is written against
+  a scope the document does not have. The author is usually adapting a read
+  response block to the write side, where those scopes silently stop
+  existing. The closed set is stated here rather than inferred from the read
+  side's reserved scopes, so a scope added to reads does not become readable
+  on writes by accident. The pinned contract-consumption manifest claims no
+  read of the write-response block, so the rule rests on that closed scope
+  set alone and stays correct whatever a run does with the block.
 status: active
 superseded_by: null

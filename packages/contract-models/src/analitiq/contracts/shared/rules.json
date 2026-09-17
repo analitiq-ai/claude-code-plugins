@@ -94,7 +94,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "ConnectionStoredMaps",
    "rationale": "A connection document is committed beside the pipeline and returned in plaintext by the connections API, so a credential filed into a non-secret map is a credential in version control and in every response — and rotating it means rewriting history rather than replacing a secret. The check reads key names only: it catches the spellings an author reaches for by habit and cannot see a real secret filed under an innocuous key, which is the half `RULE-CONN-009` leaves with the author.\n",
    "status": "active",
    "superseded_by": null
@@ -373,7 +373,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "AdbcTransport",
    "rationale": "ADBC drivers split connection state two ways — some take a DSN, some (Snowflake) take every coordinate as driver keyword arguments, and Postgres-style drivers use both, keeping TLS and other extras in the kwargs — so the contract cannot make either field required on its own. That leaves the empty transport representable, and it validates cleanly right up to the moment the engine asks the driver to connect with nothing. Requiring some source of state is the only thing that catches it before then.\n",
    "status": "active",
    "superseded_by": null
@@ -1463,21 +1463,20 @@
    "artifact_kinds": [
     "connector"
    ],
-   "validator": null,
-   "enforcement_location": "unenforced",
+   "validator": "analitiq.contracts.connector::DatabaseConnector._bulk_load_families_are_declared",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "connector-plugin"
    ],
    "targets": [
-    "SqlBulkLoad",
     "DatabaseConnector"
    ],
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
-   "rationale": "A bulk mechanism is a fact about a transport rather than about the connector — it needs that transport's own wire connection or cursor — so a key naming a family the connector does not ship declares a landing path that can never be taken, and the write either falls back silently or fails in the stage where it is least legible. Known enforcement gap: `SqlBulkLoad` validates each family key against the bulk-load vocabulary in isolation, and nothing at connector level relates those keys to the declared transports.\n",
+   "fixture_model": "DatabaseConnector",
+   "rationale": "A bulk mechanism is a fact about a transport rather than about the connector — it needs that transport's own wire connection or cursor — so a key naming a family the connector does not ship declares a landing path that can never be taken, and the write either falls back silently or fails in the stage where it is least legible. `SqlBulkLoad` grades each family key against the bulk-load vocabulary in isolation, which is every check that can be made without the rest of the document; relating those keys to the declared transports needs the connector in hand, so it is settled on the connector, where both halves are.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1683,7 +1682,7 @@
   },
   {
    "id": "RULE-CTOR-057",
-   "statement": "In a connector field a runtime resolves, every ref and every `${...}` template placeholder MUST lead with one of the resolution scopes the contract declares.\n",
+   "statement": "In a connector field a runtime resolves, every ref MUST be a string, and every ref and every `${...}` template placeholder MUST lead with one of the resolution scopes the contract declares.\n",
    "tier": "shape",
    "severity": "error",
    "artifact_kinds": [
@@ -1707,8 +1706,8 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
-   "rationale": "The API-endpoint document has required this of its own expressions since it grew typed models for them, and the connector document feeds the same grammar from its transports, its auth exchange and its DSN bindings. What made the gap worth closing rather than noting is that a transport is the whole surface at once: the default header map is folded into every transport before any of it resolves, so one unscoped token there reaches every request the connector makes rather than one operation. Which fields this covers is which fields a runtime resolves — traced through both consumers, not read off the annotations, because a field typed `Any` and described as taking an expression may still be consumed literally, and one beside it is. Where an unscoped token goes depends on which resolver reads the document — one takes the bare name as a top-level context key and falls back to `secrets`, substituting whatever is stored under that name into a request that still looks well formed; the other refuses a scope it does not know and raises. Neither names the placeholder to the connector's author. The leading token is the only part a document can be held to; whether anything ever produces a value at the rest of the path is a phase question the runtime settles.\n",
+   "fixture_model": "HttpTransport",
+   "rationale": "The API-endpoint document has required this of its own expressions since it grew typed models for them, and the connector document feeds the same grammar from its transports, its auth exchange and its DSN bindings. What made the gap worth closing rather than noting is that a transport is the whole surface at once: the default header map is folded into every transport before any of it resolves, so one unscoped token there reaches every request the connector makes rather than one operation. Which fields this covers is which fields a runtime resolves — traced through both consumers, not read off the annotations, because a field typed `Any` and described as taking an expression may still be consumed literally, and one beside it is. Where an unscoped token goes depends on which resolver reads the document — one takes the bare name as a top-level context key and falls back to `secrets`, substituting whatever is stored under that name into a request that still looks well formed; the other refuses a scope it does not know and raises. Neither names the placeholder to the connector's author. The leading token is the only part a document can be held to; whether anything ever produces a value at the rest of the path is a phase question the runtime settles. A ref that is not a string leads with nothing at all: the grammar has no token to read out of it, so the scope check passes it the same way it passes a template with no placeholder, and it is refused on its type for the reason RULE-CTOR-069 refuses a non-string template. An empty `${}` leads with nothing either, but it IS a placeholder: a closed `${...}` is one whatever it encloses, and the key is stripped before lookup, so `${}` addresses the same empty name `${ }` does and is refused here for the same reason rather than shipped as literal text.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1981,6 +1980,68 @@
    "symbol": null,
    "fixture_model": null,
    "rationale": "key_attrs names where to read a connector's native error signal from; codes names what each value it finds means. Declaring key_attrs alone leaves the engine with nowhere to route a matched value — a no-op that reads as a declared mapping. Declaring codes alone leaves the engine with nothing to read a native value from at all — unusable, not merely incomplete. Neither half is a degraded version of the mapping; each is meaningless without the other, so a block declaring only one is rejected rather than silently accepted as a partial classification.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-CTOR-068",
+   "statement": "A `function` expression in a connector field a runtime resolves MUST name its function with a non-empty string, and where that name is a function the contract models, it MUST carry the arguments that function's model declares, each of the type the model declares.\n",
+   "tier": "shape",
+   "severity": "error",
+   "artifact_kinds": [
+    "connector"
+   ],
+   "validator": "analitiq.contracts.connector::ValueExpressionScopes._functions_carry_their_arguments",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "HttpTransport",
+    "TransportDefaults",
+    "AuthOperationTemplate",
+    "PostAuthOperationRequest",
+    "AdbcTransport",
+    "DatabaseTls",
+    "DsnBinding"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": "HttpTransport",
+   "rationale": "The typed function union already states each function's arguments, but it is reached only where a field is annotated with it — and the fields a runtime resolves are mostly open maps, so a `lookup` with no `map`, a `basic_auth` with no `input` or a `url_encode` whose `safe` set is a list passes the document and reaches the resolver, which has nothing to look a value up in and either fails far from the author or resolves to nothing at all. RULE-CTOR-065 grades the node's shape — one expression key, no stray sibling — and stops there, so the arguments are this rule's half, applied by validating the node against the same union the typed sites use rather than by a second statement of what each function takes. A name the union does not model is left alone: whether the engine registers it is RULE-SHRD-007, which nothing here can read.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-CTOR-069",
+   "statement": "A template in a connector field a runtime resolves MUST be a string, and every `${` in it MUST open a placeholder that a later `}` closes.\n",
+   "tier": "shape",
+   "severity": "error",
+   "artifact_kinds": [
+    "connector"
+   ],
+   "validator": "analitiq.contracts.connector::ValueExpressionScopes._templates_close_their_placeholders",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "HttpTransport",
+    "TransportDefaults",
+    "AuthOperationTemplate",
+    "PostAuthOperationRequest",
+    "AdbcTransport",
+    "DatabaseTls",
+    "DsnBinding"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": "HttpTransport",
+   "rationale": "An unclosed `${` is no placeholder to the template grammar, so every check that reads placeholders — RULE-CTOR-057's scope check among them — sees a template that declares none and passes it, and the fragment travels verbatim into a header value, a DSN or a URL. That is the failure mode worth catching: not a refused connection but an accepted one carrying `${secrets.token` where a token belongs, which reads as a provider rejecting valid credentials. A non-string template has the same invisibility for the same reason, the grammar having nothing to scan.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2601,7 +2662,7 @@
   },
   {
    "id": "RULE-ENDP-008",
-   "statement": "Every binding that names a declared parameter MUST name one the operation declares, and that parameter's declared location MUST be the request slot the binding sits in.\n",
+   "statement": "Every binding that names a declared parameter MUST name it with a string, MUST name one the operation declares, and that parameter's declared location MUST be the request slot the binding sits in.\n",
    "tier": "coherence",
    "severity": "error",
    "artifact_kinds": [
@@ -2619,8 +2680,8 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
-   "rationale": "A param declaration is the typed contract for one request input — its type, its requiredness, whether a `filters` map entry names it as a stream's landing site — and the binding is what routes it onto the wire. When the binding site and the declared location disagree there are two answers for where one value goes, and nothing downstream can tell which the provider will see; when the name resolves to nothing, the slot silently sends no value at all. Rejecting both at authoring time is what makes the declaration worth reading.\n",
+   "fixture_model": "ReadOperation",
+   "rationale": "A param declaration is the typed contract for one request input — its type, its requiredness, whether a `filters` map entry names it as a stream's landing site — and the binding is what routes it onto the wire. When the binding site and the declared location disagree there are two answers for where one value goes, and nothing downstream can tell which the provider will see; when the name resolves to nothing, the slot silently sends no value at all. Rejecting both at authoring time is what makes the declaration worth reading. A name that is not a string names nothing at all: the walks that resolve a binding read string names, so a list or a number slips past every one of them and the slot surfaces only as a param nothing referenced, pointing at the declaration rather than at the binding that is wrong.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2669,7 +2730,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "ReadOperation",
    "rationale": "Naming a param in a pagination block creates no request binding on its own: the param still has to be declared, marked as pagination's, and bound into the request like any other, and this is the wiring authors most often leave half-done. The marker is what stops anything else claiming the same param, and a paging param the runtime cannot set means every run re-reads page one and reports success.\n",
    "status": "active",
    "superseded_by": null
@@ -2694,7 +2755,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "ReadOperation",
    "rationale": "A cursor mapping states how the stored watermark is sent, but the param carrying it is an ordinary declared param that still has to be bound into the request and marked as replication's — a window mapping wires both of its bounds that way. Unmarked, nothing reserves the param for the runtime to set; undeclared, the watermark never reaches the provider and every incremental run quietly pulls the full resource.\n",
    "status": "active",
    "superseded_by": null
@@ -2952,7 +3013,7 @@
   },
   {
    "id": "RULE-ENDP-022",
-   "statement": "An expression dict in a request slot MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares and extension keys.\n",
+   "statement": "An expression an API endpoint operation declares MUST be the shape its own form models: exactly one expression key, no sibling beyond the argument fields that key itself declares and extension keys, and a payload of the modelled type — a string `ref`, a string `template` that closes every `${` it opens, and a `function` naming a non-empty string with only the arguments the function expression declares.\n",
    "tier": "shape",
    "severity": "error",
    "artifact_kinds": [
@@ -2971,8 +3032,8 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
-   "rationale": "The resolver dispatches on the one key it recognises, in its own precedence order, and ignores whatever else the dict carries. So a dict declaring two of them resolves through one and silently discards the other — the author reads the ref they wrote, the wire carries the literal beside it — and a stray sibling is an author's edit that never took effect. Request slots are untyped, so nothing else in the contract sees these dicts; refusing the malformed shape at its own site is also what keeps the failure pointing at the bad fragment instead of surfacing later as a misleading \"param not referenced\" from the binding walk.\n",
+   "fixture_model": "ReadOperation",
+   "rationale": "The resolver dispatches on the one key it recognises, in its own precedence order, and ignores whatever else the dict carries. So a dict declaring two of them resolves through one and silently discards the other — the author reads the ref they wrote, the wire carries the literal beside it — and a stray sibling is an author's edit that never took effect. The payload under the key fails the same way one key further in: `{\"ref\": 5}` is not a path any scope is read at, `{\"template\": {...}}` is not text to interpolate, `{\"function\": \"\"}` names nothing to call, and a template that opens a `${` it never closes interpolates nothing and goes on the wire brace and all — so the request is built with the value missing and the provider answers about a credential or a filter the document does say where to find. `Expression`'s members state every one of these shapes already; request slots are untyped, so nothing else in the contract reads these dicts and the union never grades the document as authored. Refusing the malformed shape at its own site is also what keeps the failure pointing at the bad fragment instead of surfacing later as a misleading \"param not referenced\" from the binding walk.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2996,7 +3057,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "ReadOperation",
    "rationale": "A response path that resolves to nothing does not fail at run time: it yields an empty value, and every predicate built on it holds unconditionally. One mistyped segment in a pagination stop condition therefore stops after the first page on every run, and the run is green — the truncation is only visible by counting rows against the provider. A node that resolves but declares no type is the same failure one step later, because whatever plants the value gets to invent its type and an ordering comparison either works or raises depending on the page. The request-slot ban is a different fact: the request is built before any response exists, so a response reference there can never have a value at all. Refusing an unknown sub-scope rather than skipping it is what separates the engine-owned scopes this document does not describe from a typo wearing their shape.\n",
    "status": "active",
    "superseded_by": null
@@ -3158,13 +3219,13 @@
   },
   {
    "id": "RULE-ENDP-030",
-   "statement": "A write operation's response expressions MUST NOT reference `response.record_count`, a scope only a read response carries.\n",
+   "statement": "A write operation's response expressions MUST read `response` only through the scopes a write response carries — `body`, `headers`, `status` and `metadata` — and so MUST NOT reference `response.record_count`, `response.records` or any other sub-scope.\n",
    "tier": "coherence",
    "severity": "error",
    "artifact_kinds": [
     "api-endpoint"
    ],
-   "validator": "analitiq.contracts.endpoints::WriteResponse._reject_record_count",
+   "validator": "analitiq.contracts.endpoints::WriteResponse._reads_only_write_scopes",
    "enforcement_location": null,
    "owners": [
     "engine",
@@ -3182,8 +3243,8 @@
    ],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
-   "rationale": "The record count is a read-path quantity — the write scope never declares it — so a write-side reference to it names nothing, and a `success_when` built over it is written against a scope the document does not have. The author is usually adapting a read response block to the write side, where the quantity silently stops existing; refusing the reference at authoring time keeps the declaration honest about the scope it reads from. The pinned contract-consumption manifest claims no read of the write-response block, and it has no effect on a run today: the refusal at authoring time is the whole of what the rule buys.\n",
+   "fixture_model": "WriteResponse",
+   "rationale": "A write's declared response is read against the scope the provider's answer fills: its body, its headers, its status, and the metadata keys the block itself declares. The record count and the records belong to a read's page, so a write-side reference to either names nothing, and neither does a misspelled sub-scope; a `success_when` built over one is written against a scope the document does not have. The author is usually adapting a read response block to the write side, where those scopes silently stop existing. The closed set is stated here rather than inferred from the read side's reserved scopes, so a scope added to reads does not become readable on writes by accident. The pinned contract-consumption manifest claims no read of the write-response block, so the rule rests on that closed scope set alone and stays correct whatever a run does with the block.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3242,7 +3303,7 @@
   },
   {
    "id": "RULE-ENDP-033",
-   "statement": "Every ref and every `${...}` template placeholder in a request slot MUST lead with one of the resolution scopes the contract declares.\n",
+   "statement": "Every ref and every `${...}` template placeholder an API endpoint operation declares, wherever in the operation it sits, MUST lead with one of the resolution scopes the contract declares.\n",
    "tier": "coherence",
    "severity": "error",
    "artifact_kinds": [
@@ -3261,8 +3322,8 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
-   "rationale": "The leading token is what selects the resolver that supplies the value, so an unscoped or misspelled one names no resolver at all — the value does not arrive late, it never arrives. Nothing about the failure points back at the typo: it surfaces as a header sent empty or a filter quietly dropped from the query, which reads as a provider quirk. Refusing the expression where it is written is the only place the cause and the symptom are still in the same file.\n",
+   "fixture_model": "WriteOperation",
+   "rationale": "The leading token is what selects the resolver that supplies the value, so an unscoped or misspelled one names no resolver at all — the value does not arrive late, it never arrives. Nothing about the failure points back at the typo: it surfaces as a header sent empty or a filter quietly dropped from the query, which reads as a provider quirk. Refusing the expression where it is written is the only place the cause and the symptom are still in the same file. A param default feeds the same request, and a predicate operand over a scope that names nothing decides nothing, so the obligation follows the expression wherever the operation declares it rather than the slot it sits in.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4304,8 +4365,213 @@
    ],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
-   "rationale": "`records` is typed `RefExpression`, whose own `ref: str` field is what this check constrains — the anchor is what makes declared-path resolution against `response.schema` well-defined at all: every downstream reader (the validator, the engine, the conformance kit) walks from `response.body`, and a `ref` outside that shape has nothing to resolve against. `WriteResponse` has no `records` field, so this is a response-only clause and `targets` is `ResponseExtraction` alone, the same shape as RULE-ENDP-005's precedent for a response-only clause on this validator. The raise at `ResponseExtraction._validate` is bare `ValueError`, not `analitiq.contracts.shared.rules::violation`, matching every other raise in this method and its write-side sibling — this record alone is what registers the obligation. The pinned reachability manifest claims a read of both `ResponseExtraction.records` and `RefExpression.ref`, so no `RecordAffirmation` is needed. The JSON-Schema-side mirror in `ResponseExtraction`'s `model_config` is a bare inline pattern literal, never assigned to a module-level name and never compiled or matched against in Python — the actual Python-side enforcement uses plain string equality and `.startswith()`, not a regex — so `mechanism`/`symbol` are left unclassified rather than extracting a constant with no other consumer.\n",
+   "fixture_model": "ResponseExtraction",
+   "rationale": "`records` is typed `RefExpression`, whose own `ref: str` field is what this check constrains — the anchor is what makes declared-path resolution against `response.schema` well-defined at all: every downstream reader (the validator, the engine, the conformance kit) walks from `response.body`, and a `ref` outside that shape has nothing to resolve against. `WriteResponse` has no `records` field, so this is a response-only clause and `targets` is `ResponseExtraction` alone, the same shape as RULE-ENDP-005's precedent for a response-only clause on this validator. The raise at `ResponseExtraction._validate` carries this id through `analitiq.contracts.shared.rules::violation`, as its siblings in the same method do, so the refusal names the rule to a consumer that branches on ids. The pinned reachability manifest claims a read of both `ResponseExtraction.records` and `RefExpression.ref`, so no `RecordAffirmation` is needed. The JSON-Schema-side mirror in `ResponseExtraction`'s `model_config` is a bare inline pattern literal, never assigned to a module-level name and never compiled or matched against in Python — the actual Python-side enforcement uses plain string equality and `.startswith()`, not a regex — so `mechanism`/`symbol` are left unclassified rather than extracting a constant with no other consumer.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-074",
+   "statement": "Every replication cursor field MUST resolve to a record-shape node whose own `type` names exactly one JSON type besides `null`, and that type MUST be one that can hold a cursor: a string moment or an integer.\n",
+   "tier": "coherence",
+   "severity": "error",
+   "artifact_kinds": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ReadOperation"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": "ReadOperation",
+   "rationale": "The stored cursor is the last record's value for this field, and as the engine reads it today, the field's own `type` is what says how that value reads back on the next run: a string as an ISO moment, an integer as epoch ticks or a monotonic id. A field whose `type` names no real type or a union of them gives the reader nothing to choose, and the engine refuses it before the first request. A number, boolean or container field is worse: it is refused only when a stored cursor is read back, after the first run has read everything and committed a checkpoint the stream can never resume from. The reading is the field node's own `type` key and no deeper — `declared_json_types` in the engine's response-schema reader takes `field[\"type\"]` and does not descend a union — so a field typed only through `anyOf`/`oneOf`, or only by a `native_type`/`arrow_type` pair, is refused here for the same reason: it satisfies the typedness rule other paths ask about and still names no JSON type the cursor reader can see. Reading the union through would be the worse error of the two available: it would bless the one spelling that validates clean, ships, and then dies on the first cursor read. The predicate also stands on the contract alone: a watermark whose type the document leaves open cannot be compared, whatever reads it.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-075",
+   "statement": "A query parameter that declares a serialization `style` together with an `explode` flag MUST declare a pairing that has a defined query-string serialization, and when the parameter's declared type is a container, a pairing that serializes that container type.\n",
+   "tier": "shape",
+   "severity": "error",
+   "artifact_kinds": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::Param._validate",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "Param"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": "Param",
+   "rationale": "The published schema types `style` as an open string, so a document can name a pairing OpenAPI gives no query-string spelling, or one that spells only the other container (`deepObject` spells an object, the delimited styles an array). Nothing then exists to send, and as the engine reads it today it refuses such a declaration before the first request rather than guess a spelling onto the provider's wire. Refusing it here moves that failure to authoring time. The table follows OpenAPI's own serialization definitions, not the engine, so it stays correct if the engine's reading changes; if the engine later serializes a pairing OpenAPI leaves undefined, this rule would refuse a document that engine could send, and the table is the one place to widen.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-076",
+   "statement": "A parameter's declared numeric bounds MUST be finite, and no declared lower bound — `minimum`, `minLength`, `minItems` — MUST exceed the upper bound it pairs with.\n",
+   "tier": "shape",
+   "severity": "error",
+   "artifact_kinds": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::Param._validate",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "Param"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": "Param",
+   "rationale": "A bound that is not a finite number orders nothing — every comparison against NaN is false — and a lower bound above its upper bound admits no value at all. Either way every value the param is given fails its own declaration, so the param is unsendable on every run; as the engine reads it today, it refuses such a declaration when it compiles the param's rules, before any request. Refusing it here names the declaration at authoring time. The predicate is a fact about the declaration itself and holds whatever the engine does with it.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-077",
+   "statement": "A single-parameter cursor mapping MUST bound the read from below, with `gt` or `gte`; a window cursor mapping MUST bound its start from below, with `gt` or `gte`, and its end from above, with `lt` or `lte`.\n",
+   "tier": "coherence",
+   "severity": "error",
+   "artifact_kinds": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::Replication._bounds_face_forward",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "Replication"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": "Replication",
+   "rationale": "An incremental read resumes from where the last run stopped, so the stored cursor has to become a lower bound. A single mapping with an upper-bound operator asks the provider for everything before the cursor, and a window whose start bounds from above or whose end bounds from below asks for an empty or inverted range. As the engine reads it today it refuses a mapping facing the wrong way before the first run, since a first run has no cursor and would otherwise read everything, commit a checkpoint and fail only on the second. The document alone decides the direction, so the refusal belongs at authoring time.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-078",
+   "statement": "A replication cursor field typed `integer` MUST declare either an epoch cursor format, making it a moment, or no cursor format at all, making it an id; a cursor mapping over an id MUST declare no `format` and MUST NOT take the window form.\n",
+   "tier": "coherence",
+   "severity": "error",
+   "artifact_kinds": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ReadOperation"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": "ReadOperation",
+   "rationale": "An integer cursor is either a moment counted in epoch ticks or an id counted in records, and the cursor field's `format` is the only thing that says which. A calendar format on an integer claims a moment the value cannot spell. An id has no \"now\", so a window over it has no end, and a mapping `format` over it asks for an id rendered as a date. As the engine reads it today, each of these is refused when the first stored cursor is read back, which is after the whole first read has run and committed its checkpoint. The `format` read is the field node's own key, the one `record_field_declaration` takes in the engine; a format sitting inside an `anyOf`/`oneOf` branch is invisible to that reader, which is why RULE-ENDP-074 refuses a cursor field typed that way before this rule is reached. Refusing it here moves that failure to authoring time; the predicate reads only the document, so a stale reading of the engine can make this rule stricter than needed but never lets through a pairing whose meaning the document leaves undecided.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-079",
+   "statement": "A request's `query` map MUST NOT declare a key whose value is a bare `null`.\n",
+   "tier": "shape",
+   "severity": "error",
+   "artifact_kinds": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::_RequestBase._validate",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "_RequestBase"
+   ],
+   "fields": [
+    "query"
+   ],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": "GetReadRequest",
+   "rationale": "A query value has a spelling on the wire, and a bare `null` has none: an empty value, the text `null` and an omitted key are three different requests. As the engine reads it today, it refuses a bare null in the query map rather than pick one, while `{literal: null}` is the stated way to say the key is sent as absent. Refusing the bare form at authoring time keeps an author's half-finished edit from reaching the first request, and keeps the absence explicit where it is meant.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-080",
+   "statement": "A write operation's `idempotency` placed in a header MUST name that header with an HTTP field-name token.\n",
+   "tier": "shape",
+   "severity": "error",
+   "artifact_kinds": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::Idempotency._header_name_is_a_token",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "Idempotency"
+   ],
+   "fields": [
+    "name"
+   ],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": "Idempotency",
+   "rationale": "Placed in a header, `idempotency.name` becomes an HTTP field name, and a field name is a token: a space, colon or parenthesis makes a header no client can send. The field admits more because the body placement names a JSON field; the placement is what decides the grammar, so the check applies only there. As the engine reads it today, a non-token name is refused when the write plan is built, before the first batch. Refusing it here names the defect at authoring time, and the grammar is HTTP's, so the check does not depend on that reading.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-081",
+   "statement": "Every `path_params` binding in a request MUST source its placeholder's value through `from_param` or, on a write, through `from_input`; a ref, literal or template with neither binds no path segment.\n",
+   "tier": "coherence",
+   "severity": "error",
+   "artifact_kinds": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ReadOperation",
+    "WriteOperation"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": "WriteOperation",
+   "rationale": "A path segment is the one request slot the contract fills only from a declaration: an `in: path` param, which states the value's type, whether it is required and where its default comes from, or on a write a record field the mode's input schema declares. RULE-ENDP-008, RULE-ENDP-024 and RULE-ENDP-028 grade a binding against that declaration, and a ref, literal or template written straight into `path_params` skips all three, so nothing states what the segment may carry and nothing checks that it can resolve. The predicate reads only the document and holds whatever a run does with the path.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4464,7 +4730,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "PipelineAuthored",
    "rationale": "Two versions of one stream inside a single pipeline replicate the same source into the same destinations twice, and the two versions will disagree about the shape of what they write. The literal ids differ, so plain string uniqueness passes and only the version-stripped comparison catches it. The way in is routine: a stream is edited to a new version and the new reference is appended beside the old one rather than replacing it.\n",
    "status": "active",
    "superseded_by": null
@@ -6013,7 +6279,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "ConnectionEndpointRef",
    "rationale": "The handle is derived, never chosen: the runtime discovery that mints database endpoints computes it from the same function, so a hand-written or tidied-up value names an endpoint that does not exist and the stream resolves to nothing. Because the contract derives the handle when it is omitted, verification of a supplied one is the only moment the divergence can surface at all — without it the document would validate and detach silently.\n",
    "status": "active",
    "superseded_by": null
@@ -6062,7 +6328,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "PipeExpression",
    "rationale": "The node mirrors the engine's expression AST, where the seed is the value every later stage transforms; a pipe seeded by a conversion has nothing to convert and a conversion node standing alone has no input at all. Authors reach for the standalone conversion node because it reads like a function call, which is why the positional grammar is stated rather than left to the union of node types.\n",
    "status": "active",
    "superseded_by": null
@@ -6367,14 +6633,14 @@
   },
   {
    "id": "RULE-STRM-021",
-   "statement": "A validation rule's value MUST carry the payload shape its type requires.\n",
+   "statement": "A validation rule's `value` MUST carry a payload of the shape its `type` reads, and that payload MUST constrain something: a length MUST be a non-negative integer, a pattern a non-empty string, a range an object carrying a `min`, a `max` or both and no other key, with `min` no greater than `max` when both are present, an admitted-value set a non-empty list.\n",
    "tier": "coherence",
    "severity": "error",
    "artifact_kinds": [
     "stream"
    ],
-   "validator": null,
-   "enforcement_location": "unenforced",
+   "validator": "analitiq.contracts.stream::ValidationRule._value_carries_the_payload_its_type_needs",
+   "enforcement_location": null,
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -6385,8 +6651,8 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
-   "rationale": "The value field is deliberately typed open so each rule type can carry its own payload — a bound, a regex, a range object, a list of admitted values — and that openness is what leaves the shape unchecked: a rule whose payload is the wrong kind validates here, and what happens when the rule runs against a record, mid-transfer, depends on which kind it is. A `range` payload of the wrong shape raises there, reliably; the others do not: a wrong-shaped `pattern` payload can still interpolate into a syntactically valid, silently-wrong regex, and a wrong-shaped `in_list` payload can iterate into a value set with no error rather than raising. The presence check `RULE-STRM-009` settles only whether a payload is present, so an author who reads a clean validation as confirmation of the payload has read too much into it. Catching a violation means reading each rule's value against the meaning of its type in the stream spec.\n",
+   "fixture_model": "ValidationRule",
+   "rationale": "The value field is deliberately typed open so each rule type can carry its own payload — a bound, a regex, a range object, a list of admitted values — and that openness is what leaves the shape unchecked by the annotation: a rule whose payload is the wrong kind validates against the field, and what happens when the rule runs against a record, mid-transfer, depends on which kind it is. A `range` payload of the wrong shape raises there, reliably; the others do not: a wrong-shaped `pattern` payload can still interpolate into a syntactically valid, silently-wrong regex, and a wrong-shaped `in_list` payload can iterate into a value set with no error rather than raising. Whether a pattern COMPILES is not asked here, only whether it is a non-empty string: compilability is a question about a dialect, the dialect is RE2 (the engine applies a `pattern` rule through pyarrow's `match_substring_regex`), and answering it with stdlib `re` answers a different question in both directions — `\\p{L}+` is an ordinary RE2 pattern `re` refuses, `(a)\\1` a backreference `re` accepts and RE2 cannot compile. That verdict belongs where `google-re2` is a dependency. A payload that is the right kind but constrains nothing — a negative `min_length`, an empty pattern, a range with neither bound — fails no row and is reported nowhere, which reads exactly like a rule that passed; one that admits nothing — a negative `max_length`, a range whose `min` sits above its `max`, an empty admitted-value list — fails every row instead. Both are rules the author cannot have meant, and the two are refused together for the reason the same shape is refused on a param's bounds: which side of the bound the payload is wrong on does not change that it grades nothing. The presence check RULE-STRM-009 settles only whether a payload is present, so this rule is what settles whether the one present can be applied, on the document, where the author is still holding it.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6929,6 +7195,31 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-STRM-043",
+   "statement": "A stream source that replicates incrementally and declares `database_pagination.order_by_field` MUST name its `cursor_field` there.\n",
+   "tier": "coherence",
+   "severity": "error",
+   "artifact_kinds": [
+    "stream"
+   ],
+   "validator": "analitiq.contracts.stream::StreamSource._pages_are_ordered_by_the_cursor",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "StreamSource"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": "StreamSource",
+   "rationale": "A checkpoint records the cursor value of the last row of a page, and that value is the highest one read only when the page was ordered by the cursor. Declaring a different field orders the page by something else, so the run saves an arbitrary row's value and the next run resumes above rows it never read — data loss with no failure anywhere, visible only as records that never arrive. Declaring nothing is not that: an ordering the document does not name is the cursor's, because the cursor is what the read path orders a paged incremental source by when the stream names no other field. So the rule reaches exactly the disagreement an author can write down, which sits in one document and is decidable from it alone — refusing the stream is the only point at which the author still has both halves in front of them. A full-refresh source reads no cursor, so its ordering is free.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-TMAP-001",
    "statement": "An `exact` read rule whose native_type names a schemaless or structured container MUST NOT render a scalar Arrow type.\n",
    "tier": "coherence",
@@ -7076,7 +7367,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "TypeMapReadRegexRule",
    "rationale": "The rendered arrow_type is what discovery freezes into the endpoint document, so a spelling outside the engine-published Arrow vocabulary would not fail here but at schema construction, with the column already declared. Matching full-string is what makes that check mean anything — a partial match would accept trailing whitespace or a newline that no consumer parses — and it is also why a placeholder is legal only where the family declares a parameter.\n",
    "status": "active",
    "superseded_by": null

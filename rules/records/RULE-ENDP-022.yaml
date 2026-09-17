@@ -1,23 +1,35 @@
 id: RULE-ENDP-022
 statement: >
-  An expression dict in a request slot MUST declare exactly one expression
-  key and carry no sibling beyond the argument fields that key itself
-  declares and extension keys.
+  An expression an API endpoint operation declares MUST be the shape its own
+  form models: exactly one expression key, no sibling beyond the argument
+  fields that key itself declares and extension keys, and a payload of the
+  modelled type — a string `ref`, a string `template` that closes every `${`
+  it opens, and a `function` naming a non-empty string with only the
+  arguments the function expression declares.
 tier: shape
 severity: error
 artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [ReadOperation, WriteOperation]
+fixture_model: ReadOperation
 rationale: >
   The resolver dispatches on the one key it recognises, in its own
   precedence order, and ignores whatever else the dict carries. So a dict
   declaring two of them resolves through one and silently discards the
   other — the author reads the ref they wrote, the wire carries the literal
   beside it — and a stray sibling is an author's edit that never took
-  effect. Request slots are untyped, so nothing else in the contract sees
-  these dicts; refusing the malformed shape at its own site is also what
-  keeps the failure pointing at the bad fragment instead of surfacing later
-  as a misleading "param not referenced" from the binding walk.
+  effect. The payload under the key fails the same way one key further in:
+  `{"ref": 5}` is not a path any scope is read at, `{"template": {...}}` is
+  not text to interpolate, `{"function": ""}` names nothing to call, and a
+  template that opens a `${` it never closes interpolates nothing and goes on
+  the wire brace and all — so the request is built with the value missing and
+  the provider answers about a credential or a filter the document does say
+  where to find. `Expression`'s members state every one of these shapes
+  already; request slots are untyped, so nothing else in the contract reads
+  these dicts and the union never grades the document as authored. Refusing
+  the malformed shape at its own site is also what keeps the failure pointing
+  at the bad fragment instead of surfacing later as a misleading "param not
+  referenced" from the binding walk.
 status: active
 superseded_by: null

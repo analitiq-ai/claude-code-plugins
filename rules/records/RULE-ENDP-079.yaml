@@ -1,0 +1,21 @@
+id: RULE-ENDP-079
+statement: >
+  A request's `query` map MUST NOT declare a key whose value is a bare `null`.
+tier: shape
+severity: error
+artifact_kinds: [api-endpoint]
+validator: "analitiq.contracts.endpoints::_RequestBase._validate"
+owners: [connector-plugin, engine]
+targets: [_RequestBase]
+fields: [query]
+fixture_model: GetReadRequest
+rationale: >
+  A query value has a spelling on the wire, and a bare `null` has none: an
+  empty value, the text `null` and an omitted key are three different
+  requests. As the engine reads it today, it refuses a bare null in the
+  query map rather than pick one, while `{literal: null}` is the stated way
+  to say the key is sent as absent. Refusing the bare form at authoring time
+  keeps an author's half-finished edit from reaching the first request, and
+  keeps the absence explicit where it is meant.
+status: active
+superseded_by: null

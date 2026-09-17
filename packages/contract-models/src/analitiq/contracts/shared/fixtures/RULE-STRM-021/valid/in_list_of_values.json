@@ -1,0 +1,10 @@
+{
+  "type": "in_list",
+  "field": [
+    "amount"
+  ],
+  "value": [
+    "a",
+    "b"
+  ]
+}

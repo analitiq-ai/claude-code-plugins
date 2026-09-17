@@ -1,0 +1,15 @@
+{
+  "op": "pipe",
+  "args": [
+    {
+      "op": "get",
+      "path": [
+        "id"
+      ]
+    },
+    {
+      "op": "fn",
+      "name": "to_string"
+    }
+  ]
+}

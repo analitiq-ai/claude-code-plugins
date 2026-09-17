@@ -1,0 +1,6 @@
+{
+  "in": "query",
+  "type": "integer",
+  "required": false,
+  "minimum": 0
+}

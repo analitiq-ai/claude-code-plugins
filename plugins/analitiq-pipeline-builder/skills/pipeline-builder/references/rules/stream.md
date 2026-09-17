@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Covers: every rule this plugin owns that binds a **`stream`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 26 of the 58 below have no validator, so nothing rejects
+all hold: 25 of the 59 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **15** shape · **15** coherence · **17** reference · **5** process · **6** choice.
+In this file: **15** shape · **16** coherence · **17** reference · **5** process · **6** choice.
 
 ## Contents
 
@@ -76,8 +76,9 @@ single field looks wrong.
 | RULE-STRM-012 | A filter's operator MUST belong to the operator vocabulary of the scope its source endpoint reference declares. | `stream` | error | validator |
 | RULE-STRM-014 | A stream source bound to a connector-scoped endpoint MUST NOT declare any read feature the source model reserves for database sources. | `stream` | error | validator |
 | RULE-STRM-015 | A validation rule's field MUST resolve within its own mapping: the first token naming an assignment target the mapping declares, and each later token a field declared beneath the one before it. | `stream` | error | validator |
-| RULE-STRM-021 | A validation rule's value MUST carry the payload shape its type requires. | `stream` | error | — |
+| RULE-STRM-021 | A validation rule's `value` MUST carry a payload of the shape its `type` reads, and that payload MUST constrain something: a length MUST be a non-negative integer, a pattern a non-empty string, a range an object carrying a `min`, a `max` or both and no other key, with `min` no greater than `max` when both are present, an admitted-value set a non-empty list. | `stream` | error | validator |
 | RULE-STRM-041 | For an API-scope source, no two `filters` entries MUST share the same `field`/`operator` pair. | `stream` | error | validator |
+| RULE-STRM-043 | A stream source that replicates incrementally and declares `database_pagination.order_by_field` MUST name its `cursor_field` there. | `stream` | error | validator |
 
 ## Reference
 

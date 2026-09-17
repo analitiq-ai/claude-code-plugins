@@ -384,7 +384,7 @@ def _p_write_request_slot_response_ref() -> list[dict]:
     return _validate(_endpoint_with_write(request_extra={"query": {"c": {"ref": "response.body.id"}}}))
 
 
-def _p_write_records_tail() -> list[dict]:
+def _p_write_records_barred() -> list[dict]:
     return _validate(_endpoint_with_write(
         response={"success_when": {"empty": {"ref": "response.records.errors"}}},
     ))
@@ -455,11 +455,14 @@ def _p_connector_function_name() -> list[dict]:
 
 
 def _p_connector_lookup_map() -> list[dict]:
+    # The node carries the arguments `LookupDerived` declares (RULE-CTOR-068
+    # grades that), so what is left for the probe to measure is the claim the
+    # sentence makes: nothing reads the map against the input's value set.
     def mutate(doc: dict) -> dict:
         _first_transport(doc).setdefault("headers", {})["X-Region"] = {
             "function": "lookup",
-            "input": {"value": {"ref": "connection.parameters.region"},
-                      "map": {"literal": {"eu": "eu-1"}}},
+            "input": {"ref": "connection.parameters.region"},
+            "map": {"eu": "eu-1"},
         }
         return doc
     return _staged_connector(mutate, API_EXAMPLE)
@@ -930,7 +933,8 @@ PROBES: tuple[Probe, ...] = (
           message_re=r"not a declared"),
     Probe("write-request-slot-response-ref", "error", _p_write_request_slot_response_ref,
           message_re=r"built before the response exists"),
-    Probe("write-records-tail-unchecked", "clean", _p_write_records_tail),
+    Probe("write-records-barred", "error", _p_write_records_barred,
+          message_re=r"read-only"),
     Probe("write-headers-tail-unchecked", "clean", _p_write_headers_tail),
     Probe("write-status-ref-unchecked", "clean", _p_write_status_ref),
     Probe("write-truncate-insert-accepted", "clean", _p_write_truncate_insert),
@@ -1191,7 +1195,7 @@ _SCOPE_TABLE_ROWS: tuple[tuple[str, tuple[str, tuple[str, ...]], tuple[str, tupl
      ("declared-key", ("write-metadata-undeclared-key",))),
     ("`response.records.<path>`",
      ("spelling-only", ("read-records-tail-unchecked",)),
-     ("spelling-only", ("write-records-tail-unchecked",))),
+     ("barred", ("write-records-barred",))),
     ("`response.headers.<name>`",
      ("spelling-only", ("read-headers-tail-unchecked",)),
      ("spelling-only", ("write-headers-tail-unchecked",))),
@@ -1255,22 +1259,25 @@ def render_scope_guarantees() -> str:
         *table,
         "",
         "So `response.body.nope` in a read pagination block is an error rather than a",
-        "silent one-page sync — but `response.records.next_cursor` and",
+        "silent one-page sync — but on a read `response.records.next_cursor` and",
         "`response.headers.X-Made-Up` are not, and cannot be: headers, status and",
         "record counts are runtime values this document declares nothing about, and the",
         "`response.records` **scope** is not the `response.records` **field**. (That",
         "field — the `{ref: response.body.<path>}` selecting the record collection — IS",
         "resolved, and must land on an array node, RULE-ENDP-012. Referencing",
         "`response.records.<something>` from a pagination or metadata expression is a",
-        "different thing and is unchecked.)",
+        "different thing: on a read it is unchecked, and on a write the scope is barred",
+        "outright, as the table says.)",
         "",
         "**A write mode has no `response.schema`**, so nothing under",
-        "`operations.write.<mode>.response` is path-resolved at all: a typo in",
-        "`success_when`, `affected_records` or `error.*` validates clean. That is the",
-        "worst cell in the table — a `success_when` predicate over a ref that resolves",
-        "to nothing holds unconditionally, so every write reports success, including",
-        "the ones whose rejected rows the provider listed. Trace write response refs",
-        "against the provider's real payload yourself.",
+        "`operations.write.<mode>.response` is path-resolved at all: a `response.body`",
+        "PATH typo in `success_when`, `affected_records` or `error.*` validates clean.",
+        "The sub-scope in front of it is still checked — `response.bdy.ok` is an error",
+        "there as anywhere — so what survives is a wrong path under a right scope.",
+        "That is the worst cell in the table — a `success_when` predicate over a ref",
+        "that resolves to nothing holds unconditionally, so every write reports",
+        "success, including the ones whose rejected rows the provider listed. Trace",
+        "write response refs against the provider's real payload yourself.",
         "",
         "Wherever it appears, a `response.*` ref in a request slot or a param `default`",
         "is refused outright, whatever it names and on either operation: the request is",
@@ -1301,11 +1308,12 @@ def render_validator_blind_spots() -> str:
         "  read-only.** On a READ, a `response.body.<path>` is resolved against",
         "  `response.schema`; on either operation, a `response.metadata.<key>` is",
         "  checked against the declared keys. Those typos are errors. Nothing else is",
-        "  proved, and three cases in particular look proved and are not:",
-        "  `response.records.<path>` and `response.headers.<name>` are spelling-checked",
+        "  proved, and three cases in particular look proved and are not: on a read",
+        "  `response.records.<path>` and, on either operation,",
+        "  `response.headers.<name>` are spelling-checked",
         "  only, and a WRITE mode has no `response.schema`, so no write-side",
-        "  `response.body` path is resolved — a `success_when` typo validates clean and",
-        "  the predicate then holds unconditionally. Every remaining scope is checked",
+        "  `response.body` path is resolved — a `success_when` PATH typo validates clean",
+        "  and the predicate then holds unconditionally. Every remaining scope is checked",
         "  on its leading token only — so a `connection.discovered.*` ref with no",
         "  post-auth output that produces it validates clean, on either document.",
         "- **A connector field nothing resolves is not scope-checked either.** The",

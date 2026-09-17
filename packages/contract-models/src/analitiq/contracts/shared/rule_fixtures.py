@@ -6,6 +6,12 @@ one bare JSON payload per file. A valid fixture is one the model accepts; an
 invalid fixture is one the model rejects with that rule among the rules its
 enforcers raised.
 
+"JSON" here is RFC 8259, not what :mod:`json` happens to take: the corpus
+ships in the wheel to be read by consumers that are not Python, and
+``Infinity``/``NaN`` are tokens only this parser accepts. A file carrying one
+loads here and then fails — or silently reshapes into a different document —
+under every other reader, so it is refused at load rather than shipped.
+
 :func:`rule_fixtures` loads the corpus and :func:`fixture_mismatch` grades one
 fixture against the installed models, so a consumer checks the models it pins
 with the grading this repo's own suite runs rather than a second copy of it.
@@ -43,8 +49,8 @@ def rule_fixtures() -> tuple[RuleFixture, ...]:
 
     Raises ``ValueError`` for a corpus that cannot be graded as laid out: a
     directory for a rule whose record names no ``fixture_model``, a group
-    other than a verdict, a file that is not ``*.json``, or a
-    ``fixture_model`` that names no contract class or more than one.
+    other than a verdict, a file that is not ``*.json`` or not RFC 8259 JSON,
+    or a ``fixture_model`` that names no contract class or more than one.
     """
     fixtures: list[RuleFixture] = []
     for rule_id, verdict, model, path in corpus_items(FIXTURES_DIR, _fixture_model):
@@ -55,9 +61,19 @@ def rule_fixtures() -> tuple[RuleFixture, ...]:
             verdict=verdict,
             name=path.stem,
             model=model,
-            document=json.loads(path.read_text(encoding="utf-8")),
+            document=_load_json(path),
         ))
     return tuple(fixtures)
+
+
+def _load_json(path: Path) -> Any:
+    """One fixture file, parsed as RFC 8259 JSON (module docstring)."""
+    def _refuse(token: str) -> Any:
+        raise ValueError(
+            f"{path}: {token} is not an RFC 8259 JSON value; the corpus is read "
+            "by parsers that are not Python's")
+
+    return json.loads(path.read_text(encoding="utf-8"), parse_constant=_refuse)
 
 
 def fixture_mismatch(fixture: RuleFixture) -> str | None:

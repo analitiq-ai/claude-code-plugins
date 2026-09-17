@@ -1,0 +1,14 @@
+{
+  "supported_methods": [
+    "incremental"
+  ],
+  "cursor_mappings": [
+    {
+      "cursor_field": "updated_at",
+      "start_param": "since",
+      "end_param": "until",
+      "start_operator": "gte",
+      "end_operator": "lt"
+    }
+  ]
+}

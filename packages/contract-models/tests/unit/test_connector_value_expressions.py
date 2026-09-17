@@ -132,6 +132,21 @@ def test_a_literal_header_is_accepted():
     assert _http(headers={"Accept": "application/json"}).headers
 
 
+@pytest.mark.parametrize(
+    "template",
+    [
+        pytest.param("key=${}", id="empty"),
+        pytest.param("key=${ }", id="blank"),
+    ],
+)
+def test_an_empty_placeholder_is_refused(template):
+    # `${}` names no scope for the same reason `${ }` does not: the resolver
+    # strips the key before looking it up, so both address the empty name.
+    with pytest.raises(ValidationError) as exc:
+        _http(headers={"X-K": template})
+    assert _shows_the_vocabulary(exc)
+
+
 def test_the_failure_names_the_token_and_the_header():
     with pytest.raises(ValidationError) as exc:
         _http(headers={"X-Tenant": "${tenant}", "Accept": "application/json"})

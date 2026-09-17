@@ -51,7 +51,10 @@ from analitiq.contracts.stream import (
     StreamDestination,
     StreamInput,
     StreamMapping,
+    ValidationRule,
     _DB_WRITE_MODES,
+    _UNARY_RULE_TYPES,
+    _VALUE_PAYLOAD_CHECKS,
 )
 
 _ASSIGNMENT_VALUE = TypeAdapter(AssignmentValue)
@@ -863,3 +866,72 @@ class TestValidationRuleField:
         assert validator.is_valid(
             _mapping(_OBJECT_TARGET, [{"type": "required", "field": ["address.city"]}])
         )
+
+
+class TestValidationRulePayload:
+    """RULE-STRM-021 — the payload a rule's `type` reads must be applicable."""
+
+    def _rule(self, type_, value):
+        return ValidationRule.model_validate(
+            {"type": type_, "field": ["amount"], "value": value})
+
+    def test_every_rule_type_is_either_unary_or_carries_a_payload_check(self):
+        # The partition is what keeps the two halves of the check honest:
+        # RULE-STRM-009 refuses a payload on a unary type and requires one on
+        # the rest, RULE-STRM-021 grades the one present. A type in neither set
+        # would be graded by neither, with nothing failing.
+        declared = set(get_args(ValidationRule.model_fields["type"].annotation))
+        assert _UNARY_RULE_TYPES | set(_VALUE_PAYLOAD_CHECKS) == declared
+        assert not _UNARY_RULE_TYPES & set(_VALUE_PAYLOAD_CHECKS)
+
+    def test_a_negative_max_length_is_refused_as_unsatisfiable(self):
+        # A negative bound is refused either way; which way is what the author
+        # is told. No row satisfies `max_length: -1` — the opposite of what a
+        # negative `min_length` does.
+        with pytest.raises(ValidationError, match="no row can satisfy"):
+            self._rule("max_length", -1)
+
+    def test_a_negative_min_length_is_refused_as_vacuous(self):
+        with pytest.raises(ValidationError, match="every row satisfies"):
+            self._rule("min_length", -1)
+
+    def test_a_pattern_is_graded_as_a_string_not_as_a_dialect(self):
+        # RULE-STRM-021 asks only that a `pattern` payload is a non-empty
+        # string. It deliberately does NOT ask whether the source compiles:
+        # the dialect this pattern runs under is RE2, and grading it with
+        # stdlib `re` answers the wrong question in both directions.
+        # `\p{L}+` is an ordinary RE2 pattern that `re` refuses, and
+        # `a{4294967295}` makes `re.compile` raise `OverflowError` — not even
+        # `re.error` — which would escape as a crash rather than a finding.
+        for source in (r"^\p{L}+$", "a{4294967295}", "[", "(?P<"):
+            assert self._rule("pattern", source).value == source
+
+    def test_a_plain_pattern_is_accepted(self):
+        assert self._rule("pattern", r"^\d{3}-\d{4}$").value == r"^\d{3}-\d{4}$"
+
+    def test_an_empty_pattern_is_refused_as_vacuous(self):
+        with pytest.raises(ValidationError, match="every row matches"):
+            self._rule("pattern", "")
+
+    @pytest.mark.parametrize("type_", ["min_length", "max_length"])
+    def test_a_boolean_length_is_not_an_integer_length(self, type_):
+        # `True` is an `int` in Python and a boolean everywhere the document
+        # travels, so a bare isinstance check would take it as the length 1.
+        with pytest.raises(ValidationError, match="not an integer length"):
+            self._rule(type_, True)
+
+    def test_a_range_whose_min_sits_above_its_max_is_refused(self):
+        # The empty interval: every row fails it. Refused for the reason a
+        # param's `minimum` above its `maximum` is.
+        with pytest.raises(ValidationError, match="no row can fall in"):
+            self._rule("range", {"min": 10, "max": 1})
+
+    def test_a_range_whose_bounds_do_not_compare_is_left_alone(self):
+        # Whether an interval is empty is not decidable across kinds, and
+        # this rule asks only that. The mixed-kind payload is a defect this
+        # predicate does not claim to grade.
+        assert self._rule("range", {"min": 1, "max": "x"}).value == {"min": 1, "max": "x"}
+
+    def test_an_empty_admitted_value_list_is_refused(self):
+        with pytest.raises(ValidationError, match="admits no value"):
+            self._rule("in_list", [])

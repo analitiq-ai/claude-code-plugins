@@ -64,9 +64,12 @@ The provider takes one open-ended "changed since X" filter. Use a
 
 - `operator` relates the cursor field to the param (`gte` → "at or after the
   stored watermark").
-- `format` — set it only when the param expects a specific
-  encoding of the value (e.g. `epoch_seconds`); omit it when the field is
-  already in the param's native form.
+- `format` — how the stored value is rendered *into the param*. Set it only
+  when the param expects a specific encoding (e.g. `epoch_seconds`); omit it
+  when the field is already in the param's native form. It says nothing about
+  the field: an integer field counting epoch ticks declares that in its own
+  `format` in `response.schema`, and an integer id takes no mapping `format`
+  at all (`RULE-ENDP-078`).
 
 ## Bounded-window cursor
 
@@ -110,6 +113,22 @@ A window mapping wires `start_param` and `end_param` each that way.
 A cursor on `updated_at` requires `updated_at` to be a declared field of the
 record shape `response.schema` describes (`RULE-ENDP-013`), not merely
 something the provider mentions.
+
+That field's own declaration is read as well, because the stored cursor is
+read back through it. It must name exactly one JSON type besides `null` in
+its own `type`, and that type must be `string` or `integer`
+(`RULE-ENDP-074`); a number, boolean or container leaves the next run nothing
+it can compare. Write a nullable cursor as `{"type": ["string", "null"]}`:
+the declaration is read off that node and no deeper, so a type named only
+inside an `anyOf`/`oneOf` branch is refused — the reader that reads a stored
+cursor back does not descend a union, and a document it cannot read is one
+that ships and then fails on the first incremental run. An integer says which
+kind of integer it is in its own `format`: `epoch_seconds` or
+`epoch_milliseconds` makes it a moment, a calendar cursor format is refused
+outright — a moment an integer cannot spell — and anything else, a provider's
+own width token or no format at all, makes it a monotonic id
+(`RULE-ENDP-078`). An id has no "now", so it takes neither the window variant
+nor a mapping `format`.
 
 ## More than one cursor mapping
 

@@ -44,7 +44,11 @@ LOG = logging.getLogger(__name__)
 # into the `secrets` resolution scope.
 OAUTH_TOKEN_PAYLOAD_KEY = "__oauth_token_payload"
 
-_TEMPLATE_RE = re.compile(r"\$\{([^}]+)\}")
+# A closed `${...}` is a placeholder whatever it encloses, empty included:
+# the key is stripped before lookup, so `${}` addresses the same empty name
+# `${ }` does. Reading one as a placeholder and the other as literal text
+# would give one authored intent two verdicts.
+_TEMPLATE_RE = re.compile(r"\$\{([^}]*)\}")
 
 # The four object forms the value-expression contract defines. A dict bearing
 # any of these keys is an expression node; a dict bearing none is structural
@@ -193,38 +197,51 @@ def validate_expression_shapes(
     walk(node, where)
 
 
-def iter_expression_strings(node: Any) -> Iterator[tuple[str, str]]:
-    """Yield ``('ref'|'template', value)`` for every *resolvable* expression
-    string in ``node``, mirroring ``resolve_template_deep``'s dispatch and
-    boundaries so validators parse expressions exactly as the resolver does: a
-    bare string is a template; a ``literal`` subtree is opaque data; a
-    ``function``'s ``input`` is a nested expression while its ``map`` is a data
-    table. Lets the contract models enforce value-expression rules without
-    re-implementing this grammar."""
+def iter_expression_nodes(node: Any) -> Iterator[tuple[str, Any]]:
+    """Yield ``('ref'|'template'|'function', payload)`` for every expression
+    the resolver would resolve in ``node``, mirroring
+    ``resolve_template_deep``'s dispatch and boundaries: a bare string is a
+    template; a ``literal`` subtree is opaque data; a ``function``'s ``input``
+    is a nested expression while its ``map`` is a data table.
+
+    A ``ref`` or ``template`` payload is yielded as authored, whatever its
+    type, so a rule about that type reads the same walk as a rule about the
+    text. A ``function`` yields its whole node, because its arguments are
+    siblings of the name.
+    """
     if isinstance(node, str):
         yield ("template", node)
         return
     if isinstance(node, dict):
         # Dispatch on the first key the resolver honours, in `_EXPRESSION_KEYS` order.
         if "template" in node:
-            if isinstance(node["template"], str):
-                yield ("template", node["template"])
+            yield ("template", node["template"])
             return
         if "function" in node:
-            yield from iter_expression_strings(node.get("input"))
+            yield ("function", node)
+            yield from iter_expression_nodes(node.get("input"))
             return
         if "literal" in node:
             return
         if "ref" in node:
-            if isinstance(node["ref"], str):
-                yield ("ref", node["ref"])
+            yield ("ref", node["ref"])
             return
         for value in node.values():
-            yield from iter_expression_strings(value)
+            yield from iter_expression_nodes(value)
         return
     if isinstance(node, list):
         for item in node:
-            yield from iter_expression_strings(item)
+            yield from iter_expression_nodes(item)
+
+
+def iter_expression_strings(node: Any) -> Iterator[tuple[str, str]]:
+    """Yield ``('ref'|'template', value)`` for every *resolvable* expression
+    string in ``node`` — the string-valued refs and templates
+    `iter_expression_nodes` walks. Lets the contract models enforce
+    value-expression rules without re-implementing this grammar."""
+    for kind, payload in iter_expression_nodes(node):
+        if kind != "function" and isinstance(payload, str):
+            yield (kind, payload)
 
 
 def template_placeholders(template: str) -> list[str]:
@@ -232,6 +249,23 @@ def template_placeholders(template: str) -> list[str]:
     stripped exactly as the resolver strips it before lookup. A template with no
     placeholders (a plain literal string) returns an empty list."""
     return [match.strip() for match in _TEMPLATE_RE.findall(template)]
+
+
+def has_unterminated_placeholder(template: str) -> bool:
+    """True when a `${` in `template` has no `}` after it.
+
+    Such a `${` is no placeholder to `template_placeholders`, so one resolver
+    sends it as text while a resolver reading placeholders strictly refuses
+    the template. An earlier `${` closes at the first `}` after it, the
+    pairing `_TEMPLATE_RE` makes.
+    """
+    start = template.find("${")
+    while start >= 0:
+        end = template.find("}", start + 2)
+        if end < 0:
+            return True
+        start = template.find("${", end + 1)
+    return False
 
 
 def unqualified_tokens(node: Any) -> list[str]:

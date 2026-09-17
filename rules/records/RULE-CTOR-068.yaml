@@ -1,0 +1,35 @@
+id: RULE-CTOR-068
+statement: >
+  A `function` expression in a connector field a runtime resolves MUST name
+  its function with a non-empty string, and where that name is a function the
+  contract models, it MUST carry the arguments that function's model
+  declares, each of the type the model declares.
+tier: shape
+severity: error
+artifact_kinds: [connector]
+validator: "analitiq.contracts.connector::ValueExpressionScopes._functions_carry_their_arguments"
+owners: [connector-plugin, engine]
+targets:
+  - HttpTransport
+  - TransportDefaults
+  - AuthOperationTemplate
+  - PostAuthOperationRequest
+  - AdbcTransport
+  - DatabaseTls
+  - DsnBinding
+fixture_model: HttpTransport
+rationale: >
+  The typed function union already states each function's arguments, but it
+  is reached only where a field is annotated with it — and the fields a
+  runtime resolves are mostly open maps, so a `lookup` with no `map`, a
+  `basic_auth` with no `input` or a `url_encode` whose `safe` set is a list
+  passes the document and reaches the resolver, which has nothing to look a
+  value up in and either fails far from the author or resolves to nothing at
+  all. RULE-CTOR-065 grades the node's shape — one expression key, no stray
+  sibling — and stops there, so the arguments are this rule's half, applied
+  by validating the node against the same union the typed sites use rather
+  than by a second statement of what each function takes. A name the union
+  does not model is left alone: whether the engine registers it is
+  RULE-SHRD-007, which nothing here can read.
+status: active
+superseded_by: null

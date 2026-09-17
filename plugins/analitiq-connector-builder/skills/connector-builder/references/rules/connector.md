@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Covers: every rule this plugin owns that binds a **`connector`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 38 of the 86 below have no validator, so nothing rejects
+all hold: 37 of the 88 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **32** shape · **30** coherence · **10** reference · **8** process · **6** choice.
+In this file: **34** shape · **30** coherence · **10** reference · **8** process · **6** choice.
 
 ## Contents
 
@@ -52,7 +52,7 @@ than edited.
 | RULE-CTOR-040 | A `database` connector MUST declare its `sql_capabilities` block, which the contract leaves optional. | `connector` | error | — | — |
 | RULE-CTOR-055 | A DSN `template` MUST NOT contain `${...}` value-expression syntax; a substitution point is a `{name}` placeholder declared in `bindings`. | `connector` | error | validator | — |
 | RULE-CTOR-056 | A connection condition's `present` MUST be the JSON boolean `true`, never a number or string that stands in for it. | `connector` | error | validator | — |
-| RULE-CTOR-057 | In a connector field a runtime resolves, every ref and every `${...}` template placeholder MUST lead with one of the resolution scopes the contract declares. | `connector` | error | validator | — |
+| RULE-CTOR-057 | In a connector field a runtime resolves, every ref MUST be a string, and every ref and every `${...}` template placeholder MUST lead with one of the resolution scopes the contract declares. | `connector` | error | validator | — |
 | RULE-CTOR-058 | Every entry in a connector's error map MUST name its failure category from the vocabulary `ErrorMap` declares. | `connector` | error | validator | `codes`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` · `http`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` |
 | RULE-CTOR-059 | A destination's SQL capability block MUST state its catalog support, its upsert grammar and how a write selects its target schema using only the vocabulary `SqlCapabilities` declares for each. | `connector` | error | validator | `catalog`: `none`, `read`, `full` · `merge_form`: `merge`, `insert_on_conflict`, `insert_on_duplicate_key`, `none` · `session_targeting`: `per_statement`, `session_default` |
 | RULE-CTOR-060 | A destination's stage-relation block MUST state where stage relations live and how long they survive using only the vocabulary `SqlStageCapabilities` declares for each. | `connector` | error | validator | `schema`: `target`, `dedicated` · `scope`: `temp`, `real` |
@@ -62,6 +62,8 @@ than edited.
 | RULE-CTOR-064 | An authored connector document MUST NOT declare `created_at` or `updated_at`, which the registry stamps on insert and on update; the connector model rejects any key it does not name. | `connector` | error | validator | — |
 | RULE-CTOR-065 | An expression dict in a connector field a runtime resolves MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares. | `connector` | error | validator | — |
 | RULE-CTOR-066 | An HTTP transport's `base_url` MUST NOT carry URL userinfo in text the connector author writes — the bare-string form, the `{literal}` form, or the authority of a `{template}`. | `connector` | error | validator | — |
+| RULE-CTOR-068 | A `function` expression in a connector field a runtime resolves MUST name its function with a non-empty string, and where that name is a function the contract models, it MUST carry the arguments that function's model declares, each of the type the model declares. | `connector` | error | validator | — |
+| RULE-CTOR-069 | A template in a connector field a runtime resolves MUST be a string, and every `${` in it MUST open a placeholder that a later `}` closes. | `connector` | error | validator | — |
 | RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | `content-length` |
 | RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | `content-type` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
@@ -103,7 +105,7 @@ single field looks wrong.
 | RULE-CTOR-038 | Each `post_auth_outputs` entry MUST resolve on its own, referencing no value another entry produces. | `connector` | error | — |
 | RULE-CTOR-046 | A connector document MUST reach credential material only through the `secrets` scope: a DSN binding's `value` refs a secret rather than a connection parameter, and a discovery `options` block carries no secret-shaped key. | `connector` | error | — |
 | RULE-CTOR-047 | A transport's `tls.mode` MUST resolve to a value the same connector's ssl-mode connection-contract input admits, and that input MUST declare the `enum` the mode is drawn from. | `connector` | error | — |
-| RULE-CTOR-048 | Every transport family keyed in `sql_capabilities.bulk_load` MUST name a transport family the same connector declares in `transports`. | `connector` | error | — |
+| RULE-CTOR-048 | Every transport family keyed in `sql_capabilities.bulk_load` MUST name a transport family the same connector declares in `transports`. | `connector` | error | validator |
 | RULE-CTOR-050 | A transport MUST be invoked no earlier than the phase at which every scope its expressions reference becomes available, and an input a transport references MUST declare a phase no later than that transport's first use. | `connector` | error | — |
 | RULE-CTOR-051 | A `runtime.oauth.*` reference MUST appear only in the auth operation for which that value exists, and only on a connector whose auth type produces it. | `connector` | error | — |
 | RULE-CTOR-052 | Every connector-internal ref — to a secret, a connection parameter or a discovered value — MUST name something the connection contract declares as an input or as a post-auth output. | `connector` | error | — |

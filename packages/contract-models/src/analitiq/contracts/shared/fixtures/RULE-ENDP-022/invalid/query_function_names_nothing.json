@@ -1,0 +1,29 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/items",
+    "query": {
+      "q": {
+        "function": "",
+        "input": "x"
+      }
+    }
+  },
+  "params": {},
+  "response": {
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "records": {
+      "ref": "response.body"
+    }
+  }
+}

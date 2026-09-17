@@ -1,0 +1,7 @@
+{
+  "in": "query",
+  "type": "array",
+  "required": false,
+  "style": "deepObject",
+  "explode": true
+}

@@ -1,0 +1,24 @@
+{
+  "success_when": {
+    "and": [
+      {
+        "exists": {
+          "ref": "response.body.ok"
+        }
+      },
+      {
+        "exists": {
+          "ref": "response.headers.Location"
+        }
+      },
+      {
+        "eq": [
+          {
+            "ref": "response.status"
+          },
+          201
+        ]
+      }
+    ]
+  }
+}

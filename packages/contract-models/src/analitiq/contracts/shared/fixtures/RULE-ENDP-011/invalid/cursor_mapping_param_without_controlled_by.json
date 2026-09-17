@@ -1,0 +1,98 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/items",
+    "query": {
+      "skip": {
+        "from_param": "skip"
+      },
+      "limit": {
+        "from_param": "limit"
+      },
+      "updated_since": {
+        "from_param": "updated_since"
+      }
+    }
+  },
+  "params": {
+    "skip": {
+      "in": "query",
+      "type": "integer",
+      "required": false,
+      "controlled_by": "pagination"
+    },
+    "limit": {
+      "in": "query",
+      "type": "integer",
+      "required": false,
+      "controlled_by": "pagination"
+    },
+    "updated_since": {
+      "in": "query",
+      "type": "string",
+      "format": "date-time",
+      "required": false
+    }
+  },
+  "response": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "native_type": "integer",
+                "arrow_type": "Int64"
+              },
+              "updated_at": {
+                "type": "string",
+                "format": "date-time",
+                "native_type": "string",
+                "arrow_type": "Timestamp(MICROSECOND, UTC)"
+              }
+            }
+          }
+        }
+      }
+    },
+    "records": {
+      "ref": "response.body.records"
+    }
+  },
+  "pagination": {
+    "type": "offset",
+    "offset": {
+      "param": "skip",
+      "initial": 0,
+      "increment_by": {
+        "ref": "response.record_count"
+      }
+    },
+    "limit": {
+      "param": "limit",
+      "default": 50
+    },
+    "stop_when": {
+      "empty": {
+        "ref": "response.body.records"
+      }
+    }
+  },
+  "replication": {
+    "supported_methods": [
+      "full_refresh",
+      "incremental"
+    ],
+    "cursor_mappings": [
+      {
+        "cursor_field": "updated_at",
+        "param": "updated_since",
+        "operator": "gte"
+      }
+    ]
+  }
+}

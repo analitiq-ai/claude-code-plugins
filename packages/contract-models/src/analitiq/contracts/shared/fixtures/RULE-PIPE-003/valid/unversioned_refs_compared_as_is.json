@@ -1,0 +1,12 @@
+{
+  "connections": {
+    "source": "c1",
+    "destinations": [
+      "d1"
+    ]
+  },
+  "streams": [
+    "a_vx",
+    "a_vy"
+  ]
+}

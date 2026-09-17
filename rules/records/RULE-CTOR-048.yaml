@@ -5,18 +5,19 @@ statement: >
 tier: coherence
 severity: error
 artifact_kinds: [connector]
-validator: null
-enforcement_location: unenforced
+validator: "analitiq.contracts.connector::DatabaseConnector._bulk_load_families_are_declared"
 owners: [connector-plugin, engine]
-targets: [SqlBulkLoad, DatabaseConnector]
+targets: [DatabaseConnector]
+fixture_model: DatabaseConnector
 rationale: >
   A bulk mechanism is a fact about a transport rather than about the
   connector — it needs that transport's own wire connection or cursor — so a
   key naming a family the connector does not ship declares a landing path
   that can never be taken, and the write either falls back silently or fails
-  in the stage where it is least legible. Known enforcement gap: `SqlBulkLoad`
-  validates each family key against the bulk-load vocabulary in isolation,
-  and nothing at connector level relates those keys to the declared
-  transports.
+  in the stage where it is least legible. `SqlBulkLoad` grades each family
+  key against the bulk-load vocabulary in isolation, which is every check
+  that can be made without the rest of the document; relating those keys to
+  the declared transports needs the connector in hand, so it is settled on
+  the connector, where both halves are.
 status: active
 superseded_by: null

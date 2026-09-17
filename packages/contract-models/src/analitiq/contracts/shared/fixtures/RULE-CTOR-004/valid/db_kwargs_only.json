@@ -1,0 +1,9 @@
+{
+  "transport_type": "adbc",
+  "driver": "snowflake",
+  "db_kwargs": {
+    "account": {
+      "ref": "connection.parameters.account"
+    }
+  }
+}

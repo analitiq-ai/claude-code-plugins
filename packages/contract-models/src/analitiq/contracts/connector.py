@@ -13,6 +13,7 @@ contract is closed: `x-*` extension keys are rejected at every level.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from enum import Enum
 from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
@@ -22,9 +23,11 @@ from pydantic import (
     Discriminator,
     Field,
     SerializerFunctionWrapHandler,
+    StrictBool,
     StringConstraints,
     Tag as UnionTag,
     TypeAdapter,
+    ValidationError,
     field_validator,
     model_serializer,
     model_validator,
@@ -60,6 +63,8 @@ from analitiq.contracts.value_expression import (
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
     authored_url_text,
+    has_unterminated_placeholder,
+    iter_expression_nodes,
     unqualified_tokens,
     validate_expression_shapes,
 )
@@ -80,9 +85,10 @@ def _dumped(node: Any) -> Any:
 class ValueExpressionScopes:
     """A block carrying value expressions a runtime resolves.
 
-    Enforces RULE-CTOR-057 and RULE-CTOR-065 wherever they apply. Mixed in
-    rather than repeated, for the reason `HeaderMergeRules` is: each check is
-    one check, and a model gains them by inheriting.
+    Enforces RULE-CTOR-065, RULE-CTOR-068, RULE-CTOR-069 and RULE-CTOR-057
+    wherever they apply. Mixed in rather than repeated, for the reason
+    `HeaderMergeRules` is: each check is one check, and a model gains them by
+    inheriting.
 
     Each model names its own fields, because which of them a runtime resolves
     is not visible from the annotation. `rate_limit.time_window_seconds` is
@@ -103,9 +109,9 @@ class ValueExpressionScopes:
     correct, because the grammar walker recurses through a plain object into
     the expressions under it, and costs only the key name in the message.
 
-    The shape validator is defined first so it runs first: a node that is both
-    malformed and unscoped is diagnosed by its structure, pointing at the bad
-    fragment, before the scope rule reads tokens out of it.
+    The validators run in definition order, structure before text: a node
+    that is both malformed and unscoped is diagnosed by its shape, pointing at
+    the bad fragment, before the scope rule reads tokens out of it.
     """
 
     #: Fields whose whole value is one value expression.
@@ -113,22 +119,36 @@ class ValueExpressionScopes:
     #: Fields holding a map of name -> value expression.
     EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ()
 
-    @model_validator(mode="after")
-    def _expressions_well_formed(self):
+    def _authored_expressions(self) -> Iterator[tuple[Any, str]]:
+        """Each declared expression in its plain-JSON form, with where it sits."""
         for name in self.EXPRESSION_FIELDS:
-            _reject_malformed(_dumped(getattr(self, name)), name)
+            yield _dumped(getattr(self, name)), name
         for name in self.EXPRESSION_MAPS:
             for key, value in (getattr(self, name) or {}).items():
-                _reject_malformed(_dumped(value), f"{name}.{key}")
+                yield _dumped(value), f"{name}.{key}"
+
+    @model_validator(mode="after")
+    def _expressions_well_formed(self):
+        for node, where in self._authored_expressions():
+            _reject_malformed(node, where)
+        return self
+
+    @model_validator(mode="after")
+    def _functions_carry_their_arguments(self):
+        for node, where in self._authored_expressions():
+            _reject_misargued_functions(node, where)
+        return self
+
+    @model_validator(mode="after")
+    def _templates_close_their_placeholders(self):
+        for node, where in self._authored_expressions():
+            _reject_malformed_templates(node, where)
         return self
 
     @model_validator(mode="after")
     def _expressions_qualified(self):
-        for name in self.EXPRESSION_FIELDS:
-            _reject_unqualified(_dumped(getattr(self, name)), name)
-        for name in self.EXPRESSION_MAPS:
-            for key, value in (getattr(self, name) or {}).items():
-                _reject_unqualified(_dumped(value), f"{name}.{key}")
+        for node, where in self._authored_expressions():
+            _reject_unqualified(node, where)
         return self
 
 
@@ -147,12 +167,66 @@ def _reject_malformed(node: Any, where: str) -> None:
         raise violation("RULE-CTOR-065", "derived-value-expression-shape", str(detail)) from None
 
 
+def _reject_misargued_functions(node: Any, where: str) -> None:
+    """Refuse a function expression the typed function union would refuse.
+
+    A name the union does not model passes: whether the engine registers it is
+    RULE-SHRD-007, which nothing here can read.
+    """
+    for kind, function in iter_expression_nodes(node):
+        if kind != "function":
+            continue
+        name = function["function"]
+        if not isinstance(name, str) or not name:
+            raise violation(
+                "RULE-CTOR-068", "function-name-not-a-string",
+                f"{where}: `function` is {name!r}",
+            )
+        if name not in _DERIVED_FUNCTION_NAMES:
+            continue
+        try:
+            _DERIVED_VALUE_ADAPTER.validate_python(function)
+        except ValidationError as detail:
+            problems = "; ".join(
+                f"{'.'.join(str(part) for part in error['loc'][1:]) or 'node'}: {error['msg']}"
+                for error in detail.errors()
+            )
+            raise violation(
+                "RULE-CTOR-068", "function-arguments-not-declared",
+                f"{where}: {name} {problems}",
+            ) from None
+
+
+def _reject_malformed_templates(node: Any, where: str) -> None:
+    """Refuse a template that is not a string, or leaves a `${` open."""
+    for kind, template in iter_expression_nodes(node):
+        if kind != "template":
+            continue
+        if not isinstance(template, str):
+            raise violation(
+                "RULE-CTOR-069", "template-not-a-string",
+                f"{where}: template is {type(template).__name__} {template!r}",
+            )
+        if has_unterminated_placeholder(template):
+            raise violation(
+                "RULE-CTOR-069", "unterminated-placeholder",
+                f"{where}: {template!r}",
+            )
+
+
 def _reject_unqualified(node: Any, where: str) -> None:
     """Refuse a value expression whose ref/placeholder names no resolution scope.
 
     `where` names the field — or, for a map, the key — so a transport declaring
-    several headers reports the one that is wrong rather than the block.
+    several headers reports the one that is wrong rather than the block. A ref
+    that is not a string names no scope either.
     """
+    for kind, ref in iter_expression_nodes(node):
+        if kind == "ref" and not isinstance(ref, str):
+            raise violation(
+                "RULE-CTOR-057", "non-string-ref",
+                f"{where}: ref is {type(ref).__name__} {ref!r}",
+            )
     unqualified = unqualified_tokens(node)
     if unqualified:
         raise violation(
@@ -164,6 +238,8 @@ def _reject_unqualified(node: Any, where: str) -> None:
             "that bare name, or an error naming no placeholder — say where it "
             "comes from (spec: §Value Expressions)"
         )
+
+
 # Host-tolerant matcher for the `$schema` field: a connector authored against
 # the canonical `schemas.analitiq.ai` URL must still validate when the engine
 # checks it against a per-environment schema (`schemas.analitiq.work` / `.dev`).
@@ -455,13 +531,13 @@ class ConnectionContractInput(StrictModel):
             "§Connection Inputs — closed vocabulary."
         ),
     )
-    required: bool = Field(..., description="Whether resolution must produce a value")
+    required: StrictBool = Field(..., description="Whether resolution must produce a value")
     default: Any | None = Field(default=None, description="Connector-defined default for optional inputs")
     enum: list[Any] | None = Field(
         default=None,
         description="Authoritative allowed-value list for scalar inputs (non-empty when present).",
     )
-    secret: bool | None = Field(
+    secret: StrictBool | None = Field(
         default=None,
         description=(
             "Required when `storage` is `secrets`; must be `true` iff `storage` "
@@ -1002,13 +1078,20 @@ is exclusive to `lookup`.
 # extends the walk automatically. Why the set is a union rather than
 # per-function is RULE-CTOR-065's rationale; the note above says where the
 # typed union does and does not reach.
-_DERIVED_VALUE_FIELDS: frozenset[str] = frozenset(
-    name
+_DERIVED_VALUE_MODELS: tuple[type[StrictModel], ...] = tuple(
+    get_args(member)[0] if get_origin(member) is Annotated else member
     for member in get_args(get_args(DerivedValue)[0])
-    for name in (
-        get_args(member)[0] if get_origin(member) is Annotated else member
-    ).model_fields
 )
+_DERIVED_VALUE_FIELDS: frozenset[str] = frozenset(
+    name for model in _DERIVED_VALUE_MODELS for name in model.model_fields
+)
+# RULE-CTOR-068 grades a modelled function name at an untyped site exactly as
+# the union grades it at a typed one.
+_DERIVED_FUNCTION_NAMES: frozenset[str] = frozenset(
+    get_args(model.model_fields["function"].annotation)[0]
+    for model in _DERIVED_VALUE_MODELS
+)
+_DERIVED_VALUE_ADAPTER: TypeAdapter[Any] = TypeAdapter(DerivedValue)
 
 
 # --- String-valued value expressions (spec: §Value Expressions) ---
@@ -1859,7 +1942,7 @@ class SqlStageCapabilities(StrictModel):
             "or null otherwise."
         ),
     )
-    transactional_ddl: bool = Field(
+    transactional_ddl: StrictBool = Field(
         ...,
         description=(
             "Whether the destination runs stage DDL (CREATE/DROP) inside the "
@@ -2450,6 +2533,21 @@ class DatabaseConnector(ConnectorBase):
             "one additive member and may be omitted."
         ),
     )
+
+    @model_validator(mode="after")
+    def _bulk_load_families_are_declared(self) -> "DatabaseConnector":
+        if self.sql_capabilities is None:
+            return self
+        declared = {transport.transport_type for transport in self.transports.values()}
+        for family, mechanism in self.sql_capabilities.bulk_load.model_dump().items():
+            if family not in declared:
+                raise violation(
+                    "RULE-CTOR-048", "bulk-load-family-not-declared",
+                    f"sql_capabilities.bulk_load.{family} declares {mechanism!r}, "
+                    f"but no transport has transport_type {family!r} "
+                    f"(declared: {', '.join(sorted(declared))})",
+                )
+        return self
 
 
 class NosqlConnector(ConnectorBase):

@@ -1,11 +1,13 @@
 """Stream models and validators (schema v1)."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Annotated, Any, Literal, get_args
 from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
+    StrictBool,
     Tag,
     TypeAdapter,
     field_validator,
@@ -547,6 +549,29 @@ class StreamSource(StrictModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def _pages_are_ordered_by_the_cursor(self) -> "StreamSource":
+        """RULE-STRM-043 — a declared page ordering must be the cursor's.
+
+        A checkpoint takes the cursor value of the page's last row, which is
+        the highest value read only when the pages are ordered by the cursor.
+        Under any other ordering the saved value is an arbitrary row's, and
+        the next run resumes from it and never reads the rows below it — a
+        silent loss, visible only as rows that never arrive.
+        """
+        pagination = self.database_pagination
+        replication = self.replication
+        order_by_field = pagination.order_by_field if pagination else None
+        cursor_field = getattr(replication, "cursor_field", None)
+        if order_by_field and cursor_field and order_by_field != cursor_field:
+            raise violation(
+                "RULE-STRM-043",
+                "page-ordering-is-not-the-cursor",
+                f"database_pagination.order_by_field {order_by_field!r} is not "
+                f"the incremental cursor_field {cursor_field!r}",
+            )
+        return self
+
 
 # ---------------------------------------------------------------------------
 # Destination — write selection, execution overrides (spec §Destinations, §Write Selection, §Execution)
@@ -967,7 +992,7 @@ class ArrowFieldSpec(StrictModel):
             "markers 'Object', 'List', and 'Json' declare JSON containers."
         ),
     )
-    nullable: bool | None = Field(default=None)
+    nullable: StrictBool | None = Field(default=None)
     # Sibling-key rules (Object/List/Json) live in
     # `analitiq.contracts.shared.arrow_shape.enforce_container_shape`; do not duplicate
     # them in field descriptions, or they'll rot when the rules change.
@@ -1198,7 +1223,7 @@ class AssignmentTarget(StrictModel):
         default=None,
         description="Destination-native type override (e.g., 'NUMERIC(12,2)').",
     )
-    nullable: bool = Field(default=True)
+    nullable: StrictBool = Field(default=True)
     # See ArrowFieldSpec for the recursive child shape and
     # enforce_container_shape for the sibling-key rules.
     properties: dict[str, ArrowFieldSpec] | None = Field(default=None)
@@ -1240,6 +1265,108 @@ _VALIDATION_RULE_CONDITIONAL_RULES: dict[str, Any] = {
     ],
     "additionalProperties": False,
 }
+
+
+# What RULE-STRM-021 requires of a validation rule's open `value`, one
+# predicate per rule type that takes a payload. Each returns the phrase that
+# completes "value <phrase>", or `None` when the payload is usable. They are
+# written as the rule reads the payload — a length is counted against, a
+# pattern is interpolated into a regex, bounds are compared, a value set is
+# searched — so a payload that cannot play that part is refused here rather
+# than mid-transfer.
+
+
+def _an_integer_length(value: Any) -> str | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return "is not an integer length"
+    return None
+
+
+def _a_lower_length(value: Any) -> str | None:
+    wrong = _an_integer_length(value)
+    if wrong is not None:
+        return wrong
+    if value < 0:
+        return "is a negative length, which every row satisfies"
+    return None
+
+
+def _an_upper_length(value: Any) -> str | None:
+    # A negative bound is unusable in both directions, but not for the same
+    # reason: no string is shorter than -1, where every string is longer.
+    wrong = _an_integer_length(value)
+    if wrong is not None:
+        return wrong
+    if value < 0:
+        return "is a negative length, which no row can satisfy"
+    return None
+
+
+def _a_regex_source(value: Any) -> str | None:
+    # Shape only: a non-empty string. Deliberately NOT "and it compiles" —
+    # whether a source compiles is a question about a dialect, and the dialect
+    # this pattern runs under is RE2 (the engine applies a `pattern` rule
+    # through pyarrow's `match_substring_regex`), which this package cannot
+    # reach. Grading it with stdlib `re` instead would answer a different
+    # question in both directions: `\p{L}+` is an ordinary RE2 pattern that
+    # `re` refuses, and `(a)\1` is a backreference `re` accepts and RE2
+    # cannot compile. The CDK owns the RE2 verdict, where `google-re2` is a
+    # dependency and `cdk.type_map.rules` states why it is not a contract
+    # invariant.
+    if not isinstance(value, str):
+        return "is not a regular expression"
+    if not value:
+        return "is an empty regular expression, which every row matches"
+    return None
+
+
+def _a_bounds_object(value: Any) -> str | None:
+    if not isinstance(value, dict):
+        return "is not a `{min, max}` bounds object"
+    unknown = sorted(set(value) - {"min", "max"})
+    if unknown:
+        return f"names bounds {unknown!r}, which no range rule reads"
+    if value.get("min") is None and value.get("max") is None:
+        return "carries neither a `min` nor a `max`, so it bounds nothing"
+    low, high = value.get("min"), value.get("max")
+    if low is not None and high is not None:
+        try:
+            empty = low > high
+        except TypeError:
+            # Bounds of kinds that do not compare are a different defect and
+            # not this predicate's: the rule asks whether the interval admits
+            # a row, and one that cannot be ordered has no answer to give.
+            return None
+        if empty:
+            return f"bounds {low!r}..{high!r}, an interval no row can fall in"
+    return None
+
+
+def _a_value_set(value: Any) -> str | None:
+    if not isinstance(value, list):
+        return "is not a list of admitted values"
+    if not value:
+        return "admits no value, which no row can match"
+    return None
+
+
+# Which rule types take a payload, said ONCE. Both halves of the check read it:
+# RULE-STRM-009 asks whether a payload is present where one belongs,
+# RULE-STRM-021 whether the one present can be applied. Stated twice, the
+# second statement decided nothing when they disagreed — a type listed as
+# taking a payload but carrying no predicate had its payload accepted
+# unchecked, and nothing failed. `_UNARY_RULE_TYPES` is the complement;
+# `test_every_rule_type_is_either_unary_or_carries_a_payload_check` holds the
+# two to a partition of `ValidationRule.type`, so neither set can quietly stop
+# covering a member.
+_VALUE_PAYLOAD_CHECKS: dict[str, Callable[[Any], str | None]] = {
+    "min_length": _a_lower_length,
+    "max_length": _an_upper_length,
+    "pattern": _a_regex_source,
+    "range": _a_bounds_object,
+    "in_list": _a_value_set,
+}
+_UNARY_RULE_TYPES: frozenset[str] = frozenset({"required", "not_null"})
 
 
 class ValidationRule(StrictModel):
@@ -1287,8 +1414,8 @@ class ValidationRule(StrictModel):
 
     @model_validator(mode="after")
     def _validate_value_for_rule(self) -> "ValidationRule":
-        unary = {"required", "not_null"}
-        needs_value = {"min_length", "max_length", "pattern", "range", "in_list"}
+        unary = _UNARY_RULE_TYPES
+        needs_value = _VALUE_PAYLOAD_CHECKS
         if self.type in unary and self.value is not None:
             raise violation(
                 "RULE-STRM-009", "validation-rule-value-forbidden",
@@ -1298,6 +1425,26 @@ class ValidationRule(StrictModel):
             raise violation(
                 "RULE-STRM-009", "validation-rule-value-required",
                 f"validation rule {self.type!r} requires 'value'"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _value_carries_the_payload_its_type_needs(self) -> "ValidationRule":
+        """RULE-STRM-021 — `value` is typed open, so each type grades its own.
+
+        Only `range` raises where the rule runs; the rest read a wrong-shaped
+        payload into a rule that decides nothing and reports nothing, so the
+        shape is settled here, where the document still names the author.
+        """
+        check = _VALUE_PAYLOAD_CHECKS.get(self.type)
+        if check is None:
+            # A unary type; RULE-STRM-009 already refused a payload on one.
+            return self
+        wrong = check(self.value)
+        if wrong is not None:
+            raise violation(
+                "RULE-STRM-021", f"validation-rule-{self.type.replace('_', '-')}-payload",
+                f"validation rule {self.type!r} value {self.value!r} {wrong}",
             )
         return self
 

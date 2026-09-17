@@ -65,6 +65,8 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
+from _contract_documents import with_adbc_transport
+
 from analitiq.contracts.connector import (
     Concurrency,
     ErrorMap,
@@ -515,7 +517,7 @@ def _minimal_api_doc(db_example: dict) -> dict:
 
 
 def test_database_connector_carries_all_three_blocks(db_example):
-    doc = copy.deepcopy(db_example)
+    doc = with_adbc_transport(db_example)
     doc["error_map"] = copy.deepcopy(VALID_ERROR_MAP)
     doc["concurrency"] = {"max_connections": 8}
     doc["sql_capabilities"] = {
@@ -615,7 +617,7 @@ def test_full_connector_validates_against_published_schema(db_example):
     )
     validator = Draft202012Validator(schema)
 
-    valid = copy.deepcopy(db_example)
+    valid = with_adbc_transport(db_example)
     valid["error_map"] = copy.deepcopy(VALID_ERROR_MAP)
     valid["concurrency"] = {"max_connections": 8}
     valid["sql_capabilities"] = {

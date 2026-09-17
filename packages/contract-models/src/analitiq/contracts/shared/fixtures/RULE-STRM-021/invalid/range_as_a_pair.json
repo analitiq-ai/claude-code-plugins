@@ -1,0 +1,10 @@
+{
+  "type": "range",
+  "field": [
+    "amount"
+  ],
+  "value": [
+    1,
+    5
+  ]
+}

@@ -29,6 +29,7 @@ from analitiq.contracts.value_expression import (
     resolve_template_string,
     resolve_transport_base_url,
     resolve_value_expression,
+    template_placeholders,
 )
 
 
@@ -942,3 +943,26 @@ class TestResolveTransportBaseUrl:
                 {"base_url": {"template": bad_template}},
                 {"connection": {"parameters": {}}},
             )
+
+
+class TestTemplatePlaceholderGrammar:
+    """What counts as a placeholder, for the model checks that read this list."""
+
+    @pytest.mark.parametrize(
+        ("template", "expected"),
+        [
+            ("${secrets.api_key}", ["secrets.api_key"]),
+            ("${ secrets.api_key }", ["secrets.api_key"]),
+            ("key=${}", [""]),
+            ("key=${ }", [""]),
+            ("plain text", []),
+            ("Bearer ${secrets.api_key", []),
+        ],
+    )
+    def test_a_closed_placeholder_is_one_whatever_it_encloses(self, template, expected):
+        assert template_placeholders(template) == expected
+
+    def test_an_empty_placeholder_substitutes_like_any_other_miss(self):
+        # The grammar and the resolver read `${}` the same way, so what the
+        # models refuse is what the runtime would silently blank out.
+        assert resolve_template_string("key=${}", {}) == "key="

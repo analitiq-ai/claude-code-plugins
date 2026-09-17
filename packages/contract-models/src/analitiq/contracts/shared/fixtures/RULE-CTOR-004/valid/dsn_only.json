@@ -1,0 +1,22 @@
+{
+  "transport_type": "adbc",
+  "driver": "postgresql",
+  "dsn": {
+    "kind": "url_template",
+    "template": "postgresql://{host}/{database}",
+    "bindings": {
+      "host": {
+        "value": {
+          "ref": "connection.parameters.host"
+        },
+        "encoding": "host"
+      },
+      "database": {
+        "value": {
+          "ref": "connection.parameters.database"
+        },
+        "encoding": "url_path_segment"
+      }
+    }
+  }
+}

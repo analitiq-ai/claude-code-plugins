@@ -9,6 +9,7 @@ artifact_kinds: [stream]
 validator: "analitiq.contracts.stream::ConnectionEndpointRef._derive_or_verify_endpoint_id"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [ConnectionEndpointRef]
+fixture_model: ConnectionEndpointRef
 rationale: >
   The handle is derived, never chosen: the runtime discovery that mints
   database endpoints computes it from the same function, so a hand-written

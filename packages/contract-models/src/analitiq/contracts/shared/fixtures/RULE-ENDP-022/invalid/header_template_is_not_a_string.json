@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/items",
+    "headers": {
+      "X-Tenant": {
+        "template": {
+          "a": 1
+        }
+      }
+    }
+  },
+  "params": {},
+  "response": {
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "records": {
+      "ref": "response.body"
+    }
+  }
+}

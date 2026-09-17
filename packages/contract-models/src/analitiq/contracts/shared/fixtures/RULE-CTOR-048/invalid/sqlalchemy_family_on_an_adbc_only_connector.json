@@ -1,0 +1,92 @@
+{
+  "$schema": "https://schemas.analitiq.ai/connector/latest.json",
+  "kind": "database",
+  "connector_id": "bulk-load-corpus",
+  "display_name": "Bulk Load Corpus",
+  "description": "Connector whose bulk_load families are graded against its declared transports.",
+  "version": "1.0.0",
+  "default_transport": "adbc",
+  "transports": {
+    "adbc": {
+      "transport_type": "adbc",
+      "driver": "postgresql",
+      "db_kwargs": {
+        "uri": {
+          "template": "postgresql://${connection.parameters.host}/${connection.parameters.database}"
+        }
+      }
+    }
+  },
+  "auth": {
+    "type": "db"
+  },
+  "connection_contract": {
+    "inputs": {
+      "host": {
+        "source": "user",
+        "phase": "pre_auth",
+        "storage": "connection.parameters",
+        "type": "string",
+        "required": true
+      },
+      "port": {
+        "source": "user",
+        "phase": "pre_auth",
+        "storage": "connection.parameters",
+        "type": "integer",
+        "required": true,
+        "default": 5439
+      },
+      "database": {
+        "source": "user",
+        "phase": "pre_auth",
+        "storage": "connection.parameters",
+        "type": "string",
+        "required": true
+      },
+      "username": {
+        "source": "user",
+        "phase": "auth",
+        "storage": "connection.parameters",
+        "type": "string",
+        "required": true
+      },
+      "password": {
+        "source": "user",
+        "phase": "auth",
+        "storage": "secrets",
+        "type": "string",
+        "required": true,
+        "secret": true
+      }
+    }
+  },
+  "resource_discovery": {
+    "strategy": "information_schema",
+    "transport_ref": "adbc",
+    "implementation": {
+      "type": "builtin"
+    },
+    "produces": [
+      "connection.endpoints",
+      "connection.type_map"
+    ],
+    "triggers": {
+      "list_resources": "on_activation",
+      "describe_resource": "on_resource_selected"
+    }
+  },
+  "sql_capabilities": {
+    "catalog": "none",
+    "session_targeting": "per_statement",
+    "merge_form": "insert_on_conflict",
+    "bulk_load": {
+      "sqlalchemy": "copy_from"
+    },
+    "stage": {
+      "scope": "temp",
+      "schema": "target",
+      "transactional_ddl": true
+    }
+  }
+}

@@ -8,6 +8,7 @@ artifact_kinds: [connector]
 validator: "analitiq.contracts.connector::AdbcTransport._require_dsn_or_kwargs"
 owners: [engine, connector-plugin]
 targets: [AdbcTransport]
+fixture_model: AdbcTransport
 rationale: >
   ADBC drivers split connection state two ways — some take a DSN, some
   (Snowflake) take every coordinate as driver keyword arguments, and

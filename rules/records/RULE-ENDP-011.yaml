@@ -8,6 +8,7 @@ artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [ReadOperation]
+fixture_model: ReadOperation
 rationale: >
   A cursor mapping states how the stored watermark is sent, but the param
   carrying it is an ordinary declared param that still has to be bound into the

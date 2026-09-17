@@ -8,6 +8,7 @@ artifact_kinds: [stream]
 validator: "analitiq.contracts.stream::PipeExpression._validate_positional_grammar"
 owners: [pipeline-plugin, engine]
 targets: [PipeExpression]
+fixture_model: PipeExpression
 rationale: >
   The node mirrors the engine's expression AST, where the seed is the value
   every later stage transforms; a pipe seeded by a conversion has nothing to

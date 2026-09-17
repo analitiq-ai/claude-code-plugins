@@ -69,11 +69,12 @@ do not rely on them, and treat these as author-side discipline:
   read-only.** On a READ, a `response.body.<path>` is resolved against
   `response.schema`; on either operation, a `response.metadata.<key>` is
   checked against the declared keys. Those typos are errors. Nothing else is
-  proved, and three cases in particular look proved and are not:
-  `response.records.<path>` and `response.headers.<name>` are spelling-checked
+  proved, and three cases in particular look proved and are not: on a read
+  `response.records.<path>` and, on either operation,
+  `response.headers.<name>` are spelling-checked
   only, and a WRITE mode has no `response.schema`, so no write-side
-  `response.body` path is resolved — a `success_when` typo validates clean and
-  the predicate then holds unconditionally. Every remaining scope is checked
+  `response.body` path is resolved — a `success_when` PATH typo validates clean
+  and the predicate then holds unconditionally. Every remaining scope is checked
   on its leading token only — so a `connection.discovered.*` ref with no
   post-auth output that produces it validates clean, on either document.
 - **A connector field nothing resolves is not scope-checked either.** The

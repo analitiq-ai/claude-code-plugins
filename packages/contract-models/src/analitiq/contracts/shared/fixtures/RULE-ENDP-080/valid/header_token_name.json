@@ -1,0 +1,4 @@
+{
+  "in": "header",
+  "name": "Idempotency-Key"
+}

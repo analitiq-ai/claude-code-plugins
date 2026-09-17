@@ -338,6 +338,46 @@ class TestFromInputInPathParamsRejected:
                 request_extras={"query": {"id": {"from_input": "record.id"}}},
             )}))
 
+    def test_from_input_carrying_a_non_string_still_rejected_in_a_read_body(self):
+        # A POST read has a body and still has no record, so the body ban
+        # applies there — and it too read only the string payloads.
+        document = {
+            "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+            "endpoint_id": "records",
+            "operations": {"read": {
+                "request": {
+                    "method": "POST",
+                    "path": "/v1/search",
+                    "body": {"q": {"from_input": {"from_input": "record.name"}}},
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {
+                        "$schema": "https://json-schema.org/draft/2020-12/schema",
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                },
+            }},
+        }
+        with pytest.raises(ValidationError, match=r"RULE-ENDP-034"):
+            ApiEndpointDoc.model_validate(document)
+
+    def test_from_input_carrying_a_non_string_still_rejected_in_write_headers(self):
+        # RULE-ENDP-034 bans the BINDING at this site, whatever its payload is.
+        # Reading only the string payloads made a `from_input` wrapping another
+        # one invisible: the walk stopped at the outer binding, kept its dict
+        # payload, and the filter to strings then dropped it.
+        with pytest.raises(
+            ValidationError, match=r"from_input is invalid in request\.headers"
+        ):
+            parse_endpoint(_api_payload({"insert": _write_op(
+                request_extras={"headers": {
+                    "Accept": "application/json",
+                    "X-Record-Id": {"from_input": {"from_input": "record.id"}},
+                }},
+            )}))
+
 
 # ---------------------------------------------------------------------------
 # Must-not-regress
@@ -803,9 +843,59 @@ class TestWriteBlocksAreSweptForScopeTypos:
         with pytest.raises(ValidationError, match="before the response exists"):
             parse_endpoint(_api_payload({"insert": op}))
 
+    def test_the_write_refusal_carries_no_rule_id(self):
+        """RULE-ENDP-023 states the READ operation's obligation. The same check
+        on a write site is stated by no record yet, so it stays unattributed
+        rather than borrow an id whose statement is about reads — an id a
+        consumer stores, routes and counts on. Nothing else fails if that
+        choice is reversed, which is why it is asserted here.
+        """
+        op = _write_op(request_extras={"query": {"c": {"ref": "response.body.x"}}})
+        with pytest.raises(ValidationError) as caught:
+            parse_endpoint(_api_payload({"insert": op}))
+        assert "before the response exists" in str(caught.value)
+        assert "[RULE-ENDP-023]" not in str(caught.value)
+
+    def test_the_read_refusal_does_carry_the_rule_id(self):
+        # The counterparty: on a read the same complaint IS stated by a record,
+        # so it is attributed. Both halves together are what make the write
+        # side's silence a decision rather than an omission.
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-023\]"):
+            parse_endpoint({
+                "$schema": API_SCHEMA_URL,
+                "endpoint_id": "contact",
+                "operations": {"read": {
+                    "request": {"method": "GET", "path": "/Contact"},
+                    "params": {},
+                    "response": {
+                        "records": {"ref": "response.body.data"},
+                        "schema": {
+                            "type": "object",
+                            "properties": {"data": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {"id": {"type": "string"}},
+                                },
+                            }},
+                        },
+                        "metadata": {"total": {"ref": "response.body.nowhere"}},
+                    },
+                }},
+            })
+
     def test_write_path_params_is_guarded_by_the_stronger_binding_rule(self):
         op = _write_op(path_params={"id": {"ref": "response.body.anything"}})
         with pytest.raises(ValidationError, match="must be a `.from_param"):
+            parse_endpoint(_api_payload({"insert": op}))
+
+    def test_the_write_binding_refusal_names_from_input_too(self):
+        """RULE-ENDP-081 admits `from_input` on a write, so the refusal an
+        author reads there has to name it: told only to use `from_param`, the
+        remedy they reach for is a declared param for a value that lives in
+        the record."""
+        op = _write_op(path_params={"id": {"ref": "connection.parameters.id"}})
+        with pytest.raises(ValidationError, match="from_input: record"):
             parse_endpoint(_api_payload({"insert": op}))
 
     def test_the_write_slot_tuple_still_covers_every_expression_field(self):

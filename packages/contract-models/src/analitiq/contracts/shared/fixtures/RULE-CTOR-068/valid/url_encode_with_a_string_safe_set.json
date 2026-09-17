@@ -1,0 +1,13 @@
+{
+  "transport_type": "http",
+  "base_url": "https://api.example.test/v1",
+  "headers": {
+    "X-Path": {
+      "function": "url_encode",
+      "input": {
+        "literal": "a/b"
+      },
+      "safe": "/"
+    }
+  }
+}

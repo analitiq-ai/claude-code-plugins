@@ -1,13 +1,15 @@
 id: RULE-ENDP-033
 statement: >
-  Every ref and every `${...}` template placeholder in a request slot MUST lead
-  with one of the resolution scopes the contract declares.
+  Every ref and every `${...}` template placeholder an API endpoint operation
+  declares, wherever in the operation it sits, MUST lead with one of the
+  resolution scopes the contract declares.
 tier: coherence
 severity: error
 artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [ReadOperation, WriteOperation]
+fixture_model: WriteOperation
 rationale: >
   The leading token is what selects the resolver that supplies the value, so an
   unscoped or misspelled one names no resolver at all — the value does not
@@ -15,6 +17,9 @@ rationale: >
   typo: it surfaces as a header sent empty or a filter quietly dropped from the
   query, which reads as a provider quirk. Refusing the expression where it is
   written is the only place the cause and the symptom are still in the same
-  file.
+  file. A param default feeds the same request, and a predicate operand over
+  a scope that names nothing decides nothing, so the obligation follows the
+  expression wherever the operation declares it rather than the slot it sits
+  in.
 status: active
 superseded_by: null

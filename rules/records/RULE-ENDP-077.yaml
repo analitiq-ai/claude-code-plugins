@@ -1,0 +1,24 @@
+id: RULE-ENDP-077
+statement: >
+  A single-parameter cursor mapping MUST bound the read from below, with `gt`
+  or `gte`; a window cursor mapping MUST bound its start from below, with `gt`
+  or `gte`, and its end from above, with `lt` or `lte`.
+tier: coherence
+severity: error
+artifact_kinds: [api-endpoint]
+validator: "analitiq.contracts.endpoints::Replication._bounds_face_forward"
+owners: [connector-plugin, engine]
+targets: [Replication]
+fixture_model: Replication
+rationale: >
+  An incremental read resumes from where the last run stopped, so the stored
+  cursor has to become a lower bound. A single mapping with an upper-bound
+  operator asks the provider for everything before the cursor, and a window
+  whose start bounds from above or whose end bounds from below asks for an
+  empty or inverted range. As the engine reads it today it refuses a mapping
+  facing the wrong way before the first run, since a first run has no cursor
+  and would otherwise read everything, commit a checkpoint and fail only on
+  the second. The document alone decides the direction, so the refusal
+  belongs at authoring time.
+status: active
+superseded_by: null

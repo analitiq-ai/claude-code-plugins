@@ -1,0 +1,7 @@
+{
+  "type": "min_length",
+  "field": [
+    "amount"
+  ],
+  "value": 3
+}

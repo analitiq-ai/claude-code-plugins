@@ -8,6 +8,7 @@ artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [ReadOperation]
+fixture_model: ReadOperation
 rationale: >
   Naming a param in a pagination block creates no request binding on its own:
   the param still has to be declared, marked as pagination's, and bound into the

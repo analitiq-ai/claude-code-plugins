@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "path": "/items",
+  "query": {
+    "status": "open",
+    "cursor": null
+  }
+}

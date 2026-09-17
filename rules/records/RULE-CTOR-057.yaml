@@ -1,8 +1,8 @@
 id: RULE-CTOR-057
 statement: >
-  In a connector field a runtime resolves, every ref and every `${...}`
-  template placeholder MUST lead with one of the resolution scopes the
-  contract declares.
+  In a connector field a runtime resolves, every ref MUST be a string, and
+  every ref and every `${...}` template placeholder MUST lead with one of the
+  resolution scopes the contract declares.
 tier: shape
 severity: error
 artifact_kinds: [connector]
@@ -16,6 +16,7 @@ targets:
   - AdbcTransport
   - DatabaseTls
   - DsnBinding
+fixture_model: HttpTransport
 rationale: >
   The API-endpoint document has required this of its own expressions since it
   grew typed models for them, and the connector document feeds the same
@@ -35,6 +36,13 @@ rationale: >
   and raises. Neither names the placeholder to the connector's author. The
   leading token is the only part a document can be held to; whether anything
   ever produces a value at the rest of the path is a phase question the
-  runtime settles.
+  runtime settles. A ref that is not a string leads with nothing at all: the
+  grammar has no token to read out of it, so the scope check passes it the
+  same way it passes a template with no placeholder, and it is refused on its
+  type for the reason RULE-CTOR-069 refuses a non-string template. An empty
+  `${}` leads with nothing either, but it IS a placeholder: a closed `${...}`
+  is one whatever it encloses, and the key is stripped before lookup, so `${}`
+  addresses the same empty name `${ }` does and is refused here for the same
+  reason rather than shipped as literal text.
 status: active
 superseded_by: null

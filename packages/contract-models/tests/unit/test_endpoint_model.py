@@ -351,14 +351,55 @@ class TestCursorFieldsInRecordShape:
         with pytest.raises(ValidationError, match="declares no `type`"):
             parse_endpoint(self._payload_with_cursor_field("updated_at", {"updated_at": {}}))
 
-    def test_cursor_field_typed_only_via_anyof_accepted(self):
-        # The common nullable idiom — every anyOf branch declares a type, so
-        # the union ({string, null}) is a real, usable type even with no
-        # top-level `type` key.
+    def test_cursor_field_typed_by_a_type_list_is_accepted(self):
+        # The spelling the engine's cursor reader can see, and the counterparty
+        # to every refusal below.
         parse_endpoint(self._payload_with_cursor_field(
             "updated_at",
-            {"updated_at": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+            {"updated_at": {"type": ["string", "null"]}},
         ))
+
+    def test_cursor_field_typed_only_via_anyof_is_rejected(self):
+        # The nullable idiom, and the spelling a generated schema usually
+        # emits. It states exactly what the accepted `{"type": ["string",
+        # "null"]}` states — and is still refused, because the engine's cursor
+        # reader takes `field["type"]` and never descends a union. Accepting it
+        # would bless a document that validates clean, ships, and dies on the
+        # first cursor read. The refusal has to name the spelling that works,
+        # or the author has no way from one to the other.
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(self._payload_with_cursor_field(
+                "updated_at",
+                {"updated_at": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+            ))
+        with pytest.raises(ValidationError, match=r'\{"type": \["<type>", "null"\]\}'):
+            parse_endpoint(self._payload_with_cursor_field(
+                "updated_at",
+                {"updated_at": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+            ))
+
+    def test_cursor_field_typed_through_a_ref_branch_inside_anyof_is_rejected(self):
+        # Resolving the `$ref` would find a type; the engine does not resolve
+        # it either, so neither does this.
+        payload = self._payload_with_cursor_field(
+            "updated_at",
+            {"updated_at": {"anyOf": [{"$ref": "#/$defs/T"}, {"type": "null"}]}},
+        )
+        payload["operations"]["read"]["response"]["schema"]["$defs"] = {"T": {"type": "string"}}
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(payload)
+
+    def test_integer_cursor_field_under_anyof_is_rejected_before_its_format_is_read(self):
+        # A `format` on the branch does not rescue the union: RULE-ENDP-074
+        # settles the type first, and `record_field_declaration` cannot see a
+        # format inside a branch any more than it can see the type.
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(self._payload_with_cursor_field(
+                "updated_at",
+                {"updated_at": {"anyOf": [
+                    {"type": "integer", "format": "epoch_seconds"}, {"type": "null"},
+                ]}},
+            ))
 
     def test_cursor_field_with_an_untyped_anyof_branch_rejected(self):
         # One branch declaring nothing makes the union unbounded — not a
@@ -368,14 +409,6 @@ class TestCursorFieldsInRecordShape:
                 "updated_at",
                 {"updated_at": {"anyOf": [{"type": "string"}, {}]}},
             ))
-
-    def test_cursor_field_typed_via_a_ref_branch_inside_anyof_accepted(self):
-        payload = self._payload_with_cursor_field(
-            "updated_at",
-            {"updated_at": {"anyOf": [{"$ref": "#/$defs/T"}, {"type": "null"}]}},
-        )
-        payload["operations"]["read"]["response"]["schema"]["$defs"] = {"T": {"type": "string"}}
-        parse_endpoint(payload)
 
     def test_dotted_cursor_field_traverses_nested_objects(self):
         parse_endpoint(self._payload_with_cursor_field(
@@ -631,11 +664,36 @@ class TestParamValidate:
     def test_query_string_does_not_require_style(self):
         Param(**{"in": "query", "type": "string", "required": False})
 
+    @pytest.mark.parametrize(
+        "bound, value",
+        [("minimum", float("nan")), ("maximum", float("inf")),
+         ("minimum", float("-inf"))],
+    )
+    def test_a_non_finite_bound_is_refused(self, bound, value):
+        # RULE-ENDP-076's finite half lives here rather than in the shared
+        # fixture corpus: `Infinity` and `NaN` are not RFC 8259 JSON, so the
+        # case has no spelling as a corpus document.
+        with pytest.raises(ValidationError, match="RULE-ENDP-076"):
+            Param(**{
+                "in": "query", "type": "number", "required": False,
+                bound: value,
+            })
+
     def test_default_must_not_use_from_input(self):
         with pytest.raises(ValidationError, match="from_input is invalid"):
             Param(**{
                 "in": "body", "type": "object", "required": False,
                 "default": {"from_input": "record"},
+            })
+
+    def test_default_must_not_use_from_input_carrying_a_non_string(self):
+        # The ban is on the BINDING, not on its payload: a `from_input` whose
+        # payload is itself a dict is still a `from_input` authored where no
+        # record is in scope, and reading only the string payloads let it in.
+        with pytest.raises(ValidationError, match="from_input is invalid"):
+            Param(**{
+                "in": "body", "type": "object", "required": False,
+                "default": {"from_input": {"from_input": "record.id"}},
             })
 
 
@@ -4286,12 +4344,21 @@ class TestTemplatePlaceholderScope:
         with pytest.raises(ValidationError, match="resolution scope"):
             TemplateExpression(template=template)
 
-    @pytest.mark.parametrize("template", ["key=${}", "Bearer ${secrets.api_key"])
-    def test_malformed_opener_matches_resolver_and_passes(self, template):
-        # `${}` and an unclosed `${` are not placeholders under the shared
-        # resolver grammar (`_TEMPLATE_RE` requires `[^}]+`), so — matching the
-        # runtime — they are inert literal text, not a validation error. The model
-        # deliberately does not invent a stricter rule than the resolver.
+    @pytest.mark.parametrize("template", ["key=${}", "key=${ }"])
+    def test_empty_placeholder_rejected(self, template):
+        # A closed `${...}` is a placeholder whatever it encloses, and the
+        # resolver strips the key before looking it up — so `${}` addresses the
+        # same empty name `${ }` does and gets the same verdict.
+        with pytest.raises(ValidationError, match="resolution scope"):
+            TemplateExpression(template=template)
+
+    def test_unclosed_opener_matches_resolver_and_passes(self):
+        # An unclosed `${` is no placeholder under the shared resolver grammar,
+        # so — matching the runtime — it is inert literal text, not a validation
+        # error. The model deliberately does not invent a stricter rule than the
+        # resolver. (The connector document refuses it under RULE-CTOR-069; the
+        # endpoint document has no counterpart yet.)
+        template = "Bearer ${secrets.api_key"
         assert TemplateExpression(template=template).template == template
 
 

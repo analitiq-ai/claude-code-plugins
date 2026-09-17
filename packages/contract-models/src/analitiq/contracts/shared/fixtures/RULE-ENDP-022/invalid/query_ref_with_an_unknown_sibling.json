@@ -1,0 +1,34 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/items",
+    "headers": {
+      "X-Tenant": {
+        "ref": "connection.parameters.tenant"
+      }
+    },
+    "query": {
+      "q": {
+        "ref": "connection.parameters.q",
+        "rogue": 1
+      }
+    }
+  },
+  "params": {},
+  "response": {
+    "schema": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "records": {
+      "ref": "response.body"
+    }
+  }
+}

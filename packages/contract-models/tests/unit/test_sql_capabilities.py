@@ -45,6 +45,8 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
+from _contract_documents import with_adbc_transport
+
 from analitiq.contracts.connector import (
     SqlBulkLoad,
     SqlCapabilities,
@@ -532,7 +534,7 @@ def db_example() -> dict:
 
 
 def test_database_connector_carries_both_blocks(db_example):
-    doc = copy.deepcopy(db_example)
+    doc = with_adbc_transport(db_example)
     doc["sql_capabilities"] = copy.deepcopy(VALID_SQL_CAPS)
     doc["write_unit"] = {"rows": 200_000, "bytes": 33_554_432}
     connector = parse_connector(doc)
@@ -668,7 +670,7 @@ def test_full_connector_validates_against_published_schema(db_example):
     )
     validator = Draft202012Validator(schema)
 
-    valid = copy.deepcopy(db_example)
+    valid = with_adbc_transport(db_example)
     valid["sql_capabilities"] = copy.deepcopy(VALID_SQL_CAPS)
     valid["write_unit"] = {"rows": 200_000, "bytes": 33_554_432}
     # A dedicated stage naming its schema, to exercise that branch end-to-end.

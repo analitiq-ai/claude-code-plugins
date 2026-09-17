@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "path": "/items",
+  "query": {
+    "limit": {
+      "from_param": "limit"
+    }
+  }
+}
