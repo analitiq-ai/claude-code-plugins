@@ -91,11 +91,12 @@ def test_finding_matches_the_keys_finding_builder_produces(validator):
 
     from analitiq.validator._core import _KINDS
 
-    # Every call `finding()` admits — each kind, with and without a rule —
-    # rather than two sampled calls: a key set only on a branch neither sample
-    # visits would be invisible to both assertions below.
+    # Every call `finding()` admits — each kind, with no rule and with rules of
+    # each severity a `fail` finding can report — rather than sampled calls: a
+    # key set only on a branch no sample visits would be invisible to both
+    # assertions below.
     produced = [validator.finding(rule=rule, message_id="m", kind=kind, path="p", message="msg")
-                for kind in _KINDS for rule in (None, "RULE-PKG-030")]
+                for kind in _KINDS for rule in (None, "RULE-PKG-030", "RULE-CTOR-043")]
     possible_keys = set().union(*(set(f) for f in produced))
     always_present = set.intersection(*(set(f) for f in produced))
     with_rule_and_severity = validator.finding(
@@ -137,28 +138,46 @@ def test_finding_matches_the_keys_finding_builder_produces(validator):
 # ---------------------------------------------------------------------------
 # The entry-point signatures — the surface this module exists to declare (not
 # xfail: a type-contract fact settled now). The request models are imported
-# under `TYPE_CHECKING`, so nothing resolves these annotations at run time;
-# without this case a misspelled model name, a wrong module path, or an
-# annotation naming the other request model reaches a release unnoticed.
+# under `TYPE_CHECKING` and no type checker runs over this repo, so without
+# this case a misspelled model name, a deferred import of a module that does
+# not exist, or an annotation naming the other request model reaches a release
+# unnoticed — as does a parameter reappearing beside `request`.
 # ---------------------------------------------------------------------------
 
 def test_entry_points_are_annotated_with_their_request_models(validator):
+    import ast
+    import importlib
+    import inspect
     from typing import get_type_hints
 
-    import analitiq.contracts.validation_requests as validation_requests
-
     document_set = validator.document_set
+    # The namespace is built by executing the module's OWN deferred imports,
+    # never by importing the request models here: a namespace this test chose
+    # would resolve the annotation strings whatever that block says, leaving a
+    # wrong module path or a deleted import green.
+    deferred = [statement
+                for node in ast.parse(Path(document_set.__file__).read_text()).body
+                if isinstance(node, ast.If)
+                for statement in node.body if isinstance(statement, ast.ImportFrom)]
+    assert deferred, "no deferred import found; nothing resolves these annotations"
+    namespace = {}
+    for statement in deferred:
+        module = importlib.import_module(statement.module)
+        for alias in statement.names:
+            namespace[alias.asname or alias.name] = getattr(module, alias.name)
+
     for entry_point, request_model in (
         (document_set.validate_single_document, ValidateSingleDocumentRequest),
         (document_set.validate_connector_package, ValidatePackageRequest),
         (document_set.validate_pipeline_package, ValidatePackageRequest),
     ):
-        # The request models are only in scope under `TYPE_CHECKING`, so they
-        # are handed in as the local namespace the deferred annotations resolve
-        # against — the same namespace a consumer's type checker reads.
-        hints = get_type_hints(entry_point, localns=vars(validation_requests))
+        hints = get_type_hints(entry_point, localns=namespace)
         assert hints["request"] is request_model, entry_point.__name__
         assert hints["return"] is document_set.ValidationEnvelope, entry_point.__name__
+        # The kind is carried by the function, so nothing may select between
+        # kinds from the argument list: no `schema_url`, `direction`, `probes`,
+        # `entity` or package-kind parameter beside `request`.
+        assert tuple(inspect.signature(entry_point).parameters) == ("request",), entry_point.__name__
 
 
 # ---------------------------------------------------------------------------
@@ -514,7 +533,13 @@ def test_unparseable_document_in_a_package_is_a_finding_not_a_raise(validator):
     result = validator.validate_connector_package(
         ValidatePackageRequest(documents=documents))
     assert result["passed"] is False
-    assert any(f["kind"] == "fail" for f in result["findings"]), result
+    # Naming the document, not merely failing: the rest of this package is
+    # clean, so a bare `any(kind == "fail")` cannot tell "reported as
+    # unreadable" from "reported as something else entirely". The message id is
+    # deliberately not pinned — this route may mint its own.
+    unreadable = [f for f in result["findings"]
+                  if f["kind"] == "fail" and "v2__widgets" in (f["message"] + f["path"])]
+    assert unreadable, result
 
 
 @_xfail("validate_pipeline_package")
@@ -537,13 +562,17 @@ def test_embedded_connector_subtree_gets_its_own_coverage_findings(validator):
     prefix."""
     result = validator.validate_pipeline_package(
         _package_request(_pipeline_package_documents_with_embedded_connectors()))
-    scoped = [f for f in result["findings"] if f["path"].startswith("connectors/wise/")]
-    assert any(f["rule"] == "RULE-PKG-030" for f in scoped), result["findings"]
-    assert any(f["rule"] == "RULE-PKG-035" for f in scoped), result["findings"]
-    # The second subtree too: a walk that stopped at the first one satisfies
-    # every assertion above.
-    pg_scoped = [f for f in result["findings"] if f["path"].startswith("connectors/postgresql/")]
-    assert any(f["rule"] == "RULE-PKG-030" for f in pg_scoped), result["findings"]
+    # Containment, not a prefix spelling: what is fixed is that the finding is
+    # scoped to its subtree, and `rule` is optional on a `Finding`, so neither
+    # a leading slash nor a ruleless finding turns this into a failure about
+    # something other than what it names.
+    scoped = [f for f in result["findings"] if "connectors/wise/" in f["path"]]
+    assert any(f.get("rule") == "RULE-PKG-030" for f in scoped), result["findings"]
+    assert any(f.get("rule") == "RULE-PKG-035" for f in scoped), result["findings"]
+    # Both subtrees: a walk that stopped at whichever it reached first satisfies
+    # the assertions for that one alone.
+    pg_scoped = [f for f in result["findings"] if "connectors/postgresql/" in f["path"]]
+    assert any(f.get("rule") == "RULE-PKG-030" for f in pg_scoped), result["findings"]
 
 
 # ---------------------------------------------------------------------------

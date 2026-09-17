@@ -22,6 +22,7 @@ from analitiq.contracts.validation_requests import (
     MAX_DOCUMENTS,
     DocumentSet,
     ValidatePackageRequest,
+    ValidateSingleDocumentRequest,
 )
 
 PUBLISHED_SCHEMA = json.loads(
@@ -130,6 +131,22 @@ def test_rejects_non_string_value(value):
     with pytest.raises(ValidationError):
         ValidatePackageRequest.model_validate_json(
             f'{{"documents": {{"connector.json": {value}}}}}')
+
+
+def test_bytes_value_is_coerced_to_text_with_its_byte_order_mark_intact():
+    """A Python `bytes` value is the one non-`str` shape `DocumentText` does not
+    refuse: pydantic decodes it in lax mode, byte-order mark and all. Pinned
+    because it is a documented property of the request models rather than an
+    accident — a consumer that read its files as bytes has its document graded
+    as unreadable *content*, not rejected as a malformed argument — and because
+    nothing else would notice the coercion tightening under a dependency bump.
+    `model_validate_json` cannot reach it: no JSON source produces a `bytes`.
+    """
+    request = ValidatePackageRequest(documents={"connector.json": "\ufeff{}".encode()})
+    assert request.documents.root["connector.json"] == "\ufeff{}"
+
+    single = ValidateSingleDocumentRequest(document=b"{}", entity="connector")
+    assert single.document == "{}"
 
 
 def test_rejects_unknown_field():

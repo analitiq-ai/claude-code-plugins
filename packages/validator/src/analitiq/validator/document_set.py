@@ -24,10 +24,11 @@ grammar, a value that is not text, a key that is also a directory of another,
 a package past the document ceiling, an `entity` outside the published document
 schema names — each is a `pydantic.ValidationError` raised at construction, for
 an in-process caller and a remote one alike, so there is one gate rather than
-one per transport. A `bytes` value is the exception the model does not refuse:
-pydantic decodes it to `str` in lax mode, byte-order mark included, so a caller
-that read its files as bytes has that document reported as unreadable *content*
-rather than as a malformed argument. Nothing below re-checks an argument the
+one per transport. A bytes-like value is the exception the model does not
+refuse: pydantic decodes `bytes` and `bytearray` to `str` in lax mode,
+byte-order mark included, so a caller that read its files as bytes has that
+document reported as unreadable *content* rather than as a malformed
+argument. Nothing below re-checks an argument the
 model already refuses, and a malformed argument never becomes a finding.
 Document *content* is the opposite and is what this module exists to judge:
 unparseable text, a wrong shape, a contract-model failure or a cross-file
@@ -166,11 +167,6 @@ def validate_pipeline_package(request: ValidatePackageRequest) -> ValidationEnve
     `_assemble_bundle` reads such a subtree's `connector.json` only for its
     `connector_id`, and `_connector_endpoint_sets` reads the subtree's endpoint
     ids only for stream-ref resolution.
-
-    `ValidationEnvelope` is the shape a caller reads, so a finding an assembled
-    adapter mints in a local shape of its own — one carrying no `message_id` or
-    `kind`, which `finding_costs_a_pass` still grades — is normalized to a
-    `Finding` before it reaches the envelope.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.
