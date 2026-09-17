@@ -2014,3 +2014,57 @@ def test_type_map_findings_reports_its_own_crash_as_unchecked(validator, monkeyp
     assert findings[0]["message_id"] == "check-crashed", findings[0]
     assert findings[0]["kind"] == "notApplicable", findings[0]
     assert validator.finding_costs_a_pass(findings[0]) is True
+
+
+# --- the collection half, shared with every caller holding a directory of maps ---
+
+def test_type_map_sibling_paths_selects_the_type_map_documents(validator, tmp_path):
+    # The pre-split name and the connector beside them are not maps: what makes
+    # a file one is the shape of its name, and nothing about the name says which
+    # direction it holds.
+    for name in ("type-map-write.json", "type-map-read.json", "type-map.json",
+                 "connector.json", "type-map-extra.json"):
+        (tmp_path / name).write_text("{}")
+    assert {p.name for p in validator.type_map_sibling_paths(tmp_path)} == {
+        "type-map-extra.json", "type-map-read.json", "type-map-write.json"}
+
+
+def test_type_map_sibling_paths_orders_what_the_directory_hands_back(validator):
+    # Directory order is the filesystem's, and it is not sorted: two callers
+    # taking it as given would disagree about which of two documents declaring
+    # one direction already held it. A stub stands in for the directory because
+    # a real one cannot be made to hand back an unsorted listing on demand.
+    class _Scrambled:
+        def glob(self, pattern):
+            assert pattern == "type-map-*.json"
+            return iter([Path(f"/d/type-map-{c}.json") for c in "cabd"])
+
+    assert [p.name for p in validator.type_map_sibling_paths(_Scrambled())] == [
+        f"type-map-{c}.json" for c in "abcd"]
+
+
+def test_type_map_directions_gives_each_direction_to_the_first_to_declare_it(validator):
+    directions = validator.TypeMapDirections()
+    first = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "read")
+    assert directions.claim("a.json", first) == ("read", None)
+    # The later document declares a direction another already holds, so it takes
+    # none — and the direction comes back anyway, because that is what a caller
+    # names in the message it reports.
+    assert directions.claim("b.json", first) == ("read", "a.json")
+    # A second holder does not displace the first for any subsequent document.
+    assert directions.claim("c.json", first) == ("read", "a.json")
+
+
+@pytest.mark.parametrize("bad", ["Write", "", None, 5, _ABSENT])
+def test_type_map_directions_holds_nothing_for_a_document_declaring_none(validator, bad):
+    # Nothing was chosen, so nothing collided: a caller reporting a collision on
+    # this would name a direction the document never claimed, and a second such
+    # document would be reported as duplicating it.
+    directions = validator.TypeMapDirections()
+    assert directions.claim("a.json", _unusable(bad)) == (None, None)
+    assert directions.claim("b.json", _unusable(bad)) == (None, None)
+
+
+def test_type_map_directions_holds_nothing_for_a_payload_that_is_no_document(validator):
+    directions = validator.TypeMapDirections()
+    assert directions.claim("a.json", ["not", "an", "object"]) == (None, None)

@@ -99,13 +99,6 @@ from _bootstrap import ensure_deps_or_reexec
 # (`analitiq.contracts`), so a map's direction is not a member of it.
 PIPELINE_ENTITIES = ("connection", "stream", "pipeline", "database-endpoint", "type-map")
 
-# Read of the engine as it stands: it collects a connection's type maps under
-# connections/<slug>/definition/ by this pattern and keys each one by the
-# `direction` its body declares, never by its name — so the pattern picks the
-# candidates and the document picks the direction, at this scope exactly as
-# beside a connector.
-_TYPE_MAP_GLOB = "type-map-*.json"
-_TYPE_MAP_FILENAMES = {"read": "type-map-read.json", "write": "type-map-write.json"}
 # The pre-split filename: it matches no pattern either scope collects by and
 # carries no envelope to declare a direction, so nothing reads it. The published
 # validator rejects it beside a connector; the adapter mirrors that for
@@ -268,8 +261,13 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                 f"{_LEGACY_TYPE_MAP_FILENAME} is the pre-split filename; the engine never "
                 "reads it. Split it into type-map-read.json (native → Arrow) and, for the "
                 "write direction, type-map-write.json (Arrow → native)."))
-    declared_by: dict[str, str] = {}
-    for path in sorted(definition.glob(_TYPE_MAP_GLOB)):
+    from analitiq.validator import TypeMapDirections, type_map_sibling_paths
+    # Which files are maps, and which one is the map for a direction, are the
+    # published validator's answers — the same ones it gives beside a connector.
+    # What differs here is only the reporting: findings rooted at the connection
+    # site, each file decided inside its own crash guard.
+    directions = TypeMapDirections()
+    for path in type_map_sibling_paths(definition):
         fname = path.name
         with _contained(findings, f"{site}/{fname}"):
             if not path.is_file():
@@ -288,19 +286,16 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                 findings.append(_finding("connection-type-map", "error", f"{site}/{fname}",
                                          f"Cannot read {fname}: {exc}"))
                 continue
-            declared = doc.get("direction") if isinstance(doc, dict) else None
-            if declared in ("read", "write"):
-                if declared in declared_by:
-                    # Nothing chooses between them, so neither is the connection's
-                    # map for that direction. Grading this one would report the
-                    # defects of a document no consumer can pick.
-                    findings.append(_finding(
-                        "connection-type-map", "error", f"{site}/{fname}",
-                        f"{declared_by[declared]} and {fname} both declare direction "
-                        f"{declared!r}; a connection carries one type-map document per "
-                        "direction."))
-                    continue
-                declared_by[declared] = fname
+            declared, held_by = directions.claim(fname, doc)
+            if held_by is not None:
+                # Nothing chooses between them, so neither is the connection's
+                # map for that direction. Grading this one would report the
+                # defects of a document no consumer can pick.
+                findings.append(_finding(
+                    "connection-type-map", "error", f"{site}/{fname}",
+                    f"{held_by} and {fname} both declare direction {declared!r}; a "
+                    "connection carries one type-map document per direction."))
+                continue
             findings.extend({**f, "path": f"{site}/{fname}{f.get('path', '')}"}
                             for f in _type_map_findings(doc, path))
 

@@ -1522,13 +1522,10 @@ def test_scripts_borrow_private_names_that_still_exist():
         assert hasattr(importlib.import_module(module), name), f"{module}.{name}"
 
 
-def test_type_map_filenames_match_the_validator():
+def test_the_dead_pre_split_filename_matches_the_validator():
     # The adapter carries its own copy because it reaches connection directories
     # the published validator never walks. A copy that drifts stops naming the
-    # slots the validator locates, so a map one route rejects passes on the other,
+    # file the validator rejects, so a map one route rejects passes on the other,
     # and which of the two is right is not recoverable from either side alone.
-    from analitiq.validator.connectors import (
-        _LEGACY_MAP_FILENAME, _MAP_FILENAME_BY_DIRECTION,
-    )
-    assert V._TYPE_MAP_FILENAMES == _MAP_FILENAME_BY_DIRECTION
+    from analitiq.validator.connectors import _LEGACY_MAP_FILENAME
     assert V._LEGACY_TYPE_MAP_FILENAME == _LEGACY_MAP_FILENAME

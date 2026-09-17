@@ -17,6 +17,13 @@ map as the direction named, reporting a disagreeing `direction` alongside every
 other defect the model finds rather than grading the document as what it claims
 to be.
 
+A caller holding a *directory* of maps asks which files are maps and which one
+is the map for each direction: `type_map_sibling_paths(parent)` answers the
+first, `TypeMapDirections` the second. They are published because the answer has
+to be the same at every scope — a connector's siblings here, a connection's
+beside the pipeline plugin's adapter — while what each caller reports about a
+document, and where it roots that report, is its own.
+
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which self-registers its detector→validator
 pairs with the core dispatch registry — a new kind is a new module registering
@@ -46,9 +53,11 @@ from . import streams  # noqa: F401  — imported for its self-registration side
 # exercises them through the package root (see test_validation.py). Deliberately
 # NOT in __all__ — that would widen the published star-import surface.
 from .connectors import (  # skipcq: PY-W2000
+    TypeMapDirections,
     check_coverage,
     endpoint_filename_findings,
     type_map_findings,
+    type_map_sibling_paths,
     is_api_endpoint_doc,
     is_connector_doc,
     is_addressed_endpoint_path,
@@ -78,6 +87,8 @@ __all__ = [
     "check_coverage",
     "endpoint_filename_findings",
     "type_map_findings",
+    "type_map_sibling_paths",
+    "TypeMapDirections",
     "is_stem_addressed_endpoint_path",
     "is_addressed_endpoint_path",
     "is_api_endpoint_doc",

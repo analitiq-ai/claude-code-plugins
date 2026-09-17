@@ -1051,44 +1051,88 @@ def _type_map_document_findings(doc: Any, direction: str, scope: str) -> list[di
     return findings
 
 
+def type_map_sibling_paths(parent: Path) -> list[Path]:
+    """The type-map documents beside `parent`, in the order they are considered.
+
+    Which files are type-map documents is one question with one answer, asked
+    wherever maps are collected — beside a connector here, beside a connection
+    by the pipeline plugin's adapter. The order is part of the answer: it is
+    what makes "the document already holding a direction" the same document
+    from either side.
+    """
+    return sorted(parent.glob(_TYPE_MAP_GLOB))
+
+
+class TypeMapDirections:
+    """Which collected document is the map for each direction, in the order
+    `type_map_sibling_paths` returns them.
+
+    Which directions a set of maps covers is a question about the documents,
+    not about their names: a name is chosen by the author and read by nobody,
+    so counting names answers with what the set was meant to contain while the
+    consumer answers with what it declares. Keying on the declaration is what
+    makes one answer, at whichever scope the documents were collected from.
+
+    Two documents declaring one direction leave no unambiguous document for it,
+    so the later one is not the map for that direction — and neither side may
+    quietly pick, or the two would disagree about the same directory. What each
+    caller reports is its own: the finding shapes and the sites they are rooted
+    at differ by scope, and only the rule deciding who holds what is shared.
+    """
+
+    def __init__(self) -> None:
+        self._holders: dict[str, str] = {}
+
+    def claim(self, name: str, doc: Any) -> tuple[str | None, str | None]:
+        """Offer one document, named `name`, to the direction it declares.
+
+        Returns `(direction, held_by)`. `direction` is the direction the
+        document declares, or None when it declares none usable. `held_by`
+        names the document already holding that direction, and is None when
+        this one takes it — so a caller reads a claim as `held_by is None`,
+        and has the direction to name either way.
+        """
+        declared = doc.get("direction") if isinstance(doc, dict) else None
+        if declared not in ("read", "write"):
+            return None, None
+        held_by = self._holders.get(declared)
+        if held_by is None:
+            self._holders[declared] = name
+        return declared, held_by
+
+
 def _type_map_siblings_by_direction(
     parent: Path,
 ) -> tuple[dict[str, tuple[str, Any]], list[dict]]:
     """Every sibling type-map document, keyed by the direction its body declares,
     with the filename it was read from kept beside it for the messages.
 
-    Which directions a package covers is a question about its documents, not
-    about their names: a name is chosen by the author and read by nobody, so
-    counting names answers with what the package was meant to contain while the
-    consumer answers with what it declares. Keying on the declaration is what
-    makes one answer.
-
-    Two documents declaring the same direction leave the package with no
-    unambiguous document for it, so the collision is reported and the later one
-    is not graded — grading it would report every defect of a document no
-    consumer can choose. A document declaring no usable direction fills no
-    direction and is graded through the union keyed on `direction`, which names
-    the discriminator rather than picking a direction to report through.
+    A document declaring no usable direction fills no direction and is graded
+    through the union keyed on `direction`, which names the discriminator rather
+    than picking a direction to report through. A collision is reported and the
+    later document is not graded — grading it would report every defect of a
+    document no consumer can choose.
     """
     documents: dict[str, tuple[str, Any]] = {}
     findings: list[dict] = []
-    for path in sorted(parent.glob(_TYPE_MAP_GLOB)):
+    directions = TypeMapDirections()
+    for path in type_map_sibling_paths(parent):
         doc, load = _load_type_map(path)
         findings.extend(load)
         if doc is None:
             continue
-        declared = doc.get("direction") if isinstance(doc, dict) else None
-        if declared not in ("read", "write"):
+        declared, held_by = directions.claim(path.name, doc)
+        if declared is None:
             findings.extend(_model_findings(doc, _TYPE_MAP_ADAPTER))
             continue
-        if declared in documents:
+        if held_by is not None:
             findings.append(finding(
                 rule="RULE-PKG-030",
                 message_id="type-map-direction-duplicated", kind="fail", path="/direction",
                 message=(
-                    f"siblings {documents[declared][0]} and {path.name} both declare "
-                    f"direction {declared!r}; a package carries one type-map document "
-                    "per direction.")))
+                    f"siblings {held_by} and {path.name} both declare direction "
+                    f"{declared!r}; a package carries one type-map document per "
+                    "direction.")))
             continue
         documents[declared] = (path.name, doc)
     return documents, findings
