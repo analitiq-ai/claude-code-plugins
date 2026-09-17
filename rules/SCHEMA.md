@@ -236,5 +236,12 @@ emits one.
   syntactically. The census above walks contract classes, so it cannot see a
   cross-document
   check.
+- `packages/validator/tests/test_rule_cases.py` — the cross-document case
+  corpus, `packages/validator/src/analitiq/validator/cases/<RULE-ID>/{valid,invalid}/<case-name>/`,
+  shipped in the `analitiq-validator` wheel and read through
+  `analitiq.validator.rule_cases`: each invalid case draws a `fail` finding
+  naming its rule, and each valid case draws no finding naming its rule and
+  passes. It runs one way only: no record field claims cases, so a rule
+  bound to a check in `analitiq.validator` is not required to carry any.
 - `tests/registry/test_rule_reachability.py` — every id a plugin's
   prose cites is readable inside that plugin.

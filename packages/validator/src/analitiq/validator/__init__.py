@@ -59,6 +59,7 @@ from .connectors import (  # skipcq: PY-W2000
 from .pipelines import is_pipeline_bundle, is_pipeline_doc, validate_pipeline_bundle
 from .connections import is_connection_doc
 from .streams import is_stream_doc
+from .rule_cases import RuleCase, case_mismatch, rule_cases
 
 __all__ = [
     "finding",
@@ -88,4 +89,7 @@ __all__ = [
     "is_pipeline_doc",
     "is_pipeline_bundle",
     "validate_pipeline_bundle",
+    "RuleCase",
+    "case_mismatch",
+    "rule_cases",
 ]

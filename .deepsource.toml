@@ -18,6 +18,7 @@ exclude_patterns = [
   "schemas/**",
   "packages/*/tests/corpus/**",
   "packages/contract-models/src/analitiq/contracts/shared/fixtures/**",
+  "packages/validator/src/analitiq/validator/cases/**",
   "**/examples/**",
 ]
 

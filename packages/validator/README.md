@@ -78,6 +78,20 @@ to read from, and its keys are never resolved against a filesystem — the offli
 guarantee stated above for single-document validation, extended to a set of
 documents instead of one.
 
+## Rule cases
+
+Rules enforced by a cross-document check ship example document sets with the
+package, each one a directory holding a `bundle.json` or a connector package
+rooted at `connector.json`. `rule_cases()` loads them and `case_mismatch(case)`
+grades one against the installed validator, returning `None` when the
+validator agrees:
+
+```python
+from analitiq.validator import case_mismatch, rule_cases
+
+mismatches = [m for m in map(case_mismatch, rule_cases()) if m]
+```
+
 ## Install
 
 ```bash
