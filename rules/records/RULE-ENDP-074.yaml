@@ -38,9 +38,13 @@ rationale: >
   declares itself is read as that declaration, whatever a `$ref` base or an
   `allOf` branch alongside also says about it — so the refinement idiom stays
   valid. Refusing it would be over-refusal, which fails parity the same way
-  over-acceptance does. The record SHAPE, unlike the field, is resolved: a
-  shape assembled from a `$ref` or an `allOf` is followed, and the field
-  found through it is still graded as authored. That is a deliberate
+  over-acceptance does. It also means a field contributed ONLY by a `$ref`
+  base or an `allOf` branch, beside a record shape that has `properties` of
+  its own, is refused: the engine reads that own map and no other, so the
+  field it names is not there. The record SHAPE, unlike the field, is
+  resolved: a shape assembled from a `$ref` or an `allOf` is followed, and
+  the field found through it keeps its own `$ref` unresolved. That is a
+  deliberate
   difference from the engine, which resolves neither and refuses such a
   document when it reads the record schema. It is kept because RULE-ENDP-026
   tells authors to put a non-local schema in this document's `$defs`, and

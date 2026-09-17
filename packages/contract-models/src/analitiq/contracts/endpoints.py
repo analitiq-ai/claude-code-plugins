@@ -4795,9 +4795,16 @@ def _cursor_node_as_the_engine_reads_it(
     steers them into would make the two rules contradict each other. This
     does NOT mean the document runs: it is accepted here and refused there,
     an engine gap this rule declines to paper over by refusing the author
-    instead. Only the FIELD is read as authored. Where the shape declares the
-    field itself, that own declaration wins, which is what the engine reads
-    whatever a `$ref` base or an `allOf` branch alongside also says about it.
+    instead. Where the shape declares the field itself — the case the engine
+    can actually read — that own declaration wins, which is what the engine
+    reads whatever a `$ref` base or an `allOf` branch alongside also says
+    about it. In the fallback branch the grading is looser than that:
+    `materialize_node` merges the contributors' `properties` maps, so a field
+    assembled from several branches is graded composed rather than authored. A
+    field whose own value is a `$ref` is still not followed, which is what the
+    rule turns on. The looseness is unobservable — every document that reaches
+    the fallback is one the engine refuses outright — so it is recorded here
+    rather than papered over with a distinction that would change no verdict.
     """
     properties = items.get("properties")
     if not isinstance(properties, dict):
@@ -4828,25 +4835,36 @@ def _check_cursor_field_holds_the_mapping(
     does work, because a generated schema usually emits one of the others.
 
     The `format` half is the quieter failure. A node that writes `type:
-    integer` itself and carries its `format` behind a `$ref` is accepted by
-    both sides, which then disagree about what it says — an epoch moment here,
-    a bare id in the engine. Nothing fails until the second run, when a
-    committed checkpoint has to be rendered back into a request. Reading the
-    authored node is what keeps the two readings the same one.
+    integer` itself and carries its `format` behind a `$ref` names a type both
+    sides can see, so neither refuses it for its type — and grading the
+    resolved node WOULD read `epoch_milliseconds` where the engine reads no
+    format at all, calling a moment what the engine calls a bare id. Nothing
+    would fail until the second run, when a committed checkpoint has to be
+    rendered back into a request. Reading the authored node is what keeps the
+    two readings the same one: both call it an id, and RULE-ENDP-078 refuses a
+    mapping `format` over it here rather than leaving it to `cursor_bounds`.
 
-    ``field`` is ``None`` when the flat lookup lands on nothing — a dotted
-    `cursor_field` is the case that reaches here, declared as far as the
-    document is concerned (RULE-ENDP-013 has already passed) and matching no
-    key where a cursor is read from.
+    ``field`` is ``None`` when the flat lookup lands on nothing. Two shapes
+    reach it, both declared as far as the document is concerned — RULE-ENDP-013
+    has already passed — and neither naming a key where a cursor is read from:
+    a dotted `cursor_field`, which is looked up whole rather than walked, and a
+    field contributed only by a `$ref` base or an `allOf` branch beside a record
+    shape that has `properties` of its own, which the lookup does not merge.
+    The message names both, because the fix differs and the author cannot tell
+    from the verdict which one they hit.
     """
     if field is None:
         raise violation(
             "RULE-ENDP-074", "cursor-field-not-where-the-cursor-is-read",
             f"replication cursor_field {cm.cursor_field!r} is declared in "
             "response.schema but names no key on the record shape's "
-            "`properties`, which is where a stored cursor is read from: the "
-            "name is looked up whole, so a dotted path is not walked. Point "
-            "the cursor at a top-level record field"
+            "`properties`, which is where a stored cursor is read from. The "
+            "name is looked up whole and the lookup merges nothing, so a "
+            "dotted path is not walked — point the cursor at a top-level "
+            "record field — and a field contributed only by a `$ref` base or "
+            "an `allOf` branch is not seen either — declare it on the record "
+            "shape\'s own `properties`, where a branch alongside may still "
+            "refine it"
         )
     declared = field.get("type") if isinstance(field, dict) else None
     if isinstance(declared, str):

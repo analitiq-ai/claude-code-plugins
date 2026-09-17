@@ -494,6 +494,20 @@ class TestCursorFieldsInRecordShape:
         schema["items"]["allOf"] = [{"$ref": "#/$defs/Base"}]
         parse_endpoint(payload)
 
+    def test_a_cursor_field_contributed_only_by_a_ref_base_is_rejected(self):
+        # The nearest neighbour of the refinement idiom above, and the one an
+        # author is most likely to hit: the record shape has `properties` of
+        # its own, so the engine reads that map and no other — and the cursor
+        # field is declared only on the base. Both sides refuse; the message
+        # has to say which of its two causes applies, because the author's fix
+        # here is to restate the field, not to un-dot a path.
+        payload = self._payload_with_cursor_field("updated_at", {"id": {"type": "integer"}})
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {"Base": {"type": "object", "properties": {"updated_at": {"type": "string"}}}}
+        schema["items"]["allOf"] = [{"$ref": "#/$defs/Base"}]
+        with pytest.raises(ValidationError, match="contributed only by a `\\$ref` base"):
+            parse_endpoint(payload)
+
     def test_a_cursor_field_through_a_ref_record_shape_is_read_as_authored(self):
         # The record SHAPE is resolved — refusing it would contradict
         # RULE-ENDP-026, which steers authors into `$defs` — but the field
