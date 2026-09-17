@@ -94,7 +94,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "ConnectionStoredMaps",
    "rationale": "A connection document is committed beside the pipeline and returned in plaintext by the connections API, so a credential filed into a non-secret map is a credential in version control and in every response — and rotating it means rewriting history rather than replacing a secret. The check reads key names only: it catches the spellings an author reaches for by habit and cannot see a real secret filed under an innocuous key, which is the half `RULE-CONN-009` leaves with the author.\n",
    "status": "active",
    "superseded_by": null
