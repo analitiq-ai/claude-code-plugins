@@ -88,7 +88,7 @@ grades one against the installed validator, returning `None` when the
 validator agrees:
 
 ```python
-from analitiq.validator import case_mismatch, rule_cases
+from analitiq.validator.rule_cases import case_mismatch, rule_cases
 
 mismatches = [m for m in map(case_mismatch, rule_cases()) if m]
 ```

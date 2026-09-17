@@ -10,20 +10,24 @@ rule's case directory removes its coverage without failing this suite.
 """
 from __future__ import annotations
 
-import importlib
 import json
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 from analitiq.contracts.shared.rules import all_rules
-from analitiq.validator import RuleCase, case_mismatch, rule_cases
-
-# The package re-exports the function under the module's own name, so the
-# module is reached through the import system rather than as an attribute.
-corpus = importlib.import_module("analitiq.validator.rule_cases")
+import analitiq.validator.rule_cases as corpus
+from analitiq.validator.rule_cases import RuleCase, case_mismatch, rule_cases
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
+
+
+def test_the_corpus_module_is_reachable_by_its_dotted_name():
+    """`import analitiq.validator.rule_cases as m` binds the package attribute
+    of that name, so a package-level name shadowing the module hands the
+    consumer something other than the module."""
+    assert isinstance(corpus, ModuleType)
 
 
 def test_the_corpus_is_not_empty():

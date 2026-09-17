@@ -123,7 +123,7 @@ jobs:
           STAGED="${{ runner.temp }}/v-src" DIST="${{ runner.temp }}/v-dist" "${{ runner.temp }}/v-smoke/bin/python" -c "
           import os, pathlib, tarfile, zipfile
           import analitiq.validator as v
-          from analitiq.validator import case_mismatch, rule_cases
+          from analitiq.validator.rule_cases import case_mismatch, rule_cases
 
           staged = pathlib.Path(os.environ['STAGED']) / 'src' / 'analitiq' / 'validator'
           installed = pathlib.Path(v.__file__).parent
