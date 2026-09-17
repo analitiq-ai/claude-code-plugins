@@ -29,9 +29,9 @@ entry point. This adapter routes each entity as follows:
     which is already known here, guarantees the right model runs and yields
     per-field findings instead.
   * ``type-map`` -> ``analitiq.validator.type_map_findings`` as the direction
-    the document declares, at ``scope="connection"``; one declaring neither is
-    answered on the discriminator by the published entry point instead, which
-    names the field rather than picking a direction to report the rest through.
+    the document declares, at ``scope="connection"``; one declaring neither goes
+    to ``analitiq.validator.type_map_discriminator_findings``, which names the
+    field rather than picking a direction to report the rest through.
     ``_connection_type_map_findings`` below collects the maps beside a
     connection the same way, keying each by what it declares.
     ``scope`` is how the gap-only nature of a connection map (``RULE-TMAP-018``)
@@ -61,10 +61,10 @@ cannot make it:
   * ``connection-type-map`` — the published bundle validator receives assembled
     documents, never a connection's directory, so it cannot see the type-map
     files the engine loads beside ``connection.json``. The bundle pass therefore
-    validates each connection's present ``type-map-{read,write}.json`` in full
-    (via the published validator) and rejects the dead pre-split ``type-map.json``
-    filename with a migration finding, mirroring the published connector-side
-    check at connection scope.
+    collects every ``type-map-*.json`` beside it the way the published validator
+    collects a connector's, validates each in full (via the published validator)
+    and rejects the dead pre-split ``type-map.json`` filename with a migration
+    finding, mirroring the published connector-side check at connection scope.
 
 Validation is offline — no schema is fetched. Usage::
 
@@ -99,8 +99,8 @@ from _bootstrap import ensure_deps_or_reexec
 # (`analitiq.contracts`), so a map's direction is not a member of it.
 PIPELINE_ENTITIES = ("connection", "stream", "pipeline", "database-endpoint", "type-map")
 
-# The pre-split filename: it matches no pattern either scope collects by and
-# carries no envelope to declare a direction, so nothing reads it. The published
+# The pre-split filename: it matches no pattern either scope collects by, so
+# nothing reads it and nothing counts it toward a direction. The published
 # validator rejects it beside a connector; the adapter mirrors that for
 # connections, where the published bundle validator cannot see files.
 _LEGACY_TYPE_MAP_FILENAME = "type-map.json"
@@ -219,21 +219,16 @@ def _type_map_findings(doc, document_path: Path) -> list[dict]:  # skipcq: PYL-W
     documents and nothing further, so the declaration is the only direction a
     document has.
 
-    One declaring neither direction is graded through the union keyed on
-    `direction`, which answers once, naming the discriminator — and keeps a
-    payload that is no type-map envelope at all inside the type-map models,
-    where `--entity` already said that is what it is, rather than sending it
-    back out to kind detection to be called unrecognized. `scope` is not
-    threaded there because no direction was chosen, and `scope` decides the
-    write vocabulary alone."""
-    from analitiq.validator import type_map_findings
+    One declaring neither direction goes to the published answer for that case,
+    which names the discriminator and keeps a payload that is no type-map
+    envelope at all inside the type-map models, where `--entity` already said
+    that is what it is, rather than sending it back out to kind detection to be
+    called unrecognized. `scope` is not threaded there because no direction was
+    chosen, and `scope` decides the write vocabulary alone."""
+    from analitiq.validator import type_map_discriminator_findings, type_map_findings
     declared = doc.get("direction") if isinstance(doc, dict) else None
     if declared not in ("read", "write"):
-        # Private API: the union the published entry point grades an undeclared
-        # document through is not exported under a name of its own, and there is
-        # no public call that grades a payload no direction can be named for.
-        from analitiq.validator.connectors import _TYPE_MAP_ADAPTER, _model_findings
-        return _model_findings(doc, _TYPE_MAP_ADAPTER)
+        return type_map_discriminator_findings(doc)
     return type_map_findings(doc, declared, scope="connection")
 
 
@@ -246,11 +241,11 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
     published connector-side check.
 
     Appends directly to the caller's shared `findings` list rather than
-    building a local one to return: the legacy check and each type-map
-    direction are independently-decidable units, each in its own `_contained`
-    guard, so a crash in one costs only its own finding — never a list of
-    already-decided results a crash partway through would otherwise discard
-    before this function got the chance to return it."""
+    building a local one to return: the legacy check and each collected file
+    are independently-decidable units, each in its own `_contained` guard, so a
+    crash in one costs only its own finding — never a list of already-decided
+    results a crash partway through would otherwise discard before this
+    function got the chance to return it."""
     definition = conn_dir / "definition"
     site = f"connections/{conn_dir.name}/definition"
     legacy = definition / _LEGACY_TYPE_MAP_FILENAME
@@ -267,6 +262,11 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
     # What differs here is only the reporting: findings rooted at the connection
     # site, each file decided inside its own crash guard.
     directions = TypeMapDirections()
+    # Collected first and graded after, because a document is graded only once
+    # the whole directory says it is the map for its direction: a second
+    # declaration arriving later takes the direction from both, and a defect
+    # already reported against the earlier one could not be taken back.
+    collected: list[tuple[str, Path, object, str | None]] = []
     for path in type_map_sibling_paths(definition):
         fname = path.name
         with _contained(findings, f"{site}/{fname}"):
@@ -288,14 +288,16 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                 continue
             declared, held_by = directions.claim(fname, doc)
             if held_by is not None:
-                # Nothing chooses between them, so neither is the connection's
-                # map for that direction. Grading this one would report the
-                # defects of a document no consumer can pick.
+                collected[:] = [e for e in collected if e[3] != declared]
                 findings.append(_finding(
                     "connection-type-map", "error", f"{site}/{fname}",
                     f"{held_by} and {fname} both declare direction {declared!r}; a "
-                    "connection carries one type-map document per direction."))
+                    "connection carries one type-map document per direction, and "
+                    "neither of these is it."))
                 continue
+            collected.append((fname, path, doc, declared))
+    for fname, path, doc, _ in collected:
+        with _contained(findings, f"{site}/{fname}"):
             findings.extend({**f, "path": f"{site}/{fname}{f.get('path', '')}"}
                             for f in _type_map_findings(doc, path))
 
@@ -455,7 +457,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
             # connection, invisible to the assembled-document bundle, and depend
             # only on conn_json.parent — never on whether connection.json itself
             # parsed — so they are checked unconditionally: a crash inside is
-            # contained per-direction by _connection_type_map_findings itself, so
+            # contained per-file by _connection_type_map_findings itself, so
             # this outer guard is a backstop, never costs the bundle's completeness
             # (which would otherwise misreport a live connection as unresolved),
             # and a genuinely malformed or legacy type-map file is still reported

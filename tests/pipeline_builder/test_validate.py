@@ -588,7 +588,7 @@ def test_type_map_entity_rejects_a_document_that_declares_no_direction(tmp_path)
     # keyed on `direction` answers on the discriminator.
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", CONN_PG))
     assert not diag["passed"]
-    assert any(f.get("message_id") == "union_tag_not_found" and f.get("path") == "/"
+    assert any(f.get("message_id") == "union_tag_not_found" and f.get("path") == "/direction"
                for f in diag["findings"]), diag["findings"]
 
 
@@ -636,6 +636,42 @@ def test_bundle_flags_invalid_connection_write_type_map(tmp_path):
     assert bad and all(
         f["path"].startswith("connections/postgresql/definition/type-map-write.json")
         for f in bad), diag["findings"]
+
+
+def test_bundle_rejects_two_connection_maps_declaring_one_direction(tmp_path):
+    # The same rule the published validator applies beside a connector, at the
+    # site this adapter owns: a direction two documents declare has no map, so
+    # the collision is reported and neither document is graded. The earlier
+    # document carries a defect of its own — reporting it would say which of the
+    # two the order happened to reach first.
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, "connections/postgresql/definition/type-map-read.json",
+           _tm([{"match": "exact", "arrow_type": "utf8", "native_type": "TEXT"}], "write"))
+    _write(tmp_path, "connections/postgresql/definition/type-map-write.json",
+           _tm(TYPE_MAP_WRITE, "write"))
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"]
+    collision = [f for f in diag["findings"] if "both declare direction" in f["message"]]
+    assert collision, diag["findings"]
+    assert collision[0]["path"].startswith(
+        "connections/postgresql/definition/type-map-write.json"), collision[0]
+    assert "type-map-read.json" in collision[0]["message"], collision[0]
+    assert not [f for f in diag["findings"] if f.get("rule") is None
+                and f.get("kind") == "fail" and "/rules/" in f["path"]], diag["findings"]
+
+
+def test_bundle_grades_a_connection_map_under_any_collected_filename(tmp_path):
+    # Which files are maps is the name's whole say, and the name it has to have
+    # is only `type-map-*.json` — so a map under an unconventional one is graded
+    # like any other rather than sitting beside the connection unread.
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, "connections/postgresql/definition/type-map-natives.json",
+           _tm([{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "read"))
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"]
+    assert any(f["path"].startswith(
+        "connections/postgresql/definition/type-map-natives.json/rules")
+        for f in diag["findings"]), diag["findings"]
 
 
 def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
@@ -1364,9 +1400,9 @@ def test_pipeline_entities_are_a_document_artifact_kind_subset():
 
 
 def test_cli_main_type_map_entities(tmp_path, capsys):
-    # the agents drive the CLI, and diagnostics_for-level routing keys off
-    # _TYPE_MAP_FILENAMES — only this pins that PIPELINE_ENTITIES exposes the
-    # entity and that the filename alone selects the direction
+    # the agents drive the CLI: only this pins that PIPELINE_ENTITIES exposes
+    # the entity and that the invocation names no direction, the document's own
+    # declaration deciding
     path = _write(tmp_path, "type-map-write.json", _tm(TYPE_MAP_WRITE, "write"))
     rc = V.main(["--entity", "type-map", "--document", str(path)])
     out = json.loads(capsys.readouterr().out)

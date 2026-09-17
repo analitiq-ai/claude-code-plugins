@@ -630,11 +630,11 @@ def _p_type_map_direction_from_document() -> list[dict]:
 
 
 def _p_type_map_coverage_counts_declarations() -> list[dict]:
-    # A database connector package whose two maps sit under each other's
-    # conventional filenames. Both directions are covered because both are
+    # A database connector package whose maps sit under each other's
+    # conventional filenames. Each direction is covered because each is
     # declared, so a clean verdict is coverage counting declarations; counting
-    # filenames instead would grade each map as the other direction and reject
-    # the `$schema` and `direction` of both.
+    # filenames instead would grade each map as the direction it does not
+    # declare and reject its `$schema` and its `direction`.
     doc = _example_body(DB_EXAMPLE)
     with tempfile.TemporaryDirectory() as tmp:
         definition = Path(tmp) / "definition"
@@ -646,9 +646,11 @@ def _p_type_map_coverage_counts_declarations() -> list[dict]:
 
 
 def _p_type_map_duplicate_direction() -> list[dict]:
-    # The package's write map copied over its read map's filename, so both
-    # siblings declare the write direction. Nothing chooses between them, so the
-    # collision is reported and the read direction counts as uncovered.
+    # The package's write map copied over its read map's filename, so each
+    # sibling declares the write direction. Nothing chooses between them, so the
+    # collision is reported and neither direction is covered — the write one
+    # because the pair took it from each other, the read one because nothing
+    # declares it.
     doc = _example_body(DB_EXAMPLE)
     with tempfile.TemporaryDirectory() as tmp:
         definition = Path(tmp) / "definition"
@@ -1057,7 +1059,12 @@ PROBES: tuple[Probe, ...] = (
     Probe("type-map-coverage-counts-declarations", "clean",
           _p_type_map_coverage_counts_declarations),
     Probe("type-map-duplicate-direction-rejected", "error", _p_type_map_duplicate_direction,
-          message_re=r"both declare direction"),
+          message_re=r"both declare direction .*neither of these is it"),
+    # The collision's consequence, which the message alone does not carry: the
+    # direction the pair declares is covered by neither of them.
+    Probe("type-map-duplicate-direction-covers-nothing", "error",
+          _p_type_map_duplicate_direction,
+          message_re=r"no readable sibling declares it"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
           message_re=r"greater than or equal to 1"),
     Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,

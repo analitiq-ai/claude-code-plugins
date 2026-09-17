@@ -134,9 +134,9 @@ Invoke `connector-schema-validator` over the connector body and type
 map(s); it detects each document's kind from its own shape.
 <!-- PROBE: type-map-direction-from-document, type-map-coverage-counts-declarations -->
 A map is graded as the direction the map itself declares, whether it is
-validated on its own or as a connector's sibling. Author each map the
-connector's `kind` calls for under the filename that kind requires
-(`RULE-PKG-030`) — the name is the convention a reader navigates by, and the
+validated on its own or as a connector's sibling. Ship a map for each direction
+the connector's `kind` calls for (`RULE-PKG-030`), under the conventional
+filename for that direction — the name is what a reader navigates by, and the
 direction the package is counted as covering comes from the document.
 
 Validation covers the JSON documents above; the package files are

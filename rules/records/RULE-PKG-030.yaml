@@ -27,12 +27,17 @@ rationale: >
   count is right whichever way that reading goes stale: one document per
   required direction is what a consumer needs however it finds them, and a
   filename a consumer never reads cannot make a second document for one
-  direction unambiguous.
+  direction unambiguous. The pattern the documents are collected by is the half
+  of that reading a stale copy does break: it is stated on both sides and
+  published by neither, so a pattern that widens or narrows on the engine's side
+  leaves this check grading a set of files the engine does not load, and nothing
+  here goes red — a map that stops being found where it was authored is the
+  signal to re-read it from the engine.
 
   The pre-split single-map filename is rejected outright rather than read as a
-  read map. It carries its rules with no envelope to declare a direction at all,
-  so there is nothing to count it toward, and a connector that still carries it
-  has a write direction nobody has looked at. That name is a fact about the
+  read map. It matches no pattern either side collects by, so there is nothing
+  to count it toward, and a connector that still carries it has a write
+  direction nobody has looked at. That name is a fact about the
   package rather than about the document under it, so it is graded here,
   where the package is in hand, and a map handed to the validator on its own
   is graded on the direction it declares.

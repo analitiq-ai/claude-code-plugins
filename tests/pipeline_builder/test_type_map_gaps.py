@@ -95,11 +95,14 @@ def test_write_gap_reported(tmp_path):
 
 
 def test_map_without_rules_key_rejected(tmp_path):
+    # the prober keeps no shape gate of its own: the published grader names every
+    # part of the envelope that is missing, so the message says what to author
     bad = tmp_path / "r.json"
     bad.write_text('{"match": "exact"}')
-    with pytest.raises(ValueError, match="not a valid read type map"):
+    with pytest.raises(ValueError, match=r"is not a valid read type map") as exc:
         G.resolve("read", ["citext"], [bad])
-
+    for field in ("/$schema", "/direction", "/rules"):
+        assert field in str(exc.value), exc.value
 
 
 def test_a_connection_write_map_is_not_held_to_a_connector_vocabulary(tmp_path, capsys):
@@ -329,6 +332,10 @@ def test_cli_rejects_maps_holding_different_directions(tmp_path, capsys):
     err = capsys.readouterr()
     assert not err.out
     assert "same direction" in err.err
+    # The message names one map per direction, and which one is the first to
+    # declare it: a later map naming the same direction changes nothing about
+    # which document the author is pointed at.
+    assert str(r) in err.err and str(w) in err.err, err.err
 
 
 def test_cli_parse_error_names_the_file(tmp_path, capsys):

@@ -25,9 +25,8 @@ Usage::
 Each map declares the direction being probed; its filename says nothing about
 it here, as it says nothing anywhere else a map is consumed. Maps declaring
 different directions are a usage error, as is one declaring neither. Probes are
-a JSON array
-of strings on stdin (or --probes-file): provider `native_type` labels reading,
-`arrow_type` strings writing. Output on stdout::
+a JSON array of strings on stdin (or --probes-file): provider `native_type`
+labels when reading, `arrow_type` strings when writing. Output on stdout::
 
     {"direction": "read",
      "resolved": {"citext": null, "vector(3)": null},
@@ -90,9 +89,9 @@ def _load_rules(path: Path, direction: str) -> list:
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
     from analitiq.validator import finding_costs_a_pass, type_map_findings
-    # The connection scope is the one both maps can meet: a connection map covers
-    # only the gaps it fills, and a connector map rendering the whole vocabulary
-    # clears the weaker bar too.
+    # The connection scope is the one either kind of map can meet: a connection
+    # map covers only the gaps it fills, and a connector map rendering the whole
+    # vocabulary clears the weaker bar too.
     findings = type_map_findings(doc, direction, scope="connection")
     fatal, advisory = [], []
     for f in findings:
