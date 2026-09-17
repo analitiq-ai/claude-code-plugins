@@ -66,6 +66,15 @@ def test_a_valid_case_failing_another_rule_is_a_mismatch():
     assert case_mismatch(RuleCase("RULE-PIPE-011", "valid", other.name, other.root))
 
 
+@pytest.mark.parametrize("verdict", ["valid", "invalid"])
+def test_a_finding_naming_the_rule_without_failing_is_a_mismatch(monkeypatch, verdict):
+    """An informational finding costs no pass, so only its rule id grades it:
+    an invalid case needs a fail, and a valid case may not name its rule at all."""
+    informational = {"rule": "RULE-PIPE-011", "kind": "informational", "message": "probe"}
+    monkeypatch.setattr(corpus, "case_findings", lambda case: [informational])
+    assert case_mismatch(_case("RULE-PIPE-011", verdict))
+
+
 def _connector_package(root: Path, *, covered: bool) -> Path:
     """A connector package whose read map covers its endpoint's native type or not."""
     connector = json.loads((CORPUS / "valid_connector.json").read_text())
