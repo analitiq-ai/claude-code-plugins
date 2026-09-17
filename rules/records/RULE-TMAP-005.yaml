@@ -1,7 +1,8 @@
 id: RULE-TMAP-005
 statement: >
   A `regex` read rule's native_type pattern MUST compile under the RE2 regex
-  dialect.
+  dialect and MUST NOT carry Python-only `(?P…)` syntax, so a named capture is
+  spelled `(?<name>…)`.
 tier: shape
 severity: error
 artifact_kinds: [type-map]
@@ -16,9 +17,14 @@ rationale: >
   backreferences an author reaches for by habit are not RE2 syntax, and RE2
   admits syntax of its own that a backtracking engine refuses — and either kind
   reads as ordinary regex on the page, so only compiling under the dialect that
-  will match it tells the author which one they wrote. This states the engine as
-  it stands: the check runs stricter than the runtime if the engine's matcher
-  comes to accept what this check's RE2 rejects, and looser if the check
-  resolves an RE2 release accepting what the engine's refuses.
+  will match it tells the author which one they wrote. The capture spelling is
+  this contract's choice rather than the dialect's — RE2 accepts `(?P<name>…)`
+  too — held to the one form the dialects outside Python also read, so a matcher
+  stays portable to whatever compiles it. This states the engine as
+  it stands, and the gate is only as close to it as the dialect the gate
+  compiles with: where the gate admits what the engine refuses, a map passes
+  here and is refused at load; where it refuses what the engine admits, a usable
+  map is rejected. Both directions are live, and the engine screens some
+  constructs before it compiles, so it refuses patterns RE2 alone would take.
 status: active
 superseded_by: null

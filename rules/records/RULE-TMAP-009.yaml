@@ -1,8 +1,9 @@
 id: RULE-TMAP-009
 statement: >
-  A write `regex` rule's arrow_type matcher MUST compile under the RE2
-  regex dialect, and the native_type DDL it renders MUST carry only well-formed
-  placeholders.
+  A write `regex` rule's arrow_type matcher MUST compile under the RE2 regex
+  dialect and MUST NOT carry Python-only `(?P…)` syntax, so a named capture is
+  spelled `(?<name>…)`; the native_type DDL it renders MUST carry only
+  well-formed placeholders.
 tier: shape
 severity: error
 artifact_kinds: [type-map]
@@ -16,9 +17,14 @@ rationale: >
   syntax in the wrong key. The engine compiles that matcher with RE2 when it
   loads the connector, so a pattern that does not compile is not a narrower
   match, it is a rule the engine cannot load at the moment it needs to render
-  DDL. This states the engine as it stands: the check runs stricter than the
-  runtime if the engine's matcher comes to accept what this check's RE2 rejects,
-  and looser if the check resolves an RE2 release accepting what the engine's
-  refuses.
+  DDL. The capture spelling is this contract's choice rather than the dialect's
+  — RE2 accepts `(?P<name>…)` too — held to one form on both sides so a matcher
+  reads the same whichever direction it was written for. This states the engine
+  as it stands, and the gate is only as close to it
+  as the dialect the gate compiles with: where the gate admits what the engine
+  refuses, a map passes here and is refused at load; where it refuses what the
+  engine admits, a usable map is rejected. Both directions are live, and the
+  engine screens some constructs before it compiles, so it refuses patterns RE2
+  alone would take.
 status: active
 superseded_by: null
