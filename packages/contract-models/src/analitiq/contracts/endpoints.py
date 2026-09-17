@@ -4776,13 +4776,12 @@ def _validate_cursor_fields_in_record_shape(
 def _require_cursor_node_declares_a_type(
     cursor_field: str, field: Any, root: Any, *, where: str
 ) -> None:
-    """RULE-ENDP-013's typedness half, applied to the node the engine reads.
+    """RULE-ENDP-013's typedness half, applied to an already-found node.
 
-    Split out because the lookup that finds that node is flat, and the walk
-    that :func:`_check_cursor_field_in_node` performs is not: a record shape
-    may declare a field whose name CONTAINS a dot, and splitting it would
-    report a declared field as undeclared. The engine has no such problem —
-    it looks the whole name up — so neither does this.
+    Shared by the two lookups that find that node — the flat one the engine
+    performs, and the dotted walk :func:`_check_cursor_field_in_node` falls
+    back to — because the question asked of the node does not depend on how
+    it was reached.
 
     Resolution is right here and wrong in the grader: this asks whether the
     document types the node at all, which a `$ref` answers, while the grader
@@ -5053,22 +5052,4 @@ def _check_cursor_field_in_node(
             f"response.schema record-shape branch at {walked!r} (under {where!r}): "
             f"{exc.reason} (spec: §Cross-Field Validation)"
         ) from None
-    try:
-        materialized = materialize_node(node, root)
-    except SchemaResolutionError as exc:
-        raise violation(
-            "RULE-ENDP-013", "cursor-field-self-contradictory-node",
-            f"replication cursor_field {cursor_field!r} resolves in the "
-            f"response.schema record-shape branch (under {where!r}) to a "
-            f"self-contradictory node: {exc.reason} (spec: §Cross-Field Validation)"
-        ) from None
-    if not _declares_a_type(materialized, root):
-        raise violation(
-            "RULE-ENDP-013", "cursor-field-untyped-node",
-            f"replication cursor_field {cursor_field!r} resolves in the "
-            f"response.schema record-shape branch (under {where!r}) to a node "
-            "that declares no `type` (and no `native_type`/`arrow_type` pair). "
-            "Declare the type of the watermark value read there, or nothing "
-            "can tell what a valid comparison looks like "
-            "(spec: §Cross-Field Validation)"
-        )
+    _require_cursor_node_declares_a_type(cursor_field, node, root, where=where)
