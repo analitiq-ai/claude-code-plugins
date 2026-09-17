@@ -125,13 +125,13 @@ def main(argv: list[str] | None = None) -> int:
     # map whose envelope declares the other direction fails there on the
     # `direction` Literal. Catch a filename/--direction mismatch first, so the
     # message names the actual mistake (a swapped --map/--direction) rather
-    # than a generic schema failure. The two load-bearing filenames declare
-    # their direction; hold a map named either of them to it.
-    load_bearing = {"type-map-read.json": "read", "type-map-write.json": "write"}
+    # than a generic schema failure. The two conventional filenames each name a
+    # direction; hold a map named either of them to it.
+    named_for = {"type-map-read.json": "read", "type-map-write.json": "write"}
     for m in args.maps:
-        implied = load_bearing.get(Path(m).name)
+        implied = named_for.get(Path(m).name)
         if implied is not None and implied != args.direction:
-            return _fail(f"{m} is a {implied}-direction map (by filename) but "
+            return _fail(f"{m} is named for the {implied} direction but "
                          f"--direction is {args.direction}")
 
     try:

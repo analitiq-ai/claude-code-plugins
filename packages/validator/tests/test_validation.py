@@ -1254,65 +1254,63 @@ def test_is_stem_addressed_endpoint_path_public_helper(validator):
     assert validator.is_stem_addressed_endpoint_path(Path("orders.json")) is False
 
 
-def test_type_map_direction_from_schema_url(validator, tmp_path):
-    # A document with no filename signal and no valid self-declared `direction`
-    # is genuinely ambiguous: left alone it defaults to "read" and is flagged as
-    # an assumption; --schema-url pointing at type-map-write resolves it instead,
-    # so the same document reaches a verdict with no such assumption flagged.
-    doc = {"$schema": _TM_WRITE_SCHEMA, "rules": [
-        {"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+),(?<s>\d+)\)",
-         "native_type": "NUMERIC(${p}, ${s})"},
-    ]}
-    p = tmp_path / "generic.json"
-    defaulted = validator.validate_document(doc, doc_path=p)
-    hinted = validator.validate_document(
-        doc, doc_path=p, schema_url=_TM_WRITE_SCHEMA)
-    assert any(f["message_id"] == "type-map-direction-defaulted" for f in defaulted), defaulted
-    assert not any(f["message_id"] == "type-map-direction-defaulted" for f in hinted), hinted
+_STRING_RULE = {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}
 
 
-def test_filename_wins_over_conflicting_schema_url_hint(validator, tmp_path):
-    # A rule valid under the read model but invalid under the write model (an
-    # unclosed `${` placeholder in `native_type`, only meaningful on the render
-    # side) proves which model direction actually won, not just that no error
-    # happened to occur by coincidence.
-    rule = {"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}
-    doc = _type_map_doc([rule], "read")
-    p = tmp_path / "type-map-read.json"
-    findings = validator.validate_document(doc, doc_path=p, schema_url=_TM_WRITE_SCHEMA)
+@pytest.mark.parametrize("direction,filename", [
+    ("write", "type-map-read.json"),
+    ("read", "type-map-write.json"),
+    ("write", "generic.json"),
+    ("read", None),
+])
+def test_type_map_is_graded_by_its_declared_direction_under_any_filename(
+        validator, tmp_path, direction, filename):
+    # The engine keys a type map by its `direction`, never its filename, so a
+    # self-consistent document is clean wherever it sits. Only the write model
+    # runs RULE-TMAP-017, which tells the two gradings apart.
+    doc = _type_map_doc([_STRING_RULE], direction)
+    findings = validator.validate_document(
+        doc, doc_path=tmp_path / filename if filename else None)
     assert not _errors(findings), findings
-    assert not any(f["message_id"] == "type-map-direction-defaulted" for f in findings)
+    graded_as_write = any(f.get("rule") == "RULE-TMAP-017" for f in findings)
+    assert graded_as_write is (direction == "write"), findings
 
 
-def test_filename_write_with_self_declared_read_direction_is_a_model_error(validator, tmp_path):
-    doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write")
-    doc["direction"] = "read"  # disagrees with the write-map filename
-    p = tmp_path / "type-map-write.json"
-    findings = validator.validate_document(doc, doc_path=p)
-    errors = _errors(findings)
-    assert any(f["path"] == "/direction" for f in errors), findings
-
-
-def test_self_declared_direction_resolves_silently_without_defaulting(validator, tmp_path):
-    doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write")
-    p = tmp_path / "generic.json"
-    findings = validator.validate_document(doc, doc_path=p)
+def test_schema_url_does_not_decide_type_map_direction(validator, tmp_path):
+    doc = _type_map_doc([_STRING_RULE], "write")
+    findings = validator.validate_document(
+        doc, doc_path=tmp_path / "type-map-read.json", schema_url=_TM_READ_SCHEMA)
     assert not _errors(findings), findings
-    assert not any(f["message_id"] == "type-map-direction-defaulted" for f in findings), findings
 
 
-def test_schema_url_read_hint_resolves_a_generic_filename(validator, tmp_path):
-    # The read-hint mirror of test_type_map_direction_from_schema_url's
-    # write-hint case: a generic filename with a --schema-url pointing at
-    # type-map-read must resolve to the READ model directly, without falling
-    # through to the self-declared `direction` (here deliberately "write",
-    # disagreeing with the hint) or the ambiguous default.
-    doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write")
-    p = tmp_path / "generic.json"
-    findings = validator.validate_document(doc, doc_path=p, schema_url=_TM_READ_SCHEMA)
-    errors = _errors(findings)
-    assert any(f["path"] == "/direction" for f in errors), findings
-    assert not any(f["message_id"] == "type-map-direction-defaulted" for f in findings), findings
+def test_type_map_whose_direction_and_schema_disagree_is_a_model_error(validator):
+    doc = _type_map_doc([_STRING_RULE], "write")
+    doc["$schema"] = _TM_READ_SCHEMA
+    errors = _errors(validator.validate_document(doc))
+    assert [f["path"] for f in errors] == ["/$schema"], errors
+
+
+@pytest.mark.parametrize("schema,direction,missing_error_path", [
+    (_TM_WRITE_SCHEMA, None, "/direction"),
+    (_TM_WRITE_SCHEMA, "both", "/direction"),
+    (None, None, "/direction"),
+])
+def test_type_map_without_a_valid_direction_is_a_hard_error_alone(
+        validator, tmp_path, schema, direction, missing_error_path):
+    # `$schema` stands in for a missing `direction` so the rest of the document
+    # is graded against the model the author meant; with neither, the read
+    # model reports it. Either way the document's own error is the whole
+    # report: no finding narrates which model was picked.
+    doc = {"rules": [_STRING_RULE]}
+    if schema is not None:
+        doc["$schema"] = schema
+    if direction is not None:
+        doc["direction"] = direction
+    findings = validator.validate_document(doc, doc_path=tmp_path / "generic.json")
+    assert any(f["path"] == missing_error_path for f in _errors(findings)), findings
+    if schema is not None:
+        assert not any(f["path"] == "/$schema" for f in findings), findings
+    assert not any(f["kind"] == "informational" for f in findings), findings
 
 
 def test_legacy_bare_array_type_map_is_rejected_not_silently_accepted(validator, tmp_path):

@@ -29,10 +29,9 @@ entry point. This adapter routes each entity as follows:
     per-field findings instead.
   * ``type-map`` (with ``--direction {read,write}``) -> ``analitiq.validator.validate_document``
     over the connection-scoped type-map document, after an adapter filename gate:
-    the engine loads ``connections/<slug>/definition/type-map-{read,write}.json`` by
-    exactly those names (and the published validator derives rule direction from
-    them, defaulting an unknown name to read), so a misnamed file gets the rename
-    finding alone rather than findings that could be graded in the wrong direction.
+    each direction is authored as ``connections/<slug>/definition/type-map-{read,write}.json``,
+    so a file not named for ``--direction`` is a swapped invocation or a misfiled
+    document, and gets the rename finding alone.
     The published write-vocabulary-coverage warning (``RULE-TMAP-017``) is
     filtered out here for ``--direction write``: it presumes a connector's
     full-vocabulary write map, which a gap-only connection map deliberately is
@@ -100,9 +99,9 @@ from _bootstrap import ensure_deps_or_reexec
 # native<->Arrow direction is this adapter's own dispatch).
 PIPELINE_ENTITIES = ("connection", "stream", "pipeline", "database-endpoint", "type-map")
 
-# The engine loads connection-scoped type maps by these exact filenames under
-# connections/<slug>/definition/ — a differently-named file is silently ignored
-# at runtime, so the adapter gates the name like the endpoint filename gate does.
+# Each direction's connection-scoped type map is authored under this filename in
+# connections/<slug>/definition/; the adapter gates the name like the endpoint
+# filename gate does.
 _TYPE_MAP_FILENAMES = {"read": "type-map-read.json", "write": "type-map-write.json"}
 # The pre-split filename: the engine never reads it, at either scope. The
 # published validator rejects it beside a connector; the adapter mirrors that
@@ -228,8 +227,7 @@ def _authored_path(document_path: Path) -> Path:
 
     The published validator reads the authored layout off the path it is given
     — RULE-PKG-031 off `doc_path.name`, and the directories above it to decide
-    whether that name is one the engine will ever resolve; a type map's
-    direction off its basename. Every one of those is a fact about where the
+    whether that name is one the engine will ever resolve. Every one of those is a fact about where the
     author put the file, so following a link to wherever its bytes really live
     grades a layout nobody wrote: a symlinked endpoint is re-graded under its
     target's basename, and a symlinked `endpoints/` directory takes the file
@@ -247,10 +245,8 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
 
 def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
     """Validate a connection-scoped type-map file. The filename gate runs first
-    and alone on a mismatch: the published validator derives rule direction from
-    the filename, so validating a misnamed file's content could grade it in the
-    wrong direction (an unknown filename defaults to read) and bury the one
-    actionable finding (rename it) in noise. A doc that is not the published
+    and alone on a mismatch, so the one actionable finding (rename it, or fix the
+    `--direction`) is not buried under findings about the content. A doc that is not the published
     `{$schema, direction, rules}` object is likewise gated here — the published
     dispatch detects by *shape* (a top-level `rules` key), so a stray dict under
     a type-map filename with no `rules` key would be graded as some other
@@ -261,8 +257,7 @@ def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
         return [_finding(
             "connection-type-map", "error", "",
             f"file is named {document_path.name!r} but direction {direction!r} requires "
-            f"{expected!r} — the engine loads each direction only from its exact "
-            f"filename (connections/<slug>/definition/{expected}).")]
+            f"{expected!r} (connections/<slug>/definition/{expected}).")]
     if not isinstance(doc, dict):
         return [_finding(
             "connection-type-map", "error", "",
@@ -272,6 +267,13 @@ def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
         return [_finding(
             "connection-type-map", "error", "",
             f"{expected} is a JSON object but has no `rules` key.")]
+    # The declared direction is held to --direction just as the filename is:
+    # whether the validator's model choice would also catch it varies by release.
+    declared = doc.get("direction")
+    if declared in ("read", "write") and declared != direction:
+        return [_finding(
+            "connection-type-map", "error", "/direction",
+            f"{expected} declares direction {declared!r}; it must declare {direction!r}.")]
     from analitiq.validator import validate_document
     findings = validate_document(doc, doc_path=_authored_path(document_path))
     if direction == "write":

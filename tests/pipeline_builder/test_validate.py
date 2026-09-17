@@ -495,8 +495,8 @@ TYPE_MAP_READ = [
 ]
 # Deliberately direction-ASYMMETRIC: the regex rule's canonical is a matcher
 # pattern, which is a contract-model error under read grading — so the "valid as
-# --direction write" assertions below pin that the adapter actually grades in
-# the write direction (a regression to the read default would fail them). An
+# --direction write" assertions below pin that a write map is graded in the
+# write direction (a regression to the read default would fail them). An
 # exact-rule-only fixture validates clean under either direction and pins nothing.
 TYPE_MAP_WRITE = [
     {"match": "exact", "arrow_type": "Json", "native_type": "JSONB"},
@@ -520,12 +520,25 @@ def test_valid_type_map_entity(tmp_path, direction, fname, doc):
 
 
 def test_type_map_entity_rejects_wrong_filename(tmp_path):
-    # the engine loads the maps by exact filename; the gate must fire ALONE — a
-    # misnamed file's content would otherwise be graded in the wrong direction
+    # the gate must fire ALONE, so the rename is not buried under content findings
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", TYPE_MAP_READ), direction="read")
     assert not diag["passed"]
     assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
     assert "type-map-read.json" in diag["findings"][0]["message"]
+
+
+@pytest.mark.parametrize("direction,fname,declared_rules,declared", [
+    ("write", "type-map-write.json", TYPE_MAP_READ, "read"),
+    ("read", "type-map-read.json", TYPE_MAP_WRITE, "write"),
+])
+def test_type_map_entity_rejects_a_document_declaring_the_other_direction(
+        tmp_path, direction, fname, declared_rules, declared):
+    # the published validator grades by the declared direction, so a valid map
+    # of the other direction passes it; the adapter holds it to --direction
+    doc = _tm(declared_rules, declared)
+    diag = V.diagnostics_for("type-map", _write(tmp_path, fname, doc), direction=direction)
+    assert not diag["passed"]
+    assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
 
 
 def test_type_map_entity_direction_mismatch_is_caught(tmp_path):

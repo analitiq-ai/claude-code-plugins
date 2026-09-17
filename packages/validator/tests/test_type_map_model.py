@@ -118,11 +118,9 @@ def test_unknown_top_level_key_rejected():
 
 
 def test_direction_literal_must_match_the_adapter():
-    """The invariant `direction` exists to express: a document loaded via one
-    adapter (by filename, in the validator) whose own `direction` disagrees
-    is a model error, not a silent resolution — see
-    `packages/validator/src/analitiq/validator/connectors.py::_validate_type_map`.
-    """
+    """The invariant `direction` exists to express: a document graded against
+    one direction's model whose own `direction` disagrees is a model error, not
+    a silent resolution."""
     read_doc = _wrap(READ, _ONE_READ_RULE)
     read_doc["direction"] = "write"
     with pytest.raises(ValidationError):
