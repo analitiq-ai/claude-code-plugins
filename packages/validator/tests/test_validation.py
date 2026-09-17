@@ -1184,6 +1184,32 @@ def _min_connector(kind: str):
     return {"kind": kind, "transports": {}}
 
 
+@pytest.mark.parametrize("payload,expected_id", [
+    ({"rules": []}, "union_tag_not_found"),
+    ({"direction": 7, "rules": []}, "union_tag_invalid"),
+    ({"direction": "read", "rules": [
+        {"match": "exact", "native_type": "X", "arrow_type": "Utf8"},
+        {"match": "exact", "native_type": "X", "arrow_type": "Int64"}]},
+     "duplicate-type-map-rule"),
+])
+def test_a_sibling_map_finding_names_the_sibling_it_was_read_from(
+        tmp_path, validator, payload, expected_id):
+    # A document finding locates itself with a pointer into the document it
+    # graded. Forwarded beside a connector it reads as a defect in
+    # `connector.json`, which carries no such node — and any collected name can
+    # hold a map, so the file is not recoverable from the direction either. The
+    # author is told what is wrong and cannot tell which file to open.
+    (tmp_path / "type-map-natives.json").write_text(json.dumps(payload))
+    (tmp_path / "endpoints").mkdir()
+    (tmp_path / "connector.json").write_text("{}")
+    # Every finding, not just the error-severity ones: a warning about a map is
+    # as unlocatable as a failure about it.
+    reported = validator.check_coverage(_min_connector("api"), tmp_path / "connector.json")
+    named = [e for e in reported if e.get("message_id") == expected_id]
+    assert named, [e.get("message_id") for e in reported]
+    assert "type-map-natives.json" in named[0]["message"], named[0]
+
+
 def test_coverage_database_requires_write_map(tmp_path, validator):
     (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
         [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}], "read")))

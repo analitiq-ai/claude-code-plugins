@@ -1081,6 +1081,18 @@ def _type_map_document_findings(doc: Any, direction: str, scope: str) -> list[di
     return findings
 
 
+def _read_from(name: str, findings: list[dict]) -> list[dict]:
+    """The same findings, each naming the sibling its document was read from.
+
+    A document finding locates itself with a pointer into the document it
+    graded, so forwarded beside a connector it reads as a defect in
+    `connector.json` — which carries no such node. Any collected name can hold a
+    map, so the file is not recoverable from the direction either. This is the
+    convention the loader's own findings already follow.
+    """
+    return [{**f, "message": f"{name}: {f['message']}"} for f in findings]
+
+
 def legacy_type_map_present(parent: Path) -> bool:
     """Whether `parent` carries the dead pre-split type-map name.
 
@@ -1189,7 +1201,7 @@ def _type_map_siblings_by_direction(
             continue
         declared, held_by = directions.claim(path.name, doc)
         if declared is None:
-            findings.extend(type_map_discriminator_findings(doc))
+            findings.extend(_read_from(path.name, type_map_discriminator_findings(doc)))
             continue
         if held_by is not None:
             # The direction is left to nobody rather than to whichever document
@@ -1250,7 +1262,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
     if kind in _STORAGE_KINDS:
         for direction in ("read", "write"):
             if direction in documents:
-                findings.extend(type_map_findings(documents[direction][1], direction))
+                name, document = documents[direction]
+                findings.extend(_read_from(name, type_map_findings(document, direction)))
         return findings
 
     # A read map that cannot be rendered from is carried forward rather than
@@ -1273,7 +1286,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                 f"authored filename is {_READ_MAP_FILENAME}.")))
     else:
         read_source, read_doc = documents["read"]
-        findings.extend(type_map_findings(read_doc, "read"))
+        findings.extend(_read_from(read_source, type_map_findings(read_doc, "read")))
         read_rules = _type_map_rules(read_doc)
 
     if kind in _DATABASE_KINDS:
@@ -1286,7 +1299,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                     f"direction 'write'; {_no_map_reason('write', declared_by)}. The "
                     f"authored filename is {_WRITE_MAP_FILENAME}.")))
             return findings
-        findings.extend(type_map_findings(documents["write"][1], "write"))
+        write_source, write_doc = documents["write"]
+        findings.extend(_read_from(write_source, type_map_findings(write_doc, "write")))
         return findings
 
     # api: no write map, and every endpoint's natives must be covered by the read map.
