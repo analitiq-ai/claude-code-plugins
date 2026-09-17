@@ -22,14 +22,10 @@ artifact.
 ## Inputs
 
 - `schema_url` — the published `https://schemas.analitiq.ai/<resource>/latest.json`
-  URL the orchestrator passes for the document under validation. For a type
-  map, pass the URL matching the map's direction so the read/write direction is
-  unambiguous.
+  URL the orchestrator passes for the document under validation.
 - `document_path` — absolute path to the draft JSON document. Validate a type
-  map under its on-disk filename (`RULE-PKG-030`) and pass the `--schema-url`
-  matching that direction, so the direction is never inferred; a finding that
-  the direction had to be guessed means the invocation was wrong, not the
-  document. This agent validates JSON documents only; a connector's Python
+  map under its on-disk filename (`RULE-PKG-030`); its direction is the one the
+  document declares. This agent validates JSON documents only; a connector's Python
   package files (`connector.py`, `pyproject.toml`, …) are outside its scope —
   report them as not validated rather than passing judgment on them.
 
@@ -56,8 +52,8 @@ sys.exit(main())
 PY
 ```
 
-`--schema-url` is used only as a read/write **direction hint** for an
-ambiguously-named type-map document.
+The validator identifies every document by its own content; `--schema-url` is
+accepted and not consulted.
 
 ## Findings
 

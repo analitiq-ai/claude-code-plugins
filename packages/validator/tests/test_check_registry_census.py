@@ -139,9 +139,6 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "a read/parse failure has not evaluated RULE-ENDP-047 one way or "
         "the other; which rule went unchecked is the sibling notApplicable "
         "branch's to name, not this one's"),
-    ("analitiq.validator.connectors::_validate_type_map", "type-map-direction-defaulted"): (
-        "informational: a direction default is a fact about how this run "
-        "proceeded, not a violation of anything"),
     ("analitiq.validator.pipelines::validate_pipeline_bundle", "bundle-not-a-mapping"): (
         "rejects before any referential check the registry binds could even "
         "begin"),

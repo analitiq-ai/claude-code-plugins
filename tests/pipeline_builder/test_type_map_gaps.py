@@ -162,7 +162,7 @@ def test_cli_rejects_direction_filename_mismatch(tmp_path, capsys):
     assert rc == 2
     err = capsys.readouterr()
     assert not err.out
-    assert "read-direction map" in err.err
+    assert "named for the read direction" in err.err
 
 
 def test_cli_parse_error_names_the_file(tmp_path, capsys):

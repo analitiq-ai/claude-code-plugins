@@ -84,7 +84,6 @@ Schemas are generated from — so there is no schema fetch. It runs:
    - Connector → `https://schemas.analitiq.ai/connector/latest.json`
    - Read map (`type-map-read.json`) → `https://schemas.analitiq.ai/type-map-read/latest.json`
    - Write map (`type-map-write.json`, database only) → `https://schemas.analitiq.ai/type-map-write/latest.json`
-     (direction derives from the filename)
    - API endpoint → `https://schemas.analitiq.ai/api-endpoint/latest.json`
    - Database endpoint → `https://schemas.analitiq.ai/database-endpoint/latest.json`
    Every rule an author must satisfy is catalogued by id in

@@ -520,8 +520,7 @@ def test_valid_type_map_entity(tmp_path, direction, fname, doc):
 
 
 def test_type_map_entity_rejects_wrong_filename(tmp_path):
-    # the engine loads the maps by exact filename; the gate must fire ALONE — a
-    # misnamed file's content would otherwise be graded in the wrong direction
+    # the gate must fire ALONE, so the rename is not buried under content findings
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", TYPE_MAP_READ), direction="read")
     assert not diag["passed"]
     assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]

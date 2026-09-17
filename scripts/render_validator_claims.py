@@ -610,22 +610,6 @@ def _p_type_map_schema_required() -> list[dict]:
         return _validate(doc, doc_path=path)
 
 
-def _p_type_map_direction_filename_wins_over_self_declared() -> list[dict]:
-    # A fully self-consistent write document ($schema AND direction both name
-    # "write") sitting under the read-map filename. Every content signal
-    # names "write"; only the filename says "read" — so if the finding still
-    # rejects `direction` for not being "read", the filename is what decided
-    # which model graded this document, not its own declared direction (or,
-    # were direction resolved from `$schema` instead, its own declared
-    # `$schema`).
-    rules = [{"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"}]
-    doc = _wrap_type_map(rules, "write")
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "type-map-read.json"
-        path.write_text(json.dumps(doc))
-        return _validate(doc, doc_path=path)
-
-
 def _p_pagination_limit_bare_zero() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["pagination"]["limit"]["default"] = 0
@@ -1008,9 +992,6 @@ PROBES: tuple[Probe, ...] = (
           require_re=r"no rule rendering"),
     Probe("type-map-schema-required", "error", _p_type_map_schema_required,
           message_re=r"Field required"),
-    Probe("type-map-direction-filename-wins-over-self-declared", "error",
-          _p_type_map_direction_filename_wins_over_self_declared,
-          message_re=r"Input should be 'read'"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
           message_re=r"greater than or equal to 1"),
     Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,

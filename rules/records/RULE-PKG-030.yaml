@@ -1,7 +1,7 @@
 id: RULE-PKG-030
 statement: >
-  A connector MUST ship the sibling type-map documents its `kind` calls for
-  under the filenames the engine reads them by, and MUST NOT ship one for a
+  A connector MUST ship the sibling type-map documents its `kind` calls for as
+  `type-map-read.json` and `type-map-write.json`, and MUST NOT ship one for a
   direction its kind has no use for.
 tier: reference
 severity: error
