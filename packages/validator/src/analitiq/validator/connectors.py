@@ -1006,7 +1006,7 @@ def _load_json_sibling(
             message=f"sibling {path.name} could not be read or parsed ({exc}).")]
 
 
-def _load_type_map(path: Path) -> tuple[Any | None, list[dict]]:
+def _load_type_map(path: Path) -> tuple[Any, list[dict]]:
     """A type-map document, or `_UNREAD` plus an unparseable-sibling finding."""
     return _load_json_sibling(
         path, rule="RULE-PKG-030", message_id="type-map-unparseable")
@@ -1071,8 +1071,8 @@ def _type_map_document_findings(doc: Any, direction: str, scope: str) -> list[di
     # does not have, burying the disagreement the model states above them. A
     # direction that is missing or unusable disagrees with nothing, and is graded
     # as named.
-    declared = doc.get("direction") if isinstance(doc, dict) else None
-    if declared in ("read", "write") and declared != direction:
+    declared = declared_direction(doc)
+    if declared is not None and declared != direction:
         return findings
     rules = _type_map_rules(doc)
     findings.extend(_type_map_rule_warnings(rules, direction))
@@ -1119,6 +1119,22 @@ def type_map_sibling_paths(parent: Path) -> list[Path]:
     return sorted(parent.glob(_TYPE_MAP_GLOB))
 
 
+def declared_direction(doc: Any) -> str | None:
+    """The direction a type-map document declares, or None when it declares
+    none the models would accept.
+
+    Published because every scope holding a type map asks this and has to get
+    one answer. A payload that is no object declares nothing, exactly as an
+    object carrying no `direction` does — the two are different defects, and
+    which one it is belongs to the caller reporting it, not to the reading.
+    `TypeMapDirections` is the collection-scoped answer built on this one.
+    """
+    if not isinstance(doc, dict):
+        return None
+    declared = doc.get("direction")
+    return declared if declared in ("read", "write") else None
+
+
 class TypeMapDirections:
     """Which collected document is the map for each direction, in the order
     `type_map_sibling_paths` returns them.
@@ -1152,8 +1168,8 @@ class TypeMapDirections:
         this one takes it — so a caller reads a claim as `held_by is None`,
         and has the direction to name either way.
         """
-        declared = doc.get("direction") if isinstance(doc, dict) else None
-        if declared not in ("read", "write"):
+        declared = declared_direction(doc)
+        if declared is None:
             return None, None
         held_by = self._holders.get(declared)
         if held_by is None:
@@ -1577,8 +1593,8 @@ def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq
     # once, naming the discriminator, where picking a direction to report
     # through would tell the author of a write map that its correct `$schema` is
     # the wrong one.
-    declared = doc.get("direction")
-    if declared not in ("read", "write"):
+    declared = declared_direction(doc)
+    if declared is None:
         return type_map_discriminator_findings(doc)
     return type_map_findings(doc, declared)
 

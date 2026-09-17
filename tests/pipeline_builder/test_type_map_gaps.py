@@ -356,6 +356,41 @@ def test_cli_rejects_maps_holding_different_directions(tmp_path, capsys):
     assert str(r) in err.err and str(w) in err.err, err.err
 
 
+@pytest.mark.parametrize("payload", ["null", "[]", '"read"'])
+def test_cli_says_a_map_that_is_no_object_is_no_object(tmp_path, capsys, payload):
+    # A payload that is not a JSON object holds no fields at all, so reporting
+    # it as declaring direction None sends the author looking for a key the
+    # document cannot carry. The sibling scopes answer this case on the shape,
+    # and this one says the same thing.
+    m = tmp_path / "type-map-read.json"
+    m.write_text(payload)
+    probes = tmp_path / "probes.json"
+    probes.write_text('["citext"]')
+    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert str(m) in err, err
+    assert "declares direction" not in err, err
+
+
+def test_cli_parse_failure_is_reported_as_a_parse_failure(tmp_path, capsys):
+    # The direction of an unparseable map is not "whatever the others said": a
+    # run that swallowed the read failure here would reach the agreement check
+    # with one map missing and report a direction disagreement that does not
+    # exist, sending the operator to fix the wrong thing.
+    bad = tmp_path / "type-map-read.json"
+    bad.write_text("[ not json")
+    (tmp_path / "w").mkdir()
+    good = _map(tmp_path / "w", "type-map-write.json", CONNECTOR_WRITE, "write")
+    probes = tmp_path / "probes.json"
+    probes.write_text('["citext"]')
+    rc = G.main(["--map", str(bad), "--map", str(good), "--probes-file", str(probes)])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert str(bad) in err, err
+    assert "same direction" not in err, err
+
+
 def test_cli_names_the_first_map_that_declared_a_direction(tmp_path, capsys):
     # Precedence order is the argument order, so the map an author is pointed at
     # for a direction is the one that claimed it first. A later map declaring the

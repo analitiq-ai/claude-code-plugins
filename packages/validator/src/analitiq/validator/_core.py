@@ -111,6 +111,17 @@ def _bounded(text: str, limit: int = 200) -> str:
     return text if len(text) <= limit else f"{text[:limit]}…"
 
 
+# Pydantic error types whose sentence is built out of the failing document
+# rather than out of the constraint that rejected it: a discriminated union
+# renders the tag it was handed, so an oversized value in that one field arrives
+# whole. Every other type renders the constraint — the pattern, the permitted
+# literals, the missing field — which is long on some contract models and is the
+# half an author needs entire. So the bound is applied by type rather than by
+# length: clipping every model message costs the Arrow-type vocabulary its tail,
+# and clipping none puts an unbounded document excerpt in a CI log.
+_INPUT_ECHOING_ERROR_TYPES = frozenset({"union_tag_invalid"})
+
+
 def finding(
     *,
     rule: str | None = None,
@@ -227,7 +238,9 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
                     message_id=err["type"],
                     kind="fail",
                     path=base_path,
-                    message=_bounded(err["msg"]),
+                    message=(_bounded(err["msg"])
+                             if err["type"] in _INPUT_ECHOING_ERROR_TYPES
+                             else err["msg"]),
                 ))
             for v in violations:
                 findings.append(finding(

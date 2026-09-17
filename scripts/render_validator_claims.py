@@ -1174,14 +1174,18 @@ def run_probe(probe: Probe) -> ProbeFailure | None:
     if probe.expect not in ("clean", "error", "silent"):
         raise ValueError(f"probe {probe.id!r}: unknown expectation {probe.expect!r}")
     findings = probe.build()
-    # The validator's own last-resort guard converts a crash into an error
-    # finding whose message embeds the exception text. That text can contain
-    # the same vocabulary as the real rejection message, so a crashed check
-    # could otherwise satisfy an expect="error" probe while every user gets
+    # The validator's own last-resort guard converts a crash into a finding
+    # whose message embeds the exception text. That text can contain the same
+    # vocabulary as the real rejection message, so a crashed check could
+    # otherwise satisfy an expect="error" probe while every user gets
     # "validator bug — please report" instead of the rejection the prose
     # promises. A crash never proves a claim, in either direction.
-    crashed = [f for f in findings
-               if re.search(r"crashed unexpectedly", f.get("message", ""))]
+    #
+    # Recognised by the id the validator publishes for it, not by its wording:
+    # the sentence is the guard's to reword, and a probe grader reading the
+    # English would stop detecting crashes the day it changes, with every probe
+    # still reporting green.
+    crashed = [f for f in findings if f.get("message_id") == "check-crashed"]
     if crashed:
         return ProbeFailure(probe.id, "the validator crashed on the probe document", crashed)
     return _expectation_failure(probe, findings) or _pattern_failure(probe, findings)

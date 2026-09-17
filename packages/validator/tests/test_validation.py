@@ -1268,6 +1268,24 @@ def test_coverage_reads_a_type_map_under_any_matching_filename(tmp_path, kind, v
     assert [e["path"] for e in errors] == ["/rules/0/exact/arrow_type"], errors
 
 
+@pytest.mark.parametrize("kind", _STORAGE_KINDS)
+def test_a_storage_write_map_is_graded_and_named(tmp_path, kind, validator):
+    # The storage branch walks both directions, and the write half is reached
+    # only by a map declaring it. A branch that graded the read direction alone
+    # would pass this package, and the defect would arrive at the first
+    # destination write. The map sits under a name no convention reserves, so
+    # the finding has to carry it — a pointer alone roots the defect in
+    # `connector.json`, which has no `/rules` node.
+    (tmp_path / "type-map-natives.json").write_text(json.dumps(_type_map_doc(_read_rules(), "read")))
+    (tmp_path / "type-map-ddl.json").write_text(json.dumps(_type_map_doc(
+        [{"match": "exact", "arrow_type": "NotAnArrowFamily", "native_type": "TEXT"}], "write")))
+    (tmp_path / "connector.json").write_text("{}")
+    errors = _errors(validator.check_coverage(_min_connector(kind), tmp_path / "connector.json"))
+    bad = [e for e in errors if e["path"] == "/rules/0/exact/arrow_type"]
+    assert bad, errors
+    assert bad[0]["message"].startswith("type-map-ddl.json: "), bad[0]
+
+
 @pytest.mark.parametrize("native_type, arrow_type, message_id", [
     ("UNCOVERED", "Utf8", "native-type-unresolved"),
     ("BIGINT", "Utf8", "native-type-arrow-mismatch"),
@@ -1693,6 +1711,32 @@ def test_a_borrowed_diagnostic_does_not_carry_the_document_back_whole(validator)
     [error] = _errors(validator.validate_document(_unusable(oversized)))
     assert oversized not in error["message"], len(error["message"])
     assert len(error["message"]) < 500, len(error["message"])
+
+
+def test_a_borrowed_diagnostic_keeps_the_constraint_it_was_rejected_by(validator):
+    # The other half of the bound: a sentence pydantic builds out of the
+    # contract's own pattern carries no input at all, and its whole length is
+    # the vocabulary an author needs to fix the value. Clipping it leaves them
+    # a fragment of the legal alternatives and an ellipsis.
+    from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL
+    doc = {"$schema": TYPE_MAP_READ_SCHEMA_URL, "direction": "read",
+           "rules": [{"match": "exact", "native_type": "X", "arrow_type": "NotAnArrowFamily"}]}
+    [error] = _errors(validator.validate_document(doc))
+    assert error["message_id"] == "string_pattern_mismatch", error
+    assert error["message"].endswith("'"), error["message"][-80:]
+    assert "…" not in error["message"], len(error["message"])
+
+
+def test_a_connector_tag_too_is_bounded(validator):
+    # The type-map union is not the only discriminated one: the same echo
+    # reaches a log through `kind`, and the document is as untrusted there.
+    oversized = "Z" * 5000
+    errors = _errors(validator.validate_document(
+        {"$schema": CONNECTOR_SCHEMA_URL, "connector_id": "x", "display_name": "x",
+         "kind": oversized, "transports": {}}))
+    tag = [e for e in errors if e["message_id"] == "union_tag_invalid"]
+    assert tag, errors
+    assert oversized not in tag[0]["message"], len(tag[0]["message"])
 
 
 def test_an_envelope_declaring_nothing_is_still_answered_on_the_discriminator(validator):

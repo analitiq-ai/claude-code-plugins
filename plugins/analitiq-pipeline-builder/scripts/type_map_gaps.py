@@ -61,15 +61,21 @@ def _declared_direction(path: Path) -> str:
         doc = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
-    declared = doc.get("direction") if isinstance(doc, dict) else None
-    if declared not in ("read", "write"):
+    from analitiq.validator import declared_direction
+    if not isinstance(doc, dict):
+        raise ValueError(
+            f"{path} is not a JSON object, so it declares nothing; a type-map document "
+            "declares 'read' or 'write', and nothing else says which vocabulary to probe")
+    declared = declared_direction(doc)
+    if declared is None:
         # The rejected value is whatever the document held, so it is clipped to
         # the width the validator clips every borrowed diagnostic to.
         from analitiq.validator._core import _bounded
 
         raise ValueError(
-            f"{path} declares direction {_bounded(repr(declared))}; a type-map document "
-            "declares 'read' or 'write', and nothing else says which vocabulary to probe")
+            f"{path} declares direction {_bounded(repr(doc.get('direction')))}; a type-map "
+            "document declares 'read' or 'write', and nothing else says which vocabulary "
+            "to probe")
     return declared
 
 

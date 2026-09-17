@@ -221,9 +221,11 @@ def _type_map_findings(doc) -> list[dict]:
     that is what it is, rather than sending it back out to kind detection to be
     called unrecognized. `scope` is not threaded there because no direction was
     chosen, and `scope` decides the write vocabulary alone."""
-    from analitiq.validator import type_map_discriminator_findings, type_map_findings
-    declared = doc.get("direction") if isinstance(doc, dict) else None
-    if declared not in ("read", "write"):
+    from analitiq.validator import (
+        declared_direction, type_map_discriminator_findings, type_map_findings,
+    )
+    declared = declared_direction(doc)
+    if declared is None:
         return type_map_discriminator_findings(doc)
     return type_map_findings(doc, declared, scope="connection")
 
