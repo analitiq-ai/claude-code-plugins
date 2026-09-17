@@ -115,7 +115,8 @@ store that could only hold it by taking a second kind of unit is the wrong one.
 | `census/consumption/dispositions.py` | an **unread contract field** | the pinned consumption manifest claims no read of it |
 | `census/consumption/record_affirmations.py` | a **reader-affirmed record rationale** | a rule record's `targets`/`fields` govern an unread field; membership is computed from the fields a record names, never chosen |
 | `scripts/render_validator_claims.py` | a **measured outcome** | prose asserts what the validator does or does not check |
-| `packages/contract-models/tests/fixtures/rules/` | a **document** | a record names a `fixture_model` |
+| `packages/contract-models/src/analitiq/contracts/shared/fixtures/` | a **document** | a record names a `fixture_model` |
+| `packages/validator/src/analitiq/validator/cases/` | a **document set** | a record's `validator` is a check in `analitiq.validator` |
 | `plugins/**/*.md` | a **paragraph of craft** | the contract cannot express it — judgment, order, what to ask, provider gotchas |
 | `.claude/rules/*.md` | an **obligation on a contributor here** | its verdict needs a person reading a sentence |
 

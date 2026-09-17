@@ -63,6 +63,19 @@ auth-state) are **not** included.
 `analitiq` is a [PEP 420 namespace](https://peps.python.org/pep-0420/) shared with
 `analitiq-validator`.
 
+## Rule fixtures
+
+Each rule whose record names a `fixture_model` ships valid and invalid example
+documents with the package. `rule_fixtures()` loads them and
+`fixture_mismatch(fixture)` grades one against the installed models, returning
+`None` when the models agree:
+
+```python
+from analitiq.contracts.shared.rule_fixtures import fixture_mismatch, rule_fixtures
+
+mismatches = [m for m in map(fixture_mismatch, rule_fixtures()) if m]
+```
+
 ## Source of truth
 
 These modules **are** the canonical Analitiq contract models — not a copy of

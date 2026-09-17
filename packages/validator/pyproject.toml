@@ -56,3 +56,11 @@ Documentation = "https://schemas.analitiq.ai"
 [tool.setuptools]
 packages = ["analitiq.validator"]
 package-dir = { "" = "src" }
+
+# Every file the staged tree carries, as contract-models declares it:
+# `scripts/build.py` stages from `git ls-files`, so tracking is the decision to
+# publish, and a data file committed anywhere under the package ships without a
+# second declaration. `**/*` keeps nested directories such as the rule case
+# corpus. The release workflow proves the result against an installed wheel.
+[tool.setuptools.package-data]
+"analitiq.validator" = ["**/*"]

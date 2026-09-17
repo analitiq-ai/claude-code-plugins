@@ -3,13 +3,11 @@ name: Publish analitiq-validator
 # Build and publish the `analitiq-validator` package to PyPI on a
 # `validator-vX.Y.Z` tag, via OIDC Trusted Publishing (no stored token).
 #
-# The validator is RENDERED from validator/src into the public
-# `analitiq.validator` package by packages/validator/scripts/build.py and
-# depends on `analitiq-contract-models` by version from PyPI. This replaces the
-# old channel that synced the built files into the plugin repo (now this repo);
-# consumers (the connector-builder plugin, the registry CI) now `pip install
-# analitiq-validator` and run the `analitiq-validate` console
-# script.
+# packages/validator/scripts/build.py stages packages/validator/src verbatim as
+# the public `analitiq.validator` package, which depends on
+# `analitiq-contract-models` by exact version from PyPI. Consumers (the
+# connector-builder plugin, the registry CI) `pip install analitiq-validator`
+# and run the `analitiq-validate` console script.
 #
 # Runbook — the tag is pushed at the PR head, BEFORE the merge, so main is only
 # ever updated to a version already on PyPI. Root CLAUDE.md "Releases" owns the
@@ -20,7 +18,9 @@ name: Publish analitiq-validator
 #   2. Push a tag matching that version at the PR head: `validator-v1.0.0rc2`.
 #      Checkout below resolves the tag, so the commit need not be on main yet.
 #   3. This workflow asserts tag == pyproject version, runs the validator's own
-#      test suite, builds sdist+wheel from the rendered package, and publishes.
+#      test suite, builds sdist+wheel from the staged package, installs that
+#      wheel beside a contract-models wheel built from the same commit and
+#      grades every shipped rule case against it, and publishes.
 #   4. Re-run `pinned-validator-guard` (now green), then merge with a MERGE
 #      COMMIT — squashing would orphan the commit this tag points at.
 #
@@ -96,11 +96,41 @@ jobs:
       - name: Validator tests — never ship a validator that fails its own suite
         run: python -m pytest -q packages/validator/tests
 
-      - name: Stage the rendered public package
+      - name: Stage the public package
         run: python packages/validator/scripts/build.py --dist "${{ runner.temp }}/v-src"
 
       - name: Build sdist + wheel
         run: python -m build --outdir "${{ runner.temp }}/v-dist" "${{ runner.temp }}/v-src"
+
+      - name: Build the contract-models wheel the smoke test installs beside it
+        # The validator pins `analitiq-contract-models` exactly, so the smoke
+        # test installs the one built from this same commit rather than
+        # resolving it from PyPI.
+        run: |
+          python packages/contract-models/scripts/build.py --dist "${{ runner.temp }}/cm-src"
+          python -m build --wheel --outdir "${{ runner.temp }}/cm-dist" "${{ runner.temp }}/cm-src"
+
+      - name: Smoke-test the built wheel (install + grade every shipped rule case)
+        # `wheel_smoke.py` proves the wheel kept every staged data file and
+        # carries no build-host bytecode. The corpus is read only when a
+        # consumer asks for it, so present is not readable: the grading below
+        # is what proves the shipped cases load and still hold.
+        run: |
+          python -m venv "${{ runner.temp }}/v-smoke"
+          "${{ runner.temp }}/v-smoke/bin/pip" install --quiet "${{ runner.temp }}"/v-dist/*.whl "${{ runner.temp }}"/cm-dist/*.whl
+          "${{ runner.temp }}/v-smoke/bin/python" packages/wheel_smoke.py \
+            --module analitiq.validator \
+            --staged "${{ runner.temp }}/v-src/src/analitiq/validator" \
+            --dist "${{ runner.temp }}/v-dist"
+          "${{ runner.temp }}/v-smoke/bin/python" -c "
+          from analitiq.validator.rule_cases import case_mismatch, rule_cases
+
+          cases = rule_cases()
+          assert cases, 'rule case corpus shipped empty'
+          mismatches = [m for m in map(case_mismatch, cases) if m]
+          assert not mismatches, mismatches
+          print('rule cases graded:', len(cases))
+          "
 
       - name: Publish to PyPI (Trusted Publishing, OIDC)
         uses: pypa/gh-action-pypi-publish@release/v1

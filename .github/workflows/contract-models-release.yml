@@ -18,7 +18,8 @@ name: Publish analitiq-contract-models
 #      `contract-models-v1.0.0rc2`. Checkout below resolves the tag, so the
 #      commit need not be on main yet.
 #   3. This workflow asserts tag == pyproject version, runs the build guards,
-#      builds sdist+wheel from the rendered package, and publishes to PyPI.
+#      builds sdist+wheel from the staged package, installs that wheel and
+#      grades every shipped rule fixture against it, and publishes to PyPI.
 #   4. Merge with a MERGE COMMIT — squashing would orphan the commit this tag
 #      points at.
 #
@@ -87,56 +88,45 @@ jobs:
       - name: Build guards (version match, minimal, no alq/private leak, boto3-free)
         run: python packages/contract-models/scripts/build.py --check --expect-version "${{ steps.ver.outputs.version }}"
 
-      - name: Stage the rendered public package
+      - name: Stage the public package
         run: python packages/contract-models/scripts/build.py --dist "${{ runner.temp }}/cm-src"
 
       - name: Build sdist + wheel
         run: python -m build --outdir "${{ runner.temp }}/cm-dist" "${{ runner.temp }}/cm-src"
 
       - name: Smoke-test the built wheel (install + read every shipped data file)
-        # build.py's import_guard exercises the staged source tree, which
-        # carries every file regardless of package-data, so only an install of
-        # the actual wheel shows what the declaration kept — and a broken rc
-        # published to PyPI is an immutable, burned version.
-        #
-        # The data-file check is DERIVED from the staged tree rather than
-        # listing filenames, so a file committed later is covered without
-        # anyone remembering this step. It has to be a comparison against the
-        # installed tree because the two files here are reached differently:
-        # the vendored grammar loads at import, so a wheel without it cannot
-        # import at all, while the rule registry loads on first use and only
-        # through `violation()` — a wheel without THAT imports, and validates a
-        # VALID document, exactly like a correct one. It raises FileNotFoundError
-        # in place of the finding, for the first document that breaks an
-        # in-process rule. The explicit loads below then prove the two files are
-        # readable, not merely present.
+        # `wheel_smoke.py` proves the wheel kept every staged data file and
+        # carries no build-host bytecode. What it cannot know is that the data
+        # is READABLE, which differs per file here: the vendored grammar loads
+        # at import, so a wheel without it cannot import at all, while the rule
+        # registry loads on first use and only through `violation()` — a wheel
+        # without THAT imports, and validates a VALID document, exactly like a
+        # correct one. It raises FileNotFoundError in place of the finding, for
+        # the first document that breaks an in-process rule. The fixture corpus
+        # is read only when a consumer asks for it. So the loads below grade
+        # every shipped fixture against the installed models.
         run: |
           python -m venv "${{ runner.temp }}/cm-smoke"
           "${{ runner.temp }}/cm-smoke/bin/pip" install --quiet "${{ runner.temp }}"/cm-dist/*.whl
-          STAGED="${{ runner.temp }}/cm-src" "${{ runner.temp }}/cm-smoke/bin/python" -c "
-          import os, pathlib
-          import analitiq.contracts as c
+          "${{ runner.temp }}/cm-smoke/bin/python" packages/wheel_smoke.py \
+            --module analitiq.contracts \
+            --staged "${{ runner.temp }}/cm-src/analitiq/contracts" \
+            --dist "${{ runner.temp }}/cm-dist"
+          "${{ runner.temp }}/cm-smoke/bin/python" -c "
           import analitiq.contracts.endpoints as ep
           import analitiq.contracts.arrow_grammar as ag
+          from analitiq.contracts.shared.rule_fixtures import fixture_mismatch, rule_fixtures
           from analitiq.contracts.shared.rules import all_rules
-
-          staged = pathlib.Path(os.environ['STAGED']) / 'analitiq'
-          installed = pathlib.Path(c.__file__).parent.parent
-          expected = sorted(
-              p.relative_to(staged)
-              for p in staged.rglob('*')
-              if p.is_file() and p.suffix not in ('.py', '.pyc')
-              and '__pycache__' not in p.parts
-          )
-          assert expected, 'staged tree carries no data files — the walk broke'
-          missing = [str(r) for r in expected if not (installed / r).is_file()]
-          assert not missing, f'wheel dropped staged data files: {missing}'
-          print('data files shipped:', len(expected), '->', [str(r) for r in expected])
 
           assert ag.FAMILY_NAMES and ep.ARROW_TYPE_RE.fullmatch('Utf8')
           assert all_rules(), 'rules.json shipped empty'
           print('wheel imports; grammar loaded:', len(ag.FAMILY_NAMES), 'families')
           print('rule registry loaded:', len(all_rules()), 'rules')
+          fixtures = rule_fixtures()
+          assert fixtures, 'rule fixture corpus shipped empty'
+          mismatches = [m for m in map(fixture_mismatch, fixtures) if m]
+          assert not mismatches, mismatches
+          print('rule fixtures graded:', len(fixtures))
           "
 
       - name: Publish to PyPI (Trusted Publishing, OIDC)

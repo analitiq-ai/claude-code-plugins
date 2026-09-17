@@ -120,3 +120,40 @@ def test_passed_ignores_informational_findings():
         rule=rule.id, message_id="m", kind="informational",
         path="/", message="x")]
     assert _passed(findings)
+
+
+def test_a_bare_violation_and_a_multi_entry_become_the_same_finding():
+    """`_model_findings` unpacks both raise shapes through
+    `rules.rule_violations`, so one complaint reads the same whether its
+    enforcer raised it alone or beside others."""
+    from pydantic import BaseModel, TypeAdapter, model_validator
+
+    from analitiq.contracts.shared.rules import MultiRuleViolation, violation
+    from analitiq.validator._core import _model_findings
+
+    rule = _rule("error")
+
+    def _complaint():
+        return violation(rule.id, "probe", "detail", path="/at")
+
+    class Bare(BaseModel):
+        @model_validator(mode="after")
+        def _raise(self):
+            raise _complaint()
+
+    class Multi(BaseModel):
+        @model_validator(mode="after")
+        def _raise(self):
+            raise MultiRuleViolation([_complaint()])
+
+    class HoldsBare(BaseModel):
+        inner: Bare
+
+    class HoldsMulti(BaseModel):
+        inner: Multi
+
+    bare = _model_findings({"inner": {}}, TypeAdapter(HoldsBare))
+    multi = _model_findings({"inner": {}}, TypeAdapter(HoldsMulti))
+    assert bare == multi == [finding(
+        rule=rule.id, message_id="probe", kind="fail", path="/inner/at",
+        message=_complaint().message)]

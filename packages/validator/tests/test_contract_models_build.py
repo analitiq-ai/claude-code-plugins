@@ -73,3 +73,16 @@ def test_dependency_guard_rejects_a_private_import(tmp_path, monkeypatch):
     monkeypatch.setattr(b, "REPO_ROOT", tmp_path)
     with pytest.raises(SystemExit, match="cannot depend"):
         b.dependency_guard()
+
+
+def test_import_guard_leaves_the_staged_tree_as_staged(tmp_path):
+    """`package-data` keeps every file the staged tree carries, so a file the
+    import guard writes into it ships. Bytecode compiled by the build host's
+    interpreter is such a file."""
+    b = _build_module()
+    dist = tmp_path / "dist"
+    b.stage(dist)
+    before = sorted(p.relative_to(dist) for p in dist.rglob("*") if p.is_file())
+    b.import_guard(dist)
+    after = sorted(p.relative_to(dist) for p in dist.rglob("*") if p.is_file())
+    assert after == before, sorted(set(after) - set(before))

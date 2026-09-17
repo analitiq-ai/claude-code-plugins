@@ -83,6 +83,21 @@ against a filesystem — the offline guarantee
 stated above for single-document validation, extended to a set of documents
 instead of one.
 
+## Rule cases
+
+Some rules enforced by a cross-document check ship example document sets with
+the package, each one a directory holding a `bundle.json` or a connector package
+rooted at `connector.json`. A rule is not required to carry any, so the corpus
+grades only the rules it holds cases for. `rule_cases()` loads them and `case_mismatch(case)`
+grades one against the installed validator, returning `None` when the
+validator agrees:
+
+```python
+from analitiq.validator.rule_cases import case_mismatch, rule_cases
+
+mismatches = [m for m in map(case_mismatch, rule_cases()) if m]
+```
+
 ## Install
 
 ```bash

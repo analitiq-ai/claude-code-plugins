@@ -58,6 +58,8 @@ packages = [
 #
 # The release workflow proves the result against a real installed wheel:
 # `build.py` copies the tree whatever this says, so only an install shows what
-# the declaration actually kept.
+# the declaration actually kept. `**/*` rather than `*`: a bare `*` matches only
+# a package directory's own files, and drops a data directory nested inside it,
+# such as the rule fixture corpus.
 [tool.setuptools.package-data]
-"*" = ["*"]
+"*" = ["**/*"]

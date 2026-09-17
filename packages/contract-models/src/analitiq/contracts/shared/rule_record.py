@@ -266,11 +266,12 @@ class RuleRecord:
     #: moved.
     symbol: str | None = None
     #: The concrete model the shared fixture corpus validates against. Naming
-    #: one is how a rule joins the corpus, so membership is a thing the record
-    #: says rather than a thing derived from how the rule happens to be
-    #: written. Absent means the rule ships no fixtures — the tests assert both
-    #: directions, so a corpus directory without this key is an orphan and this
-    #: key without a corpus directory is a gap.
+    #: one is how a rule joins the corpus (`shared/fixtures/<RULE-ID>/`, read
+    #: by `shared.rule_fixtures` and shipped in the wheel), so membership is a
+    #: thing the record says rather than a thing derived from how the rule
+    #: happens to be written. Absent means the rule ships no fixtures — a
+    #: corpus directory without this key is refused by `rule_fixtures`, and
+    #: this key without a corpus directory is a gap the tests fail on.
     fixture_model: str | None = None
     superseded_by: str | None = None
 
