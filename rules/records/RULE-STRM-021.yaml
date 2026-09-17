@@ -3,8 +3,8 @@ statement: >
   A validation rule's `value` MUST carry a payload of the shape its `type`
   reads, and that payload MUST constrain something: a length MUST be a
   non-negative integer, a pattern a non-empty regular expression, a range an
-  object carrying a `min` or a `max` and no other bound, an admitted-value
-  set a list.
+  object carrying a `min` or a `max` and no other bound and no empty
+  interval, an admitted-value set a non-empty list.
 tier: coherence
 severity: error
 artifact_kinds: [stream]
@@ -23,9 +23,14 @@ rationale: >
   interpolate into a syntactically valid, silently-wrong regex, and a
   wrong-shaped `in_list` payload can iterate into a value set with no error
   rather than raising. A payload that is the right kind but constrains
-  nothing — a negative length, an empty pattern, a range with neither bound
-  — fails no row and is reported nowhere, which reads exactly like a rule
-  that passed. The presence check RULE-STRM-009 settles only whether a
+  nothing — a negative `min_length`, an empty pattern, a range with neither
+  bound — fails no row and is reported nowhere, which reads exactly like a
+  rule that passed; one that admits nothing — a negative `max_length`, a
+  range whose `min` sits above its `max`, an empty admitted-value list —
+  fails every row instead. Both are rules the author cannot have meant, and
+  the two are refused together for the reason the same shape is refused on a
+  param's bounds: which side of the bound the payload is wrong on does not
+  change that it grades nothing. The presence check RULE-STRM-009 settles only whether a
   payload is present, so this rule is what settles whether the one present
   can be applied, on the document, where the author is still holding it.
 status: active

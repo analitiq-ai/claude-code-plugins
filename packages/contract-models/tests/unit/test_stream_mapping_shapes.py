@@ -902,3 +902,30 @@ class TestValidationRulePayload:
 
     def test_a_compilable_pattern_is_accepted(self):
         assert self._rule("pattern", r"^\d{3}-\d{4}$").value == r"^\d{3}-\d{4}$"
+
+    def test_an_empty_pattern_is_refused_as_vacuous(self):
+        with pytest.raises(ValidationError, match="every row matches"):
+            self._rule("pattern", "")
+
+    @pytest.mark.parametrize("type_", ["min_length", "max_length"])
+    def test_a_boolean_length_is_not_an_integer_length(self, type_):
+        # `True` is an `int` in Python and a boolean everywhere the document
+        # travels, so a bare isinstance check would take it as the length 1.
+        with pytest.raises(ValidationError, match="not an integer length"):
+            self._rule(type_, True)
+
+    def test_a_range_whose_min_sits_above_its_max_is_refused(self):
+        # The empty interval: every row fails it. Refused for the reason a
+        # param's `minimum` above its `maximum` is.
+        with pytest.raises(ValidationError, match="no row can fall in"):
+            self._rule("range", {"min": 10, "max": 1})
+
+    def test_a_range_whose_bounds_do_not_compare_is_left_alone(self):
+        # Whether an interval is empty is not decidable across kinds, and
+        # this rule asks only that. The mixed-kind payload is a defect this
+        # predicate does not claim to grade.
+        assert self._rule("range", {"min": 1, "max": "x"}).value == {"min": 1, "max": "x"}
+
+    def test_an_empty_admitted_value_list_is_refused(self):
+        with pytest.raises(ValidationError, match="admits no value"):
+            self._rule("in_list", [])

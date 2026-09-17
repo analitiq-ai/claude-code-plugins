@@ -1327,12 +1327,25 @@ def _a_bounds_object(value: Any) -> str | None:
         return f"names bounds {unknown!r}, which no range rule reads"
     if value.get("min") is None and value.get("max") is None:
         return "carries neither a `min` nor a `max`, so it bounds nothing"
+    low, high = value.get("min"), value.get("max")
+    if low is not None and high is not None:
+        try:
+            empty = low > high
+        except TypeError:
+            # Bounds of kinds that do not compare are a different defect and
+            # not this predicate's: the rule asks whether the interval admits
+            # a row, and one that cannot be ordered has no answer to give.
+            return None
+        if empty:
+            return f"bounds {low!r}..{high!r}, an interval no row can fall in"
     return None
 
 
 def _a_value_set(value: Any) -> str | None:
     if not isinstance(value, list):
         return "is not a list of admitted values"
+    if not value:
+        return "admits no value, which no row can match"
     return None
 
 
