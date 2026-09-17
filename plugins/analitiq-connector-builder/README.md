@@ -81,11 +81,12 @@ Schemas are generated from — so there is no schema fetch. It runs:
 
 1. **Contract-model validation** — structure, plus the cross-field rules the
    models themselves apply.
-   <!-- PROBE: type-map-direction-from-document, type-map-direction-not-schema-url, type-map-slot-grades-the-sibling -->
-   Discriminating keys in the document body select the model — a type map
-   validated on its own by its own `direction`, not by its filename and not by
-   its `$schema`. Inside a connector package a map is located by the slot
-   filename it sits under, and graded as that slot
+   <!-- PROBE: type-map-direction-from-document, type-map-direction-not-schema-url, type-map-coverage-counts-declarations -->
+   Discriminating keys in the document body select the model — a type map by its
+   own `direction`, not by its filename and not by its `$schema`. A connector
+   package's maps are collected by pattern and counted toward the directions
+   they declare, so a name says which siblings are maps and the slot names for
+   each direction are a convention an author follows (`RULE-PKG-030`)
    (`skills/connector-builder/references/metadata-and-versioning.md`). Each kind
    is graded against the model behind this schema:
    - Connector → `https://schemas.analitiq.ai/connector/latest.json`

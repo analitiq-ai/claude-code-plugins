@@ -61,6 +61,7 @@ connector's rendering for every stream on that connection (`RULE-TMAP-018`).
 - **Present with an empty `rules` array** — never ship one at either scope; the
   contract requires at least one rule, so a document with no rules is a
   rejected document rather than the fallthrough an absent file gives you.
-- **The pre-split `type-map.json`** — the engine never reads this filename at
-  either scope. A connector ships its maps under the names its `kind` calls
-  for (`RULE-PKG-030`).
+- **The pre-split `type-map.json`** — it matches no pattern either scope
+  collects by, so nothing reads it and nothing counts it toward a direction. A
+  connector ships a map declaring each direction its `kind` calls for
+  (`RULE-PKG-030`).

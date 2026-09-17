@@ -22,11 +22,11 @@ artifact.
 ## Inputs
 
 - `document_path` — absolute path to the draft JSON document.
-  <!-- PROBE: type-map-direction-from-document, type-map-slot-grades-the-sibling -->
+  <!-- PROBE: type-map-direction-from-document, type-map-coverage-counts-declarations -->
   Validating a type map on its own runs no package-level check under any name —
   those run when the **connector** is validated, off the maps sitting beside it,
-  each graded as the slot filename it sits under, and a direction the `kind`
-  requires but ships no map for surfaces there as a missing sibling
+  each counted toward the direction it declares, and a direction the `kind`
+  requires that no sibling declares surfaces there as a missing map
   (`RULE-PKG-030`). So point this at the draft where it sits in the package
   rather than at a copy you re-serialized: what is beside it decides as much as
   what is in it, and what ships is then what was graded. This agent validates

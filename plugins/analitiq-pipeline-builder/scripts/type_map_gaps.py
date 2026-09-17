@@ -19,13 +19,14 @@ map is the fallback.
 Usage::
 
     printf '%s' '["citext", "vector(3)"]' | python3 type_map_gaps.py \
-        --direction read \
         --map connections/pg/definition/type-map-read.json \
         --map connectors/postgresql/definition/type-map-read.json
 
-Probes are a JSON array of strings on stdin (or --probes-file): provider
-`native_type` labels for ``--direction read``, `arrow_type` strings for
-``--direction write``. Output on stdout::
+Each map declares the direction being probed; its filename says nothing about
+it here, as it says nothing anywhere else a map is consumed. Maps declaring
+different directions are a usage error, as is one declaring neither. Probes are
+a JSON array of strings on stdin (or --probes-file): provider `native_type`
+labels when reading, `arrow_type` strings when writing. Output on stdout::
 
     {"direction": "read",
      "resolved": {"citext": null, "vector(3)": null},
@@ -44,12 +45,28 @@ import sys
 from pathlib import Path
 
 from _bootstrap import ensure_deps_or_reexec
-from validate import TYPE_MAP_FILENAMES
 
 
 def _fail(message: str) -> "int":
     print(f"type_map_gaps: {message}", file=sys.stderr)
     return 2
+
+
+def _declared_direction(path: Path) -> str:
+    """The direction a type-map document declares. A name says nothing about a
+    map's direction anywhere a map is consumed, so it says nothing here either:
+    probing the direction a filename suggested would report gaps in a vocabulary
+    the document never claimed to hold."""
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError(f"{path}: {exc}") from exc
+    declared = doc.get("direction") if isinstance(doc, dict) else None
+    if declared not in ("read", "write"):
+        raise ValueError(
+            f"{path} declares direction {declared!r}; a type-map document declares "
+            "'read' or 'write', and nothing else says which vocabulary to probe")
+    return declared
 
 
 def _load_rules(path: Path, direction: str) -> list:
@@ -127,13 +144,10 @@ def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--direction", required=True, choices=("read", "write"),
-                        help="read: probes are native types, maps are type-map-read files; "
-                             "write: probes are Arrow types, maps are type-map-write files.")
     parser.add_argument("--map", action="append", required=True, dest="maps", metavar="PATH",
-                        help="A {$schema, direction, rules} type-map document; repeatable, "
-                             "in precedence order (connection-scoped map first, connector "
-                             "map after).")
+                        help="A {$schema, direction, rules} type-map document, which declares "
+                             "the direction it holds; repeatable, in precedence order "
+                             "(connection-scoped map first, connector map after).")
     parser.add_argument("--probes-file", metavar="PATH",
                         help="JSON array of probe strings; defaults to stdin.")
     args = parser.parse_args(argv)
@@ -143,17 +157,19 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         return _fail(str(exc))
 
-    # `_load_rules` grades each map against the model `--direction` names, so a
-    # map whose envelope declares the other direction fails there on the
-    # `direction` Literal. Catch a filename/--direction mismatch first, so the
-    # message names the actual mistake (a swapped --map/--direction) rather
-    # than a generic schema failure. Hold a map named for a direction to it.
-    named_for = {name: d for d, name in TYPE_MAP_FILENAMES.items()}
+    # Each document declares the direction being probed, and they must agree:
+    # the resolver concatenates their rule arrays into one precedence order, so
+    # a pair holding opposite directions has no single vocabulary to probe.
+    directions: dict[str, str] = {}
     for m in args.maps:
-        implied = named_for.get(Path(m).name)
-        if implied is not None and implied != args.direction:
-            return _fail(f"{m} is named for the {implied} direction but "
-                         f"--direction is {args.direction}")
+        try:
+            directions.setdefault(_declared_direction(Path(m)), m)
+        except ValueError as exc:
+            return _fail(str(exc))
+    if len(directions) > 1:
+        return _fail("every --map must hold the same direction, got "
+                     + ", ".join(f"{m} ({d})" for d, m in sorted(directions.items())))
+    direction = next(iter(directions))
 
     try:
         raw = Path(args.probes_file).read_text() if args.probes_file else sys.stdin.read()
@@ -164,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
         return _fail("probes must be a JSON array of strings")
 
     try:
-        result = resolve(args.direction, probes, [Path(m) for m in args.maps])
+        result = resolve(direction, probes, [Path(m) for m in args.maps])
     except (OSError, ValueError) as exc:
         # _load_rules names the file in a ValueError for every way one can fail
         # — unreadable, unparseable, or graded fatal — which is the only path

@@ -220,8 +220,10 @@ def _staged_connector(mutate: Callable[[dict], dict], example_dir: Path,
         return _validate(doc, doc_path=definition / "connector.json")
 
 
-def _staged_type_map(rules: list, filename: str) -> list[dict]:
-    direction = "write" if "write" in filename else "read"
+def _staged_type_map(rules: list, direction: str) -> list[dict]:
+    # Staged under the direction's conventional filename so the probe reads the
+    # way an author's tree does; nothing in the verdict turns on the name.
+    filename = f"type-map-{direction}.json"
     doc = _wrap_type_map(rules, direction)
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / filename
@@ -591,7 +593,7 @@ def _p_param_key_provider_spelling() -> list[dict]:
 def _p_write_map_regex_case() -> list[dict]:
     rules = json.loads((DB_EXAMPLE / "type-map-write.json").read_text())["rules"]
     rules.append({"match": "regex", "arrow_type": "^utf8$", "native_type": "TEXT"})
-    return _staged_type_map(rules, "type-map-write.json")
+    return _staged_type_map(rules, "write")
 
 
 def _p_write_coverage_sample_gap() -> list[dict]:
@@ -600,7 +602,7 @@ def _p_write_coverage_sample_gap() -> list[dict]:
         {"match": "exact", "arrow_type": "Int64", "native_type": "BIGINT"},
         {"match": "exact", "arrow_type": "Boolean", "native_type": "BOOLEAN"},
     ]
-    return _staged_type_map(rules, "type-map-write.json")
+    return _staged_type_map(rules, "write")
 
 
 def _p_type_map_schema_required() -> list[dict]:
@@ -627,20 +629,35 @@ def _p_type_map_direction_from_document() -> list[dict]:
         return _validate(doc, doc_path=path)
 
 
-def _p_type_map_slot_grades_the_sibling() -> list[dict]:
-    # The same document the standalone route passes under this name: it declares
-    # write and its `$schema` agrees. Located as the read slot's sibling, the
-    # slot is what it is graded as, so the write `$schema` is rejected — the
-    # filename deciding, which is what the package route has that the standalone
-    # route does not.
-    rules = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
-    misfiled = _wrap_type_map(rules, "write")
+def _p_type_map_coverage_counts_declarations() -> list[dict]:
+    # A database connector package whose maps sit under each other's
+    # conventional filenames. Each direction is covered because each is
+    # declared, so a clean verdict is coverage counting declarations; counting
+    # filenames instead would grade each map as the direction it does not
+    # declare and reject its `$schema` and its `direction`.
     doc = _example_body(DB_EXAMPLE)
     with tempfile.TemporaryDirectory() as tmp:
         definition = Path(tmp) / "definition"
         definition.mkdir()
         (definition / "connector.json").write_text(json.dumps(doc))
-        (definition / "type-map-read.json").write_text(json.dumps(misfiled))
+        shutil.copy(DB_EXAMPLE / "type-map-read.json", definition / "type-map-write.json")
+        shutil.copy(DB_EXAMPLE / "type-map-write.json", definition / "type-map-read.json")
+        return _validate(doc, doc_path=definition / "connector.json")
+
+
+def _p_type_map_duplicate_direction() -> list[dict]:
+    # The package's read map copied under a second collected name, so a sibling
+    # beyond the authored one declares the read direction. Nothing chooses
+    # between them, so the collision is reported and the read direction is the
+    # map for neither — while the write direction, which one document declares
+    # alone, is covered and graded.
+    doc = _example_body(DB_EXAMPLE)
+    with tempfile.TemporaryDirectory() as tmp:
+        definition = Path(tmp) / "definition"
+        definition.mkdir()
+        (definition / "connector.json").write_text(json.dumps(doc))
+        shutil.copy(DB_EXAMPLE / "type-map-read.json", definition / "type-map-read.json")
+        shutil.copy(DB_EXAMPLE / "type-map-read.json", definition / "type-map-natives.json")
         shutil.copy(DB_EXAMPLE / "type-map-write.json", definition / "type-map-write.json")
         return _validate(doc, doc_path=definition / "connector.json")
 
@@ -1038,10 +1055,18 @@ PROBES: tuple[Probe, ...] = (
     Probe("type-map-schema-required", "error", _p_type_map_schema_required,
           message_re=r"Field required"),
     Probe("type-map-direction-from-document", "clean", _p_type_map_direction_from_document),
-    Probe("type-map-slot-grades-the-sibling", "error", _p_type_map_slot_grades_the_sibling,
-          message_re=r"type-map-read/latest\.json"),
     Probe("type-map-direction-not-schema-url", "error", _p_type_map_direction_not_schema_url,
           message_re=r"type-map-read"),
+    Probe("type-map-coverage-counts-declarations", "clean",
+          _p_type_map_coverage_counts_declarations),
+    Probe("type-map-duplicate-direction-rejected", "error", _p_type_map_duplicate_direction,
+          message_re=r"both declare direction .*neither of these is it"),
+    # The collision's consequence, which the message alone does not carry: the
+    # direction the pair declares is covered by neither of them, and the finding
+    # saying so distinguishes that from a direction nothing declared.
+    Probe("type-map-duplicate-direction-covers-nothing", "error",
+          _p_type_map_duplicate_direction,
+          message_re=r"more than one sibling declares it, so none of them is it"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
           message_re=r"greater than or equal to 1"),
     Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,

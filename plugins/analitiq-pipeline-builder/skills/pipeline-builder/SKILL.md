@@ -331,8 +331,9 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
      ambiguities.
    - Write a non-null `type_maps.read` / `type_maps.write` to
      `connections/<connection-slug>/definition/type-map-read.json` /
-     `type-map-write.json` and validate each (entity `type-map`, `--direction
-     read` / `write`) through the same fix-and-revalidate loop as other artifacts.
+     `type-map-write.json` and validate each (entity `type-map`; each document
+     declares its own direction) through the same fix-and-revalidate loop as
+     other artifacts.
      `null` means write nothing — never create an empty map file, and never
      delete an existing one. Record authored or extended maps in the final
      summary.
@@ -428,8 +429,7 @@ and leaves everything else — including `.secrets/` — untouched.
    (public and private), every connection-scoped private endpoint those
    connections own (entities `connection` / `database-endpoint`), and any
    connection-scoped `type-map-read.json` / `type-map-write.json` beside them
-   (entity `type-map`, `--direction read` / `write` matching the file) — which
-   catches a stale or broken
+   (entity `type-map`) — which catches a stale or broken
    referenced artifact; plus the whole bundle with `bundle_root: .`, the pass
    that resolves cross-document references and the on-disk endpoint file names
    (`references/io-contracts.md` documents its finding ids and shape). Both
