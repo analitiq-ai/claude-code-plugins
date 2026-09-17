@@ -82,6 +82,17 @@ ADBC_TRANSPORT = {
     },
 }
 
+def with_adbc_transport(document: dict) -> dict:
+    """``document`` with the second SQL transport family declared beside its own.
+
+    A document whose bulk-load mechanism keys both families needs both
+    transports, which RULE-CTOR-048 is what refuses.
+    """
+    doc = copy.deepcopy(document)
+    doc["transports"]["adbc"] = copy.deepcopy(ADBC_TRANSPORT)
+    return doc
+
+
 SQL_CAPABILITIES = {
     "catalog": "none",
     "session_targeting": "per_statement",

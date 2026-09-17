@@ -65,7 +65,7 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
-from _contract_documents import ADBC_TRANSPORT
+from _contract_documents import with_adbc_transport
 
 from analitiq.contracts.connector import (
     Concurrency,
@@ -501,17 +501,6 @@ def db_example() -> dict:
     return json.loads(POSTGRES_EXAMPLE.read_text())
 
 
-def _dual_transport(db_example: dict) -> dict:
-    """The example connector with the ADBC transport `VALID_SQL_CAPS` needs.
-
-    `VALID_SQL_CAPS.bulk_load` keys both families and the example declares
-    only SQLAlchemy, which RULE-CTOR-048 refuses.
-    """
-    doc = copy.deepcopy(db_example)
-    doc["transports"]["adbc"] = copy.deepcopy(ADBC_TRANSPORT)
-    return doc
-
-
 def _minimal_api_doc(db_example: dict) -> dict:
     return {
         "$schema": db_example["$schema"],
@@ -528,7 +517,7 @@ def _minimal_api_doc(db_example: dict) -> dict:
 
 
 def test_database_connector_carries_all_three_blocks(db_example):
-    doc = _dual_transport(db_example)
+    doc = with_adbc_transport(db_example)
     doc["error_map"] = copy.deepcopy(VALID_ERROR_MAP)
     doc["concurrency"] = {"max_connections": 8}
     doc["sql_capabilities"] = {
@@ -628,7 +617,7 @@ def test_full_connector_validates_against_published_schema(db_example):
     )
     validator = Draft202012Validator(schema)
 
-    valid = _dual_transport(db_example)
+    valid = with_adbc_transport(db_example)
     valid["error_map"] = copy.deepcopy(VALID_ERROR_MAP)
     valid["concurrency"] = {"max_connections": 8}
     valid["sql_capabilities"] = {
