@@ -544,11 +544,21 @@ def test_bundle_with_valid_connection_type_maps(tmp_path):
     assert diag["passed"], diag["findings"]
 
 
-def test_bundle_rejects_dead_type_map_filename(tmp_path):
-    # the engine never reads the pre-split name — a lingering file is silently inert
-    # at runtime, so the bundle pass rejects it with a migration finding
+@pytest.mark.parametrize("shape", ["regular file", "directory", "dangling symlink"])
+def test_bundle_rejects_dead_type_map_filename(tmp_path, shape):
+    # the engine never reads the pre-split name — a lingering entry is silently
+    # inert at runtime, so the bundle pass rejects it with a migration finding.
+    # What carries the name decides nothing: the name is what is refused, and
+    # both scopes refuse it through the one published predicate.
     doc = _build_bundle(tmp_path)
-    _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
+    dead = tmp_path / "connections/postgresql/definition/type-map.json"
+    dead.parent.mkdir(parents=True, exist_ok=True)
+    if shape == "regular file":
+        _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
+    elif shape == "directory":
+        dead.mkdir()
+    else:
+        dead.symlink_to(dead.parent / "nothing-here.json")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
     migration = [f for f in diag["findings"] if f.get("validator") == "connection-type-map"]
@@ -1558,10 +1568,3 @@ def test_scripts_borrow_private_names_that_still_exist():
         assert hasattr(importlib.import_module(module), name), f"{module}.{name}"
 
 
-def test_the_dead_pre_split_filename_matches_the_validator():
-    # The adapter carries its own copy because it reaches connection directories
-    # the published validator never walks. A copy that drifts stops naming the
-    # file the validator rejects, so a map one route rejects passes on the other,
-    # and which of the two is right is not recoverable from either side alone.
-    from analitiq.validator.connectors import _LEGACY_MAP_FILENAME
-    assert V._LEGACY_TYPE_MAP_FILENAME == _LEGACY_MAP_FILENAME

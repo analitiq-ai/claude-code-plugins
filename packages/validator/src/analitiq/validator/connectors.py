@@ -111,7 +111,7 @@ except ImportError as exc:  # pragma: no cover - dependency guard
 
 _READ_MAP_FILENAME = "type-map-read.json"
 _WRITE_MAP_FILENAME = "type-map-write.json"
-_LEGACY_MAP_FILENAME = "type-map.json"
+LEGACY_TYPE_MAP_FILENAME = "type-map.json"
 # Which siblings are type-map documents at all. It selects the candidates and
 # nothing more — each one's direction is the one its body declares, so no part
 # of the name decides one. The name is still rendered into findings, which is
@@ -1081,6 +1081,20 @@ def _type_map_document_findings(doc: Any, direction: str, scope: str) -> list[di
     return findings
 
 
+def legacy_type_map_present(parent: Path) -> bool:
+    """Whether `parent` carries the dead pre-split type-map name.
+
+    The name is what is refused, so what sits under it decides nothing: a
+    directory or a broken link carrying it is the same dead name as a document,
+    and answering only for a regular file would let an author keep the name by
+    making it something else. Published because both scopes that walk a
+    definition directory must refuse it alike — pinning the name alone leaves
+    each side free to disagree about what carrying it means.
+    """
+    dead = parent / LEGACY_TYPE_MAP_FILENAME
+    return dead.exists() or dead.is_symlink()
+
+
 def type_map_sibling_paths(parent: Path) -> list[Path]:
     """The type-map documents beside `parent`, in the order they are considered.
 
@@ -1220,12 +1234,12 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
 
     findings: list[dict] = []
     parent = doc_path.parent
-    if (parent / _LEGACY_MAP_FILENAME).is_file():
+    if legacy_type_map_present(parent):
         findings.append(finding(
             rule="RULE-PKG-030",
             message_id="legacy-type-map-filename", kind="fail", path="/",
             message=(
-                f"sibling {_LEGACY_MAP_FILENAME} is the pre-split name; it is collected "
+                f"sibling {LEGACY_TYPE_MAP_FILENAME} is the pre-split name; it is collected "
                 f"as no direction's map. Give the read direction a `direction` of its own "
                 f"as {_READ_MAP_FILENAME} (and add {_WRITE_MAP_FILENAME} for database "
                 "connectors).")))

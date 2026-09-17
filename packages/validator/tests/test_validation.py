@@ -1413,14 +1413,32 @@ def test_coverage_does_not_read_a_collected_sibling_that_blocks(tmp_path, valida
     assert any("not a regular file" in e["message"] for e in errors), errors
 
 
-def test_coverage_flags_legacy_type_map(tmp_path, validator):
-    (tmp_path / "type-map.json").write_text('[{"match":"exact","native_type":"X","arrow_type":"Utf8"}]')
+def _plant_legacy_name(parent: Path, shape: str) -> None:
+    """Put the dead pre-split name at `parent` as one of the things a name can be."""
+    dead = parent / "type-map.json"
+    if shape == "regular file":
+        dead.write_text('[{"match":"exact","native_type":"X","arrow_type":"Utf8"}]')
+    elif shape == "directory":
+        dead.mkdir()
+    elif shape == "dangling symlink":
+        dead.symlink_to(parent / "nothing-here.json")
+    else:  # pragma: no cover - a shape the parametrization does not carry
+        raise AssertionError(shape)
+
+
+@pytest.mark.parametrize("shape", ["regular file", "directory", "dangling symlink"])
+def test_coverage_flags_legacy_type_map(tmp_path, validator, shape):
+    # The dead name is reported for carrying the name, not for what is under it:
+    # the rule is that nothing loads a `type-map.json`, and that is as true of a
+    # directory or a broken link as of a file. Reading it as "a regular file with
+    # this name" lets the author keep the name by making it something else.
+    _plant_legacy_name(tmp_path, shape)
     (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
         [{"match": "exact", "native_type": "X", "arrow_type": "Utf8"}], "read")))
     (tmp_path / "endpoints").mkdir()
     (tmp_path / "connector.json").write_text("{}")
     errors = _errors(validator.check_coverage(_min_connector("api"), tmp_path / "connector.json"))
-    assert any("pre-split name" in e["message"] for e in errors)
+    assert any("pre-split name" in e["message"] for e in errors), [e["message"] for e in errors]
 
 
 def test_standalone_type_map_at_the_pre_split_name_is_graded_as_it_declares(tmp_path, validator):

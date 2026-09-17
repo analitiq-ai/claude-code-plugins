@@ -101,12 +101,6 @@ from _bootstrap import ensure_deps_or_reexec
 # (`analitiq.contracts`), so a map's direction is not a member of it.
 PIPELINE_ENTITIES = ("connection", "stream", "pipeline", "database-endpoint", "type-map")
 
-# The pre-split filename: it matches no pattern either scope collects by, so
-# nothing reads it and nothing counts it toward a direction. The published
-# validator rejects it beside a connector; the adapter mirrors that for
-# connections, where the published bundle validator cannot see files.
-_LEGACY_TYPE_MAP_FILENAME = "type-map.json"
-
 
 # ---------------------------------------------------------------------------
 # Finding + Diagnostics shape
@@ -251,19 +245,25 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
     function got the chance to return it."""
     definition = conn_dir / "definition"
     site = f"connections/{conn_dir.name}/definition"
-    legacy = definition / _LEGACY_TYPE_MAP_FILENAME
-    with _contained(findings, f"{site}/{_LEGACY_TYPE_MAP_FILENAME}"):
-        if legacy.exists() or legacy.is_symlink():
+    from analitiq.validator import (
+        LEGACY_TYPE_MAP_FILENAME,
+        TypeMapDirections,
+        legacy_type_map_present,
+        type_map_sibling_paths,
+    )
+    legacy_site = f"{site}/{LEGACY_TYPE_MAP_FILENAME}"
+    with _contained(findings, legacy_site):
+        if legacy_type_map_present(definition):
             findings.append(_finding(
-                "connection-type-map", "error", f"{site}/{_LEGACY_TYPE_MAP_FILENAME}",
-                f"{_LEGACY_TYPE_MAP_FILENAME} is the pre-split filename; the engine never "
+                "connection-type-map", "error", legacy_site,
+                f"{LEGACY_TYPE_MAP_FILENAME} is the pre-split filename; the engine never "
                 "reads it. Split it into type-map-read.json (native → Arrow) and, for the "
                 "write direction, type-map-write.json (Arrow → native)."))
-    from analitiq.validator import TypeMapDirections, type_map_sibling_paths
-    # Which files are maps, and which one is the map for a direction, are the
-    # published validator's answers — the same ones it gives beside a connector.
-    # What differs here is only the reporting: findings rooted at the connection
-    # site, each file decided inside its own crash guard.
+    # Which files are maps, which one is the map for a direction, and what the
+    # dead pre-split name means are the published validator's answers — the same
+    # ones it gives beside a connector. What differs here is only the reporting:
+    # findings rooted at the connection site, each file decided inside its own
+    # crash guard.
     directions = TypeMapDirections()
     # Collected first and graded after, because a document is graded only once
     # the whole directory says it is the map for its direction: a second

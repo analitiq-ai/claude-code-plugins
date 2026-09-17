@@ -53,12 +53,14 @@ from . import streams  # noqa: F401  — imported for its self-registration side
 # exercises them through the package root (see test_validation.py). Deliberately
 # NOT in __all__ — that would widen the published star-import surface.
 from .connectors import (  # skipcq: PY-W2000
+    LEGACY_TYPE_MAP_FILENAME,
     TypeMapDirections,
     check_coverage,
     endpoint_filename_findings,
     type_map_discriminator_findings,
     type_map_findings,
     type_map_sibling_paths,
+    legacy_type_map_present,
     is_api_endpoint_doc,
     is_connector_doc,
     is_addressed_endpoint_path,
@@ -90,6 +92,8 @@ __all__ = [
     "type_map_findings",
     "type_map_discriminator_findings",
     "type_map_sibling_paths",
+    "legacy_type_map_present",
+    "LEGACY_TYPE_MAP_FILENAME",
     "TypeMapDirections",
     "is_stem_addressed_endpoint_path",
     "is_addressed_endpoint_path",
