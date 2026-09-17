@@ -54,8 +54,10 @@ def test_staged_artifact_matches_source(tmp_path):
     """Staging COPIES; it does not transform.
 
     This is the property the whole split buys: what a maintainer reads in
-    `validator/src/` is byte-for-byte what a consumer installs. If a render step
-    ever creeps back in, this fails.
+    `validator/src/` is byte-for-byte what a consumer installs, at the same
+    relative path — the rule case corpus is nested directories, so a copy that
+    flattened names would lose it. If a render step ever creeps back in, this
+    fails.
     """
     build = _build_module()
     dist = tmp_path / "dist"
@@ -65,12 +67,44 @@ def test_staged_artifact_matches_source(tmp_path):
     assert (pkg / "__init__.py").is_file(), "package must expose analitiq/validator/__init__.py"
     assert (pkg / "_core.py").is_file(), "the _core module must be staged"
     assert (pkg / "connectors.py").is_file(), "the connectors module must be staged"
+    assert any((pkg / "cases").rglob("*.json")), "the rule case corpus must be staged"
     assert not (dist / "src" / "analitiq" / "__init__.py").exists(), (
         "analitiq/ must stay a PEP 420 namespace (no __init__.py) so it can be "
         "shared with analitiq-contract-models"
     )
-    for src_path in build._source_files():
-        assert (pkg / src_path.name).read_text() == src_path.read_text(), (
-            f"{src_path.name} was transformed during staging — the published "
+    for src_path in build._tracked_files():
+        relative = src_path.relative_to(build.SRC_DIR)
+        assert (pkg / relative).read_bytes() == src_path.read_bytes(), (
+            f"{relative} was transformed during staging — the published "
             "package must be the source verbatim"
         )
+
+
+def test_every_data_file_under_src_is_tracked():
+    """A data file the wheel must ship has to be tracked, because tracking is
+    what stages it.
+
+    `scripts/build.py` stages from `git ls-files`, so the one way a case file
+    goes missing from a wheel is by never being committed. The suite reads the
+    source tree, where the file is right there, so only a consumer grading the
+    installed corpus would notice.
+    """
+    build = _build_module()
+    tracked = set(build._tracked_files())
+    on_disk = {
+        path
+        for path in build.SRC_DIR.rglob("*")
+        if path.is_file()
+        and path.suffix not in (".py", ".pyc")
+        and "__pycache__" not in path.parts
+    }
+    assert on_disk, (
+        f"{build.SRC_DIR} carries no data files at all — the rule case corpus "
+        "lives here, so this is a path that stopped matching rather than a tree "
+        "with nothing in it"
+    )
+    untracked = sorted(str(p.relative_to(build.SRC_DIR)) for p in on_disk - tracked)
+    assert not untracked, (
+        "data files under src/ that the wheel would silently drop — the build "
+        f"stages tracked files only, so commit each of these: {untracked}"
+    )

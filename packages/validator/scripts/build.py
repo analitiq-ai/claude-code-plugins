@@ -15,7 +15,8 @@ Responsibilities:
      the published package unimportable. (Prose hygiene — not naming Analitiq
      internals in docstrings/`description`s — is kept by author and review
      discipline, not machine-checked here.)
-  2. Stage `dist/` (src layout): copy each module alongside `pyproject.toml`,
+  2. Stage `dist/` (src layout): copy every tracked file of the source package,
+     modules and data alike, at its relative path alongside `pyproject.toml`,
      `README`, and `LICENSE`, ready for `python -m build`.
 
 Stdlib only (`tomllib` is 3.11+), so it runs anywhere the validator does.
@@ -82,17 +83,17 @@ def _git() -> str:
     return exe
 
 
-def _source_files(src_dir: Path = SRC_DIR) -> list[Path]:
-    """Every tracked `*.py` module of the validator source package.
+def _tracked_files(src_dir: Path = SRC_DIR) -> list[Path]:
+    """Every tracked file of the validator source package — what `stage()`
+    publishes.
 
-    Tracked rather than merely present: this list is both what `stage()`
-    publishes and what the import guards parse, so an untracked scratch module
-    left in the directory would otherwise ship in the wheel and be graded as
-    though it were source. `git add` is the decision to publish, and it is the
-    one a reviewer sees.
+    Tracked rather than merely present: an untracked scratch file left in the
+    directory would otherwise ship in the wheel, and a module would be graded
+    as though it were source. `git add` is the decision to publish, and it is
+    the one a reviewer sees.
     """
     listing = subprocess.run(
-        [_git(), "-C", str(src_dir), "ls-files", "-z", "--", "*.py"],
+        [_git(), "-C", str(src_dir), "ls-files", "-z", "--", "."],
         capture_output=True,
         text=True,
         check=True,
@@ -100,11 +101,17 @@ def _source_files(src_dir: Path = SRC_DIR) -> list[Path]:
     names = [name for name in listing.split("\0") if name]
     if not names:
         raise SystemExit(
-            f"build: git reports no tracked modules under {src_dir} — the "
+            f"build: git reports no tracked files under {src_dir} — the "
             "package is never empty, so this is a path that stopped matching "
             "or a tree that is not a checkout"
         )
     return sorted(src_dir / name for name in names)
+
+
+def _source_files(src_dir: Path = SRC_DIR) -> list[Path]:
+    """Every tracked `*.py` module of the source package — what the import
+    guards parse."""
+    return [path for path in _tracked_files(src_dir) if path.suffix == ".py"]
 
 
 def check_public_safe(src_dir: Path = SRC_DIR) -> list[str]:
@@ -144,7 +151,8 @@ def run_checks(expect_version: str | None) -> None:
 
 def stage(dist_dir: Path) -> None:
     """Copy the source package into `src/analitiq/validator/` + metadata (src
-    layout, matching pyproject's `package-dir = {"" = "src"}`).
+    layout, matching pyproject's `package-dir = {"" = "src"}`), each file at
+    its path relative to the source package.
 
     `analitiq` gets NO `__init__.py` — it is a PEP 420 namespace shared with
     `analitiq-contract-models`.
@@ -154,8 +162,10 @@ def stage(dist_dir: Path) -> None:
         shutil.rmtree(dist_dir)
     pkg_dir.mkdir(parents=True)
 
-    for src_path in _source_files():
-        shutil.copy2(src_path, pkg_dir / src_path.name)
+    for src_path in _tracked_files():
+        dest = pkg_dir / src_path.relative_to(SRC_DIR)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_path, dest)
 
     shutil.copy2(PYPROJECT, dist_dir / "pyproject.toml")
     shutil.copy2(README, dist_dir / "README.md")

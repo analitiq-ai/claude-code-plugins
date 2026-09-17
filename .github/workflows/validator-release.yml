@@ -102,6 +102,49 @@ jobs:
       - name: Build sdist + wheel
         run: python -m build --outdir "${{ runner.temp }}/v-dist" "${{ runner.temp }}/v-src"
 
+      - name: Build the contract-models wheel the smoke test installs beside it
+        # The validator pins `analitiq-contract-models` exactly, so the smoke
+        # test installs the one built from this same commit rather than
+        # resolving it from PyPI.
+        run: |
+          python packages/contract-models/scripts/build.py --dist "${{ runner.temp }}/cm-src"
+          python -m build --wheel --outdir "${{ runner.temp }}/cm-dist" "${{ runner.temp }}/cm-src"
+
+      - name: Smoke-test the built wheel (install + grade every shipped rule case)
+        # build.py stages every tracked file whatever package-data says, so
+        # only an install of the actual wheel shows what the declaration kept
+        # — and a broken rc published to PyPI is an immutable, burned version.
+        # The data-file check is DERIVED from the staged tree rather than
+        # listing filenames, so a case committed later is covered without
+        # anyone remembering this step.
+        run: |
+          python -m venv "${{ runner.temp }}/v-smoke"
+          "${{ runner.temp }}/v-smoke/bin/pip" install --quiet "${{ runner.temp }}"/v-dist/*.whl "${{ runner.temp }}"/cm-dist/*.whl
+          STAGED="${{ runner.temp }}/v-src" "${{ runner.temp }}/v-smoke/bin/python" -c "
+          import os, pathlib
+          import analitiq.validator as v
+          from analitiq.validator import case_mismatch, rule_cases
+
+          staged = pathlib.Path(os.environ['STAGED']) / 'src' / 'analitiq' / 'validator'
+          installed = pathlib.Path(v.__file__).parent
+          expected = sorted(
+              p.relative_to(staged)
+              for p in staged.rglob('*')
+              if p.is_file() and p.suffix not in ('.py', '.pyc')
+              and '__pycache__' not in p.parts
+          )
+          assert expected, 'staged tree carries no data files — the walk broke'
+          missing = [str(r) for r in expected if not (installed / r).is_file()]
+          assert not missing, f'wheel dropped staged data files: {missing}'
+          print('data files shipped:', len(expected))
+
+          cases = rule_cases()
+          assert cases, 'rule case corpus shipped empty'
+          mismatches = [m for m in map(case_mismatch, cases) if m]
+          assert not mismatches, mismatches
+          print('rule cases graded:', len(cases))
+          "
+
       - name: Publish to PyPI (Trusted Publishing, OIDC)
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
