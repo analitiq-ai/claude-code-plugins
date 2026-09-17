@@ -338,6 +338,46 @@ class TestFromInputInPathParamsRejected:
                 request_extras={"query": {"id": {"from_input": "record.id"}}},
             )}))
 
+    def test_from_input_carrying_a_non_string_still_rejected_in_a_read_body(self):
+        # A POST read has a body and still has no record, so the body ban
+        # applies there — and it too read only the string payloads.
+        document = {
+            "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+            "endpoint_id": "records",
+            "operations": {"read": {
+                "request": {
+                    "method": "POST",
+                    "path": "/v1/search",
+                    "body": {"q": {"from_input": {"from_input": "record.name"}}},
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {
+                        "$schema": "https://json-schema.org/draft/2020-12/schema",
+                        "type": "array",
+                        "items": {"type": "object"},
+                    },
+                },
+            }},
+        }
+        with pytest.raises(ValidationError, match=r"RULE-ENDP-034"):
+            ApiEndpointDoc.model_validate(document)
+
+    def test_from_input_carrying_a_non_string_still_rejected_in_write_headers(self):
+        # RULE-ENDP-034 bans the BINDING at this site, whatever its payload is.
+        # Reading only the string payloads made a `from_input` wrapping another
+        # one invisible: the walk stopped at the outer binding, kept its dict
+        # payload, and the filter to strings then dropped it.
+        with pytest.raises(
+            ValidationError, match=r"from_input is invalid in request\.headers"
+        ):
+            parse_endpoint(_api_payload({"insert": _write_op(
+                request_extras={"headers": {
+                    "Accept": "application/json",
+                    "X-Record-Id": {"from_input": {"from_input": "record.id"}},
+                }},
+            )}))
+
 
 # ---------------------------------------------------------------------------
 # Must-not-regress

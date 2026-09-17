@@ -621,6 +621,16 @@ class TestParamValidate:
                 "default": {"from_input": "record"},
             })
 
+    def test_default_must_not_use_from_input_carrying_a_non_string(self):
+        # The ban is on the BINDING, not on its payload: a `from_input` whose
+        # payload is itself a dict is still a `from_input` authored where no
+        # record is in scope, and reading only the string payloads let it in.
+        with pytest.raises(ValidationError, match="from_input is invalid"):
+            Param(**{
+                "in": "body", "type": "object", "required": False,
+                "default": {"from_input": {"from_input": "record.id"}},
+            })
+
 
 # ---------------------------------------------------------------------------
 # `filters` map — an operator's landing site on the request

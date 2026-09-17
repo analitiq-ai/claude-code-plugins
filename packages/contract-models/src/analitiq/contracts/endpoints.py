@@ -595,7 +595,9 @@ class Param(_EndpointModel):
         # in, so a sweep here reported a paging consequence to write authors and
         # could not reach `response.schema` for declared-path resolution. See
         # `_sweep_expression_sites`.
-        if _collect_singleton_values(self.default, "from_input"):
+        # Payloads, not string values: RULE-ENDP-034 bans the BINDING here,
+        # so a `from_input` whose payload is not a string is still one.
+        if _collect_singleton_payloads(self.default, "from_input"):
             raise ValueError(
                 "from_input is invalid in params.<name>.default "
                 "(spec: §Cross-Field Validation)"
@@ -3381,7 +3383,11 @@ def _validate_param_wiring(
         ("request.query", request.query),
     ]
     for where, value in banned_from_input_sites:
-        if _collect_singleton_values(value, "from_input"):
+        # Payloads, not string values. The ban is on the binding, and a
+        # `from_input` carrying anything but a string is one the shape walks
+        # below cannot read either — dropping it here left the site with
+        # nothing to report.
+        if _collect_singleton_payloads(value, "from_input"):
             # RULE-ENDP-034: this site is built before a record is in hand, so
             # from_input — which draws from the record being written — has
             # nothing to draw from here.
@@ -3589,8 +3595,9 @@ def _validate_param_wiring(
                     "body-binding-wrong-location",
                     f"request.body binds to param {name!r} with in={param.location!r}; expected in='body'"
                 )
-        from_inputs = _collect_singleton_values(body, "from_input")
-        if not allow_from_input and from_inputs:
+        # Payloads answer whether a binding is HERE; the string values below
+        # answer what one addresses. The ban needs the first.
+        if not allow_from_input and _collect_singleton_payloads(body, "from_input"):
             raise violation(
                 "RULE-ENDP-034",
                 "from-input-in-body-on-read",
@@ -3601,7 +3608,7 @@ def _validate_param_wiring(
         # Disjoint cases: 'record', 'records', or 'record.<dotted>'. Anything
         # else — including 'records.<dotted>' (dotted paths through batch
         # arrays) — is invalid in v1.
-        for fi in from_inputs:
+        for fi in _collect_singleton_values(body, "from_input"):
             if fi in ("record", "records"):
                 continue
             if fi.startswith("record.") and not fi.startswith("records."):
