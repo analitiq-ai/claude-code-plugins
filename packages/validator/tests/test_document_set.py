@@ -22,9 +22,9 @@ call. Nothing here covers a malformed argument — a bad key, a value that is
 not text, a key that is also a directory, an `entity` outside the vocabulary.
 Those are refused by the request models at construction and belong to the
 contract package's own model tests; a case asserting one of them produces a
-*finding* would contradict the gate. A `bytes` value is the one shape that gate
-does not refuse — pydantic decodes it in lax mode, byte-order mark included —
-so it reaches these entry points as unreadable content, and pinning that
+*finding* would contradict the gate. `bytes` and `bytearray` are what that gate
+does not refuse — pydantic decodes them in lax mode, byte-order mark included —
+so they reach these entry points as unreadable content, and pinning that
 coercion belongs to the model tests too.
 """
 from __future__ import annotations
@@ -155,11 +155,13 @@ def test_entry_points_are_annotated_with_their_request_models(validator):
     # never by importing the request models here: a namespace this test chose
     # would resolve the annotation strings whatever that block says, leaving a
     # wrong module path or a deleted import green.
+    source = Path(document_set.__file__).read_text(encoding="utf-8")
     deferred = [statement
-                for node in ast.parse(Path(document_set.__file__).read_text()).body
+                for node in ast.parse(source).body
                 if isinstance(node, ast.If)
+                and isinstance(node.test, ast.Name) and node.test.id == "TYPE_CHECKING"
                 for statement in node.body if isinstance(statement, ast.ImportFrom)]
-    assert deferred, "no deferred import found; nothing resolves these annotations"
+    assert deferred, "no `if TYPE_CHECKING:` import resolves these annotations"
     namespace = {}
     for statement in deferred:
         module = importlib.import_module(statement.module)

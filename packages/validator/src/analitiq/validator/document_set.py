@@ -24,12 +24,12 @@ grammar, a value that is not text, a key that is also a directory of another,
 a package past the document ceiling, an `entity` outside the published document
 schema names — each is a `pydantic.ValidationError` raised at construction, for
 an in-process caller and a remote one alike, so there is one gate rather than
-one per transport. A bytes-like value is the exception the model does not
-refuse: pydantic decodes `bytes` and `bytearray` to `str` in lax mode,
-byte-order mark included, so a caller that read its files as bytes has that
-document reported as unreadable *content* rather than as a malformed
-argument. Nothing below re-checks an argument the
-model already refuses, and a malformed argument never becomes a finding.
+one per transport. `bytes` and `bytearray` are what the model does not refuse:
+pydantic decodes them to `str` in lax mode, byte-order mark included, so a
+caller that read its files as bytes has that document reported as unreadable
+*content* rather than as a malformed argument. Nothing below re-checks an
+argument the model already refuses, and a malformed argument never becomes a
+finding.
 Document *content* is the opposite and is what this module exists to judge:
 unparseable text, a wrong shape, a contract-model failure or a cross-file
 inconsistency is a finding rather than a raised error.
