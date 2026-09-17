@@ -1,6 +1,8 @@
 """Stream models and validators (schema v1)."""
 from __future__ import annotations
 
+import re
+from collections.abc import Callable
 from typing import Annotated, Any, Literal, get_args
 from pydantic import (
     ConfigDict,
@@ -1275,11 +1277,29 @@ _VALIDATION_RULE_CONDITIONAL_RULES: dict[str, Any] = {
 # than mid-transfer.
 
 
-def _a_length(value: Any) -> str | None:
+def _an_integer_length(value: Any) -> str | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return "is not an integer length"
+    return None
+
+
+def _a_lower_length(value: Any) -> str | None:
+    wrong = _an_integer_length(value)
+    if wrong is not None:
+        return wrong
     if value < 0:
         return "is a negative length, which every row satisfies"
+    return None
+
+
+def _an_upper_length(value: Any) -> str | None:
+    # A negative bound is unusable in both directions, but not for the same
+    # reason: no string is shorter than -1, where every string is longer.
+    wrong = _an_integer_length(value)
+    if wrong is not None:
+        return wrong
+    if value < 0:
+        return "is a negative length, which no row can satisfy"
     return None
 
 
@@ -1288,6 +1308,14 @@ def _a_regex_source(value: Any) -> str | None:
         return "is not a regular expression"
     if not value:
         return "is an empty regular expression, which every row matches"
+    try:
+        re.compile(value)
+    except re.error as detail:
+        # A source that does not compile is not a regular expression, which is
+        # what the rule asks for. Refusing it here names the author; left to
+        # run time it raises per row, mid-transfer, against a document nobody
+        # is holding any more.
+        return f"does not compile as a regular expression ({detail})"
     return None
 
 
@@ -1306,6 +1334,25 @@ def _a_value_set(value: Any) -> str | None:
     if not isinstance(value, list):
         return "is not a list of admitted values"
     return None
+
+
+# Which rule types take a payload, said ONCE. Both halves of the check read it:
+# RULE-STRM-009 asks whether a payload is present where one belongs,
+# RULE-STRM-021 whether the one present can be applied. Stated twice, the
+# second statement decided nothing when they disagreed — a type listed as
+# taking a payload but carrying no predicate had its payload accepted
+# unchecked, and nothing failed. `_UNARY_RULE_TYPES` is the complement;
+# `test_every_rule_type_is_either_unary_or_carries_a_payload_check` holds the
+# two to a partition of `ValidationRule.type`, so neither set can quietly stop
+# covering a member.
+_VALUE_PAYLOAD_CHECKS: dict[str, "Callable[[Any], str | None]"] = {
+    "min_length": _a_lower_length,
+    "max_length": _an_upper_length,
+    "pattern": _a_regex_source,
+    "range": _a_bounds_object,
+    "in_list": _a_value_set,
+}
+_UNARY_RULE_TYPES: frozenset[str] = frozenset({"required", "not_null"})
 
 
 class ValidationRule(StrictModel):
@@ -1353,8 +1400,8 @@ class ValidationRule(StrictModel):
 
     @model_validator(mode="after")
     def _validate_value_for_rule(self) -> "ValidationRule":
-        unary = {"required", "not_null"}
-        needs_value = {"min_length", "max_length", "pattern", "range", "in_list"}
+        unary = _UNARY_RULE_TYPES
+        needs_value = _VALUE_PAYLOAD_CHECKS
         if self.type in unary and self.value is not None:
             raise violation(
                 "RULE-STRM-009", "validation-rule-value-forbidden",
@@ -1375,15 +1422,9 @@ class ValidationRule(StrictModel):
         payload into a rule that decides nothing and reports nothing, so the
         shape is settled here, where the document still names the author.
         """
-        checks = {
-            "min_length": _a_length,
-            "max_length": _a_length,
-            "pattern": _a_regex_source,
-            "range": _a_bounds_object,
-            "in_list": _a_value_set,
-        }
-        check = checks.get(self.type)
+        check = _VALUE_PAYLOAD_CHECKS.get(self.type)
         if check is None:
+            # A unary type; RULE-STRM-009 already refused a payload on one.
             return self
         wrong = check(self.value)
         if wrong is not None:

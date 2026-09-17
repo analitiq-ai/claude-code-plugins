@@ -51,7 +51,10 @@ from analitiq.contracts.stream import (
     StreamDestination,
     StreamInput,
     StreamMapping,
+    ValidationRule,
     _DB_WRITE_MODES,
+    _UNARY_RULE_TYPES,
+    _VALUE_PAYLOAD_CHECKS,
 )
 
 _ASSIGNMENT_VALUE = TypeAdapter(AssignmentValue)
@@ -863,3 +866,39 @@ class TestValidationRuleField:
         assert validator.is_valid(
             _mapping(_OBJECT_TARGET, [{"type": "required", "field": ["address.city"]}])
         )
+
+
+class TestValidationRulePayload:
+    """RULE-STRM-021 — the payload a rule's `type` reads must be applicable."""
+
+    def _rule(self, type_, value):
+        return ValidationRule.model_validate(
+            {"type": type_, "field": ["amount"], "value": value})
+
+    def test_every_rule_type_is_either_unary_or_carries_a_payload_check(self):
+        # The partition is what keeps the two halves of the check honest:
+        # RULE-STRM-009 refuses a payload on a unary type and requires one on
+        # the rest, RULE-STRM-021 grades the one present. A type in neither set
+        # would be graded by neither, with nothing failing.
+        declared = set(get_args(ValidationRule.model_fields["type"].annotation))
+        assert _UNARY_RULE_TYPES | set(_VALUE_PAYLOAD_CHECKS) == declared
+        assert not _UNARY_RULE_TYPES & set(_VALUE_PAYLOAD_CHECKS)
+
+    def test_a_negative_max_length_is_refused_as_unsatisfiable(self):
+        # A negative bound is refused either way; which way is what the author
+        # is told. No row satisfies `max_length: -1` — the opposite of what a
+        # negative `min_length` does.
+        with pytest.raises(ValidationError, match="no row can satisfy"):
+            self._rule("max_length", -1)
+
+    def test_a_negative_min_length_is_refused_as_vacuous(self):
+        with pytest.raises(ValidationError, match="every row satisfies"):
+            self._rule("min_length", -1)
+
+    @pytest.mark.parametrize("source", ["[", "(?P<", "a{2,1}", "(unclosed"])
+    def test_a_pattern_that_is_not_a_regular_expression_is_refused(self, source):
+        with pytest.raises(ValidationError, match="RULE-STRM-021"):
+            self._rule("pattern", source)
+
+    def test_a_compilable_pattern_is_accepted(self):
+        assert self._rule("pattern", r"^\d{3}-\d{4}$").value == r"^\d{3}-\d{4}$"
