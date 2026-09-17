@@ -1,4 +1,4 @@
-"""The path-free document-set API — types and signatures, not yet implemented.
+"""The path-free document-set API.
 
 `analitiq.validator._core.validate_document` and `analitiq.validator.connectors
 .check_coverage` both read real files off disk: `check_coverage` walks a
@@ -43,10 +43,9 @@ dispatch where `validate_document` applies it, as a `check-crashed`
 `notApplicable` finding — so a crash inside the path-based route this module
 delegates a single document to still comes back as a finding.
 
-Every function below raises `NotImplementedError` — the behaviour they must
-satisfy is fixed by `packages/validator/tests/test_document_set.py`, whose
-fixture cases are `xfail` until an implementation replaces these bodies and
-removes the markers one case at a time.
+The package entry points below still raise `NotImplementedError`; the
+behaviour each must satisfy is fixed by
+`packages/validator/tests/test_document_set.py`.
 """
 from __future__ import annotations
 
@@ -111,10 +110,10 @@ class ValidationEnvelope(TypedDict):
 
 def _envelope(findings: list[Finding]) -> ValidationEnvelope:
     """Wrap `findings` in the one `ValidationEnvelope` shape every entry point
-    in this module answers with — reduced the same way `finding_costs_a_pass`
-    is defined, never a second predicate that can drift from it."""
-    from analitiq.validator._core import finding_costs_a_pass
-    return {"passed": not any(finding_costs_a_pass(f) for f in findings), "findings": findings}
+    in this module answers with, via `_core._passed` so `main()` and this
+    module answer "did this document pass" identically."""
+    from analitiq.validator._core import _passed
+    return {"passed": _passed(findings), "findings": findings}
 
 
 def _detected_entity(document: object) -> str | None:
@@ -126,12 +125,10 @@ def _detected_entity(document: object) -> str | None:
     a separately hand-copied precedence list, so the order detectors are tried
     is always read from the registry, never duplicated. `_KIND_REGISTRY`'s own
     entries carry no name for either half of the pair; each registration
-    idiom keeps a name on a different half — `register_kind` (connector /
-    api-endpoint / database-endpoint / type-map / kindless-connector, all in
-    `analitiq.validator.connectors`) always names its validator, while
-    `register_model_and_schema_kind` (connection / stream / pipeline) builds
-    an anonymous validator closure per call and only ever names its detector
-    — so the two tables below key off whichever half is actually a stable,
+    idiom keeps a name on a different half — a `register_kind` call site
+    passes a named validator, while `register_model_and_schema_kind` builds an
+    anonymous validator closure per call and only ever names its detector —
+    so the two tables below key off whichever half is actually a stable,
     importable name for that registration.
 
     `_validate_pipeline_bundle`'s registration is deliberately absent from
@@ -200,12 +197,18 @@ def validate_single_document(
     except json.JSONDecodeError as exc:
         return _envelope([_unreadable_document_finding(exc)])
 
-    if _detected_entity(document) != request.entity:
+    detected = _detected_entity(document)
+    if detected != request.entity:
+        if detected is None:
+            message = (
+                f"declared entity {request.entity!r}, but no registered kind "
+                "recognises this document's own content.")
+        else:
+            message = (
+                f"declared entity {request.entity!r} does not match "
+                f"{detected!r}, what this document's own content declares.")
         return _envelope([finding(
-            message_id="entity-mismatch", kind="fail", path="/",
-            message=(
-                f"declared entity {request.entity!r} does not match what this "
-                "document's own content declares."))])
+            message_id="entity-mismatch", kind="fail", path="/", message=message)])
 
     return _envelope(validate_document(document))
 
