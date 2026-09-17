@@ -239,6 +239,11 @@ def test_a_validate_spec_entity_is_optional():
     assert _problems({"validate": [{"glob": "a.json"}]}) == []
 
 
+def test_a_validate_spec_must_name_a_glob():
+    problems = _problems({"validate": [{"entity": "pipeline"}]})
+    assert any("missing required key 'glob'" in p for p in problems)
+
+
 def test_a_validate_spec_bundle_root_without_entity_is_refused():
     # bundle_root is only read on the entity route; naming it alone is a
     # silent no-op the shape check must catch instead of blessing.
