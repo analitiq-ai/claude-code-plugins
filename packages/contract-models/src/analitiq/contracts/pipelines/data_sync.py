@@ -21,7 +21,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal
 
-from pydantic import ConfigDict, Field, field_validator, model_validator
+from pydantic import ConfigDict, Field, StrictBool, field_validator, model_validator
 
 from analitiq.contracts.shared.common import NonEmptyStr, StrictModel
 from analitiq.contracts.shared.rules import violation
@@ -279,7 +279,7 @@ class PipelineRunRequest(StrictModel):
     is valid — the default applies. Unknown keys are rejected (`StrictModel`).
     """
 
-    terminate_existing_sync: bool = Field(
+    terminate_existing_sync: StrictBool = Field(
         default=False,
         description=(
             "Terminate an already-running job for this pipeline before "

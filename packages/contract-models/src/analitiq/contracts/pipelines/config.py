@@ -20,6 +20,7 @@ from zoneinfo import available_timezones
 from pydantic import (
     ConfigDict,
     Field,
+    StrictBool,
     field_validator,
     model_validator,
 )
@@ -216,7 +217,7 @@ class Logging(StrictModel):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO", description="Logging level"
     )
-    metrics_enabled: bool = Field(
+    metrics_enabled: StrictBool = Field(
         default=True, description="Whether runtime metrics emission is enabled"
     )
 

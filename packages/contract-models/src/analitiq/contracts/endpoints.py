@@ -33,6 +33,7 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
+    StrictBool,
     StringConstraints,
     Tag as UnionTag,
     field_validator,
@@ -570,7 +571,7 @@ class Param(_EndpointModel):
     type: Literal["string", "integer", "number", "boolean", "array", "object"] = Field(
         ..., description="JSON-style validation type for the request input.",
     )
-    required: bool = Field(..., description="Whether the param must resolve to a value.")
+    required: StrictBool = Field(..., description="Whether the param must resolve to a value.")
     description: str | None = Field(default=None)
     default: Any | None = Field(default=None, description="Default value (literal or value expression).")
     enum: list[Any] | None = Field(default=None)
@@ -587,7 +588,7 @@ class Param(_EndpointModel):
         description="Marks the param as owned by pagination or replication.",
     )
     style: str | None = Field(default=None, description="OpenAPI query serialization style.")
-    explode: bool | None = Field(default=None)
+    explode: StrictBool | None = Field(default=None)
 
     @model_validator(mode="after")
     def _validate(self) -> "Param":
@@ -2941,7 +2942,7 @@ class ColumnFieldSpec(_EndpointModel):
             "markers 'Object', 'List', and 'Json' declare JSON containers."
         ),
     )
-    nullable: bool | None = Field(default=None)
+    nullable: StrictBool | None = Field(default=None)
     properties: dict[str, "ColumnFieldSpec"] | None = Field(default=None)
     items: ColumnFieldSpec | None = Field(default=None)
 
@@ -2980,7 +2981,7 @@ class Column(_EndpointModel):
             "§Native and Arrow Types."
         ),
     )
-    nullable: bool | None = Field(default=None)
+    nullable: StrictBool | None = Field(default=None)
     default: Any | None = Field(default=None)
     comment: str | None = Field(default=None)
     ordinal_position: StrictPositiveInt | None = Field(default=None)
