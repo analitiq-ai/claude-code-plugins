@@ -149,7 +149,6 @@ def test_a_case_needs_exactly_one_entry_file(monkeypatch, tmp_path, entries):
         _load_from(monkeypatch, tmp_path)
 
 
-
 def test_a_bundle_case_holding_another_file_is_refused(monkeypatch, tmp_path):
     """A bundle is validated from `bundle.json` alone, so a document beside it
     would grade nothing."""

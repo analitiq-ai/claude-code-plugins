@@ -13,7 +13,7 @@ import dataclasses
 import re
 
 import pytest
-from pydantic import BaseModel, ValidationError, model_validator
+from pydantic import BaseModel, model_validator
 
 from analitiq.contracts.shared.introspect import closed_members, contract_classes
 

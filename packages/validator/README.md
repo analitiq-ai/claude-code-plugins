@@ -80,9 +80,10 @@ documents instead of one.
 
 ## Rule cases
 
-Rules enforced by a cross-document check ship example document sets with the
-package, each one a directory holding a `bundle.json` or a connector package
-rooted at `connector.json`. `rule_cases()` loads them and `case_mismatch(case)`
+Some rules enforced by a cross-document check ship example document sets with
+the package, each one a directory holding a `bundle.json` or a connector package
+rooted at `connector.json`. A rule is not required to carry any, so the corpus
+grades only the rules it holds cases for. `rule_cases()` loads them and `case_mismatch(case)`
 grades one against the installed validator, returning `None` when the
 validator agrees:
 
