@@ -1748,9 +1748,24 @@ def test_type_map_findings_scope_decides_the_write_vocabulary_alone(validator):
 def test_type_map_findings_scope_does_not_reach_the_read_direction(validator):
     # nothing about a read map differs by scope; a divergence here would mean
     # `scope` had grown a second meaning
-    doc = _type_map_doc([{"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"}])
-    assert (validator.type_map_findings(doc, "read", scope="connector")
-            == validator.type_map_findings(doc, "read", scope="connection"))
+    # The rule earns an advisory, so the equality has content: over a clean
+    # document both sides are empty and any scope-keyed filter passes.
+    doc = _type_map_doc([{"match": "regex", "native_type": "^vector\\(", "arrow_type": "Utf8"}])
+    at_connector = validator.type_map_findings(doc, "read", scope="connector")
+    assert at_connector, "the document must earn a finding or this asserts nothing"
+    assert at_connector == validator.type_map_findings(doc, "read", scope="connection")
+
+
+def test_type_map_findings_does_not_grade_rules_authored_for_the_other_direction(validator):
+    # A map's rules are keyed for the direction it declares — read matches on
+    # `native_type`, write on `arrow_type` — so under the other direction there is
+    # nothing the advisories can read. Grading them anyway mints defects the
+    # document does not have: these four are a legitimate many-to-one write
+    # mapping, and read grading sees one native matched four times.
+    doc = _type_map_doc([{"match": "exact", "arrow_type": a, "native_type": "BIGINT"}
+                         for a in ("Int8", "Int16", "Int32", "Int64")], "write")
+    findings = validator.type_map_findings(doc, "read")
+    assert {f["path"] for f in findings} == {"/$schema", "/direction"}, findings
 
 
 def test_type_map_findings_reports_a_disagreeing_direction_alongside_the_rest(validator):

@@ -580,10 +580,15 @@ def test_type_map_entity_forwards_the_published_findings_verbatim(tmp_path):
     # the published grader says at this direction and scope IS the output. A
     # reintroduced filter, re-shape or scope drift fails here.
     from analitiq.validator import type_map_findings
-    doc = _tm(TYPE_MAP_WRITE, "write")
+    # The map earns a finding at connection scope, so the equality has content:
+    # over a clean document both sides are empty and a reintroduced filter passes.
+    doc = _tm(TYPE_MAP_WRITE + [{"match": "exact", "arrow_type": "Json",
+                                 "native_type": "JSON"}], "write")
+    published = type_map_findings(doc, "write", scope="connection")
+    assert published, "the document must earn a finding or this asserts nothing"
     diag = V.diagnostics_for(
         "type-map", _write(tmp_path, "type-map-write.json", doc), direction="write")
-    assert diag["findings"] == type_map_findings(doc, "write", scope="connection")
+    assert diag["findings"] == published
 
 
 def test_type_map_entity_rejects_dict_without_rules_key(tmp_path):

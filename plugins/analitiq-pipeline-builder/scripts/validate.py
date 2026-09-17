@@ -34,9 +34,9 @@ entry point. This adapter routes each entity as follows:
     ``connections/<slug>/definition/type-map-{read,write}.json`` each name a
     direction, so a file named for the other one is an invocation and a file
     disagreeing, and gets the rename finding alone rather than content findings
-    that bury it. ``scope`` is how the gap-only nature of a connection
-    map reaches the published check, which otherwise expects a connector's full
-    write vocabulary (``RULE-TMAP-018``).
+    that bury it. ``scope`` is how the gap-only nature of a connection map
+    (``RULE-TMAP-018``) reaches the published check, which otherwise holds a
+    write map to a connector's full vocabulary (``RULE-TMAP-017``).
   * ``pipeline`` with ``--bundle-root`` -> additionally
     ``analitiq.validator.validate_pipeline_bundle`` over the on-disk bundle, for the
     cross-document referential integrity no single document can verify. A draft

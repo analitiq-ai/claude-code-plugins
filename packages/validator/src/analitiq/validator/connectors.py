@@ -1015,7 +1015,7 @@ def type_map_findings(
 
     `scope` decides the write vocabulary alone: a connector write map must
     render all of it, a connection map is gap-only (`RULE-TMAP-018`) and would
-    earn that finding forever."""
+    earn the write-vocabulary finding (`RULE-TMAP-017`) forever."""
     # An unsupported value would silently select the direction or scope nobody
     # asked for. It is the caller's own argument rather than anything the document
     # did, so it raises past the guard instead of arriving as a finding.
@@ -1030,6 +1030,14 @@ def type_map_findings(
 def _type_map_document_findings(doc: Any, direction: str, scope: str) -> list[dict]:
     adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
     findings = _model_findings(doc, adapter)
+    # A document declaring the other direction has its rules keyed for that one —
+    # read matches on `native_type`, write on `arrow_type` — so this direction's
+    # advisories have nothing to read and report defects the document does not
+    # have, burying the disagreement the model states above them. A direction
+    # that is missing or unusable disagrees with nothing, and is graded as named.
+    declared = doc.get("direction") if isinstance(doc, dict) else None
+    if declared in ("read", "write") and declared != direction:
+        return findings
     rules = _type_map_rules(doc)
     findings.extend(_type_map_rule_warnings(rules, direction))
     if direction == "write" and scope == "connector" and isinstance(rules, list):
