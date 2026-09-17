@@ -130,7 +130,7 @@ def test_an_advisory_reaches_the_operator_even_when_something_fatal_stops_the_pr
     # wrote could never have matched.
     p = tmp_path / "type-map-read.json"
     p.write_text(json.dumps({
-        "$schema": "https://schemas.analitiq.ai/type-map-write/latest.json",
+        "$schema": TYPE_MAP_WRITE_SCHEMA_URL,   # the write schema under a read declaration
         "direction": "read",
         "rules": CONNECTOR_READ + [CONNECTOR_READ[0]]}))
     with pytest.raises(ValueError, match=r"is not a valid read type map"):
