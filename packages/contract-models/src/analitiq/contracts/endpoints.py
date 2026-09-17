@@ -4873,9 +4873,12 @@ def _check_cursor_field_holds_the_mapping(
     here even though it states exactly what `{"type": ["string", "null"]}`
     states, and `{"$ref": "#/$defs/Timestamp"}` is refused however plainly the
     pointer's target is typed: reading either one through would resolve a type
-    the engine cannot see, and bless a document that validates clean, ships,
-    and then dies on the first cursor read. The refusal names the spelling that
-    does work, because a generated schema usually emits one of the others.
+    the engine cannot see, and bless a document the engine cannot read. A field
+    it sees no type on earns no Arrow type either, so the read fails as the
+    endpoint is prepared, under every replication method — and where the author
+    also writes the `native_type`/`arrow_type` pair, the document survives that
+    far and fails at the cursor reader instead. The refusal names the spelling
+    that does work, because a generated schema usually emits one of the others.
 
     The `format` half is the quieter failure. A node that writes `type:
     integer` itself and carries its `format` behind a `$ref` names a type both

@@ -364,9 +364,10 @@ class TestCursorFieldsInRecordShape:
         # emits. It states exactly what the accepted `{"type": ["string",
         # "null"]}` states — and is still refused, because the engine's cursor
         # reader takes `field["type"]` and never descends a union. Accepting it
-        # would bless a document that validates clean, ships, and dies on the
-        # first cursor read. The refusal has to name the spelling that works,
-        # or the author has no way from one to the other.
+        # would bless a document the engine cannot read: untyped to it, the
+        # field earns no Arrow type, and the read fails as the endpoint is
+        # prepared, on every replication method. The refusal has to name the
+        # spelling that works, or the author has no way from one to the other.
         with pytest.raises(ValidationError, match="is not read back"):
             parse_endpoint(self._payload_with_cursor_field(
                 "updated_at",
@@ -407,8 +408,8 @@ class TestCursorFieldsInRecordShape:
         # something typed, but the engine's cursor reader never resolves one:
         # `records_items_schema` walks `properties` and hands
         # `record_field_declaration` the node as authored, whose `type` key is
-        # absent. Accepting this ships a document that dies on the first
-        # cursor read.
+        # absent. Accepting this ships a document the engine refuses as it
+        # prepares the read.
         payload = self._payload_with_cursor_field(
             "updated_at", {"updated_at": {"$ref": "#/$defs/T"}}
         )
@@ -475,6 +476,28 @@ class TestCursorFieldsInRecordShape:
         # would flip the verdict, making one cursor field's fate depend on
         # another field's existence.
         parse_endpoint(self._payload_with_cursor_field("a.b", {"a.b": {"type": "integer"}}))
+
+    def test_an_empty_cursor_node_typed_only_by_an_allof_branch_is_rejected(self):
+        # The refinement idiom's mirror image: there the own node carried the
+        # type and the branch refined it, here the branch carries the type and
+        # the own node is bare. The engine reads the bare node, so the field
+        # names no type it can see and earns no Arrow type at all.
+        payload = self._payload_with_cursor_field("updated_at", {"updated_at": {}})
+        payload["operations"]["read"]["response"]["schema"]["items"]["allOf"] = [
+            {"properties": {"updated_at": {"type": "string"}}}
+        ]
+        with pytest.raises(ValidationError, match="declares no `type`"):
+            parse_endpoint(payload)
+
+    def test_an_empty_cursor_node_typed_only_by_a_ref_base_is_rejected(self):
+        # The same shape reached through a `$ref`. Resolving the base would
+        # find the type; the engine resolves nothing, so neither does this.
+        payload = self._payload_with_cursor_field("updated_at", {"updated_at": {}})
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {"Base": {"type": "object", "properties": {"updated_at": {"type": "string"}}}}
+        schema["items"]["allOf"] = [{"$ref": "#/$defs/Base"}]
+        with pytest.raises(ValidationError, match="declares no `type`"):
+            parse_endpoint(payload)
 
     def test_cursor_field_declared_by_an_allof_branch_beside_properties_is_accepted(self):
         # The refinement idiom: the record shape declares the field itself and

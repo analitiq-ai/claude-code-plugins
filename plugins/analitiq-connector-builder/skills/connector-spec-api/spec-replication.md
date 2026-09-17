@@ -122,7 +122,8 @@ it can compare. Write a nullable cursor as `{"type": ["string", "null"]}`:
 the declaration is read off that node and no deeper, so a type reached only
 through an `anyOf`/`oneOf` branch, a `$ref` or an `allOf` is refused — the
 reader that reads a stored cursor back descends none of them, and a document
-it cannot read is one that ships and then fails on the first incremental run.
+it cannot read is one that fails as the endpoint is prepared, on every
+replication method — not only the incremental one.
 Where the field sits is read the same way: it must be a plain key on the
 record shape's `properties`, looked up whole. A dotted `cursor_field` names
 no key there, so point the cursor at a top-level record field rather than a

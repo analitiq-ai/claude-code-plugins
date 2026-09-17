@@ -27,8 +27,11 @@ rationale: >
   `native_type`/`arrow_type` pair, is refused here for the same reason: it
   satisfies the typedness rule other paths ask about and still names no JSON
   type the cursor reader can see. Reading any of them through would be the
-  worse error of the two available: it would bless the spellings that
-  validate clean, ship, and then die on the first cursor read.
+  worse error of the two available: it would bless spellings the engine
+  cannot read at all. A field it sees no type on earns no Arrow type either,
+  so the read fails as the endpoint is prepared, under every replication
+  method; where the author also writes a `native_type`/`arrow_type` pair the
+  document survives that far and fails at the cursor reader instead.
   Where the field is looked up is part of the same reading. The engine takes
   one flat lookup keyed by the whole cursor field name, so a dotted path is
   not walked: it matches no key, and the read fails when the endpoint is
