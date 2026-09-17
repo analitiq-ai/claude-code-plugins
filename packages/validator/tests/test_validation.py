@@ -2037,7 +2037,7 @@ def test_type_map_sibling_paths_orders_what_the_directory_hands_back(validator):
     class _Scrambled:
         def glob(self, pattern):
             assert pattern == "type-map-*.json"
-            return iter([Path(f"/d/type-map-{c}.json") for c in "cabd"])
+            return iter(Path(f"/d/type-map-{c}.json") for c in "cabd")
 
     assert [p.name for p in validator.type_map_sibling_paths(_Scrambled())] == [
         f"type-map-{c}.json" for c in "abcd"]
