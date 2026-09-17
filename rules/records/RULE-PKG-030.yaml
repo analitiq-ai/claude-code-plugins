@@ -17,6 +17,10 @@ rationale: >
   capability, and the rules in it are graded by nobody and trusted by the next
   author. The pre-split single-map filename is rejected outright rather than
   read as a read map, because a connector that still carries it has a write
-  direction nobody has looked at.
+  direction nobody has looked at. That name is a fact about the package rather
+  than about the document under it — what it says is that a direction was never
+  split out, and the missing sibling is the evidence — so it is graded here,
+  where the package is in hand, and a map handed to the validator on its own is
+  graded on the direction it declares.
 status: active
 superseded_by: null

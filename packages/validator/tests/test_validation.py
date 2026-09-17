@@ -1185,6 +1185,17 @@ def test_coverage_flags_legacy_type_map(tmp_path, validator):
     assert any("pre-split name" in e["message"] for e in errors)
 
 
+def test_standalone_type_map_at_the_pre_split_name_is_graded_as_it_declares(tmp_path, validator):
+    # The pre-split name is a fact about a package: what it says is that a
+    # direction was never split out, and the direction nobody looked at is the
+    # sibling that is missing. `check_coverage` holds the package and reports it.
+    # A document handed to the validator on its own has no siblings to be missing
+    # and nothing the name can be wrong relative to, so it is graded on what it
+    # declares. The routes answer differently on purpose, and this pins it.
+    doc = _type_map_doc([{"match": "exact", "native_type": "X", "arrow_type": "Utf8"}], "read")
+    assert not _errors(validator.validate_document(doc, doc_path=tmp_path / "type-map.json"))
+
+
 @pytest.mark.parametrize("kind", ["database", "nosql", "document"])
 def test_coverage_database_family_requires_write_map(tmp_path, kind, validator):
     # nosql/document are database-family kinds — same read+write map requirement.
