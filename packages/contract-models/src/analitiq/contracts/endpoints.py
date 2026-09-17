@@ -36,6 +36,7 @@ from pydantic import (
     StrictBool,
     StringConstraints,
     Tag as UnionTag,
+    ValidationError,
     field_validator,
     model_validator,
 )
@@ -100,6 +101,8 @@ from analitiq.contracts.value_expression import (
     header_name_key,
     _EXPRESSION_KEYS as _RESOLVER_EXPRESSION_KEYS,
     has_known_scope,
+    has_unterminated_placeholder,
+    iter_expression_nodes,
     iter_expression_strings,
     template_placeholders,
     validate_expression_shapes,
@@ -3192,6 +3195,81 @@ def _validate_expression_shapes(value: Any, where: str) -> None:
     )
 
 
+def _reject_malformed_expression_payloads(value: Any, where: str) -> None:
+    """Grade every expression payload by the model its own form declares.
+
+    `Expression`'s members already say what each form carries — `ref` and
+    `template` a string, `function` a name plus the arguments
+    `FunctionExpression` models. Request slots are typed `Any`, so the union
+    never reads the document as authored and the resolver was handed payloads
+    no form describes: `{"ref": 5}` is not a path, `{"template": {...}}` is not
+    text to interpolate, `{"function": ""}` names nothing to call. Each reaches
+    the engine as a request built from a value that never resolved, which is
+    the RULE-ENDP-022 harm — an author's edit that never took effect — arriving
+    one key to the right of where the sibling walk looks.
+
+    An unterminated `${` is the same defect in the text: `resolve_template_deep`
+    interpolates only closed placeholders, so `"Bearer ${secrets.token"` goes on
+    the wire verbatim, brace and all, and the provider answers 401 about a
+    credential the document does say where to find.
+
+    The connector document refuses all three already (RULE-CTOR-057,
+    RULE-CTOR-068, RULE-CTOR-069) through the same shared walk; this is the
+    endpoint's side of the same grammar.
+    """
+    for kind, node in iter_expression_nodes(value):
+        if kind == "ref":
+            if not isinstance(node, str):
+                raise violation(
+                    "RULE-ENDP-022", "ref-not-a-string",
+                    f"{where}: `ref` is {type(node).__name__} {node!r}; a ref is "
+                    "the dotted path a scope is read at, so only a string names "
+                    "one (spec: §Value Expressions)"
+                )
+        elif kind == "template":
+            if not isinstance(node, str):
+                raise violation(
+                    "RULE-ENDP-022", "template-not-a-string",
+                    f"{where}: `template` is {type(node).__name__} {node!r}; a "
+                    "template is the text the engine interpolates into "
+                    "(spec: §Value Expressions)"
+                )
+            if has_unterminated_placeholder(node):
+                raise violation(
+                    "RULE-ENDP-022", "unterminated-placeholder",
+                    f"{where}: template {node!r} opens a `${{` it never closes, so "
+                    "the engine interpolates nothing and sends the text as "
+                    "written (spec: §Value Expressions)"
+                )
+        else:
+            _reject_misargued_function(node, where)
+
+
+def _reject_misargued_function(node: "dict[str, Any]", where: str) -> None:
+    """Grade a `function` node exactly as `FunctionExpression` grades it.
+
+    Extension siblings are dropped first: the shape walk already admits them
+    here (spec §Extension Policy) and the model does not declare them. Whether
+    the ENGINE registers the name is RULE-SHRD-007, which nothing here can read.
+    """
+    authored = {k: v for k, v in node.items() if not _is_extension_key(k)}
+    try:
+        FunctionExpression.model_validate(authored)
+    except ValidationError as detail:
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in error['loc']) or 'node'}: {error['msg']}"
+            for error in detail.errors()
+        )
+        raise violation(
+            "RULE-ENDP-022", "function-arguments-not-declared",
+            f"{where}: {problems} (spec: §Value Expressions)"
+        ) from None
+
+
+def _is_extension_key(key: Any) -> bool:
+    return isinstance(key, str) and key.startswith("x-")
+
+
 def _is_singleton(value: Any, key: str) -> bool:
     """True when ``value`` is a ``{key: <anything>}`` dict, with optional ``x-*`` siblings.
 
@@ -4202,6 +4280,7 @@ def _sweep_expression_sites(
     for site in sites:
         where, payload = site.where, site.payload
         _validate_expression_shapes(payload, where)
+        _reject_malformed_expression_payloads(payload, where)
         for token in _expression_tokens(payload):
             _reject_unknown_scope(where, token, site.operation)
             _reject_unknown_response_scope(site, token)
