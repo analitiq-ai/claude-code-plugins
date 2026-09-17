@@ -72,7 +72,7 @@ def test_staged_artifact_matches_source(tmp_path):
         "analitiq/ must stay a PEP 420 namespace (no __init__.py) so it can be "
         "shared with analitiq-contract-models"
     )
-    for src_path in build._tracked_files():
+    for src_path in build.tracked_files(build.SRC_DIR):
         relative = src_path.relative_to(build.SRC_DIR)
         assert (pkg / relative).read_bytes() == src_path.read_bytes(), (
             f"{relative} was transformed during staging — the published "
@@ -90,7 +90,7 @@ def test_every_data_file_under_src_is_tracked():
     installed corpus would notice.
     """
     build = _build_module()
-    tracked = set(build._tracked_files())
+    tracked = set(build.tracked_files(build.SRC_DIR))
     on_disk = {
         path
         for path in build.SRC_DIR.rglob("*")

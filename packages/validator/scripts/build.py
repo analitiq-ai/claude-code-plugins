@@ -27,16 +27,20 @@ from __future__ import annotations
 import argparse
 import ast
 import shutil
-import subprocess
 import sys
 import tomllib
 from pathlib import Path
 
 VALIDATOR_DIR = Path(__file__).resolve().parent.parent
+PACKAGES_DIR = VALIDATOR_DIR.parent
 SRC_DIR = VALIDATOR_DIR / "src" / "analitiq" / "validator"
 PYPROJECT = VALIDATOR_DIR / "pyproject.toml"
 README = VALIDATOR_DIR / "README.md"
 LICENSE = VALIDATOR_DIR / "LICENSE"
+
+# `packages/`, where the staging helpers both build scripts share live.
+sys.path.insert(0, str(PACKAGES_DIR))
+from build_shared import stage_tree, tracked_files  # noqa: E402
 
 # Third-party the validator SOURCE may carry. It validates via the contract
 # models, imported from the public `analitiq.contracts` namespace (its
@@ -64,54 +68,10 @@ def _top_level_imports(source: str) -> set[str]:
     return names
 
 
-def _git() -> str:
-    """The `git` executable, resolved to a full path.
-
-    Resolving first is what turns a missing `git` into the failure below rather
-    than a `FileNotFoundError` from inside `subprocess`. It does not harden the
-    lookup — `which` searches the same inherited `PATH` — so the value is the
-    message and the stop: absent `git` is never a fallback to an unfiltered
-    tree, because the point of asking git is that tracking, not presence on
-    disk, decides what ships.
-    """
-    exe = shutil.which("git")
-    if exe is None:
-        raise SystemExit(
-            "build: no `git` on PATH — the staged module list is taken from "
-            "the index, so there is no safe way to continue without it."
-        )
-    return exe
-
-
-def _tracked_files(src_dir: Path = SRC_DIR) -> list[Path]:
-    """Every tracked file of the validator source package — what `stage()`
-    publishes.
-
-    Tracked rather than merely present: an untracked scratch file left in the
-    directory would otherwise ship in the wheel, and a module would be graded
-    as though it were source. `git add` is the decision to publish, and it is
-    the one a reviewer sees.
-    """
-    listing = subprocess.run(
-        [_git(), "-C", str(src_dir), "ls-files", "-z", "--", "."],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    names = [name for name in listing.split("\0") if name]
-    if not names:
-        raise SystemExit(
-            f"build: git reports no tracked files under {src_dir} — the "
-            "package is never empty, so this is a path that stopped matching "
-            "or a tree that is not a checkout"
-        )
-    return sorted(src_dir / name for name in names)
-
-
 def _source_files(src_dir: Path = SRC_DIR) -> list[Path]:
     """Every tracked `*.py` module of the source package — what the import
     guards parse."""
-    return [path for path in _tracked_files(src_dir) if path.suffix == ".py"]
+    return [path for path in tracked_files(src_dir) if path.suffix == ".py"]
 
 
 def check_public_safe(src_dir: Path = SRC_DIR) -> list[str]:
@@ -162,10 +122,7 @@ def stage(dist_dir: Path) -> None:
         shutil.rmtree(dist_dir)
     pkg_dir.mkdir(parents=True)
 
-    for src_path in _tracked_files():
-        dest = pkg_dir / src_path.relative_to(SRC_DIR)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src_path, dest)
+    stage_tree(SRC_DIR, pkg_dir)
 
     shutil.copy2(PYPROJECT, dist_dir / "pyproject.toml")
     shutil.copy2(README, dist_dir / "README.md")

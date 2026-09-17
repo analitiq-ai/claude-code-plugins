@@ -111,40 +111,19 @@ jobs:
           python -m build --wheel --outdir "${{ runner.temp }}/cm-dist" "${{ runner.temp }}/cm-src"
 
       - name: Smoke-test the built wheel (install + grade every shipped rule case)
-        # build.py stages every tracked file whatever package-data says, so
-        # only an install of the actual wheel shows what the declaration kept
-        # — and a broken rc published to PyPI is an immutable, burned version.
-        # The data-file check is DERIVED from the staged tree rather than
-        # listing filenames, so a case committed later is covered without
-        # anyone remembering this step.
+        # `wheel_smoke.py` proves the wheel kept every staged data file and
+        # carries no build-host bytecode. The corpus is read only when a
+        # consumer asks for it, so present is not readable: the grading below
+        # is what proves the shipped cases load and still hold.
         run: |
           python -m venv "${{ runner.temp }}/v-smoke"
           "${{ runner.temp }}/v-smoke/bin/pip" install --quiet "${{ runner.temp }}"/v-dist/*.whl "${{ runner.temp }}"/cm-dist/*.whl
-          STAGED="${{ runner.temp }}/v-src" DIST="${{ runner.temp }}/v-dist" "${{ runner.temp }}/v-smoke/bin/python" -c "
-          import os, pathlib, tarfile, zipfile
-          import analitiq.validator as v
+          "${{ runner.temp }}/v-smoke/bin/python" packages/wheel_smoke.py \
+            --module analitiq.validator \
+            --staged "${{ runner.temp }}/v-src/src/analitiq/validator" \
+            --dist "${{ runner.temp }}/v-dist"
+          "${{ runner.temp }}/v-smoke/bin/python" -c "
           from analitiq.validator.rule_cases import case_mismatch, rule_cases
-
-          staged = pathlib.Path(os.environ['STAGED']) / 'src' / 'analitiq' / 'validator'
-          installed = pathlib.Path(v.__file__).parent
-          expected = sorted(
-              p.relative_to(staged)
-              for p in staged.rglob('*')
-              if p.is_file() and p.suffix not in ('.py', '.pyc')
-              and '__pycache__' not in p.parts
-          )
-          assert expected, 'staged tree carries no data files — the walk broke'
-          missing = [str(r) for r in expected if not (installed / r).is_file()]
-          assert not missing, f'wheel dropped staged data files: {missing}'
-          print('data files shipped:', len(expected))
-
-          # The installed tree carries the bytecode pip compiles, so bytecode
-          # the build host left in the staged tree shows only in the archives.
-          dist = pathlib.Path(os.environ['DIST'])
-          archived = [n for w in dist.glob('*.whl') for n in zipfile.ZipFile(w).namelist()]
-          archived += [n for s in dist.glob('*.tar.gz') for n in tarfile.open(s).getnames()]
-          bytecode = [n for n in archived if n.endswith('.pyc') or '__pycache__' in n]
-          assert not bytecode, f'build-host bytecode shipped: {bytecode}'
 
           cases = rule_cases()
           assert cases, 'rule case corpus shipped empty'

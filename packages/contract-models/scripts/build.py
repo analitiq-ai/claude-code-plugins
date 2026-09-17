@@ -38,6 +38,11 @@ from pathlib import Path
 
 PKG_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = PKG_DIR.parent
+
+# `packages/`, where the staging helpers both build scripts share live.
+sys.path.insert(0, str(REPO_ROOT))
+from build_shared import stage_tree, tracked_files  # noqa: E402
+
 SRC = PKG_DIR / "src"
 PKG_SRC = SRC / "analitiq" / "contracts"
 PYPROJECT = PKG_DIR / "pyproject.toml"
@@ -74,53 +79,6 @@ _INIT_BODY = (
 
 def read_version() -> str:
     return tomllib.loads(PYPROJECT.read_text())["project"]["version"]
-
-
-def _git() -> str:
-    """The `git` executable, resolved to a full path.
-
-    Resolving first is what turns a missing `git` into the failure below rather
-    than a `FileNotFoundError` from inside `subprocess`. It does not harden the
-    lookup — `which` searches the same inherited `PATH` — so the value is the
-    message and the stop: absent `git` is never a fallback to an unfiltered
-    tree, because the point of asking git is that tracking, not presence on
-    disk, decides what ships.
-    """
-    exe = shutil.which("git")
-    if exe is None:
-        raise SystemExit(
-            "build: no `git` on PATH — the staged file list is taken from the "
-            "index, so there is no safe way to continue without it."
-        )
-    return exe
-
-
-def tracked_files(root: Path) -> list[Path]:
-    """Every git-tracked file under `root` — exactly what `stage()` copies.
-
-    Tracking, not presence on disk, decides what ships. A tree filtered only by
-    `__pycache__` publishes whatever happens to be sitting in it when the build
-    runs — a merge `.orig`, a scratch dump, a parked `.env` — and a published
-    version is immutable, so a file that reaches PyPI can be yanked but never
-    removed. It is also where the decision belongs: `git add` puts the file in
-    a diff a reviewer reads, which a line in `pyproject.toml` does not.
-
-    This is what lets the wheel ship the whole tree without enumerating it.
-    """
-    listing = subprocess.run(
-        [_git(), "-C", str(root), "ls-files", "-z", "--", "."],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    names = [name for name in listing.split("\0") if name]
-    if not names:
-        raise SystemExit(
-            f"build: git reports no tracked files under {root} — the package is "
-            "never empty, so this is a path that stopped matching or a tree "
-            "that is not a checkout, not a package with nothing in it"
-        )
-    return sorted(root / name for name in names)
 
 
 def _source_files() -> list[Path]:
@@ -194,17 +152,13 @@ def stage(dist_dir: Path) -> None:
     so the tree is mirrored as-is.
 
     What is copied here is what the wheel ships: `package-data` keeps every file
-    the staged tree carries, so this selection — `tracked_files` — is the whole
-    decision, and no data file needs declaring one by one."""
+    the staged tree carries, so `stage_tree`'s selection is the whole decision,
+    and no data file needs declaring one by one."""
     if dist_dir.exists():
         shutil.rmtree(dist_dir)
     dist_dir.mkdir(parents=True)
 
-    namespace_root = SRC / "analitiq"
-    for src_path in tracked_files(namespace_root):
-        dest = dist_dir / "analitiq" / src_path.relative_to(namespace_root)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src_path, dest)
+    stage_tree(SRC / "analitiq", dist_dir / "analitiq")
     (dist_dir / "analitiq" / "contracts" / "__init__.py").write_text(
         _INIT_BANNER + _INIT_BODY
     )
