@@ -638,10 +638,10 @@ def test_every_fixtured_rule_has_fixtures():
             )
 
 
-def _write_fixture(root, rule_id: str, group: str, name: str) -> None:
+def _write_fixture(root, rule_id: str, group: str, name: str, body: str = "{}") -> None:
     target = root / rule_id / group
     target.mkdir(parents=True, exist_ok=True)
-    (target / name).write_text("{}", encoding="utf-8")
+    (target / name).write_text(body, encoding="utf-8")
 
 
 def test_no_orphan_fixture_directories(monkeypatch, tmp_path):
@@ -683,6 +683,31 @@ def test_a_fixture_that_is_not_json_is_refused(monkeypatch, tmp_path):
     monkeypatch.setattr(corpus, "FIXTURES_DIR", tmp_path)
     with pytest.raises(ValueError, match=r"a\.yaml"):
         corpus.rule_fixtures()
+
+
+@pytest.mark.parametrize("token", ["Infinity", "-Infinity", "NaN"])
+def test_a_fixture_using_a_python_only_json_constant_is_refused(
+    monkeypatch, tmp_path, token
+):
+    """The corpus ships in the wheel for consumers that are not Python.
+
+    `json.loads` takes these three tokens by extension, so a fixture carrying
+    one loads here and fails — or, worse, silently reshapes — under any
+    RFC 8259 parser, turning an `invalid` case into a document the model
+    accepts. Refusing them at load is what keeps the corpus portable.
+    """
+    _write_fixture(
+        tmp_path, FIXTURED_RULES[0].id, "invalid", "a.json",
+        body='{"maximum": %s}' % token,
+    )
+    monkeypatch.setattr(corpus, "FIXTURES_DIR", tmp_path)
+    with pytest.raises(ValueError, match=token):
+        corpus.rule_fixtures()
+
+
+def test_the_shipped_corpus_is_rfc_8259_json():
+    """Every shipped fixture loads through the strict parser."""
+    assert corpus.rule_fixtures()
 
 
 @pytest.mark.parametrize(

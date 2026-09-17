@@ -614,6 +614,21 @@ class TestParamValidate:
     def test_query_string_does_not_require_style(self):
         Param(**{"in": "query", "type": "string", "required": False})
 
+    @pytest.mark.parametrize(
+        "bound, value",
+        [("minimum", float("nan")), ("maximum", float("inf")),
+         ("minimum", float("-inf"))],
+    )
+    def test_a_non_finite_bound_is_refused(self, bound, value):
+        # RULE-ENDP-076's finite half lives here rather than in the shared
+        # fixture corpus: `Infinity` and `NaN` are not RFC 8259 JSON, so the
+        # case has no spelling as a corpus document.
+        with pytest.raises(ValidationError, match="RULE-ENDP-076"):
+            Param(**{
+                "in": "query", "type": "number", "required": False,
+                bound: value,
+            })
+
     def test_default_must_not_use_from_input(self):
         with pytest.raises(ValidationError, match="from_input is invalid"):
             Param(**{
