@@ -21,8 +21,8 @@ rationale: >
   never from what they are named. Read of the engine as it stands: it collects a
   connector's and a connection's type maps by pattern, keys each one by the
   `direction` in its body, and never inspects the filename — so a package whose
-  documents declare one direction twice has no unambiguous document for either
-  of the two, and loading stops before a column is read. Counting filenames
+  documents declare one direction twice has no unambiguous document for any
+  direction, and loading stops before a column is read. Counting filenames
   instead would pass that package and fail one the engine loads correctly. The
   count is right whichever way that reading goes stale: one document per
   required direction is what a consumer needs however it finds them, and a
