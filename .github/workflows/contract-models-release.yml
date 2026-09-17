@@ -113,8 +113,8 @@ jobs:
         run: |
           python -m venv "${{ runner.temp }}/cm-smoke"
           "${{ runner.temp }}/cm-smoke/bin/pip" install --quiet "${{ runner.temp }}"/cm-dist/*.whl
-          STAGED="${{ runner.temp }}/cm-src" "${{ runner.temp }}/cm-smoke/bin/python" -c "
-          import os, pathlib
+          STAGED="${{ runner.temp }}/cm-src" DIST="${{ runner.temp }}/cm-dist" "${{ runner.temp }}/cm-smoke/bin/python" -c "
+          import os, pathlib, tarfile, zipfile
           import analitiq.contracts as c
           import analitiq.contracts.endpoints as ep
           import analitiq.contracts.arrow_grammar as ag
@@ -133,6 +133,14 @@ jobs:
           missing = [str(r) for r in expected if not (installed / r).is_file()]
           assert not missing, f'wheel dropped staged data files: {missing}'
           print('data files shipped:', len(expected), '->', [str(r) for r in expected])
+
+          # The installed tree carries the bytecode pip compiles, so bytecode
+          # the build host left in the staged tree shows only in the archives.
+          dist = pathlib.Path(os.environ['DIST'])
+          archived = [n for w in dist.glob('*.whl') for n in zipfile.ZipFile(w).namelist()]
+          archived += [n for s in dist.glob('*.tar.gz') for n in tarfile.open(s).getnames()]
+          bytecode = [n for n in archived if n.endswith('.pyc') or '__pycache__' in n]
+          assert not bytecode, f'build-host bytecode shipped: {bytecode}'
 
           assert ag.FAMILY_NAMES and ep.ARROW_TYPE_RE.fullmatch('Utf8')
           assert all_rules(), 'rules.json shipped empty'

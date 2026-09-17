@@ -236,8 +236,10 @@ def import_guard(dist_dir: Path) -> None:
         "print('import-guard ok')"
     )
     env = {k: v for k, v in os.environ.items() if k != "DOMAIN"}
+    # `-B`: `package-data` ships every file in the staged tree, so bytecode the
+    # probe compiled there would reach the wheel and the sdist.
     result = subprocess.run(
-        [sys.executable, "-c", probe], capture_output=True, text=True, env=env,
+        [sys.executable, "-B", "-c", probe], capture_output=True, text=True, env=env,
         check=False,  # the guard inspects returncode itself to raise a clearer error
     )
     if result.returncode != 0:
