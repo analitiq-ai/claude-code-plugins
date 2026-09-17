@@ -1,7 +1,6 @@
 """Stream models and validators (schema v1)."""
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from typing import Annotated, Any, Literal, get_args
 from pydantic import (
@@ -1304,18 +1303,20 @@ def _an_upper_length(value: Any) -> str | None:
 
 
 def _a_regex_source(value: Any) -> str | None:
+    # Shape only: a non-empty string. Deliberately NOT "and it compiles" —
+    # whether a source compiles is a question about a dialect, and the dialect
+    # this pattern runs under is RE2 (the engine applies a `pattern` rule
+    # through pyarrow's `match_substring_regex`), which this package cannot
+    # reach. Grading it with stdlib `re` instead would answer a different
+    # question in both directions: `\p{L}+` is an ordinary RE2 pattern that
+    # `re` refuses, and `(a)\1` is a backreference `re` accepts and RE2
+    # cannot compile. The CDK owns the RE2 verdict, where `google-re2` is a
+    # dependency and `cdk.type_map.rules` states why it is not a contract
+    # invariant.
     if not isinstance(value, str):
         return "is not a regular expression"
     if not value:
         return "is an empty regular expression, which every row matches"
-    try:
-        re.compile(value)
-    except re.error as detail:
-        # A source that does not compile is not a regular expression, which is
-        # what the rule asks for. Refusing it here names the author; left to
-        # run time it raises per row, mid-transfer, against a document nobody
-        # is holding any more.
-        return f"does not compile as a regular expression ({detail})"
     return None
 
 
@@ -1358,7 +1359,7 @@ def _a_value_set(value: Any) -> str | None:
 # `test_every_rule_type_is_either_unary_or_carries_a_payload_check` holds the
 # two to a partition of `ValidationRule.type`, so neither set can quietly stop
 # covering a member.
-_VALUE_PAYLOAD_CHECKS: dict[str, "Callable[[Any], str | None]"] = {
+_VALUE_PAYLOAD_CHECKS: dict[str, Callable[[Any], str | None]] = {
     "min_length": _a_lower_length,
     "max_length": _an_upper_length,
     "pattern": _a_regex_source,

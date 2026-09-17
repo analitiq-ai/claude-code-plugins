@@ -80,7 +80,6 @@ from analitiq.contracts.shared.json_schema import (
     DeclaredPathError,
     SchemaResolutionError,
     _declares_a_type,
-    declared_type_leaves,
     materialize_node,
     pointer_position,
     resolve_declared_path,
@@ -4762,44 +4761,42 @@ def _validate_cursor_fields_in_record_shape(
         field = _check_cursor_field_in_node(
             _cursor_field_of(cm), items, where="items", root=root
         )
-        _check_cursor_field_holds_the_mapping(cm, field, root)
-
-
-def _json_types_of(node: Any) -> list[str]:
-    """The JSON types a single declaration names, `null` included."""
-    declared = node.get("type") if isinstance(node, dict) else None
-    if isinstance(declared, str):
-        return [declared]
-    if isinstance(declared, list):
-        return [t for t in declared if isinstance(t, str)]
-    return []
+        _check_cursor_field_holds_the_mapping(cm, field)
 
 
 def _check_cursor_field_holds_the_mapping(
-    cm: SingleCursorMapping | WindowCursorMapping, field: Any, root: Any
+    cm: SingleCursorMapping | WindowCursorMapping, field: Any
 ) -> None:
     """The cursor field's own declaration must say how a stored cursor reads
     back, and the mapping must be one that reading can render.
 
-    Read through `anyOf`/`oneOf` (`declared_type_leaves`), because that is how
-    a nullable field is written: `{"anyOf": [{"type": "string"}, {"type":
-    "null"}]}` states what `{"type": ["string", "null"]}` states, and the
-    reader is left one non-null type either way. Which spelling the author
-    picked must not decide the verdict.
+    Read off the field node's own `type` and `format` and no deeper, because
+    that is the reading the engine performs when it reads a stored cursor back:
+    `cdk.api.response_schema.declared_json_types` takes `field["type"]`, and
+    `record_field_declaration` takes `field["format"]` off that same node.
+    Neither descends an `anyOf`/`oneOf`. So `{"anyOf": [{"type": "string"},
+    {"type": "null"}]}` is refused here even though it states exactly what
+    `{"type": ["string", "null"]}` states — reading the union through would
+    resolve a type the engine cannot see, and bless a document that validates
+    clean, ships, and then dies on the first cursor read. The refusal names the
+    spelling that does work, because a generated schema usually emits the other
+    one.
     """
-    leaves = declared_type_leaves(field, root) or []
-    types = sorted({
-        declared
-        for leaf in leaves
-        for declared in _json_types_of(leaf)
-        if declared != "null"
-    })
+    declared = field.get("type") if isinstance(field, dict) else None
+    if isinstance(declared, str):
+        types = [declared]
+    elif isinstance(declared, list):
+        types = [t for t in declared if isinstance(t, str) and t != "null"]
+    else:
+        types = []
     if len(types) != 1:
         raise violation(
             "RULE-ENDP-074", "cursor-field-not-one-json-type",
-            f"replication cursor_field {cm.cursor_field!r} declares "
-            f"{types or 'no JSON type'!r}; a cursor field declares one JSON "
-            "type, optionally beside null"
+            f"replication cursor_field {cm.cursor_field!r} declares type "
+            f"{declared!r}; a cursor field declares one JSON type in its own "
+            "`type`, optionally beside null — a type named only inside an "
+            "`anyOf`/`oneOf` branch is not read back, so spell it "
+            '`{"type": ["<type>", "null"]}`'
         )
     if types[0] not in CURSOR_JSON_TYPES:
         raise violation(
@@ -4809,28 +4806,9 @@ def _check_cursor_field_holds_the_mapping(
         )
     if types[0] != "integer":
         return
-    formats = {
-        leaf.get("format") if isinstance(leaf.get("format"), str) else None
-        for leaf in leaves
-        if "integer" in _json_types_of(leaf)
-    }
-    # Compared by what each branch says about reading the cursor back, not by
-    # the token it spells that with: a format outside the cursor vocabulary
-    # says nothing about the reading, so `int64` beside `uint64` declares an id
-    # twice and agrees. What the branches may not do is disagree —
-    # `epoch_seconds` beside `epoch_milliseconds` is one stored value under two
-    # scales, and an epoch format beside none is a value that is a moment or an
-    # id depending on which branch is read.
-    readings = {fmt if fmt in CURSOR_FORMATS else None for fmt in formats}
-    if len(readings) > 1:
-        raise violation(
-            "RULE-ENDP-078", "integer-cursor-field-two-formats",
-            f"replication cursor_field {cm.cursor_field!r} declares "
-            f"{sorted(f or '(none)' for f in formats)!r} across its branches; "
-            "an integer cursor reads back one way — under one cursor format, "
-            "or under none at all"
-        )
-    field_format = readings.pop() if readings else None
+    field_format = field.get("format")
+    if not isinstance(field_format, str):
+        field_format = None
     if field_format in EPOCH_CURSOR_FORMATS:
         return
     if field_format in CURSOR_FORMATS:

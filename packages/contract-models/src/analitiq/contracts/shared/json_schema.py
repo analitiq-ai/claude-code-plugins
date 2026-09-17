@@ -1358,35 +1358,17 @@ def _declares_a_type(node: Any, root: Any = None) -> bool:
     common nullable idiom (`{"anyOf": [{"type": "string"}, {"type": "null"}]}`)
     among them — since the value is then provably typed however the union
     resolves; one branch answering neither way makes the whole union
-    unbounded. `declared_type_leaves` is that walk; this asks only whether it
-    found anything.
+    unbounded. A branch can itself need `$ref`/`allOf` resolution first
+    (`materialize_node` does not recurse into `anyOf`/`oneOf` branches on its
+    own), so `root` — the same root `node` was materialized against — resolves
+    each branch before it is inspected; a caller with no root in scope simply
+    cannot recognise a `$ref` branch's type.
     """
-    return declared_type_leaves(node, root) is not None
+    return _declares_a_type_walk(node, root, set())
 
 
-def declared_type_leaves(node: Any, root: Any = None) -> list[dict[str, Any]] | None:
-    """Every declaration a value at `node` can be read through, or ``None``
-    when the node is not typed at all.
-
-    A node stating its own `type` — or the contract's `native_type`/`arrow_type`
-    pair — is one leaf: itself. A node stating neither but unioning branches
-    that each answer is those branches' leaves. So a caller asking WHICH types
-    may live here reads `{"type": ["string", "null"]}` and the `anyOf` spelling
-    of it the same way, instead of accepting one and refusing the other.
-
-    A branch can itself need `$ref`/`allOf` resolution first (`materialize_node`
-    does not recurse into `anyOf`/`oneOf` branches on its own), so `root` — the
-    same root `node` was materialized against — resolves each branch before it
-    is inspected; a caller with no root in scope simply cannot recognise a
-    `$ref` branch's type.
-    """
-    return _declared_type_leaves_walk(node, root, set())
-
-
-def _declared_type_leaves_walk(
-    node: Any, root: Any, on_path: set[int]
-) -> list[dict[str, Any]] | None:
-    """`declared_type_leaves`'s own recursion, tracking `anyOf`/`oneOf` branches
+def _declares_a_type_walk(node: Any, root: Any, on_path: set[int]) -> bool:
+    """`_declares_a_type`'s own recursion, tracking `anyOf`/`oneOf` branches
     already on the current path.
 
     A recursive alias (a branch `$ref`erring to a `$defs` entry that contains
@@ -1402,38 +1384,34 @@ def _declared_type_leaves_walk(
     `$ref`/`allOf` cycle, rather than recursing until `RecursionError`.
     """
     if not isinstance(node, dict):
-        return None
+        return False
     if _declared_types(node):
-        return [node]
+        return True
     if node.get("native_type") is not None and node.get("arrow_type") is not None:
-        return [node]
+        return True
     for branch_key in ("anyOf", "oneOf"):
         branches = node.get(branch_key)
         if not isinstance(branches, list) or not branches:
             continue
-        leaves: list[dict[str, Any]] = []
+        every_branch_typed = True
         for branch in branches:
             if not isinstance(branch, dict):
-                leaves = []
+                every_branch_typed = False
                 break
             branch_id = id(branch)
             if branch_id in on_path:
-                leaves = []
+                every_branch_typed = False
                 break
             resolved_branch = branch
             if root is not None:
                 try:
                     resolved_branch = materialize_node(branch, root)
                 except SchemaResolutionError:
-                    leaves = []
+                    every_branch_typed = False
                     break
-            branch_leaves = _declared_type_leaves_walk(
-                resolved_branch, root, on_path | {branch_id}
-            )
-            if branch_leaves is None:
-                leaves = []
+            if not _declares_a_type_walk(resolved_branch, root, on_path | {branch_id}):
+                every_branch_typed = False
                 break
-            leaves.extend(branch_leaves)
-        if leaves:
-            return leaves
-    return None
+        if every_branch_typed:
+            return True
+    return False

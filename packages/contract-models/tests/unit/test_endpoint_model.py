@@ -351,79 +351,55 @@ class TestCursorFieldsInRecordShape:
         with pytest.raises(ValidationError, match="declares no `type`"):
             parse_endpoint(self._payload_with_cursor_field("updated_at", {"updated_at": {}}))
 
-    def test_cursor_field_typed_only_via_anyof_accepted(self):
-        # The nullable idiom. `{"anyOf": [{"type": "string"}, {"type": "null"}]}`
-        # states what `{"type": ["string", "null"]}` states, and RULE-ENDP-074
-        # accepts that one — the reader has one non-null type either way, so
-        # the spelling must not decide the verdict.
+    def test_cursor_field_typed_by_a_type_list_is_accepted(self):
+        # The spelling the engine's cursor reader can see, and the counterparty
+        # to every refusal below.
         parse_endpoint(self._payload_with_cursor_field(
             "updated_at",
-            {"updated_at": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+            {"updated_at": {"type": ["string", "null"]}},
         ))
 
-    def test_cursor_field_typed_via_a_ref_branch_inside_anyof_accepted(self):
+    def test_cursor_field_typed_only_via_anyof_is_rejected(self):
+        # The nullable idiom, and the spelling a generated schema usually
+        # emits. It states exactly what the accepted `{"type": ["string",
+        # "null"]}` states — and is still refused, because the engine's cursor
+        # reader takes `field["type"]` and never descends a union. Accepting it
+        # would bless a document that validates clean, ships, and dies on the
+        # first cursor read. The refusal has to name the spelling that works,
+        # or the author has no way from one to the other.
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(self._payload_with_cursor_field(
+                "updated_at",
+                {"updated_at": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+            ))
+        with pytest.raises(ValidationError, match=r'\{"type": \["<type>", "null"\]\}'):
+            parse_endpoint(self._payload_with_cursor_field(
+                "updated_at",
+                {"updated_at": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+            ))
+
+    def test_cursor_field_typed_through_a_ref_branch_inside_anyof_is_rejected(self):
+        # Resolving the `$ref` would find a type; the engine does not resolve
+        # it either, so neither does this.
         payload = self._payload_with_cursor_field(
             "updated_at",
             {"updated_at": {"anyOf": [{"$ref": "#/$defs/T"}, {"type": "null"}]}},
         )
         payload["operations"]["read"]["response"]["schema"]["$defs"] = {"T": {"type": "string"}}
-        parse_endpoint(payload)
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(payload)
 
-    def test_cursor_field_whose_anyof_branches_disagree_is_rejected(self):
-        # Two real types across the union is the union `{"type": ["string",
-        # "integer"]}` already refused: the reader still has nothing to choose.
-        with pytest.raises(ValidationError, match="one JSON type"):
-            parse_endpoint(self._payload_with_cursor_field(
-                "updated_at",
-                {"updated_at": {"anyOf": [{"type": "string"}, {"type": "integer"}]}},
-            ))
-
-    def test_integer_cursor_field_under_anyof_reads_its_own_format(self):
-        # The format sits on the branch that carries the integer, and an
-        # integer cursor is a moment only under an epoch format (RULE-ENDP-078).
-        parse_endpoint(self._payload_with_cursor_field(
-            "updated_at",
-            {"updated_at": {"anyOf": [
-                {"type": "integer", "format": "epoch_seconds"}, {"type": "null"},
-            ]}},
-        ))
-
-    def test_integer_cursor_field_under_anyof_is_refused_by_its_own_format(self):
-        # The verdict turns on the branch's own `format`: a calendar format is
-        # a moment an integer cannot spell. Without the per-branch read the
-        # field is an id and the document passes, so this is the case that
-        # holds that read in place.
-        with pytest.raises(ValidationError, match="a moment only under"):
+    def test_integer_cursor_field_under_anyof_is_rejected_before_its_format_is_read(self):
+        # A `format` on the branch does not rescue the union: RULE-ENDP-074
+        # settles the type first, and `record_field_declaration` cannot see a
+        # format inside a branch any more than it can see the type.
+        with pytest.raises(ValidationError, match="is not read back"):
             parse_endpoint(self._payload_with_cursor_field(
                 "updated_at",
                 {"updated_at": {"anyOf": [
-                    {"type": "integer", "format": "date-time"}, {"type": "null"},
+                    {"type": "integer", "format": "epoch_seconds"}, {"type": "null"},
                 ]}},
             ))
-
-    def test_integer_cursor_field_whose_branches_disagree_on_format_is_rejected(self):
-        # Two epoch scales for one stored value: reading it back picks one, and
-        # the document does not say which (RULE-ENDP-078).
-        with pytest.raises(ValidationError, match="reads back one way"):
-            parse_endpoint(self._payload_with_cursor_field(
-                "updated_at",
-                {"updated_at": {"anyOf": [
-                    {"type": "integer", "format": "epoch_seconds"},
-                    {"type": "integer", "format": "epoch_milliseconds"},
-                ]}},
-            ))
-
-    def test_integer_cursor_field_whose_branches_declare_two_id_formats_is_accepted(self):
-        # Neither names a cursor format, so both branches say the same thing
-        # about reading the value back — it is an id — and the document leaves
-        # nothing for RULE-ENDP-078 to call undecided.
-        parse_endpoint(self._payload_with_cursor_field(
-            "updated_at",
-            {"updated_at": {"anyOf": [
-                {"type": "integer", "format": "int64"},
-                {"type": "integer", "format": "uint64"},
-            ]}},
-        ))
 
     def test_cursor_field_with_an_untyped_anyof_branch_rejected(self):
         # One branch declaring nothing makes the union unbounded — not a

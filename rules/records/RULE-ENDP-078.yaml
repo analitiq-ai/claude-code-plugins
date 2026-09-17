@@ -19,12 +19,11 @@ rationale: >
   mapping `format` over it asks for an id rendered as a date. As the engine
   reads it today, each of these is refused when the first stored cursor is
   read back, which is after the whole first read has run and committed its
-  checkpoint. A field whose `anyOf`/`oneOf` branches disagree about which of
-  the two the integer is — an epoch scale against another epoch scale, or an
-  epoch format against a branch declaring none — leaves one stored value the
-  document reads back two ways; branches naming formats the cursor vocabulary
-  does not hold say nothing about the reading and so cannot disagree.
-  Refusing it here moves that failure to authoring time; the
+  checkpoint. The `format` read is the field node's own key, the one
+  `record_field_declaration` takes in the engine; a format sitting inside an
+  `anyOf`/`oneOf` branch is invisible to that reader, which is why
+  RULE-ENDP-074 refuses a cursor field typed that way before this rule is
+  reached. Refusing it here moves that failure to authoring time; the
   predicate reads only the document, so a stale reading of the engine can
   make this rule stricter than needed but never lets through a pairing whose
   meaning the document leaves undecided.

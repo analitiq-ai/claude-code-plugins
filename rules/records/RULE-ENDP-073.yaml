@@ -19,10 +19,10 @@ rationale: >
   has no `records` field, so this is a response-only clause and `targets` is
   `ResponseExtraction` alone, the same shape as RULE-ENDP-005's precedent for
   a response-only clause on this validator. The raise at
-  `ResponseExtraction._validate` is bare `ValueError`, not
-  `analitiq.contracts.shared.rules::violation`, matching every other raise in
-  this method and its write-side sibling — this record alone is what
-  registers the obligation. The pinned reachability manifest claims a read of
+  `ResponseExtraction._validate` carries this id through
+  `analitiq.contracts.shared.rules::violation`, as its siblings in the same
+  method do, so the refusal names the rule to a consumer that branches on
+  ids. The pinned reachability manifest claims a read of
   both `ResponseExtraction.records` and `RefExpression.ref`, so no
   `RecordAffirmation` is needed. The JSON-Schema-side mirror in
   `ResponseExtraction`'s `model_config` is a bare inline pattern literal,

@@ -895,12 +895,18 @@ class TestValidationRulePayload:
         with pytest.raises(ValidationError, match="every row satisfies"):
             self._rule("min_length", -1)
 
-    @pytest.mark.parametrize("source", ["[", "(?P<", "a{2,1}", "(unclosed"])
-    def test_a_pattern_that_is_not_a_regular_expression_is_refused(self, source):
-        with pytest.raises(ValidationError, match="RULE-STRM-021"):
-            self._rule("pattern", source)
+    def test_a_pattern_is_graded_as_a_string_not_as_a_dialect(self):
+        # RULE-STRM-021 asks only that a `pattern` payload is a non-empty
+        # string. It deliberately does NOT ask whether the source compiles:
+        # the dialect this pattern runs under is RE2, and grading it with
+        # stdlib `re` answers the wrong question in both directions.
+        # `\p{L}+` is an ordinary RE2 pattern that `re` refuses, and
+        # `a{4294967295}` makes `re.compile` raise `OverflowError` — not even
+        # `re.error` — which would escape as a crash rather than a finding.
+        for source in (r"^\p{L}+$", "a{4294967295}", "[", "(?P<"):
+            assert self._rule("pattern", source).value == source
 
-    def test_a_compilable_pattern_is_accepted(self):
+    def test_a_plain_pattern_is_accepted(self):
         assert self._rule("pattern", r"^\d{3}-\d{4}$").value == r"^\d{3}-\d{4}$"
 
     def test_an_empty_pattern_is_refused_as_vacuous(self):

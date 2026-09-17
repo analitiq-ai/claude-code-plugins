@@ -1,0 +1,7 @@
+{
+  "type": "range",
+  "field": [
+    "amount"
+  ],
+  "value": 5
+}
