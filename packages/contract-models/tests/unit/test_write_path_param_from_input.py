@@ -848,6 +848,15 @@ class TestWriteBlocksAreSweptForScopeTypos:
         with pytest.raises(ValidationError, match="must be a `.from_param"):
             parse_endpoint(_api_payload({"insert": op}))
 
+    def test_the_write_binding_refusal_names_from_input_too(self):
+        """RULE-ENDP-081 admits `from_input` on a write, so the refusal an
+        author reads there has to name it: told only to use `from_param`, the
+        remedy they reach for is a declared param for a value that lives in
+        the record."""
+        op = _write_op(path_params={"id": {"ref": "connection.parameters.id"}})
+        with pytest.raises(ValidationError, match="from_input: record"):
+            parse_endpoint(_api_payload({"insert": op}))
+
     def test_the_write_slot_tuple_still_covers_every_expression_field(self):
         assert set(_REQUEST_EXPRESSION_SLOTS) == set(self.FREE_SLOTS) | {"path_params"}
 

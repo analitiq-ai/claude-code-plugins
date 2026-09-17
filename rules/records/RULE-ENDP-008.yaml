@@ -1,8 +1,8 @@
 id: RULE-ENDP-008
 statement: >
-  Every binding that names a declared parameter MUST name one the operation
-  declares, and that parameter's declared location MUST be the request slot the
-  binding sits in.
+  Every binding that names a declared parameter MUST name it with a string,
+  MUST name one the operation declares, and that parameter's declared location
+  MUST be the request slot the binding sits in.
 tier: coherence
 severity: error
 artifact_kinds: [api-endpoint]
@@ -18,6 +18,10 @@ rationale: >
   location disagree there are two answers for where one value goes, and nothing
   downstream can tell which the provider will see; when the name resolves to
   nothing, the slot silently sends no value at all. Rejecting both at authoring
-  time is what makes the declaration worth reading.
+  time is what makes the declaration worth reading. A name that is not a
+  string names nothing at all: the walks that resolve a binding read string
+  names, so a list or a number slips past every one of them and the slot
+  surfaces only as a param nothing referenced, pointing at the declaration
+  rather than at the binding that is wrong.
 status: active
 superseded_by: null

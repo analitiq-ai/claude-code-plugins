@@ -3472,10 +3472,17 @@ def _validate_param_wiring(
         # A `from_input` path_param binds the record directly and declares no
         # param, so it satisfies the "must be a binding" requirement on its own.
         if not names and not from_inputs:
+            # Both sources, where both are open. A write addresses one record
+            # by its own key, so an author told only about `from_param` there
+            # declares a param for a value that lives in the record.
+            binding_forms = (
+                "`{from_param: <name>}` or `{from_input: record.<field>}`"
+                if allow_from_input else "`{from_param: <name>}`"
+            )
             raise violation(
                 "RULE-ENDP-081",
                 "path-param-binding-without-source",
-                f"request.path_params[{placeholder!r}] must be a `{{from_param: <name>}}` expression "
+                f"request.path_params[{placeholder!r}] must be a {binding_forms} expression "
                 "(spec: §Request Parameter Binding)"
             )
         for name in names:

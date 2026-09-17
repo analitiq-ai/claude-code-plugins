@@ -94,7 +94,7 @@ single field looks wrong.
 | RULE-ENDP-004 | A cursor mapping MUST carry the fields of a single filter form and MUST NOT mix fields belonging to different forms. | `api-endpoint` | error | validator |
 | RULE-ENDP-005 | Every node of a read operation's response schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | `api-endpoint` | error | validator |
 | RULE-ENDP-006 | Every node of a write mode's input schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | `api-endpoint` | error | validator |
-| RULE-ENDP-008 | Every binding that names a declared parameter MUST name one the operation declares, and that parameter's declared location MUST be the request slot the binding sits in. | `api-endpoint` | error | validator |
+| RULE-ENDP-008 | Every binding that names a declared parameter MUST name it with a string, MUST name one the operation declares, and that parameter's declared location MUST be the request slot the binding sits in. | `api-endpoint` | error | validator |
 | RULE-ENDP-009 | Every parameter an operation declares MUST be referenced by exactly one request binding. | `api-endpoint` | error | validator |
 | RULE-ENDP-010 | Every parameter a pagination block names MUST be declared by the same operation and MUST declare itself controlled by pagination. | `api-endpoint` | error | validator |
 | RULE-ENDP-011 | Every parameter a replication cursor mapping names MUST be declared by the same operation and MUST declare itself controlled by replication. | `api-endpoint` | error | validator |
