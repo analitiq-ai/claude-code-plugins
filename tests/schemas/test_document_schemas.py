@@ -9,6 +9,7 @@ selection refuses a root it cannot classify.
 """
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Annotated, Literal, Union
@@ -100,6 +101,41 @@ def test_a_schema_field_accepting_another_documents_url_is_refused():
         render_schemas.document_schema_names(resources)
 
 
+def test_a_schema_field_constrained_by_field_metadata_is_selected():
+    constrained = type("Constrained", (BaseModel,), {
+        "__annotations__": {"schema_url": str},
+        "schema_url": Field(..., alias="$schema",
+                            pattern=f"^{re.escape(schema_url_for('probe-pattern'))}$"),
+    })
+    constrained.__module__ = PUBLIC
+    resources = [
+        _resource("probe-pattern", constrained),
+        _resource("probe-b", _document_model("B", "probe-b")),
+    ]
+    assert render_schemas.document_schema_names(resources) == ["probe-pattern", "probe-b"]
+
+
 def test_committed_label_file_matches_the_registry():
     ok, message = render_schemas.check_document_schemas()
     assert ok, message
+
+
+def test_a_stale_label_file_fails_the_check(monkeypatch, tmp_path):
+    stale = tmp_path / "document_schemas.json"
+    stale.write_text(render_schemas.DOCUMENT_SCHEMAS_PATH.read_text().replace('"stream"', '"x"'))
+    monkeypatch.setattr(render_schemas, "DOCUMENT_SCHEMAS_PATH", stale)
+    ok, _ = render_schemas.check_document_schemas()
+    assert not ok
+
+
+def test_a_missing_label_file_fails_the_check(monkeypatch, tmp_path):
+    monkeypatch.setattr(render_schemas, "DOCUMENT_SCHEMAS_PATH", tmp_path / "absent.json")
+    ok, _ = render_schemas.check_document_schemas()
+    assert not ok
+
+
+def test_full_check_gates_the_label_file(monkeypatch, tmp_path):
+    stale = tmp_path / "document_schemas.json"
+    stale.write_text("{}\n")
+    monkeypatch.setattr(render_schemas, "DOCUMENT_SCHEMAS_PATH", stale)
+    assert render_schemas.main(["check"]) == 1
