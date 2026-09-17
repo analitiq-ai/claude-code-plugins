@@ -9,6 +9,7 @@ validator: "analitiq.contracts.endpoints::ResponseExtraction._validate"
 owners: [connector-plugin, engine]
 targets: [ResponseExtraction]
 fields: [records.ref]
+fixture_model: ResponseExtraction
 rationale: >
   `records` is typed `RefExpression`, whose own `ref: str` field is what this
   check constrains — the anchor is what makes declared-path resolution against

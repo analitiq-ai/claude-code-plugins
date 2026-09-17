@@ -1,0 +1,5 @@
+{
+  "match": "regex",
+  "native_type": "^CHAR\\((?<n>[1-9]\\d{0,2})\\)$",
+  "arrow_type": "FixedSizeBinary(${n})"
+}

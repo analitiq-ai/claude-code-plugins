@@ -1,0 +1,12 @@
+{
+  "connections": {
+    "source": "c1",
+    "destinations": [
+      "d1"
+    ]
+  },
+  "streams": [
+    "a_v1",
+    "a_v2"
+  ]
+}

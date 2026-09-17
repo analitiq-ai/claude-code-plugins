@@ -1,0 +1,5 @@
+{
+  "match": "regex",
+  "native_type": "^TEXT$",
+  "arrow_type": "Utf8 "
+}

@@ -1,0 +1,20 @@
+{
+  "op": "pipe",
+  "args": [
+    {
+      "op": "get",
+      "path": [
+        "address",
+        "zip"
+      ]
+    },
+    {
+      "op": "fn",
+      "name": "to_string"
+    },
+    {
+      "op": "fn",
+      "name": "to_string"
+    }
+  ]
+}

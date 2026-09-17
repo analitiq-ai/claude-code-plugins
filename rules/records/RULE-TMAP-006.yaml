@@ -8,6 +8,7 @@ artifact_kinds: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapReadRegexRule]
+fixture_model: TypeMapReadRegexRule
 rationale: >
   The rendered arrow_type is what discovery freezes into the endpoint document,
   so a spelling outside the engine-published Arrow vocabulary would not fail

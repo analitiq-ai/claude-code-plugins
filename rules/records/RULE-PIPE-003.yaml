@@ -8,6 +8,7 @@ artifact_kinds: [pipeline]
 validator: "analitiq.contracts.pipelines.config::PipelineAuthored._validate_streams_unique_base"
 owners: [pipeline-plugin]
 targets: [PipelineAuthored]
+fixture_model: PipelineAuthored
 rationale: >
   Two versions of one stream inside a single pipeline replicate the same
   source into the same destinations twice, and the two versions will disagree

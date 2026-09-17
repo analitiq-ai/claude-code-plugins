@@ -1,0 +1,13 @@
+{
+  "op": "pipe",
+  "args": [
+    {
+      "op": "fn",
+      "name": "to_string"
+    },
+    {
+      "op": "fn",
+      "name": "to_string"
+    }
+  ]
+}

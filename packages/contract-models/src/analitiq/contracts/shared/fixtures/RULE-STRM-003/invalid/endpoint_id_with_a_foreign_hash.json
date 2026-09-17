@@ -1,0 +1,9 @@
+{
+  "scope": "connection",
+  "connection_id": "prod-postgres",
+  "database_object": {
+    "schema": "public",
+    "name": "users"
+  },
+  "endpoint_id": "public__users__00000000"
+}
