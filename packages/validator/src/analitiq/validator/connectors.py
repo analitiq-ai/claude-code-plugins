@@ -1010,8 +1010,9 @@ def type_map_findings(
 
     Naming the direction IS the assertion: a document declaring the other
     direction fails the model's `direction` Literal alongside every other defect
-    it carries, where refusing to grade it at all would report the disagreement
-    and nothing else.
+    the model finds, where refusing to grade it at all would report the
+    disagreement and nothing else. Its advisories are keyed for the direction it
+    declares, so they are not run.
 
     `scope` decides the write vocabulary alone: a connector write map must
     render all of it, a connection map is gap-only (`RULE-TMAP-018`) and would
@@ -1030,11 +1031,13 @@ def type_map_findings(
 def _type_map_document_findings(doc: Any, direction: str, scope: str) -> list[dict]:
     adapter = _READ_MAP_ADAPTER if direction == "read" else _WRITE_MAP_ADAPTER
     findings = _model_findings(doc, adapter)
-    # A document declaring the other direction has its rules keyed for that one —
-    # read matches on `native_type`, write on `arrow_type` — so this direction's
-    # advisories have nothing to read and report defects the document does not
-    # have, burying the disagreement the model states above them. A direction
-    # that is missing or unusable disagrees with nothing, and is graded as named.
+    # A rule carries both keys whichever direction it is for — one matches, the
+    # other renders — so grading it as the other direction reads the render side
+    # as the matcher: Arrow types legitimately rendering to one native DDL read
+    # as duplicates of each other. The advisories would mint defects the document
+    # does not have, burying the disagreement the model states above them. A
+    # direction that is missing or unusable disagrees with nothing, and is graded
+    # as named.
     declared = doc.get("direction") if isinstance(doc, dict) else None
     if declared in ("read", "write") and declared != direction:
         return findings

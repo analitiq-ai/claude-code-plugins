@@ -30,11 +30,10 @@ entry point. This adapter routes each entity as follows:
     per-field findings instead.
   * ``type-map`` (with ``--direction {read,write}``) ->
     ``analitiq.validator.type_map_findings`` at ``scope="connection"``, after an
-    adapter filename gate: the two load-bearing names
-    ``connections/<slug>/definition/type-map-{read,write}.json`` each name a
-    direction, so a file named for the other one is an invocation and a file
-    disagreeing, and gets the rename finding alone rather than content findings
-    that bury it. ``scope`` is how the gap-only nature of a connection map
+    adapter filename gate: each direction is authored under the name for that
+    direction in ``connections/<slug>/definition/``, so a file under any other
+    name means the invocation and the file disagree, and it gets the rename
+    finding alone rather than content findings that bury it. ``scope`` is how the gap-only nature of a connection map
     (``RULE-TMAP-018``) reaches the published check, which otherwise holds a
     write map to a connector's full vocabulary (``RULE-TMAP-017``).
   * ``pipeline`` with ``--bundle-root`` -> additionally
@@ -100,11 +99,11 @@ from _bootstrap import ensure_deps_or_reexec
 # native<->Arrow direction is this adapter's own dispatch).
 PIPELINE_ENTITIES = ("connection", "stream", "pipeline", "database-endpoint", "type-map")
 
-# The two load-bearing names, each naming a direction: a connection's map for
-# a direction is authored under the matching one under
-# connections/<slug>/definition/, so the adapter gates the name like the
-# endpoint filename gate does.
-_TYPE_MAP_FILENAMES = {"read": "type-map-read.json", "write": "type-map-write.json"}
+# A connection's map for a direction is authored under the name for that
+# direction, under connections/<slug>/definition/, so the adapter gates the name
+# like the endpoint filename gate does. The gap prober reads this same mapping
+# backwards, so one direction is named in one place.
+TYPE_MAP_FILENAMES = {"read": "type-map-read.json", "write": "type-map-write.json"}
 # The pre-split filename: the engine never reads it, at either scope. The
 # published validator rejects it beside a connector; the adapter mirrors that
 # for connections, where the published bundle validator cannot see files.
@@ -220,14 +219,15 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
 
 def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
     """Validate a connection-scoped type-map file as the direction named. The
-    filename gate runs first and alone on a mismatch: the two load-bearing
-    names each name a direction, so a file named for the other one means the
+    filename gate runs first and alone on a mismatch: each direction is authored
+    under the name for that direction, so a file under any other name means the
     invocation and the file disagree, and grading its content would bury the one
-    actionable finding under noise. What the file *contains* needs no gate here — naming the direction is
-    the assertion, and the published grader rejects anything that is not a
-    `{$schema, direction, rules}` document of that direction, at the field that
-    is wrong."""
-    expected = _TYPE_MAP_FILENAMES[direction]
+    actionable finding under noise. What the file *contains* needs no gate here —
+    naming the direction is the assertion, and the published grader rejects
+    anything that is not a `{$schema, direction, rules}` document of that
+    direction, at the field that is wrong, or at the document itself when it is
+    not an object."""
+    expected = TYPE_MAP_FILENAMES[direction]
     if document_path.name != expected:
         return [_finding(
             "connection-type-map", "error", "",
@@ -261,7 +261,7 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                 f"{_LEGACY_TYPE_MAP_FILENAME} is the pre-split filename; the engine never "
                 "reads it. Split it into type-map-read.json (native → Arrow) and, for the "
                 "write direction, type-map-write.json (Arrow → native)."))
-    for direction, fname in _TYPE_MAP_FILENAMES.items():
+    for direction, fname in TYPE_MAP_FILENAMES.items():
         path = definition / fname
         with _contained(findings, f"{site}/{fname}"):
             if not (path.exists() or path.is_symlink()):

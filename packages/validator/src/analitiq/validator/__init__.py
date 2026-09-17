@@ -14,7 +14,8 @@ at `severity: "error"`.
 holding an unidentified document. A caller that knows what a document is meant
 to be says so instead: `type_map_findings(doc, direction, scope)` grades a type
 map as the direction named, reporting a disagreeing `direction` alongside every
-other defect rather than grading the document as what it claims to be.
+other defect the model finds rather than grading the document as what it claims
+to be.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which self-registers its detector→validator

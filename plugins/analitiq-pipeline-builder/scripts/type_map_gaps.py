@@ -44,6 +44,7 @@ import sys
 from pathlib import Path
 
 from _bootstrap import ensure_deps_or_reexec
+from validate import TYPE_MAP_FILENAMES
 
 
 def _fail(message: str) -> "int":
@@ -75,13 +76,16 @@ def _load_rules(path: Path, direction: str) -> list:
     # map covers only the gaps it fills, and a connector map rendering the whole
     # vocabulary clears the weaker bar too.
     findings = type_map_findings(doc, direction, scope="connection")
-    # Reported before anything raises: an advisory usually explains the gap
-    # reported below it, and a fatal finding elsewhere in the same document is
-    # no reason to make the author fix that first and rediscover this one.
+    fatal, advisory = [], []
     for f in findings:
+        (fatal if finding_costs_a_pass(f) else advisory).append(f)
+    # Reported before anything raises: a fatal finding elsewhere in the same
+    # document is no reason to make the author fix that first and rediscover this
+    # one on the next run. The fatal ones travel in the raise below instead, which
+    # names the file they were found in.
+    for f in advisory:
         print(f"type_map_gaps: {path}: {f.get('path') or '/'}: {f['message']}",
               file=sys.stderr)
-    fatal = [f for f in findings if finding_costs_a_pass(f)]
     if fatal:
         detail = "; ".join(f"{f.get('path') or '/'}: {f['message']}" for f in fatal)
         # A check that crashed stops the probe for the same reason a defect does
@@ -143,9 +147,8 @@ def main(argv: list[str] | None = None) -> int:
     # map whose envelope declares the other direction fails there on the
     # `direction` Literal. Catch a filename/--direction mismatch first, so the
     # message names the actual mistake (a swapped --map/--direction) rather
-    # than a generic schema failure. The two conventional filenames each name a
-    # direction; hold a map named either of them to it.
-    named_for = {"type-map-read.json": "read", "type-map-write.json": "write"}
+    # than a generic schema failure. Hold a map named for a direction to it.
+    named_for = {name: d for d, name in TYPE_MAP_FILENAMES.items()}
     for m in args.maps:
         implied = named_for.get(Path(m).name)
         if implied is not None and implied != args.direction:

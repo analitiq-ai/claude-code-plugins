@@ -102,6 +102,26 @@ def test_map_without_rules_key_rejected(tmp_path):
         assert field in str(exc.value), exc.value
 
 
+def test_a_connection_write_map_is_not_held_to_a_connector_vocabulary(tmp_path, capsys):
+    # A connection map fills the gaps its connector left, so holding it to the
+    # whole Arrow vocabulary earns the coverage warning on every run. The
+    # authoring agent is told to add rules for families the connector already
+    # renders, and shadows them.
+    G.resolve("write", ["Utf8"], [_map(tmp_path, "type-map-write.json", CONNECTOR_WRITE, "write")])
+    assert capsys.readouterr().err == ""
+
+
+def test_an_advisory_reaches_the_operator_over_a_map_that_resolves(tmp_path, capsys):
+    # The gap and the rule that was meant to fill it are reported together: a
+    # duplicate is unreachable, so the probe it was written for comes back
+    # uncovered and reads as a vocabulary the connector simply lacks.
+    p = tmp_path / "type-map-read.json"
+    p.write_text(json.dumps(_tm_doc(CONNECTOR_READ + [CONNECTOR_READ[0]], "read")))
+    result = G.resolve("read", ["citext", "vector(3)"], [p])
+    assert result["gaps"] == ["vector(3)"]
+    assert "duplicate rule" in capsys.readouterr().err
+
+
 def test_an_advisory_reaches_the_operator_even_when_something_fatal_stops_the_probe(
         tmp_path, capsys):
     # An advisory is most often the explanation for a gap reported below it, so

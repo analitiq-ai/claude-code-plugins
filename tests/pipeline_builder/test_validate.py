@@ -385,7 +385,7 @@ def test_diagnostics_for_requires_direction_with_type_map_entity(tmp_path):
 
 def test_diagnostics_for_rejects_an_unsupported_direction_value(tmp_path):
     # Membership, not just presence: a non-null value outside {read, write}
-    # must not slip past the guard into _TYPE_MAP_FILENAMES[direction].
+    # must not slip past the guard into TYPE_MAP_FILENAMES[direction].
     with pytest.raises(ValueError, match="direction must be"):
         V.diagnostics_for("type-map", tmp_path / "type-map-read.json", direction="bogus")
 
@@ -1357,7 +1357,7 @@ def test_pipeline_entities_are_a_document_artifact_kind_subset():
 
 def test_cli_main_type_map_entities(tmp_path, capsys):
     # the agents drive the CLI, and diagnostics_for-level routing keys off
-    # _TYPE_MAP_FILENAMES — only this pins that PIPELINE_ENTITIES exposes the
+    # TYPE_MAP_FILENAMES — only this pins that PIPELINE_ENTITIES exposes the
     # new entity plus the --direction split
     path = _write(tmp_path, "type-map-write.json", _tm(TYPE_MAP_WRITE, "write"))
     rc = V.main(["--entity", "type-map", "--direction", "write", "--document", str(path)])

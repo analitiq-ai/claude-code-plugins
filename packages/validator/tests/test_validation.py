@@ -1147,6 +1147,19 @@ def test_coverage_database_requires_write_map(tmp_path, validator):
     assert any("type-map-write.json" in e["message"] for e in errors)
 
 
+def test_coverage_holds_a_connector_write_map_to_the_whole_vocabulary(tmp_path, validator):
+    # The sibling-map route grades at connector scope: a connector that renders
+    # one Arrow family materializes nothing else, and the gap-only allowance
+    # belongs to a connection map filling in behind one.
+    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
+        [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}], "read")))
+    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(
+        [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")))
+    (tmp_path / "connector.json").write_text("{}")
+    findings = validator.check_coverage(_min_connector("database"), tmp_path / "connector.json")
+    assert "RULE-TMAP-017" in {f.get("rule") for f in findings}, findings
+
+
 def test_coverage_api_rejects_write_map(tmp_path, validator):
     (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
         [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "read")))
@@ -1766,17 +1779,6 @@ def test_type_map_findings_does_not_grade_rules_authored_for_the_other_direction
                          for a in ("Int8", "Int16", "Int32", "Int64")], "write")
     findings = validator.type_map_findings(doc, "read")
     assert {f["path"] for f in findings} == {"/$schema", "/direction"}, findings
-
-
-def test_type_map_findings_reports_a_disagreeing_direction_alongside_the_rest(validator):
-    # naming the direction is the assertion, so a document declaring the other
-    # one is graded anyway — the disagreement is reported WITH its other defects,
-    # never instead of them
-    doc = _type_map_doc([{"match": "regex", "native_type": "^vector\\(", "arrow_type": "Utf8"}],
-                        "write")
-    findings = validator.type_map_findings(doc, "read")
-    assert "/direction" in {f["path"] for f in findings}, findings
-    assert len({f["path"] for f in findings}) > 1, findings
 
 
 @pytest.mark.parametrize("kwargs,expected", [

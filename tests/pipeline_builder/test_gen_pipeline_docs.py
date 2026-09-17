@@ -194,8 +194,9 @@ def test_measured_reachable_connectors_ids_matches_expectation():
 def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
     """RULE-TMAP-017 is bound to `connectors.py` and genuinely fires in the
     published validator, but `measured_reachable_connectors_ids` must not
-    include it: `validate.py`'s own write-coverage filter strips it before it
-    ever reaches this adapter's output. This is the case a hand-typed
+    include it: the adapter grades a connection map at `scope="connection"`,
+    where the rule does not apply, so it never reaches this adapter's output.
+    This is the case a hand-typed
     allowlist got wrong once (excluded by name, correctly, but with nothing
     checking the exclusion stayed correct) — asserting both halves here means
     a future change that stops filtering it, or starts filtering something
