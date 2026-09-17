@@ -20,13 +20,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, get_args
+from typing import TYPE_CHECKING
 
 from ._core import finding_costs_a_pass, validate_document
 
-CASES_DIR = Path(__file__).with_name("cases")
+if TYPE_CHECKING:  # the corpus layout, shared with the fixture corpus that ships
+    from analitiq.contracts.shared.corpus import Verdict  # in analitiq-contract-models
 
-Verdict = Literal["valid", "invalid"]
+CASES_DIR = Path(__file__).with_name("cases")
 
 _CONNECTOR_ENTRY = "connector.json"
 _BUNDLE_ENTRY = "bundle.json"
@@ -52,17 +53,16 @@ def rule_cases() -> tuple[RuleCase, ...]:
     root without exactly one entry file, or a bundle case root holding any
     other file.
     """
+    # Imported here for the reason `_core` gives: a module-level import of
+    # anything under `analitiq.contracts` would raise before the kinds'
+    # missing-dependency guard.
+    from analitiq.contracts.shared.corpus import corpus_items
+
     cases: list[RuleCase] = []
-    for rule_dir in sorted(CASES_DIR.iterdir()):
-        _require_validator_check(rule_dir.name)
-        for group_dir in sorted(rule_dir.iterdir()):
-            if group_dir.name not in get_args(Verdict):
-                raise ValueError(f"{group_dir}: a case group is one of {get_args(Verdict)}")
-            for root in sorted(group_dir.iterdir()):
-                if _entry_file(root).name == _BUNDLE_ENTRY:
-                    _require_bundle_alone(root)
-                cases.append(RuleCase(
-                    rule_id=rule_dir.name, verdict=group_dir.name, name=root.name, root=root))
+    for rule_id, verdict, _, root in corpus_items(CASES_DIR, _require_validator_check):
+        if _entry_file(root).name == _BUNDLE_ENTRY:
+            _require_bundle_alone(root)
+        cases.append(RuleCase(rule_id=rule_id, verdict=verdict, name=root.name, root=root))
     return tuple(cases)
 
 
@@ -98,8 +98,9 @@ def case_mismatch(case: RuleCase) -> str | None:
 
 
 def _require_validator_check(rule_id: str) -> None:
-    # Imported here for the reason `_core` gives: a module-level import of the
-    # contract models would raise before the kinds' missing-dependency guard.
+    """Refuse a rule id the case corpus has no business carrying: the corpus
+    grades checks in this package, so a rule enforced anywhere else — or by
+    nothing — would be graded against a validator that never looks at it."""
     from analitiq.contracts.shared.rules import rule_by_id
 
     try:

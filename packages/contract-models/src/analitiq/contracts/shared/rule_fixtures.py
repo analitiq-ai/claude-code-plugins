@@ -15,16 +15,15 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from .corpus import Verdict, corpus_items
 from .introspect import contract_classes
 from .rules import rule_by_id, violated_rule_ids
 
 FIXTURES_DIR = Path(__file__).with_name("fixtures")
-
-Verdict = Literal["valid", "invalid"]
 
 
 @dataclass(frozen=True)
@@ -48,22 +47,16 @@ def rule_fixtures() -> tuple[RuleFixture, ...]:
     ``fixture_model`` that names no contract class or more than one.
     """
     fixtures: list[RuleFixture] = []
-    for rule_dir in sorted(FIXTURES_DIR.iterdir()):
-        model = _fixture_model(rule_dir.name)
-        for group_dir in sorted(rule_dir.iterdir()):
-            if group_dir.name not in get_args(Verdict):
-                raise ValueError(
-                    f"{group_dir}: a fixture group is one of {get_args(Verdict)}")
-            for path in sorted(group_dir.iterdir()):
-                if path.suffix != ".json":
-                    raise ValueError(f"{path}: a fixture is a *.json file")
-                fixtures.append(RuleFixture(
-                    rule_id=rule_dir.name,
-                    verdict=group_dir.name,
-                    name=path.stem,
-                    model=model,
-                    document=json.loads(path.read_text(encoding="utf-8")),
-                ))
+    for rule_id, verdict, model, path in corpus_items(FIXTURES_DIR, _fixture_model):
+        if path.suffix != ".json":
+            raise ValueError(f"{path}: a fixture is a *.json file")
+        fixtures.append(RuleFixture(
+            rule_id=rule_id,
+            verdict=verdict,
+            name=path.stem,
+            model=model,
+            document=json.loads(path.read_text(encoding="utf-8")),
+        ))
     return tuple(fixtures)
 
 
