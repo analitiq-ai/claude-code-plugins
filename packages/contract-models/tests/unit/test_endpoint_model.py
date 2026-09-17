@@ -455,11 +455,60 @@ class TestCursorFieldsInRecordShape:
                 {"updated_at": {"anyOf": [{"type": "string"}, {}]}},
             ))
 
-    def test_dotted_cursor_field_traverses_nested_objects(self):
-        parse_endpoint(self._payload_with_cursor_field(
-            "metadata.updated_at",
-            {"metadata": {"type": "object", "properties": {"updated_at": {"type": "string"}}}},
-        ))
+    def test_a_dotted_cursor_field_is_rejected(self):
+        # The path resolves in the document, so RULE-ENDP-013 passes — and the
+        # engine still cannot read a cursor out of it. `record_field_declaration`
+        # looks the name up WHOLE under the record shape's `properties`, so
+        # "metadata.updated_at" matches no key and raises; the value read is
+        # flat too (`records[-1].get(cursor_field)`), so even a lenient reader
+        # would checkpoint nothing and the stream would silently never advance.
+        with pytest.raises(ValidationError, match="names no key on the record shape"):
+            parse_endpoint(self._payload_with_cursor_field(
+                "metadata.updated_at",
+                {"metadata": {"type": "object", "properties": {"updated_at": {"type": "string"}}}},
+            ))
+
+    def test_cursor_field_declared_by_an_allof_branch_beside_properties_is_accepted(self):
+        # The refinement idiom: the record shape declares the field itself and
+        # an `allOf` branch narrows it. The engine reads
+        # `items["properties"]["updated_at"]` and finds `{"type": "string"}`,
+        # so refusing this would refuse a document that runs — over-refusal is
+        # as much a parity defect as over-acceptance.
+        payload = self._payload_with_cursor_field(
+            "updated_at", {"updated_at": {"type": "string"}}
+        )
+        payload["operations"]["read"]["response"]["schema"]["items"]["allOf"] = [
+            {"properties": {"updated_at": {"format": "date-time"}}}
+        ]
+        parse_endpoint(payload)
+
+    def test_cursor_field_declared_beside_a_ref_base_is_accepted(self):
+        # The same shape reached the other way. The field is on the record
+        # shape's own `properties`, which is where the engine looks; that a
+        # `$ref` base also declares it changes nothing about that lookup.
+        payload = self._payload_with_cursor_field(
+            "updated_at", {"updated_at": {"type": "string", "format": "date-time"}}
+        )
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {"Base": {"type": "object", "properties": {"updated_at": {"type": "string"}}}}
+        schema["items"]["allOf"] = [{"$ref": "#/$defs/Base"}]
+        parse_endpoint(payload)
+
+    def test_a_cursor_field_through_a_ref_record_shape_is_read_as_authored(self):
+        # The record SHAPE is resolved — RULE-ENDP-026 tells authors to put a
+        # non-local schema in `$defs`, so this spelling has to keep working —
+        # but the field found there is still graded as written. `$defs/Rec`
+        # declares `updated_at` only through a `$ref`, which the cursor reader
+        # cannot see.
+        payload = self._payload_with_cursor_field("updated_at", {})
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {
+            "Rec": {"type": "object", "properties": {"updated_at": {"$ref": "#/$defs/T"}}},
+            "T": {"type": "string"},
+        }
+        schema["items"] = {"$ref": "#/$defs/Rec"}
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(payload)
 
     def test_cursor_field_traversing_a_scalar_node_is_rejected(self):
         # `metadata` is declared `type: "string"`, so its sibling `properties`

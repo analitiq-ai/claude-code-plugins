@@ -123,8 +123,12 @@ the declaration is read off that node and no deeper, so a type reached only
 through an `anyOf`/`oneOf` branch, a `$ref` or an `allOf` is refused — the
 reader that reads a stored cursor back descends none of them, and a document
 it cannot read is one that ships and then fails on the first incremental run.
-Spell the cursor field out in place even where the rest of the record shape
-uses `$defs`. An integer says which kind of integer it is in its own
+Where the field sits is read the same way: it must be a plain key on the
+record shape's `properties`, looked up whole. A dotted `cursor_field` names
+no key there, so point the cursor at a top-level record field rather than a
+nested one. A `$ref` base or an `allOf` branch alongside is fine — the
+record shape's own declaration of the field is the one that is read. An
+integer says which kind of integer it is in its own
 `format` — on that same node, for the same reason: `epoch_seconds` or
 `epoch_milliseconds` makes it a moment, a calendar cursor format is refused
 outright — a moment an integer cannot spell — and anything else, a provider's

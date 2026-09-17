@@ -4758,10 +4758,51 @@ def _validate_cursor_fields_in_record_shape(
     except ValueError as detail:
         raise violation("RULE-ENDP-013", "cursor-record-shape-unusable", str(detail)) from None
     for cm in replication.cursor_mappings:
-        field = _check_cursor_field_in_node(
-            _cursor_field_of(cm), items, where="items", root=root
+        cursor_field = _cursor_field_of(cm)
+        _check_cursor_field_in_node(cursor_field, items, where="items", root=root)
+        _check_cursor_field_holds_the_mapping(
+            cm, _cursor_node_as_the_engine_reads_it(items, cursor_field, root)
         )
-        _check_cursor_field_holds_the_mapping(cm, field)
+
+
+def _cursor_node_as_the_engine_reads_it(
+    items: dict[str, Any], cursor_field: str, root: Any
+) -> Any:
+    """The cursor field's declaration as the engine's cursor reader gets it.
+
+    `cdk.api.response_schema.record_field_declaration` is
+    ``(items_schema.get("properties") or {}).get(cursor_field)`` — one flat
+    lookup keyed by the whole name, on a map it does not merge, returning a
+    declaration it does not resolve. Two of those three properties are
+    reproduced exactly:
+
+    * The lookup is FLAT. A dotted `cursor_field` matches no key there, so it
+      is not walked here either. (The value read is flat too — `generic.py`
+      takes ``records[-1].get(cursor_field)`` — so a dotted cursor would
+      checkpoint nothing and the stream would silently never advance.)
+    * The declaration is returned AS AUTHORED. Resolving it would read a
+      `type` or a `format` the engine cannot see, which is the whole reason
+      this function exists rather than re-using
+      :func:`_check_cursor_field_in_node`'s answer.
+
+    The third is not, deliberately. The engine reads `properties` off the
+    `items` node itself, so a record shape written as a bare `$ref` stops it
+    before any cursor is read — but the contract accepts that shape on
+    purpose, because RULE-ENDP-026 tells authors to put a non-local schema in
+    this document's `$defs` and an author who complies must get a working
+    connector. Refusing it here would punish them for following the rule. So
+    the record SHAPE is resolved when it has no `properties` of its own, and
+    only the FIELD is read as authored. Where the shape declares the field
+    itself, that own declaration wins, which is what the engine reads whatever
+    a `$ref` base or an `allOf` branch alongside also says about it.
+    """
+    properties = items.get("properties")
+    if not isinstance(properties, dict):
+        shape = materialize_node(items, root)
+        properties = shape.get("properties") if isinstance(shape, dict) else None
+    if not isinstance(properties, dict):
+        return None
+    return properties.get(cursor_field)
 
 
 def _check_cursor_field_holds_the_mapping(
@@ -4789,7 +4830,21 @@ def _check_cursor_field_holds_the_mapping(
     a bare id in the engine. Nothing fails until the second run, when a
     committed checkpoint has to be rendered back into a request. Reading the
     authored node is what keeps the two readings the same one.
+
+    ``field`` is ``None`` when the flat lookup lands on nothing — a dotted
+    `cursor_field` is the case that reaches here, declared as far as the
+    document is concerned (RULE-ENDP-013 has already passed) and matching no
+    key where a cursor is read from.
     """
+    if field is None:
+        raise violation(
+            "RULE-ENDP-074", "cursor-field-not-where-the-cursor-is-read",
+            f"replication cursor_field {cm.cursor_field!r} is declared in "
+            "response.schema but names no key on the record shape's "
+            "`properties`, which is where a stored cursor is read from: the "
+            "name is looked up whole, so a dotted path is not walked. Point "
+            "the cursor at a top-level record field"
+        )
     declared = field.get("type") if isinstance(field, dict) else None
     if isinstance(declared, str):
         types = [declared]
@@ -4903,7 +4958,7 @@ def _cursor_field_of(cm: Any) -> str:
 
 def _check_cursor_field_in_node(
     cursor_field: str, items_node: dict[str, Any], *, where: str, root: Any
-) -> Any:
+) -> None:
     """A ``cursor_field`` must resolve under the record shape by declared-path
     resolution — the same algorithm `response.records` and the pagination /
     metadata refs use, so an author never has to hold two traversal rules.
@@ -4915,14 +4970,10 @@ def _check_cursor_field_in_node(
     holds `filters`/`order_by_field` to: an incremental comparison built over
     an untyped node has nothing to tell it what a valid watermark looks like.
 
-    Returns the node AS AUTHORED, not the materialized one. Resolution proves
-    the path lands on something typed; it does not decide what the cursor
-    reader will see there, and those are different questions with different
-    answers. `cdk.api.response_schema.records_items_schema` walks `properties`
-    and resolves no pointer, so `record_field_declaration` reads the `type`
-    and `format` keys the author wrote on the node itself.
-    :func:`_check_cursor_field_holds_the_mapping` has to grade that same node
-    or it grades a document the engine never sees.
+    Answers only "is this path declared, and typed" — a question about the
+    document. What the engine's cursor reader will find is a different
+    question with a different answer, asked by
+    :func:`_cursor_node_as_the_engine_reads_it`.
     """
     segments = cursor_field.split(".")
     try:
@@ -4956,4 +5007,3 @@ def _check_cursor_field_in_node(
             "can tell what a valid comparison looks like "
             "(spec: §Cross-Field Validation)"
         )
-    return node
