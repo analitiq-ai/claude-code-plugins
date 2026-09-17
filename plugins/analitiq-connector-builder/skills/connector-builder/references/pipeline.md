@@ -131,8 +131,7 @@ either kind.
 ### 4. Validate the domain (barrier)
 
 Invoke `connector-schema-validator` over the connector body and type
-map(s); it detects each document's kind from its own shape, so nothing
-further identifies which schema a document is graded against. Validate each
+map(s); it detects each document's kind from its own shape. Validate each
 map the connector's `kind` calls for, under the filename that kind requires
 (`RULE-PKG-030`), so the connector's sibling walk can find it.
 
