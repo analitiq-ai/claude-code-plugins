@@ -371,6 +371,8 @@ def _scenario_problems(scenario: dict, path: Path) -> list[str]:
         if unknown:
             problems.append(f"validate spec {spec.get('glob')!r} names unknown keys "
                             f"{unknown}; expected a subset of glob/entity/bundle_root")
+        if "glob" not in spec:
+            problems.append(f"validate spec {spec!r} is missing required key 'glob'")
     for item in scenario.get("seed", []):
         if not (REPO_ROOT / item["from"]).is_file():
             problems.append(f"seed source {item['from']} does not exist")

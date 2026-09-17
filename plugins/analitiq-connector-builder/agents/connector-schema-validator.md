@@ -22,9 +22,10 @@ artifact.
 ## Inputs
 
 - `document_path` — absolute path to the draft JSON document. The validator
-  detects the document's kind from its own shape. Validate a type map under
-  its on-disk filename (`RULE-PKG-030`) so the read/write direction is
-  unambiguous. This agent validates JSON documents only; a connector's Python
+  detects the document's kind from its own shape and grades a type map by its
+  declared `direction`, never by filename. Validate a type map under its
+  on-disk filename (`RULE-PKG-030`) anyway, so the connector's sibling walk
+  can find it. This agent validates JSON documents only; a connector's Python
   package files (`connector.py`, `pyproject.toml`, …) are outside its scope —
   report them as not validated rather than passing judgment on them.
 

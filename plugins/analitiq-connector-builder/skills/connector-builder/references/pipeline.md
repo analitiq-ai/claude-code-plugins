@@ -132,9 +132,10 @@ either kind.
 
 Invoke `connector-schema-validator` over the connector body and type
 map(s); it detects each document's kind from its own shape, so nothing
-further identifies which schema a document is graded against. Validate
-each map the connector's `kind` calls for, under the filename that kind
-requires (`RULE-PKG-030`), so the read/write direction is unambiguous.
+further identifies which schema a document is graded against, and grades a
+type map by its declared `direction`, never by filename. Validate each map
+the connector's `kind` calls for, under the filename that kind requires
+(`RULE-PKG-030`) anyway, so the connector's sibling walk can find it.
 
 Validation covers the JSON documents above; the package files are
 governed by rules of their own (`RULE-PKG-007`, `RULE-PKG-009`,
