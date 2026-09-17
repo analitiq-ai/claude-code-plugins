@@ -2122,9 +2122,9 @@ class Idempotency(DeclaredHeaderNames, _EndpointModel):
         ...,
         description=(
             "Header name or top-level body field name that carries the key. "
-            "Not constrained to a header name's token shape, because `in: "
-            "body` makes it a JSON field name, which admits more; what both "
-            "share is that the space around a name is not part of it."
+            "Which of the two it is follows `in`, and each is held to the "
+            "shape its own placement admits; what both share is that the "
+            "space around a name is not part of it."
         ),
     )
 
