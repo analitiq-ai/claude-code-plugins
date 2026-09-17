@@ -468,6 +468,14 @@ class TestCursorFieldsInRecordShape:
                 {"metadata": {"type": "object", "properties": {"updated_at": {"type": "string"}}}},
             ))
 
+    def test_a_record_field_whose_name_contains_a_dot_is_accepted(self):
+        # The engine looks the whole name up, so a field literally named
+        # "a.b" is one it reads. Splitting on "." here would report a declared
+        # field as undeclared — and worse, an unrelated sibling named "a"
+        # would flip the verdict, making one cursor field's fate depend on
+        # another field's existence.
+        parse_endpoint(self._payload_with_cursor_field("a.b", {"a.b": {"type": "integer"}}))
+
     def test_cursor_field_declared_by_an_allof_branch_beside_properties_is_accepted(self):
         # The refinement idiom: the record shape declares the field itself and
         # an `allOf` branch narrows it. The engine reads

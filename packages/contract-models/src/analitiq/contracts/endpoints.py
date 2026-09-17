@@ -1054,7 +1054,8 @@ class SingleCursorMapping(_EndpointModel):
     cursor_field: str = Field(
         ...,
         pattern=RECORD_FIELD_PATH_PATTERN,
-        description="Dotted record field path used as the incremental watermark.",
+        description="Record field used as the incremental watermark. A plain key on "
+                    "the record shape's `properties`, looked up whole — not a path.",
     )
     param: str = Field(..., min_length=1)
     operator: Literal["gt", "gte", "lt", "lte"]
@@ -1067,7 +1068,8 @@ class WindowCursorMapping(_EndpointModel):
     cursor_field: str = Field(
         ...,
         pattern=RECORD_FIELD_PATH_PATTERN,
-        description="Dotted record field path used as the incremental watermark.",
+        description="Record field used as the incremental watermark. A plain key on "
+                    "the record shape's `properties`, looked up whole — not a path.",
     )
     start_param: str = Field(..., min_length=1)
     end_param: str = Field(..., min_length=1)
@@ -4759,9 +4761,51 @@ def _validate_cursor_fields_in_record_shape(
         raise violation("RULE-ENDP-013", "cursor-record-shape-unusable", str(detail)) from None
     for cm in replication.cursor_mappings:
         cursor_field = _cursor_field_of(cm)
-        _check_cursor_field_in_node(cursor_field, items, where="items", root=root)
-        _check_cursor_field_holds_the_mapping(
-            cm, _cursor_node_as_the_engine_reads_it(items, cursor_field, root)
+        field = _cursor_node_as_the_engine_reads_it(items, cursor_field, root)
+        if field is None:
+            # The engine's lookup missed. Walk the path, which either names
+            # the hop that broke (a typo, RULE-ENDP-013) or resolves — a
+            # dotted path the engine does not walk, left to the not-found arm
+            # of :func:`_check_cursor_field_holds_the_mapping` to explain.
+            _check_cursor_field_in_node(cursor_field, items, where="items", root=root)
+        else:
+            _require_cursor_node_declares_a_type(cursor_field, field, root, where="items")
+        _check_cursor_field_holds_the_mapping(cm, field)
+
+
+def _require_cursor_node_declares_a_type(
+    cursor_field: str, field: Any, root: Any, *, where: str
+) -> None:
+    """RULE-ENDP-013's typedness half, applied to the node the engine reads.
+
+    Split out because the lookup that finds that node is flat, and the walk
+    that :func:`_check_cursor_field_in_node` performs is not: a record shape
+    may declare a field whose name CONTAINS a dot, and splitting it would
+    report a declared field as undeclared. The engine has no such problem —
+    it looks the whole name up — so neither does this.
+
+    Resolution is right here and wrong in the grader: this asks whether the
+    document types the node at all, which a `$ref` answers, while the grader
+    asks what the cursor reader sees, which a `$ref` hides.
+    """
+    try:
+        materialized = materialize_node(field, root)
+    except SchemaResolutionError as exc:
+        raise violation(
+            "RULE-ENDP-013", "cursor-field-self-contradictory-node",
+            f"replication cursor_field {cursor_field!r} resolves in the "
+            f"response.schema record-shape branch (under {where!r}) to a "
+            f"self-contradictory node: {exc.reason} (spec: §Cross-Field Validation)"
+        ) from None
+    if not _declares_a_type(materialized, root):
+        raise violation(
+            "RULE-ENDP-013", "cursor-field-untyped-node",
+            f"replication cursor_field {cursor_field!r} resolves in the "
+            f"response.schema record-shape branch (under {where!r}) to a node "
+            "that declares no `type` (and no `native_type`/`arrow_type` pair). "
+            "Declare the type of the watermark value read there, or nothing "
+            "can tell what a valid comparison looks like "
+            "(spec: §Cross-Field Validation)"
         )
 
 
@@ -4863,8 +4907,8 @@ def _check_cursor_field_holds_the_mapping(
             "dotted path is not walked — point the cursor at a top-level "
             "record field — and a field contributed only by a `$ref` base or "
             "an `allOf` branch is not seen either — declare it on the record "
-            "shape\'s own `properties`, where a branch alongside may still "
-            "refine it"
+            "shape\'s own `properties`, carrying its own `type` and `format`, "
+            "because a branch alongside is not read for this field"
         )
     declared = field.get("type") if isinstance(field, dict) else None
     if isinstance(declared, str):

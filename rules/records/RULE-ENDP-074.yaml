@@ -34,11 +34,13 @@ rationale: >
   not walked: it matches no key, and the read fails when the endpoint is
   prepared, before the first request. Refusing it at authoring time moves
   that failure to where the author can see it. The lookup does not merge
-  either — a field the record shape
-  declares itself is read as that declaration, whatever a `$ref` base or an
-  `allOf` branch alongside also says about it — so the refinement idiom stays
-  valid. Refusing it would be over-refusal, which fails parity the same way
-  over-acceptance does. It also means a field contributed ONLY by a `$ref`
+  either — a field the record shape declares itself is read as that
+  declaration, whatever a `$ref` base or an `allOf` branch alongside also
+  says about it. So such a shape is accepted, because refusing it would be
+  over-refusal, which fails parity the same way over-acceptance does; but the
+  branch is not read for this field at all, so a `format` it adds to a `type`
+  on the shape is invisible to both readers, and the cursor field must carry
+  its own `type` and `format`. It also means a field contributed ONLY by a `$ref`
   base or an `allOf` branch, beside a record shape that has `properties` of
   its own, is refused: the engine reads that own map and no other, so the
   field it names is not there. The record SHAPE, unlike the field, is
