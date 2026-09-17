@@ -86,9 +86,21 @@ def stage_tree(source_root: Path, dest_root: Path) -> list[Path]:
 
     Relative paths, not names: both corpora are nested directories, so a copy
     that flattened them would lose the layout their loaders read back.
+
+    Every entry is a regular file. `shutil.copy2` resolves a symbolic link and
+    writes what it points AT, so a staged link publishes its target's bytes
+    under the package's name — content from outside the package, chosen by
+    something other than the file a reviewer read. Neither package has a use
+    for one, so it is refused rather than resolved.
     """
     copied = tracked_files(source_root)
     for src_path in copied:
+        if src_path.is_symlink():
+            raise SystemExit(
+                f"build: {src_path} is a symbolic link — staging copies what a "
+                "link points at, so it would publish content from outside the "
+                "package. Commit the file itself."
+            )
         dest = dest_root / src_path.relative_to(source_root)
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src_path, dest)

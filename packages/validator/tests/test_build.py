@@ -108,3 +108,33 @@ def test_every_data_file_under_src_is_tracked():
         "data files under src/ that the wheel would silently drop — the build "
         f"stages tracked files only, so commit each of these: {untracked}"
     )
+
+
+def test_staging_refuses_a_tracked_symlink(tmp_path):
+    """A link would publish the bytes it points AT under the package's name.
+
+    `shutil.copy2` resolves one, so without the refusal the staged tree — and
+    the wheel built from it — carries content from outside the package, chosen
+    by the link target rather than by the file a reviewer read. An immutable
+    PyPI release makes that unrecallable.
+    """
+    import subprocess
+
+    import pytest
+
+    _build_module()  # puts `packages/` on sys.path, where build_shared lives
+    import build_shared
+
+    src = tmp_path / "pkg"
+    (src / "sub").mkdir(parents=True)
+    (src / "sub" / "real.json").write_text("{}")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("content from outside the package")
+    (src / "sub" / "link.json").symlink_to(outside)
+
+    git = build_shared.git_executable()
+    subprocess.run([git, "init", "-q", str(src)], check=True)
+    subprocess.run([git, "-C", str(src), "add", "-A"], check=True)
+
+    with pytest.raises(SystemExit, match="symbolic link"):
+        build_shared.stage_tree(src, tmp_path / "staged")

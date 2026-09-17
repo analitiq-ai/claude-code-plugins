@@ -744,7 +744,7 @@ def test_a_fixture_outside_a_verdict_group_is_refused(monkeypatch, tmp_path):
 def test_a_fixture_that_is_not_json_is_refused(monkeypatch, tmp_path):
     _write_fixture(tmp_path, FIXTURED_RULES[0].id, "valid", "a.yaml")
     monkeypatch.setattr(corpus, "FIXTURES_DIR", tmp_path)
-    with pytest.raises(ValueError, match="a.yaml"):
+    with pytest.raises(ValueError, match=r"a\.yaml"):
         corpus.rule_fixtures()
 
 
