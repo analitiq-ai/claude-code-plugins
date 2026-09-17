@@ -9,10 +9,11 @@ re-implementation reconciles against the same JSON fixtures.
 """
 from __future__ import annotations
 
+import dataclasses
 import re
 
 import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, model_validator
 
 from analitiq.contracts.shared.introspect import closed_members, contract_classes
 
@@ -21,7 +22,7 @@ from analitiq.contracts.pipelines import config as pipeline_config
 from analitiq.contracts.pipelines import data_sync
 from analitiq.contracts.shared import common
 from analitiq.contracts.shared import rule_fixtures as corpus
-from analitiq.contracts.shared.rules import all_rules
+from analitiq.contracts.shared.rules import all_rules, violation
 from analitiq.contracts.shared.rule_record import (
     DESCRIPTIVE_TIER,
     ENFORCEMENT_LOCATIONS,
@@ -753,6 +754,28 @@ def test_fixture_matches_enforcement(fixture):
     # it: some other constraint failing first would pass a bare `raises`, and
     # the corpus would certify a rule nothing enforces.
     assert corpus.fixture_mismatch(fixture) is None
+
+
+@pytest.mark.parametrize("verdict", ["valid", "invalid"])
+def test_a_fixture_with_its_verdict_flipped_is_a_mismatch(verdict):
+    fixture = next(f for f in corpus.rule_fixtures() if f.verdict == verdict)
+    flipped = "invalid" if verdict == "valid" else "valid"
+    assert corpus.fixture_mismatch(dataclasses.replace(fixture, verdict=flipped))
+
+
+class _RejectsCitingAnotherRule(BaseModel):
+    @model_validator(mode="after")
+    def _reject(self):
+        raise violation("RULE-HTTP-001", "probe", "detail citing RULE-HTTP-002")
+
+
+def test_an_invalid_fixture_rejected_by_another_rule_is_a_mismatch():
+    """The message names RULE-HTTP-002; the enforcer raised only RULE-HTTP-001."""
+    fixture = corpus.RuleFixture(
+        rule_id="RULE-HTTP-002", verdict="invalid", name="cited",
+        model=_RejectsCitingAnotherRule, document={},
+    )
+    assert corpus.fixture_mismatch(fixture)
 
 
 @pytest.mark.parametrize("name", ["NoSuchContractModel", "Batching"])
