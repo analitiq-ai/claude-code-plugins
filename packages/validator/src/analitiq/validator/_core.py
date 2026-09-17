@@ -55,9 +55,9 @@ _KINDS = ("fail", "notApplicable", "informational")
 
 # The kind registry: ordered `(detector, validator_fn)` pairs. `_dispatch` runs
 # each detector in registration order and hands the document to the first
-# validator whose detector matches. A validator takes `(doc, doc_path, schema_url)`
-# and returns a list of findings.
-_Validator = Callable[[Any, "Path | None", "str | None"], list[dict]]
+# validator whose detector matches. A validator takes `(doc, doc_path)` and
+# returns a list of findings.
+_Validator = Callable[[Any, "Path | None"], list[dict]]
 _KIND_REGISTRY: list[tuple[Callable[[Any], bool], _Validator]] = []
 
 
@@ -281,11 +281,11 @@ def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: Typ
 
     A kind with no further cross-file or referential checks needs only
     `_model_findings(doc, adapter) + _missing_schema_url_findings(doc)` under the
-    per-kind `(doc, doc_path, schema_url)` signature. Packaging that here lets
-    such a module supply just its detector and adapter, so the combination is
+    per-kind `(doc, doc_path)` signature. Packaging that here lets such a
+    module supply just its detector and adapter, so the combination is
     defined once rather than reimplemented per kind.
     """
-    def _validate(doc: Any, doc_path: Path | None = None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+    def _validate(doc: Any, doc_path: Path | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
         return _model_findings(doc, adapter) + _missing_schema_url_findings(doc)
     register_kind(detector, _validate)
 
@@ -294,19 +294,15 @@ def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: Typ
 # Dispatch
 # ---------------------------------------------------------------------------
 
-def validate_document(doc: Any, doc_path: Path | None = None,
-                      schema_url: str | None = None) -> list[dict]:
-    """Detect the document kind, validate via its model, add cross-file checks.
-
-    `schema_url` is accepted and not consulted.
-    """
-    return _run_guarded(_dispatch, doc, doc_path, schema_url, crash_label="document validation")
+def validate_document(doc: Any, doc_path: Path | None = None) -> list[dict]:
+    """Detect the document kind, validate via its model, add cross-file checks."""
+    return _run_guarded(_dispatch, doc, doc_path, crash_label="document validation")
 
 
-def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:
+def _dispatch(doc: Any, doc_path: Path | None) -> list[dict]:
     for detector, validator in _KIND_REGISTRY:
         if detector(doc):
-            return validator(doc, doc_path, schema_url)
+            return validator(doc, doc_path)
     # Anything no registered kind claims is a document we were asked to validate
     # but cannot identify — that is a validation failure, not a pass.
     return [finding(
@@ -357,12 +353,6 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate an Analitiq connector/endpoint/type-map document.")
     parser.add_argument("--document", required=True, help="Path to the JSON document to validate.")
-    # Accepted for backward compatibility with existing invocations. Validation
-    # is now always model-driven and offline, so these are no-ops.
-    parser.add_argument("--schema-url", help="(ignored) validation is model-driven.")
-    parser.add_argument("--semantic-only", action="store_true", help="(ignored) always offline now.")
-    parser.add_argument("--json-only", action="store_true", help="(ignored) always offline now.")
-    parser.add_argument("--no-cache", action="store_true", help="(ignored) no schema cache.")
     args = parser.parse_args()
 
     document_path = Path(args.document)
@@ -377,7 +367,7 @@ def main() -> int:
             message=f"Cannot read document: {exc}")]}))
         return 1
 
-    findings = validate_document(document, doc_path=document_path.resolve(), schema_url=args.schema_url)
+    findings = validate_document(document, doc_path=document_path.resolve())
     passed = _passed(findings)
     print(json.dumps({"passed": passed, "findings": findings}, indent=2))
     return 0 if passed else 1

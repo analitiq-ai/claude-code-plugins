@@ -37,8 +37,6 @@ from analitiq.validator import validate_document  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / "plugins" / "analitiq-connector-builder" / "skills"
-CONNECTOR_SCHEMA = "https://schemas.analitiq.ai/connector/latest.json"
-ENDPOINT_SCHEMA = "https://schemas.analitiq.ai/api-endpoint/latest.json"
 TYPE_MAP_SCHEMAS = {
     "type-map-read.json": TYPE_MAP_READ_SCHEMA_URL,
     "type-map-write.json": TYPE_MAP_WRITE_SCHEMA_URL,
@@ -163,11 +161,7 @@ def test_prose_type_map_rules_validate(tmp_path: Path) -> None:
         }
         map_path = tmp_path / f"type-map-{direction}.json"
         map_path.write_text(json.dumps(doc), encoding="utf-8")
-        findings = validate_document(
-            doc,
-            doc_path=map_path.resolve(),
-            schema_url=TYPE_MAP_SCHEMAS[f"type-map-{direction}.json"],
-        )
+        findings = validate_document(doc, doc_path=map_path.resolve())
         failures += [
             f"{path.relative_to(REPO_ROOT)}:{lineno} ({direction}) "
             f"{f.get('rule')}: {f['message']}"
@@ -202,9 +196,7 @@ def test_example_connector_validates(example_dir: Path, tmp_path: Path) -> None:
     doc_path = _stage(example_dir, tmp_path)
     document = json.loads(doc_path.read_text(encoding="utf-8"))
 
-    findings = validate_document(
-        document, doc_path=doc_path.resolve(), schema_url=CONNECTOR_SCHEMA
-    )
+    findings = validate_document(document, doc_path=doc_path.resolve())
     errors = _errors(findings)
     assert not errors, "\n".join(
         f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors
@@ -216,10 +208,10 @@ def test_example_type_maps_validate(example_dir: Path, tmp_path: Path) -> None:
     """Validate each type map as a standalone document, under its own filename.
 
     This is the invocation `connector-schema-validator` documents (each map
-    validated against its matching read/write schema URL, direction derived from
-    the filename), so it should be exercised directly rather than only through
-    the connector's sibling walk. It also localizes a failure to the map instead
-    of surfacing it on the connector.
+    under its RULE-PKG-030 filename, direction resolved from the document's own
+    `direction`/`$schema`), so it should be exercised directly rather than only
+    through the connector's sibling walk. It also localizes a failure to the
+    map instead of surfacing it on the connector.
 
     It does NOT close the database read-map gap: rule-shape errors are already
     caught by the sibling walk, and neither level probes natives on a DB
@@ -227,15 +219,13 @@ def test_example_type_maps_validate(example_dir: Path, tmp_path: Path) -> None:
     documented in `spec-type-maps.md`, not covered here.
     """
     definition = _stage(example_dir, tmp_path).parent
-    present = [(definition / name, url) for name, url in TYPE_MAP_SCHEMAS.items()
+    present = [definition / name for name in TYPE_MAP_SCHEMAS
                if (definition / name).exists()]
     assert present, f"{example_dir.name} ships no type map"
 
-    for map_path, schema_url in present:
+    for map_path in present:
         document = json.loads(map_path.read_text(encoding="utf-8"))
-        findings = validate_document(
-            document, doc_path=map_path.resolve(), schema_url=schema_url
-        )
+        findings = validate_document(document, doc_path=map_path.resolve())
         errors = _errors(findings)
         assert not errors, f"{map_path.name}\n" + "\n".join(
             f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors
@@ -263,11 +253,7 @@ def test_example_write_maps_render_bare_container_markers(
     definition = _stage(example_dir, tmp_path).parent
     map_path = definition / "type-map-write.json"
     document = json.loads(map_path.read_text(encoding="utf-8"))
-    findings = validate_document(
-        document,
-        doc_path=map_path.resolve(),
-        schema_url=TYPE_MAP_SCHEMAS["type-map-write.json"],
-    )
+    findings = validate_document(document, doc_path=map_path.resolve())
     named = [
         f["message"]
         for f in findings
@@ -296,9 +282,7 @@ def test_example_endpoints_validate(example_dir: Path, tmp_path: Path) -> None:
 
     for endpoint_path in endpoint_files:
         document = json.loads(endpoint_path.read_text(encoding="utf-8"))
-        findings = validate_document(
-            document, doc_path=endpoint_path.resolve(), schema_url=ENDPOINT_SCHEMA
-        )
+        findings = validate_document(document, doc_path=endpoint_path.resolve())
         errors = _errors(findings)
         assert not errors, f"{endpoint_path.name}\n" + "\n".join(
             f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors

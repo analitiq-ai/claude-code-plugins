@@ -395,7 +395,7 @@ class TestStandaloneEndpointValidation:
         doc_path = pkg / "endpoints" / "thing.json"
         doc = self._endpoint()
         doc_path.write_text(json.dumps(doc))
-        return _validate_api_endpoint(doc, doc_path, None)
+        return _validate_api_endpoint(doc, doc_path)
 
     def _ids(self, findings):
         return {(f.get("rule"), f.get("severity")) for f in findings}
@@ -489,7 +489,7 @@ class TestStandaloneEndpointValidation:
             Path("thing.json") if shape == "relative"
             else Path("..") / "endpoints" / "thing.json"
         )
-        findings = _validate_api_endpoint(doc, doc_path, None)
+        findings = _validate_api_endpoint(doc, doc_path)
         assert ("RULE-ENDP-047", "error") in self._ids(findings), (
             "the undeclared transport_ref was downgraded to a warning because "
             "the sibling lookup missed"

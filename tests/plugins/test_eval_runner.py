@@ -228,10 +228,15 @@ def test_an_assertion_must_read_a_document_docs_resolves():
     assert any("absent-name" in p for p in problems)
 
 
-def test_a_validate_spec_names_exactly_one_selector():
-    both = {"glob": "a.json", "entity": "pipeline", "schema_url": "https://x/y.json"}
-    assert any("exactly one" in p for p in _problems({"validate": [both]}))
-    assert any("exactly one" in p for p in _problems({"validate": [{"glob": "a.json"}]}))
+def test_a_validate_spec_rejects_unknown_keys():
+    unknown = {"glob": "a.json", "entity": "pipeline", "schema_url": "https://x/y.json"}
+    assert any("unknown keys" in p for p in _problems({"validate": [unknown]}))
+
+
+def test_a_validate_spec_entity_is_optional():
+    # No `entity`: the plain validator detects the document's kind from its
+    # own shape instead of the pipeline plugin's `--entity`-selected adapter.
+    assert _problems({"validate": [{"glob": "a.json"}]}) == []
 
 
 def test_a_seed_source_that_does_not_exist_is_refused():

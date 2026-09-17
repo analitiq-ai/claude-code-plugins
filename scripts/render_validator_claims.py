@@ -132,10 +132,10 @@ class Probe:
     require_re: str = ""
 
 
-def _validate(doc: Any, doc_path: Path | None = None, schema_url: str | None = None) -> list[dict]:
+def _validate(doc: Any, doc_path: Path | None = None) -> list[dict]:
     from analitiq.validator import validate_document
 
-    return validate_document(doc, doc_path=doc_path, schema_url=schema_url)
+    return validate_document(doc, doc_path=doc_path)
 
 
 def _read_endpoint() -> dict:

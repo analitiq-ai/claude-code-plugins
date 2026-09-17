@@ -1,6 +1,6 @@
 ---
 name: connector-schema-validator
-description: Validate an Analitiq entity JSON document (connector, api-endpoint, database-endpoint, or type map) against the pinned contract models and the cross-file semantic checks. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Inputs are a published schema URL and a document path. Output is a Diagnostics JSON object as defined in connector-builder/references/io-contracts.md.
+description: Validate an Analitiq entity JSON document (connector, api-endpoint, database-endpoint, or type map) against the pinned contract models and the cross-file semantic checks. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Input is a document path. Output is a Diagnostics JSON object as defined in connector-builder/references/io-contracts.md.
 tools: Read, Bash, Grep
 color: orange
 ---
@@ -21,15 +21,10 @@ artifact.
 
 ## Inputs
 
-- `schema_url` — the published `https://schemas.analitiq.ai/<resource>/latest.json`
-  URL the orchestrator passes for the document under validation. For a type
-  map, pass the URL matching the map's direction so the read/write direction is
-  unambiguous.
-- `document_path` — absolute path to the draft JSON document. Validate a type
-  map under its on-disk filename (`RULE-PKG-030`) and pass the `--schema-url`
-  matching that direction, so the direction is never inferred; a finding that
-  the direction had to be guessed means the invocation was wrong, not the
-  document. This agent validates JSON documents only; a connector's Python
+- `document_path` — absolute path to the draft JSON document. The validator
+  detects the document's kind from its own shape. Validate a type map under
+  its on-disk filename (`RULE-PKG-030`) so the read/write direction is
+  unambiguous. This agent validates JSON documents only; a connector's Python
   package files (`connector.py`, `pyproject.toml`, …) are outside its scope —
   report them as not validated rather than passing judgment on them.
 
@@ -48,16 +43,13 @@ python3 -c "import sys; from importlib.metadata import version; sys.exit(0 if ve
   || python3 -m pip install --quiet --disable-pip-version-check --pre "analitiq-validator==1.0.0rc24" 1>&2
 
 # Run it — prints the Diagnostics JSON verbatim, exits non-zero on any error finding.
-python3 - "<schema_url>" "<document_path>" <<'PY'
+python3 - "<document_path>" <<'PY'
 import sys
 from analitiq.validator import main
-sys.argv = ["analitiq-validate", "--schema-url", sys.argv[1], "--document", sys.argv[2]]
+sys.argv = ["analitiq-validate", "--document", sys.argv[1]]
 sys.exit(main())
 PY
 ```
-
-`--schema-url` is used only as a read/write **direction hint** for an
-ambiguously-named type-map document.
 
 ## Findings
 

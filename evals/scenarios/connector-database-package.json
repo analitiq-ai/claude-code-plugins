@@ -8,16 +8,13 @@
   "expect": "build",
   "validate": [
     {
-      "glob": "mysql/definition/connector.json",
-      "schema_url": "https://schemas.analitiq.ai/connector/latest.json"
+      "glob": "mysql/definition/connector.json"
     },
     {
-      "glob": "mysql/definition/type-map-read.json",
-      "schema_url": "https://schemas.analitiq.ai/type-map-read/latest.json"
+      "glob": "mysql/definition/type-map-read.json"
     },
     {
-      "glob": "mysql/definition/type-map-write.json",
-      "schema_url": "https://schemas.analitiq.ai/type-map-write/latest.json"
+      "glob": "mysql/definition/type-map-write.json"
     }
   ],
   "docs": {

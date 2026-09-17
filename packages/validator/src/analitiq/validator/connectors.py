@@ -1212,14 +1212,14 @@ _WRITE_MAP_ADAPTER = TypeAdapter(TypeMapWriteDoc)
 # Per-kind validators + registration
 # ---------------------------------------------------------------------------
 
-def _validate_connector(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+def _validate_connector(doc: Any, doc_path: Path | None) -> list[dict]:
     findings = _model_findings(doc, _CONNECTOR_ADAPTER)
     findings += _missing_schema_url_findings(doc)
     findings += check_coverage(doc, doc_path)
     return findings
 
 
-def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+def _validate_api_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
     transports: Any = None
     sibling_findings: list[dict] = []
     if isinstance(doc, dict):
@@ -1329,7 +1329,7 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     return findings
 
 
-def _validate_database_endpoint(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+def _validate_database_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
     # The filename↔id gate applies only to the authored connection-scoped file the
     # engine locates by stem (`.../definition/endpoints/{endpoint_id}.json`), not to
     # the hash-addressed materialized snapshot (`.../endpoints/{endpoint_id}/schemas/
@@ -1345,7 +1345,7 @@ def _validate_database_endpoint(doc: Any, doc_path: Path | None, schema_url: str
     return findings
 
 
-def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
     # The engine keys a type map by the document's own `direction`, so the
     # filename never grades it. `$schema` names the direction too and stands in
     # when `direction` is missing or invalid, so the rest of the document is
@@ -1357,7 +1357,7 @@ def _validate_type_map(doc: Any, doc_path: Path | None, schema_url: str | None =
     return _type_map_findings(doc, direction)
 
 
-def _validate_kindless_connector(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+def _validate_kindless_connector(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
     # A dict carrying connector sentinels but no `kind` is a connector missing
     # its discriminator — hand it to the model so the missing `kind` is reported
     # (rather than silently passing as "unrecognized"). `$schema` is optional on
