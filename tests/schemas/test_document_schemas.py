@@ -80,6 +80,17 @@ def test_a_union_root_only_partly_declaring_schema_is_refused():
         render_schemas.document_schema_names([_resource("probe-mixed", root)])
 
 
+def test_a_container_root_of_document_models_is_not_selected():
+    root = list[_document_model("Item", "probe-array")]
+    assert render_schemas.document_schema_names([_resource("probe-array", root)]) == []
+
+
+def test_a_nullable_document_root_is_refused():
+    root = Union[_document_model("A", "probe-nullable"), None]
+    with pytest.raises(ValueError, match="probe-nullable"):
+        render_schemas.document_schema_names([_resource("probe-nullable", root)])
+
+
 def test_a_schema_field_naming_another_resource_is_refused():
     wrong = _resource("probe-own", _document_model("Wrong", "probe-other"))
     with pytest.raises(ValueError, match="probe-own"):

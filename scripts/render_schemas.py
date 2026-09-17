@@ -52,6 +52,7 @@ import re
 import sys
 import tomllib
 import inspect
+import types
 import typing
 from dataclasses import dataclass
 from pathlib import Path
@@ -1688,16 +1689,22 @@ def cmd_contracts_version(args: argparse.Namespace) -> int:
 # declaring `$schema` on its root model, never by being listed.
 
 
-def _root_models(root: Any) -> tuple[type[BaseModel], ...]:
-    """The models a document can be at its root: the root itself, or every
-    member of a root union. Unlike `_model_tree`, never descends into fields."""
-    if inspect.isclass(root) and issubclass(root, BaseModel):
-        return (root,)
-    return tuple(model for arg in typing.get_args(root) for model in _root_models(arg))
+def _root_types(root: Any) -> tuple[Any, ...]:
+    """The types a document can be at its root: every member of a root union,
+    or the root itself. A container root stays whole, so its item models never
+    count as the document."""
+    origin = typing.get_origin(root)
+    if origin is typing.Annotated:
+        return _root_types(typing.get_args(root)[0])
+    if origin in (typing.Union, types.UnionType):
+        return tuple(member for arg in typing.get_args(root) for member in _root_types(arg))
+    return (root,)
 
 
-def _schema_url_adapter(model: type[BaseModel]) -> TypeAdapter | None:
-    field = next((f for f in model.model_fields.values() if f.alias == "$schema"), None)
+def _schema_url_adapter(root: Any) -> TypeAdapter | None:
+    if not (inspect.isclass(root) and issubclass(root, BaseModel)):
+        return None
+    field = next((f for f in root.model_fields.values() if f.alias == "$schema"), None)
     if field is None:
         return None
     return TypeAdapter(
@@ -1723,14 +1730,14 @@ def document_schema_names(resources: Iterable[Resource]) -> list[str]:
     """
     selected: dict[str, list[TypeAdapter]] = {}
     for resource in resources:
-        roots = _root_models(resource.adapter._type)  # skipcq: PYL-W0212
-        adapters = [_schema_url_adapter(model) for model in roots]
+        adapters = [_schema_url_adapter(member)
+                    for member in _root_types(resource.adapter._type)]  # skipcq: PYL-W0212
         declared = [adapter for adapter in adapters if adapter is not None]
         if not declared:
             continue
         if len(declared) != len(adapters):
             raise ValueError(
-                f"resource {resource.name!r}: only some root models declare "
+                f"resource {resource.name!r}: only some root union members declare "
                 "`$schema`, so it is neither a document schema nor not one")
         selected[resource.name] = declared
     for name, adapters in selected.items():
