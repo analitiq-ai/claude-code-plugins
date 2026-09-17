@@ -55,12 +55,9 @@ from typing import Any, Callable, Literal
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 # The authored public contract models, published as `analitiq-contract-models`.
-# Public schemas render from these and ONLY these.
-#
-# In the infra repo this renderer also reached into the private `alq.models.*`
-# layer to emit ~40 internal-audience schemas. That half stayed behind: this
-# copy renders the 13 public resources, and `Resource.__post_init__` asserts a
-# registered model tree never leaves `analitiq.contracts`.
+# Public schemas render from these and ONLY these: every versioned resource is
+# a `RESOURCES` entry, and `Resource.__post_init__` asserts a registered model
+# tree never leaves `analitiq.contracts`.
 CONTRACTS_SRC = REPO_ROOT / "packages" / "contract-models" / "src"
 sys.path.insert(0, str(CONTRACTS_SRC))
 
@@ -108,6 +105,9 @@ from analitiq.contracts.pipelines.data_sync import (  # noqa: E402
     PipelineTerminateResponse,
 )
 from analitiq.contracts.stream import StreamInput  # noqa: E402
+from analitiq.contracts.validation_requests import (  # noqa: E402
+    ValidatePackageRequest,
+)
 SCHEMAS_ROOT = REPO_ROOT / "schemas"
 
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -1064,6 +1064,20 @@ RESOURCES: tuple[Resource, ...] = (
         mode="serialization",
         post_process=_data_sync_response_post_process,
         source_paths=(f"{_CONTRACTS_PREFIX}/pipelines/data_sync.py",),
+    ),
+    Resource(
+        name="validate-package-request",
+        title="Analitiq Validate Package Request",
+        description=(
+            "Public JSON Schema contract for a request to validate one connector "
+            "or pipeline package supplied as its documents: each document's file "
+            "text keyed by its relative path in the package. The schema gates the "
+            "request's shape only; the documents' content is not judged by it. "
+            "Source of truth: analitiq.contracts.validation_requests."
+            "ValidatePackageRequest (Pydantic)."
+        ),
+        adapter=TypeAdapter(ValidatePackageRequest),
+        source_paths=(f"{_CONTRACTS_PREFIX}/validation_requests.py",),
     ),
 )
 

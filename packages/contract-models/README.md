@@ -48,7 +48,13 @@ The **API** contract: the request/response shapes of the public REST API.
   the run/terminate/status responses, and the public run vocabulary
   (`PublicRunStatus`, `PublicErrorCode`)
 
-Both are shape and rules only. Nothing here knows how Analitiq runs a pipeline,
+The **validation request** contract: the arguments a validation of supplied
+documents takes.
+
+- `analitiq.contracts.validation_requests` — `DocumentSet`,
+  `ValidatePackageRequest`
+
+Each is shape and rules only. Nothing here knows how Analitiq runs a pipeline,
 stores a run, or names a state internally — those live server-side and depend on
 this package, never the reverse. Internal persistence/catalog variants
 (`*Document`/`*Config`/`*Patch`/`*Read`, resolved-connector/catalog shapes,

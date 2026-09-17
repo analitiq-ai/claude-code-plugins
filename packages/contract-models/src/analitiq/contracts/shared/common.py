@@ -88,6 +88,12 @@ DESCRIPTION_MAX = 2000
 TAG_MIN_LEN = 1
 TAG_MAX_LEN = 64
 TAGS_MAX = 50
+# Coarse guards against an unbounded request, not a size policy: each is set
+# far above what an authored document needs, so exceeding one is a request
+# error. The text ceiling bounds a document's text; the key ceiling bounds the
+# package-relative path it is supplied under.
+DOCUMENT_TEXT_MAX_LENGTH = 500_000
+DOCUMENT_KEY_MAX_LENGTH = 1024
 
 
 # Anchored "no leading/trailing whitespace" — the declarative mirror of
@@ -126,6 +132,8 @@ TrimmedTag = Annotated[
 NonEmptyStr = Annotated[
     str, StringConstraints(min_length=1, pattern=r"\S")
 ]
+
+DocumentText = Annotated[str, StringConstraints(max_length=DOCUMENT_TEXT_MAX_LENGTH)]
 
 
 # --- Field-shape validators -------------------------------------------------
@@ -246,6 +254,32 @@ HEADER_NAME_PROPERTY_NAMES: dict[str, Any] = {
 MediaType = Annotated[
     str, StringConstraints(pattern=rf"^{TOKEN}/{TOKEN} *(;.*)?$")
 ]
+
+# Pydantic renders a patterned-key dict as `patternProperties` alone, under
+# which a JSON-Schema-only consumer would ACCEPT the off-grammar keys the model
+# rejects (patternProperties constrains matching keys; non-matching keys fall
+# through to an unset additionalProperties). This callable closes two gaps so
+# schema and model agree:
+#
+# 1. Inject `additionalProperties: false` as a sibling, so off-grammar keys
+#    are rejected rather than falling through.
+# 2. Publish the key patterns with a true-end assertion `(?![\s\S])` in place
+#    of the trailing `$`. Python-`re`-based schema validators (`jsonschema`)
+#    let `$` match before a trailing newline, admitting keys ending in one
+#    that pydantic-core's Rust regex (end-of-haystack `$`) and conformant
+#    ECMA validators reject; the lookahead is true-end in BOTH regex
+#    dialects. Lookahead cannot live in the StringConstraints pattern —
+#    pydantic-core's Rust regex rejects it — so the ECMA-safe form goes in
+#    the published schema only and the Rust `$` (already true-end) is the
+#    runtime mirror.
+def closed_true_end_keys(schema: dict[str, Any]) -> None:
+    pattern_props = schema.pop("patternProperties", None)
+    if pattern_props:
+        schema["patternProperties"] = {
+            (key[:-1] + r"(?![\s\S])" if key.endswith("$") else key): value
+            for key, value in pattern_props.items()
+        }
+    schema["additionalProperties"] = False
 
 
 class StrictModel(ParseOnly, BaseModel):
