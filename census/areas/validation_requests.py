@@ -1,5 +1,5 @@
-"""Census entries for ``validation_requests``: the document set and the
-package request that carries one."""
+"""Census entries for ``validation_requests``: the document set, the package
+request that carries one, and the single-document request."""
 from __future__ import annotations
 
 from census.obligation import ProseObligation
@@ -30,5 +30,31 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="68a6572fde0c",
         structural="`documents` is a required DocumentSet under extra='forbid'",
         waiver=_CONTENT_IS_NOT_JUDGED_HERE,
+    ),
+    ProseObligation(
+        model="ValidateSingleDocumentRequest",
+        prose_hash="a02ec8e5a989",
+        structural="`document` and `entity` are required under extra='forbid'",
+        waiver=(
+            "whether the text is the document `entity` names is its content, which "
+            "this model does not judge; it gates only the request's shape"
+        ),
+    ),
+    ProseObligation(
+        model="ValidateSingleDocumentRequest", field="document",
+        prose_hash="76e04fa58fd3",
+        structural="typed DocumentText, a length-bounded string no validator parses",
+    ),
+    ProseObligation(
+        model="ValidateSingleDocumentRequest", field="entity",
+        prose_hash="93f351e3bea3",
+        structural=(
+            "a Literal over DOCUMENT_SCHEMA_NAMES, generated from the registered "
+            "resources whose root model declares `$schema`"
+        ),
+        waiver=(
+            "whether the document is written against the named schema is its "
+            "content, which this model does not judge"
+        ),
     ),
 )

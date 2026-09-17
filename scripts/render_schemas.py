@@ -37,6 +37,10 @@ Subcommands:
     contracts-version
                 Render schemas/contracts-version.json — the tree's provenance
                 stamp (versionless + mutable; covered by the full `check`).
+    document-schemas
+                Render analitiq/contracts/document_schemas.json — the resources
+                whose root model declares `$schema`, loaded by the
+                single-document request (covered by the full `check`).
 """
 from __future__ import annotations
 
@@ -51,6 +55,7 @@ import inspect
 import typing
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Iterable
 from typing import Any, Callable, Literal
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -76,8 +81,8 @@ if os.environ["DOMAIN"] != _DEFAULT_DOMAIN:
         f"committed schemas are rendered for {_DEFAULT_DOMAIN}. Unset it (or run "
         "in a clean shell) — otherwise every resource reports stale.")
 
-from pydantic import BaseModel, TypeAdapter  # noqa: E402
-from analitiq.contracts.shared.common import SCHEMA_BASE_URL, SLUG_PATTERN  # noqa: E402
+from pydantic import BaseModel, TypeAdapter, ValidationError  # noqa: E402
+from analitiq.contracts.shared.common import SCHEMA_BASE_URL, SLUG_PATTERN, schema_url_for  # noqa: E402
 
 #: The `$id` host, owned by the contract package.
 CANONICAL_BASE = SCHEMA_BASE_URL
@@ -106,7 +111,10 @@ from analitiq.contracts.pipelines.data_sync import (  # noqa: E402
 )
 from analitiq.contracts.stream import StreamInput  # noqa: E402
 from analitiq.contracts.validation_requests import (  # noqa: E402
+    DOCUMENT_SCHEMAS_KEY,
+    DOCUMENT_SCHEMAS_PATH,
     ValidatePackageRequest,
+    ValidateSingleDocumentRequest,
 )
 SCHEMAS_ROOT = REPO_ROOT / "schemas"
 
@@ -1079,6 +1087,23 @@ RESOURCES: tuple[Resource, ...] = (
         adapter=TypeAdapter(ValidatePackageRequest),
         source_paths=(f"{_CONTRACTS_PREFIX}/validation_requests.py",),
     ),
+    Resource(
+        name="validate-single-document-request",
+        title="Analitiq Validate Single Document Request",
+        description=(
+            "Public JSON Schema contract for a request to validate one document "
+            "supplied as its file text, together with the name of the published "
+            "document schema it is written against. The schema gates the "
+            "request's shape only; the document's content is not judged by it. "
+            "Source of truth: analitiq.contracts.validation_requests."
+            "ValidateSingleDocumentRequest (Pydantic)."
+        ),
+        adapter=TypeAdapter(ValidateSingleDocumentRequest),
+        source_paths=(
+            f"{_CONTRACTS_PREFIX}/validation_requests.py",
+            f"{_CONTRACTS_PREFIX}/document_schemas.json",
+        ),
+    ),
 )
 
 RESOURCES_BY_NAME: dict[str, Resource] = {r.name: r for r in RESOURCES}
@@ -1654,6 +1679,130 @@ def cmd_contracts_version(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# document_schemas.json — the single-document request's `entity` vocabulary
+# ---------------------------------------------------------------------------
+# Generated into the contract package rather than the schemas/ tree: the
+# request model loads it to build its `entity` Literal, and a model cannot read
+# RESOURCES itself, which lives in this script and imports the models. The
+# selection is a property of the models, so a resource becomes a label by
+# declaring `$schema` on its root model, never by being listed.
+
+
+def _root_models(root: Any) -> tuple[type[BaseModel], ...]:
+    """The models a document can be at its root: the root itself, or every
+    member of a root union. Unlike `_model_tree`, never descends into fields."""
+    if inspect.isclass(root) and issubclass(root, BaseModel):
+        return (root,)
+    return tuple(model for arg in typing.get_args(root) for model in _root_models(arg))
+
+
+def _schema_url_adapter(model: type[BaseModel]) -> TypeAdapter | None:
+    field = next((f for f in model.model_fields.values() if f.alias == "$schema"), None)
+    if field is None:
+        return None
+    return TypeAdapter(
+        typing.Annotated[(field.annotation, *field.metadata)] if field.metadata
+        else field.annotation)
+
+
+def _accepts(adapter: TypeAdapter, value: str) -> bool:
+    try:
+        adapter.validate_python(value)
+    except ValidationError:
+        return False
+    return True
+
+
+def document_schema_names(resources: Iterable[Resource]) -> list[str]:
+    """Names of the resources whose root model declares a `$schema` field.
+
+    Raises when a root union declares it on only some members, or when a
+    root's `$schema` refuses its own resource's URL or accepts another
+    selected resource's URL — either would make a label name a schema other
+    than the document's own.
+    """
+    selected: dict[str, list[TypeAdapter]] = {}
+    for resource in resources:
+        roots = _root_models(resource.adapter._type)  # skipcq: PYL-W0212
+        adapters = [_schema_url_adapter(model) for model in roots]
+        declared = [adapter for adapter in adapters if adapter is not None]
+        if not declared:
+            continue
+        if len(declared) != len(adapters):
+            raise ValueError(
+                f"resource {resource.name!r}: only some root models declare "
+                "`$schema`, so it is neither a document schema nor not one")
+        selected[resource.name] = declared
+    for name, adapters in selected.items():
+        for adapter in adapters:
+            if not _accepts(adapter, schema_url_for(name)):
+                raise ValueError(
+                    f"resource {name!r}: a root model's `$schema` refuses "
+                    f"{schema_url_for(name)!r}, its own schema URL")
+            others = [other for other in selected
+                      if other != name and _accepts(adapter, schema_url_for(other))]
+            if others:
+                raise ValueError(
+                    f"resource {name!r}: a root model's `$schema` also accepts "
+                    f"the schema URL of {others}")
+    return list(selected)
+
+
+def _document_schemas_text() -> str:
+    doc = {
+        "$comment": (
+            "GENERATED by scripts/render_schemas.py from the RESOURCES whose root "
+            "model declares `$schema`. Do not hand-edit; "
+            "`render_schemas.py document-schemas` re-renders it."
+        ),
+        DOCUMENT_SCHEMAS_KEY: document_schema_names(RESOURCES),
+    }
+    return json.dumps(doc, indent=2) + "\n"
+
+
+def check_document_schemas() -> tuple[bool, str]:
+    """(ok, message) — committed document_schemas.json vs rendered output."""
+    hint = "`scripts/render_schemas.py document-schemas`"
+    if not DOCUMENT_SCHEMAS_PATH.exists():
+        return (False, f"document-schemas: {DOCUMENT_SCHEMAS_PATH} is missing; run {hint}")
+    try:
+        rendered = _document_schemas_text()
+    except ValueError as exc:
+        return (False, f"document-schemas: cannot render — {exc}")
+    if DOCUMENT_SCHEMAS_PATH.read_text() != rendered:
+        return (
+            False,
+            "document-schemas: document_schemas.json is stale or hand-edited; "
+            f"re-run {hint}, then `write --resource validate-single-document-request`",
+        )
+    return (True, "document-schemas: OK — document_schemas.json matches RESOURCES")
+
+
+def _refresh_document_schemas() -> None:
+    rendered = _document_schemas_text()
+    if DOCUMENT_SCHEMAS_PATH.read_text() != rendered:
+        DOCUMENT_SCHEMAS_PATH.write_text(rendered)
+        print(
+            f"wrote {DOCUMENT_SCHEMAS_PATH.relative_to(REPO_ROOT)}; re-run "
+            "`write --resource validate-single-document-request` to publish it")
+
+
+def cmd_document_schemas(args: argparse.Namespace) -> int:
+    if args.check:
+        ok, msg = check_document_schemas()
+        print(msg, file=None if ok else sys.stderr)
+        return 0 if ok else 1
+    try:
+        rendered = _document_schemas_text()
+    except ValueError as exc:
+        print(f"document-schemas: cannot render — {exc}", file=sys.stderr)
+        return 2
+    DOCUMENT_SCHEMAS_PATH.write_text(rendered)
+    print(f"wrote {DOCUMENT_SCHEMAS_PATH.relative_to(REPO_ROOT)}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
 
@@ -1987,6 +2136,7 @@ def cmd_write(args: argparse.Namespace) -> int:
         f"wrote {resource.name}/{version}.json + latest.json + index.json "
         f"(bump {base_version} → {version}, '{severity}')"
     )
+    _refresh_document_schemas()
     _refresh_contracts_version()
     return 0
 
@@ -2074,11 +2224,11 @@ def cmd_check(args: argparse.Namespace) -> int:
             print(msg, file=sys.stderr)
         else:
             print(msg)
-    # arrow-types.json and contracts-version.json are generated but not
-    # registry Resources (versionless + mutable); a full check covers them so
-    # CI needs no extra invocation.
+    # arrow-types.json, contracts-version.json and document_schemas.json are
+    # generated but not registry Resources (versionless + mutable); a full
+    # check covers them so CI needs no extra invocation.
     if not args.resource:
-        for extra_check in (check_arrow_types, check_contracts_version):
+        for extra_check in (check_arrow_types, check_contracts_version, check_document_schemas):
             ok, msg = extra_check()
             if not ok:
                 failed = True
@@ -2087,8 +2237,8 @@ def cmd_check(args: argparse.Namespace) -> int:
                 print(msg)
     else:
         print(
-            "note: arrow-types.json and contracts-version.json not "
-            "checked with --resource; run a full `check` (CI does) to cover them"
+            "note: arrow-types.json, contracts-version.json and "
+            "document_schemas.json not checked with --resource; run a full `check` (CI does) to cover them"
         )
     return 1 if failed else 0
 
@@ -2299,6 +2449,19 @@ def main(argv: list[str] | None = None) -> int:
         "(also part of the full `check` run)",
     )
     p_cv.set_defaults(func=cmd_contracts_version)
+
+    p_ds = sub.add_parser(
+        "document-schemas",
+        help="render the contract package's document_schemas.json — the "
+        "single-document request's `entity` vocabulary, selected from RESOURCES",
+    )
+    p_ds.add_argument(
+        "--check",
+        action="store_true",
+        help="exit 1 if the committed file differs from rendered output "
+        "(also part of the full `check` run)",
+    )
+    p_ds.set_defaults(func=cmd_document_schemas)
 
     p_classify = sub.add_parser(
         "classify",
