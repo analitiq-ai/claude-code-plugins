@@ -455,11 +455,14 @@ def _p_connector_function_name() -> list[dict]:
 
 
 def _p_connector_lookup_map() -> list[dict]:
+    # The node carries the arguments `LookupDerived` declares (RULE-CTOR-068
+    # grades that), so what is left for the probe to measure is the claim the
+    # sentence makes: nothing reads the map against the input's value set.
     def mutate(doc: dict) -> dict:
         _first_transport(doc).setdefault("headers", {})["X-Region"] = {
             "function": "lookup",
-            "input": {"value": {"ref": "connection.parameters.region"},
-                      "map": {"literal": {"eu": "eu-1"}}},
+            "input": {"ref": "connection.parameters.region"},
+            "map": {"eu": "eu-1"},
         }
         return doc
     return _staged_connector(mutate, API_EXAMPLE)

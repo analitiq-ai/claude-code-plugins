@@ -1,0 +1,29 @@
+id: RULE-CTOR-069
+statement: >
+  A template in a connector field a runtime resolves MUST be a string, and
+  every `${` in it MUST open a placeholder that a later `}` closes.
+tier: shape
+severity: error
+artifact_kinds: [connector]
+validator: "analitiq.contracts.connector::ValueExpressionScopes._templates_close_their_placeholders"
+owners: [connector-plugin, engine]
+targets:
+  - HttpTransport
+  - TransportDefaults
+  - AuthOperationTemplate
+  - PostAuthOperationRequest
+  - AdbcTransport
+  - DatabaseTls
+  - DsnBinding
+fixture_model: HttpTransport
+rationale: >
+  An unclosed `${` is no placeholder to the template grammar, so every check
+  that reads placeholders — RULE-CTOR-057's scope check among them — sees a
+  template that declares none and passes it, and the fragment travels
+  verbatim into a header value, a DSN or a URL. That is the failure mode
+  worth catching: not a refused connection but an accepted one carrying
+  `${secrets.token` where a token belongs, which reads as a provider
+  rejecting valid credentials. A non-string template has the same
+  invisibility for the same reason, the grammar having nothing to scan.
+status: active
+superseded_by: null

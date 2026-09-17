@@ -1,0 +1,9 @@
+{
+  "type": "range",
+  "field": [
+    "amount"
+  ],
+  "value": {
+    "min": 0
+  }
+}

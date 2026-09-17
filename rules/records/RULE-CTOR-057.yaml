@@ -16,6 +16,7 @@ targets:
   - AdbcTransport
   - DatabaseTls
   - DsnBinding
+fixture_model: HttpTransport
 rationale: >
   The API-endpoint document has required this of its own expressions since it
   grew typed models for them, and the connector document feeds the same

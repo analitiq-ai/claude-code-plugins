@@ -3465,7 +3465,9 @@ def _validate_param_wiring(
         # A `from_input` path_param binds the record directly and declares no
         # param, so it satisfies the "must be a binding" requirement on its own.
         if not names and not from_inputs:
-            raise ValueError(
+            raise violation(
+                "RULE-ENDP-081",
+                "path-param-binding-without-source",
                 f"request.path_params[{placeholder!r}] must be a `{{from_param: <name>}}` expression "
                 "(spec: §Request Parameter Binding)"
             )
@@ -4321,7 +4323,9 @@ def _reject_unknown_scope(where: str, token: str, operation: _OperationKind) -> 
     """
     if has_known_scope(token):
         return
-    raise ValueError(
+    raise violation(
+        "RULE-ENDP-033",
+        "expression-unknown-scope",
         f"{where} references {token!r}, whose leading token is not a known "
         f"resolution scope ({', '.join(RESOLUTION_SCOPES)}). {_unresolved_harm(operation)} "
         "(spec: §Value Expressions)"

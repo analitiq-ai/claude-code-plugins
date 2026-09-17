@@ -1,0 +1,24 @@
+id: RULE-ENDP-081
+statement: >
+  Every `path_params` binding in a request MUST source its placeholder's
+  value through `from_param` or, on a write, through `from_input`; a ref,
+  literal or template with neither binds no path segment.
+tier: coherence
+severity: error
+artifact_kinds: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation, WriteOperation]
+fixture_model: WriteOperation
+rationale: >
+  A path segment is the one request slot the contract fills only from a
+  declaration: an `in: path` param, which states the value's type, whether
+  it is required and where its default comes from, or on a write a record
+  field the mode's input schema declares. RULE-ENDP-008, RULE-ENDP-024 and
+  RULE-ENDP-028 grade a binding against that declaration, and a ref, literal
+  or template written straight into `path_params` skips all three, so
+  nothing states what the segment may carry and nothing checks that it can
+  resolve. The predicate reads only the document and holds whatever a run
+  does with the path.
+status: active
+superseded_by: null

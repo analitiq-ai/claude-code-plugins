@@ -17,13 +17,13 @@ rationale: >
   answer fills: its body, its headers, its status, and the metadata keys the
   block itself declares. The record count and the records belong to a read's
   page, so a write-side reference to either names nothing, and neither does
-  a misspelled sub-scope. As the engine reads it today, such a reference is
-  refused when the write plan is built, before the first batch; without that
-  refusal it would resolve to nothing on every response, and a
-  `success_when` built over it would decide nothing about what the provider
-  said. The author is usually adapting a read response block to the write
-  side, where those scopes silently stop existing. The closed set is stated
-  here rather than inferred from the read side's reserved scopes, so a scope
-  added to reads does not become readable on writes by accident.
+  a misspelled sub-scope; a `success_when` built over one is written against
+  a scope the document does not have. The author is usually adapting a read
+  response block to the write side, where those scopes silently stop
+  existing. The closed set is stated here rather than inferred from the read
+  side's reserved scopes, so a scope added to reads does not become readable
+  on writes by accident. The pinned contract-consumption manifest claims no
+  read of the write-response block, so the rule rests on that closed scope
+  set alone and stays correct whatever a run does with the block.
 status: active
 superseded_by: null

@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/items",
+    "body": {
+      "item": {
+        "from_input": "record"
+      }
+    }
+  },
+  "input": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "native_type": "integer",
+          "arrow_type": "Int64"
+        }
+      }
+    }
+  },
+  "response": {
+    "success_when": {
+      "empty": {
+        "ref": "response.body.errors"
+      }
+    }
+  }
+}

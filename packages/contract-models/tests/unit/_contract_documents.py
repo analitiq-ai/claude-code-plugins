@@ -71,6 +71,17 @@ DATABASE_CONNECTOR = {
     },
 }
 
+# The second SQL transport family, for the documents that key a bulk-load
+# mechanism under `adbc`: RULE-CTOR-048 requires the connector to declare the
+# transport whose bulk mechanism it names.
+ADBC_TRANSPORT = {
+    "transport_type": "adbc",
+    "driver": "postgresql",
+    "db_kwargs": {
+        "uri": {"template": "postgresql://${connection.parameters.host}/db"}
+    },
+}
+
 SQL_CAPABILITIES = {
     "catalog": "none",
     "session_targeting": "per_statement",

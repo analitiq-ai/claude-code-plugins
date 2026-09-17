@@ -1,0 +1,7 @@
+{
+  "type": "pattern",
+  "field": [
+    "amount"
+  ],
+  "value": "[A-Z]{3}"
+}

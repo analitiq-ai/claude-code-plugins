@@ -1,26 +1,32 @@
 id: RULE-STRM-021
 statement: >
-  A validation rule's value MUST carry the payload shape its type requires.
+  A validation rule's `value` MUST carry a payload of the shape its `type`
+  reads, and that payload MUST constrain something: a length MUST be a
+  non-negative integer, a pattern a non-empty regular expression, a range an
+  object carrying a `min` or a `max` and no other bound, an admitted-value
+  set a list.
 tier: coherence
 severity: error
 artifact_kinds: [stream]
-validator: null
-enforcement_location: unenforced
+validator: "analitiq.contracts.stream::ValidationRule._value_carries_the_payload_its_type_needs"
 owners: [pipeline-plugin, engine]
 targets: [ValidationRule]
+fixture_model: ValidationRule
 rationale: >
   The value field is deliberately typed open so each rule type can carry its
   own payload — a bound, a regex, a range object, a list of admitted values
-  — and that openness is what leaves the shape unchecked: a rule whose
-  payload is the wrong kind validates here, and what happens when the rule
-  runs against a record, mid-transfer, depends on which kind it is. A
-  `range` payload of the wrong shape raises there, reliably; the others do
-  not: a wrong-shaped `pattern` payload can still interpolate into a
-  syntactically valid, silently-wrong regex, and a wrong-shaped `in_list`
-  payload can iterate into a value set with no error rather than raising.
-  The presence check `RULE-STRM-009` settles only whether a payload is
-  present, so an author who reads a clean validation as confirmation of the
-  payload has read too much into it. Catching a violation means reading
-  each rule's value against the meaning of its type in the stream spec.
+  — and that openness is what leaves the shape unchecked by the annotation:
+  a rule whose payload is the wrong kind validates against the field, and
+  what happens when the rule runs against a record, mid-transfer, depends on
+  which kind it is. A `range` payload of the wrong shape raises there,
+  reliably; the others do not: a wrong-shaped `pattern` payload can still
+  interpolate into a syntactically valid, silently-wrong regex, and a
+  wrong-shaped `in_list` payload can iterate into a value set with no error
+  rather than raising. A payload that is the right kind but constrains
+  nothing — a negative length, an empty pattern, a range with neither bound
+  — fails no row and is reported nowhere, which reads exactly like a rule
+  that passed. The presence check RULE-STRM-009 settles only whether a
+  payload is present, so this rule is what settles whether the one present
+  can be applied, on the document, where the author is still holding it.
 status: active
 superseded_by: null

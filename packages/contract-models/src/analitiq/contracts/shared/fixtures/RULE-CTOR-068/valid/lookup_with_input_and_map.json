@@ -1,0 +1,15 @@
+{
+  "transport_type": "http",
+  "base_url": "https://api.example.test/v1",
+  "headers": {
+    "X-Region": {
+      "function": "lookup",
+      "input": {
+        "ref": "connection.parameters.region"
+      },
+      "map": {
+        "eu": "eu-west-1"
+      }
+    }
+  }
+}

@@ -47,7 +47,7 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
             "endpoints.WriteResponse.metadata",
             "endpoints.WriteResponse.success_when",
         ),
-        rationale_sha256="f6a37a14bf3bdf1a2922a538e854e19880c98d915b11165d260e081cf70dc93a",
+        rationale_sha256="bd5584d06a87064b3914a706865723da50817bc4ce48d6929d1e053f3f0e0f9d",
     ),
     RecordAffirmation(
         "RULE-ENDP-038",

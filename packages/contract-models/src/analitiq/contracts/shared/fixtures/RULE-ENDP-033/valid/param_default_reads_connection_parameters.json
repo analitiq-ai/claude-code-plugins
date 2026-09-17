@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/items",
+    "body": {
+      "item": {
+        "from_input": "record"
+      }
+    },
+    "query": {
+      "token": {
+        "from_param": "tok"
+      }
+    }
+  },
+  "input": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "native_type": "integer",
+          "arrow_type": "Int64"
+        }
+      }
+    }
+  },
+  "params": {
+    "tok": {
+      "in": "query",
+      "type": "string",
+      "required": true,
+      "default": {
+        "ref": "connection.parameters.tok"
+      }
+    }
+  }
+}
