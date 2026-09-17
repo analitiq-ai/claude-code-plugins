@@ -39,6 +39,10 @@ rationale: >
   runtime settles. A ref that is not a string leads with nothing at all: the
   grammar has no token to read out of it, so the scope check passes it the
   same way it passes a template with no placeholder, and it is refused on its
-  type for the reason RULE-CTOR-069 refuses a non-string template.
+  type for the reason RULE-CTOR-069 refuses a non-string template. An empty
+  `${}` leads with nothing either, but it IS a placeholder: a closed `${...}`
+  is one whatever it encloses, and the key is stripped before lookup, so `${}`
+  addresses the same empty name `${ }` does and is refused here for the same
+  reason rather than shipped as literal text.
 status: active
 superseded_by: null

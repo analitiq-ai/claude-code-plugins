@@ -4294,12 +4294,21 @@ class TestTemplatePlaceholderScope:
         with pytest.raises(ValidationError, match="resolution scope"):
             TemplateExpression(template=template)
 
-    @pytest.mark.parametrize("template", ["key=${}", "Bearer ${secrets.api_key"])
-    def test_malformed_opener_matches_resolver_and_passes(self, template):
-        # `${}` and an unclosed `${` are not placeholders under the shared
-        # resolver grammar (`_TEMPLATE_RE` requires `[^}]+`), so — matching the
-        # runtime — they are inert literal text, not a validation error. The model
-        # deliberately does not invent a stricter rule than the resolver.
+    @pytest.mark.parametrize("template", ["key=${}", "key=${ }"])
+    def test_empty_placeholder_rejected(self, template):
+        # A closed `${...}` is a placeholder whatever it encloses, and the
+        # resolver strips the key before looking it up — so `${}` addresses the
+        # same empty name `${ }` does and gets the same verdict.
+        with pytest.raises(ValidationError, match="resolution scope"):
+            TemplateExpression(template=template)
+
+    def test_unclosed_opener_matches_resolver_and_passes(self):
+        # An unclosed `${` is no placeholder under the shared resolver grammar,
+        # so — matching the runtime — it is inert literal text, not a validation
+        # error. The model deliberately does not invent a stricter rule than the
+        # resolver. (The connector document refuses it under RULE-CTOR-069; the
+        # endpoint document has no counterpart yet.)
+        template = "Bearer ${secrets.api_key"
         assert TemplateExpression(template=template).template == template
 
 

@@ -44,7 +44,11 @@ LOG = logging.getLogger(__name__)
 # into the `secrets` resolution scope.
 OAUTH_TOKEN_PAYLOAD_KEY = "__oauth_token_payload"
 
-_TEMPLATE_RE = re.compile(r"\$\{([^}]+)\}")
+# A closed `${...}` is a placeholder whatever it encloses, empty included:
+# the key is stripped before lookup, so `${}` addresses the same empty name
+# `${ }` does. Reading one as a placeholder and the other as literal text
+# would give one authored intent two verdicts.
+_TEMPLATE_RE = re.compile(r"\$\{([^}]*)\}")
 
 # The four object forms the value-expression contract defines. A dict bearing
 # any of these keys is an expression node; a dict bearing none is structural
