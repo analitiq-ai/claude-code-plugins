@@ -194,15 +194,18 @@ def validate_single_document(
 
     try:
         document = json.loads(request.document)
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, RecursionError) as exc:
+        # RecursionError is a RuntimeError, so nesting deep enough to exhaust the
+        # parser's stack escapes the JSONDecodeError arm — and it is still content
+        # a caller sent, not a defect in this package.
         return _envelope([_unreadable_document_finding(exc)])
 
     detected = _detected_entity(document)
     if detected != request.entity:
         if detected is None:
             message = (
-                f"declared entity {request.entity!r}, but no registered kind "
-                "recognises this document's own content.")
+                f"declared entity {request.entity!r}, but this document's own "
+                "content matches no published document schema.")
         else:
             message = (
                 f"declared entity {request.entity!r} does not match "

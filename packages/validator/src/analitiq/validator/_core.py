@@ -354,7 +354,9 @@ def main() -> int:
     document_path = Path(args.document)
     try:
         document = json.loads(document_path.read_text())
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
+        # RecursionError is a RuntimeError, so nesting deep enough to exhaust the
+        # parser's stack escapes the JSONDecodeError arm.
         # OSError subsumes FileNotFoundError / IsADirectoryError / PermissionError,
         # so an unreadable document always yields the finding + exit 1 (never a
         # bare traceback), matching _load_type_map and the documented contract.

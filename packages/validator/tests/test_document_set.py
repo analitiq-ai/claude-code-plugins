@@ -1,12 +1,12 @@
 """Fixture corpus for the path-free document-set API (`analitiq.validator
-.document_set`) — every case exercising one of its entry points is
-`xfail(strict=True)`, because each of those functions currently raises
-`NotImplementedError`. An implementation turns such a case from `xfail` to
-passing by replacing the stub body it exercises and removing that case's
-marker; `strict=True` means a case that starts passing while its marker is
-still on it fails the suite, so a marker can never survive its own fix by
-accident. The cases that grade a type-contract fact settled now — the
-signature pin and the `Finding` shape pin — carry no marker and pass today.
+.document_set`) — a case exercising an entry point that still raises
+`NotImplementedError` is `xfail(strict=True)`. An implementation turns such a
+case from `xfail` to passing by replacing the stub body it exercises and
+removing that case's marker; `strict=True` means a case that starts passing
+while its marker is still on it fails the suite, so a marker can never survive
+its own fix by accident. The cases that grade a type-contract fact settled now
+— the signature pin and the `Finding` shape pin — carry no marker and pass
+today.
 
 Two corpora already committed for the path-based routes are reused here
 rather than re-authored: `packages/validator/tests/corpus/` (a connector
@@ -505,6 +505,65 @@ def test_unparseable_document_text_is_a_finding_not_a_raise(validator):
     result = validator.validate_single_document(request)
     assert result["passed"] is False
     assert any(f["message_id"] == "unreadable-document" for f in result["findings"]), result
+
+
+def test_nesting_too_deep_to_parse_is_a_finding_not_a_raise(validator):
+    """`RecursionError` is a `RuntimeError`, so it escapes the `JSONDecodeError`
+    arm the parser's other failures land in. It is still content a caller sent,
+    and a consumer wrapping this package as a remote tool would otherwise take
+    the crash for a document it was handed."""
+    document = "[" * 20_000 + "]" * 20_000
+    result = validator.validate_single_document(
+        ValidateSingleDocumentRequest(document=document, entity="connector"))
+    assert result["passed"] is False
+    assert any(f["message_id"] == "unreadable-document" for f in result["findings"]), result
+
+
+# ---------------------------------------------------------------------------
+# `_detected_entity`'s tables restate a vocabulary the contract package
+# generates, and nothing else in the validator package reads that owner. Per
+# `.claude/rules/no-drift-surfaces.md` a copy is pinned by a test that reads the
+# owner, or it is a defect — so the pin below reads `DOCUMENT_SCHEMA_NAMES`
+# itself. A kind registering with no name there cannot be declared as an
+# `entity` at all, so the vocabulary is what the tables have to track.
+# ---------------------------------------------------------------------------
+
+#: One document per published document-schema name, built from the fixtures
+#: above. Membership is asserted against `DOCUMENT_SCHEMA_NAMES` itself, so a
+#: name added or renamed there fails here rather than silently going undetected.
+_DOCUMENT_FOR_ENTITY = {
+    "connector": _CONNECTOR_WISE,
+    "connection": _CONN_WISE,
+    "pipeline": _PIPELINE,
+    "stream": _STREAM,
+    "api-endpoint": _WISE_TRANSFERS_ENDPOINT,
+    "database-endpoint": _DB_ENDPOINT,
+    "type-map-read": _CONNECTOR_PG_TYPE_MAP_READ,
+    "type-map-write": _CONNECTOR_PG_TYPE_MAP_WRITE,
+}
+
+
+def test_every_published_document_schema_name_is_detected(validator):
+    """Each name the contract publishes resolves from a document of that kind.
+    A name the contract adds or renames lands here as a missing key, rather than
+    as every document of that kind drawing a spurious `entity-mismatch`."""
+    from analitiq.contracts.validation_requests import DOCUMENT_SCHEMA_NAMES
+    from analitiq.validator.document_set import _detected_entity
+
+    assert set(_DOCUMENT_FOR_ENTITY) == set(DOCUMENT_SCHEMA_NAMES)
+    for entity, document in _DOCUMENT_FOR_ENTITY.items():
+        assert _detected_entity(document) == entity, (entity, document)
+
+
+def test_an_assembled_bundle_resolves_to_no_published_name(validator):
+    """A bundle is not a single document and no published schema names one, so
+    it is deliberately absent from `_detected_entity`'s tables. Sent to this
+    entry point it is reported as matching no published schema — never
+    validated as the `pipeline` its core carries."""
+    bundle = {"pipeline": _PIPELINE, "streams": [_STREAM], "connections": {_SRC: _CONN_WISE}}
+    result = validator.validate_single_document(_document_request(bundle, "pipeline"))
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"] if f["kind"] == "fail"] == ["entity-mismatch"]
 
 
 # ---------------------------------------------------------------------------

@@ -66,8 +66,8 @@ document content directly — cannot use either route: it has the documents'
 content in hand, never a directory they can be read from.
 
 `analitiq.validator.document_set` fixes the contract such a consumer calls
-instead, ahead of building it: its types and signatures are exported from
-this package today; every function currently raises `NotImplementedError`.
+instead: `validate_single_document` is implemented, and the package entry
+points still raise `NotImplementedError`.
 `packages/validator/tests/test_document_set.py` is the fixture corpus that
 fixes what an implementation must satisfy, `xfail` until each case's function
 is built. Read that module and that test file for the contract itself — it is
