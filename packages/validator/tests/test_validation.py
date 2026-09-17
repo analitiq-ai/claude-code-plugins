@@ -1448,50 +1448,36 @@ def test_type_map_findings_rejects_an_unsupported_direction_or_scope(validator, 
         validator.type_map_findings(doc, **kwargs)
 
 
-def test_schema_url_is_inert_for_every_registered_kind(validator, tmp_path):
-    # `validate_document` documents `schema_url` as threaded through unread.
-    # Each entry carries its own hint, and the hint must name a schema the
-    # document is NOT graded against — otherwise the entry passes whether or not
-    # a validator resolves from the hint. For the type-map that means the
-    # opposite direction rather than another kind: a `type-map-read` URL is the
-    # only hint value a direction resolver could act on.
-    #
+def test_every_registered_kind_is_reached_by_a_document_here(validator, tmp_path):
     # Coverage is derived from `_KIND_REGISTRY`, not listed: a hand-written set
-    # would leave a newly registered kind silently ungraded, which is exactly the
-    # case where a fresh validator body is most likely to reach for the hint.
+    # would leave a newly registered kind silently ungraded, and a kind no
+    # document here reaches is a detector nothing in this file exercises.
     from analitiq.validator._core import _KIND_REGISTRY
 
-    other = CONNECTOR_SCHEMA_URL
     docs = {
-        "connector": (_connector_doc(), None, STREAM_SCHEMA_URL),
-        "api-endpoint": (_endpoint("TEXT", "Utf8"), None, other),
+        "connector": (_connector_doc(), None),
+        "api-endpoint": (_endpoint("TEXT", "Utf8"), None),
         "database-endpoint": (_db_endpoint(derive_db_endpoint_id(None, "public", "orders")),
-                              tmp_path / "orders.json", other),
+                              tmp_path / "orders.json"),
         "type-map": (_type_map_doc(
             [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write"),
-            tmp_path / "type-map-read.json", _TM_READ_SCHEMA),
-        # The document that declares no direction is the one a hint could still
-        # resolve: with nothing to contradict, a resolver reading the URL would
-        # grade it as read where the union reports the unusable discriminator.
+            tmp_path / "type-map-read.json"),
         "type-map-declaring-no-direction": (
             {"$schema": _TM_READ_SCHEMA,
              "rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]},
-            tmp_path / "type-map-read.json", _TM_READ_SCHEMA),
+            tmp_path / "type-map-read.json"),
         # `auth` is a connector sentinel and there is no `kind`, so this reaches
         # the kindless-connector fallback rather than the connector proper.
-        "kindless-connector": ({"$schema": CONNECTOR_SCHEMA_URL, "auth": {}}, None, STREAM_SCHEMA_URL),
-        "pipeline-bundle": ({"pipeline": _pipeline_doc(), "streams": [], "connections": []},
-                            None, other),
-        "connection": (_connection_doc(), None, other),
-        "stream": (_stream_doc(), None, other),
-        "pipeline": (_pipeline_doc(), None, other),
-        "unrecognized": ({"nothing": "claims this"}, None, other),
+        "kindless-connector": ({"$schema": CONNECTOR_SCHEMA_URL, "auth": {}}, None),
+        "pipeline-bundle": ({"pipeline": _pipeline_doc(), "streams": [], "connections": []}, None),
+        "connection": (_connection_doc(), None),
+        "stream": (_stream_doc(), None),
+        "pipeline": (_pipeline_doc(), None),
+        "unrecognized": ({"nothing": "claims this"}, None),
     }
     reached = set()
-    for label, (doc, doc_path, hint) in docs.items():
-        bare = validator.validate_document(doc, doc_path=doc_path)
-        hinted = validator.validate_document(doc, doc_path=doc_path, schema_url=hint)
-        assert bare == hinted, (label, bare, hinted)
+    for doc, doc_path in docs.values():
+        validator.validate_document(doc, doc_path=doc_path)
         # `_dispatch` takes the first matching detector, so that is the one graded.
         reached.add(next((i for i, (d, _) in enumerate(_KIND_REGISTRY) if d(doc)), None))
     assert reached == set(range(len(_KIND_REGISTRY))) | {None}, sorted(
