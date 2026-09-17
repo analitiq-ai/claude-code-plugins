@@ -114,7 +114,6 @@ except ImportError as exc:  # pragma: no cover - dependency guard
 _READ_MAP_FILENAME = "type-map-read.json"
 _WRITE_MAP_FILENAME = "type-map-write.json"
 _LEGACY_MAP_FILENAME = "type-map.json"
-_MAP_FILENAME_BY_DIRECTION = {"read": _READ_MAP_FILENAME, "write": _WRITE_MAP_FILENAME}
 
 _CONNECTOR_SENTINELS = ("transports", "connection_contract", "default_transport", "auth")
 _STORAGE_KINDS = ("file", "s3", "stdout")
