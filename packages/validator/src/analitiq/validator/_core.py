@@ -336,6 +336,16 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
 # CLI
 # ---------------------------------------------------------------------------
 
+def _unreadable_document_finding(exc: Exception) -> dict:
+    """The finding for a document whose text could not be read or parsed at
+    all, before any kind was even identified — shared by the disk-backed CLI
+    below and `analitiq.validator.document_set.validate_single_document`,
+    which parses text it already holds rather than a path."""
+    return finding(
+        message_id="unreadable-document", kind="fail", path="",
+        message=f"Cannot read document: {exc}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate an Analitiq connector/endpoint/type-map document.")
     parser.add_argument("--document", required=True, help="Path to the JSON document to validate.")
@@ -348,9 +358,7 @@ def main() -> int:
         # OSError subsumes FileNotFoundError / IsADirectoryError / PermissionError,
         # so an unreadable document always yields the finding + exit 1 (never a
         # bare traceback), matching _load_type_map and the documented contract.
-        print(json.dumps({"passed": False, "findings": [finding(
-            message_id="unreadable-document", kind="fail", path="",
-            message=f"Cannot read document: {exc}")]}))
+        print(json.dumps({"passed": False, "findings": [_unreadable_document_finding(exc)]}))
         return 1
 
     findings = validate_document(document, doc_path=document_path.resolve())

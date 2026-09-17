@@ -1379,16 +1379,23 @@ def _validate_database_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
     return findings
 
 
-def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    # The engine keys a type map by the document's own `direction`, so the
-    # filename never grades it. `$schema` names the direction too and stands in
-    # when `direction` is missing or invalid, so the rest of the document is
-    # graded against the model its author meant; with neither, the read model
-    # reports the missing `direction` itself.
+def _type_map_direction(doc: Any) -> Literal["read", "write"]:
+    """The `read`/`write` direction a type-map document declares.
+
+    The engine keys a type map by the document's own `direction`, so the
+    filename never grades it. `$schema` names the direction too and stands in
+    when `direction` is missing or invalid, so the rest of the document is
+    graded against the model its author meant; with neither, the read model
+    reports the missing `direction` itself.
+    """
     direction = doc.get("direction")
     if direction not in ("read", "write"):
         direction = "write" if doc.get("$schema") == TYPE_MAP_WRITE_SCHEMA_URL else "read"
-    return type_map_findings(doc, direction)
+    return direction
+
+
+def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+    return type_map_findings(doc, _type_map_direction(doc))
 
 
 def _validate_kindless_connector(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature

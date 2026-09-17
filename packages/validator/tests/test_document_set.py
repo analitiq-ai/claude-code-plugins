@@ -455,7 +455,6 @@ def _write_package(root: Path, documents: dict) -> None:
 # checked against detection rather than trusted.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_single_document")
 def test_single_document_wraps_the_path_based_route(validator):
     """A document whose declared `entity` matches what detection finds reports
     exactly the path-based route's findings, wrapped in one envelope."""
@@ -465,7 +464,6 @@ def test_single_document_wraps_the_path_based_route(validator):
     assert json.dumps(result) == json.dumps(_expected_envelope(validator, expected_findings))
 
 
-@_xfail("validate_single_document")
 def test_declared_entity_that_disagrees_with_the_document_is_a_finding(validator):
     """The caller's declaration is checked, not trusted: a stream document sent
     as a connector is reported, not silently validated as whatever it looks
@@ -481,7 +479,6 @@ def test_declared_entity_that_disagrees_with_the_document_is_a_finding(validator
     assert not any(f["kind"] == "fail" for f in matched["findings"]), matched
 
 
-@_xfail("validate_single_document")
 def test_type_map_entity_names_the_direction_the_document_declares(validator):
     """`entity`'s vocabulary separates the read direction from the write one
     while the core registry's detector claims a type map by shape alone, so the
@@ -498,7 +495,6 @@ def test_type_map_entity_names_the_direction_the_document_declares(validator):
     assert not any(f["kind"] == "fail" for f in sent_as_read["findings"]), sent_as_read
 
 
-@_xfail("validate_single_document")
 def test_unparseable_document_text_is_a_finding_not_a_raise(validator):
     """Document *content* is what this API judges, so text the JSON parser
     cannot read comes back as a finding under `unreadable-document`, the

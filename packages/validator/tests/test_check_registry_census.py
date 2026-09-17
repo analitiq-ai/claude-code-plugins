@@ -115,9 +115,13 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
 RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator._core::_dispatch", "unrecognized-document"): (
         "no registered kind's detector claimed the document"),
-    ("analitiq.validator._core::main", "unreadable-document"): (
+    ("analitiq.validator._core::_unreadable_document_finding", "unreadable-document"): (
         "the document could not be read or parsed at all, before any kind "
         "was even identified"),
+    ("analitiq.validator.document_set::validate_single_document", "entity-mismatch"): (
+        "a structural precondition — the caller's declared entity disagrees "
+        "with, or nothing recognises, the document's own content — rejected "
+        "before any rule-specific check could run"),
     ("analitiq.validator._core::validate_document", "check-crashed"): (
         "top-level dispatch crashed before any kind was even identified, so "
         "the crash is not attributable to any one rule; a guarded check "

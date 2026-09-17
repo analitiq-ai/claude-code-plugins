@@ -50,6 +50,7 @@ removes the markers one case at a time.
 """
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Literal, TypedDict
 
 if TYPE_CHECKING:
@@ -108,6 +109,69 @@ class ValidationEnvelope(TypedDict):
     findings: list[Finding]
 
 
+def _envelope(findings: list[Finding]) -> ValidationEnvelope:
+    """Wrap `findings` in the one `ValidationEnvelope` shape every entry point
+    in this module answers with — reduced the same way `finding_costs_a_pass`
+    is defined, never a second predicate that can drift from it."""
+    from analitiq.validator._core import finding_costs_a_pass
+    return {"passed": not any(finding_costs_a_pass(f) for f in findings), "findings": findings}
+
+
+def _detected_entity(document: object) -> str | None:
+    """The published document-schema name the core registry's own detection
+    would assign `document`, or `None` when no registered kind claims it — the
+    same outcome `_core._dispatch` reports as `unrecognized-document`.
+
+    Walks the live `_KIND_REGISTRY` in its real registration order rather than
+    a separately hand-copied precedence list, so the order detectors are tried
+    is always read from the registry, never duplicated. `_KIND_REGISTRY`'s own
+    entries carry no name for either half of the pair; each registration
+    idiom keeps a name on a different half — `register_kind` (connector /
+    api-endpoint / database-endpoint / type-map / kindless-connector, all in
+    `analitiq.validator.connectors`) always names its validator, while
+    `register_model_and_schema_kind` (connection / stream / pipeline) builds
+    an anonymous validator closure per call and only ever names its detector
+    — so the two tables below key off whichever half is actually a stable,
+    importable name for that registration.
+
+    `_validate_pipeline_bundle`'s registration is deliberately absent from
+    both tables: no published document-schema name denotes an assembled
+    bundle, so a document happening to match its detector falls through to
+    `None` the same as one no detector recognises at all.
+    """
+    from analitiq.validator import _core, is_connection_doc, is_pipeline_doc, is_stream_doc
+    from analitiq.validator.connectors import (
+        _validate_api_endpoint,
+        _validate_connector,
+        _validate_database_endpoint,
+        _validate_kindless_connector,
+        _validate_type_map,
+        _type_map_direction,
+    )
+
+    entity_by_validator = {
+        _validate_connector: "connector",
+        _validate_api_endpoint: "api-endpoint",
+        _validate_database_endpoint: "database-endpoint",
+        _validate_kindless_connector: "connector",
+    }
+    entity_by_detector = {
+        is_connection_doc: "connection",
+        is_stream_doc: "stream",
+        is_pipeline_doc: "pipeline",
+    }
+
+    for detector, validator in _core._KIND_REGISTRY:
+        if not detector(document):
+            continue
+        if validator is _validate_type_map:
+            return f"type-map-{_type_map_direction(document)}"
+        if validator in entity_by_validator:
+            return entity_by_validator[validator]
+        return entity_by_detector.get(detector)
+    return None
+
+
 def validate_single_document(
         request: ValidateSingleDocumentRequest) -> ValidationEnvelope:
     """Validate one document supplied as its file text.
@@ -128,13 +192,22 @@ def validate_single_document(
 
     Wraps the path-based route's bare findings list in a `ValidationEnvelope`,
     so every entry point in this module answers in one shape.
-
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
     """
-    raise NotImplementedError(
-        "validate_single_document is not yet implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
+    from analitiq.validator._core import _unreadable_document_finding, finding, validate_document
+
+    try:
+        document = json.loads(request.document)
+    except json.JSONDecodeError as exc:
+        return _envelope([_unreadable_document_finding(exc)])
+
+    if _detected_entity(document) != request.entity:
+        return _envelope([finding(
+            message_id="entity-mismatch", kind="fail", path="/",
+            message=(
+                f"declared entity {request.entity!r} does not match what this "
+                "document's own content declares."))])
+
+    return _envelope(validate_document(document))
 
 
 def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnvelope:
