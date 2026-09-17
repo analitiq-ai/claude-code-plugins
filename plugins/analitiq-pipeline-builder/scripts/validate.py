@@ -267,8 +267,8 @@ def _type_map_findings(direction: str, doc, document_path: Path) -> list[dict]:
         return [_finding(
             "connection-type-map", "error", "",
             f"{expected} is a JSON object but has no `rules` key.")]
-    # The published validator grades a map by the direction it declares, so a
-    # valid map of the other direction would pass it under this filename.
+    # The declared direction is held to --direction just as the filename is:
+    # whether the validator's model choice would also catch it varies by release.
     declared = doc.get("direction")
     if declared in ("read", "write") and declared != direction:
         return [_finding(
