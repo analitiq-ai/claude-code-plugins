@@ -7215,7 +7215,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": "StreamSource",
-   "rationale": "A checkpoint records the cursor value of the last row of a page, and that value is the highest one read only when the page was ordered by the cursor. Under any other ordering the run saves an arbitrary row's value, and the next run resumes above rows it never read — data loss with no failure anywhere, visible only as records that never arrive. The two fields sit in one document and disagreeing is decidable from it alone, so refusing the stream is the only point at which the author still has both halves in front of them; a full-refresh source reads no cursor, so its ordering is free.\n",
+   "rationale": "A checkpoint records the cursor value of the last row of a page, and that value is the highest one read only when the page was ordered by the cursor. Declaring a different field orders the page by something else, so the run saves an arbitrary row's value and the next run resumes above rows it never read — data loss with no failure anywhere, visible only as records that never arrive. Declaring nothing is not that: an ordering the document does not name is the cursor's, because the cursor is what the read path orders a paged incremental source by when the stream names no other field. So the rule reaches exactly the disagreement an author can write down, which sits in one document and is decidable from it alone — refusing the stream is the only point at which the author still has both halves in front of them. A full-refresh source reads no cursor, so its ordering is free.\n",
    "status": "active",
    "superseded_by": null
   },
