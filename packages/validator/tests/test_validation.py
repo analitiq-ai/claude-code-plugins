@@ -1253,6 +1253,13 @@ def test_coverage_lets_no_sibling_take_a_direction_from_the_map_that_declared_it
     assert "type-map-direction-duplicated" in ids, errors
     assert "read-map-missing" in ids, errors
     assert not any(e["path"].startswith("/rules") for e in errors), errors
+    # Both documents are named, and the finding is rooted where the collision
+    # was decided: a report naming one of them leaves the author unable to act,
+    # and `claim` hands back the other one so it can be named.
+    collision = [e for e in errors if e["message_id"] == "type-map-direction-duplicated"]
+    assert "type-map-aaa.json" in collision[0]["message"], collision[0]
+    assert "type-map-read.json" in collision[0]["message"], collision[0]
+    assert collision[0]["path"] == "/direction", collision[0]
 
 
 def test_coverage_grades_a_sibling_that_parsed_to_no_document(tmp_path, validator):
