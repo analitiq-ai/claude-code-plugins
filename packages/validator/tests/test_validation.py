@@ -1316,6 +1316,17 @@ def test_a_direction_two_siblings_declare_is_not_reported_as_undeclared(tmp_path
     assert "more than one sibling declares it" in missing[0]["message"], missing[0]
 
 
+def test_a_direction_no_sibling_declares_is_not_reported_as_declared_twice(tmp_path, validator):
+    # The mirror of the collision, and the ordinary case: nothing was shipped.
+    # Told the other cause, the author goes looking for a map to delete.
+    (tmp_path / "connector.json").write_text("{}")
+    errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
+    for message_id in ("read-map-missing", "write-map-missing"):
+        missing = [e for e in errors if e["message_id"] == message_id]
+        assert missing, errors
+        assert "no readable sibling declares it" in missing[0]["message"], missing[0]
+
+
 def test_coverage_refuses_an_api_write_direction_two_siblings_declare(tmp_path, validator):
     # An api connector is refused for shipping a document that declares the
     # write direction, so a second document declaring it cannot be what lifts

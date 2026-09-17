@@ -62,10 +62,11 @@ cannot make it:
     documents, never a connection's directory, so it cannot see the type-map
     files the engine loads beside ``connection.json``. The bundle pass therefore
     collects every ``type-map-*.json`` beside it the way the published validator
-    collects a connector's, validates in full (via the published validator) each
-    one that is the map for the direction it declares, and rejects the dead
-    pre-split ``type-map.json`` filename with a migration finding, mirroring the
-    published connector-side check at connection scope.
+    collects a connector's, validates in full (via the published validator) every
+    document it read except the ones a second declaration of one direction took
+    that direction from, and rejects the dead pre-split ``type-map.json``
+    filename with a migration finding, mirroring the published connector-side
+    check at connection scope.
 
 Validation is offline — no schema is fetched. Usage::
 
@@ -237,9 +238,10 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
     """Validate the connection-scoped type maps beside one connection.json —
     file-level checks the published bundle validator structurally cannot make
     (it receives assembled documents, never the connection's directory). A
-    present map is validated in full via the published validator; the dead
-    pre-split filename is rejected with a migration finding, mirroring the
-    published connector-side check.
+    collected map is validated in full via the published validator unless a
+    second document declares its direction, which leaves that direction to
+    neither of them; the dead pre-split filename is rejected with a migration
+    finding, mirroring the published connector-side check.
 
     Appends directly to the caller's shared `findings` list rather than
     building a local one to return: the legacy check and each collected file
