@@ -7,7 +7,9 @@ instead of the record. The model rejects it, so the validator now catches it —
 the gap the old validator missed.
 """
 import json
+import os
 import re
+import signal
 from pathlib import Path
 
 import pytest
@@ -25,6 +27,10 @@ from analitiq.validator.connectors import (
     _STORAGE_KINDS,
     _WRITE_MAP_FILENAME,
 )
+
+def _raise_timeout(signum, frame):
+    raise AssertionError("the check read a sibling that is not a regular file")
+
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -1288,6 +1294,69 @@ def test_coverage_rejects_an_api_write_map_under_any_name(tmp_path, validator):
     refused = [e for e in errors if e["message_id"] == "write-map-not-allowed"]
     assert refused, errors
     assert "type-map-ddl.json" in refused[0]["message"], refused[0]
+
+
+def test_a_direction_two_siblings_declare_is_not_reported_as_undeclared(tmp_path, validator):
+    # The finding is the author's whole account of why the direction has no map,
+    # and the two accounts call for opposite edits: ship a map, or delete one.
+    (tmp_path / "type-map-aaa.json").write_text(json.dumps(_type_map_doc(_read_rules(), "read")))
+    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(_read_rules(), "read")))
+    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
+    (tmp_path / "connector.json").write_text("{}")
+    errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
+    missing = [e for e in errors if e["message_id"] == "read-map-missing"]
+    assert missing, errors
+    assert "more than one sibling declares it" in missing[0]["message"], missing[0]
+
+
+def test_coverage_refuses_an_api_write_direction_two_siblings_declare(tmp_path, validator):
+    # An api connector is refused for shipping a document that declares the
+    # write direction, so a second document declaring it cannot be what lifts
+    # the refusal — the author would delete one and only then be told the
+    # direction was never allowed.
+    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(_read_rules(), "read")))
+    (tmp_path / "type-map-ddl.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
+    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
+    (tmp_path / "endpoints").mkdir()
+    (tmp_path / "connector.json").write_text("{}")
+    errors = _errors(validator.check_coverage(_min_connector("api"), tmp_path / "connector.json"))
+    ids = {e["message_id"] for e in errors}
+    assert "type-map-direction-duplicated" in ids, errors
+    assert "write-map-not-allowed" in ids, errors
+
+
+def test_coverage_reports_a_collected_sibling_that_is_not_a_regular_file(tmp_path, validator):
+    # The pattern collects directory entries, not documents, so what it hands
+    # the loader is whatever carries the name. A directory raises on the read
+    # and reports an errno; a FIFO blocks it until something writes, and the
+    # check never returns. The alarm bounds that, so a load reaching the read
+    # fails here instead of hanging the suite.
+    (tmp_path / "type-map-read.json").mkdir()
+    (tmp_path / "connector.json").write_text("{}")
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.alarm(10)
+    try:
+        errors = _errors(validator.check_coverage(
+            _min_connector("file"), tmp_path / "connector.json"))
+    finally:
+        signal.alarm(0)
+    assert any("not a regular file" in e["message"] for e in errors), errors
+
+
+def test_coverage_does_not_read_a_collected_sibling_that_blocks(tmp_path, validator):
+    # The payload nothing can time out on its own: `read_text` on a FIFO waits
+    # for a writer that never comes, so a check that opens what the pattern
+    # collected never answers at all.
+    os.mkfifo(tmp_path / "type-map-read.json")
+    (tmp_path / "connector.json").write_text("{}")
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.alarm(10)
+    try:
+        errors = _errors(validator.check_coverage(
+            _min_connector("file"), tmp_path / "connector.json"))
+    finally:
+        signal.alarm(0)
+    assert any("not a regular file" in e["message"] for e in errors), errors
 
 
 def test_coverage_flags_legacy_type_map(tmp_path, validator):

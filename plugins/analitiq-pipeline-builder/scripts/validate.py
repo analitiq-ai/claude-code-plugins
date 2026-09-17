@@ -62,9 +62,10 @@ cannot make it:
     documents, never a connection's directory, so it cannot see the type-map
     files the engine loads beside ``connection.json``. The bundle pass therefore
     collects every ``type-map-*.json`` beside it the way the published validator
-    collects a connector's, validates each in full (via the published validator)
-    and rejects the dead pre-split ``type-map.json`` filename with a migration
-    finding, mirroring the published connector-side check at connection scope.
+    collects a connector's, validates in full (via the published validator) each
+    one that is the map for the direction it declares, and rejects the dead
+    pre-split ``type-map.json`` filename with a migration finding, mirroring the
+    published connector-side check at connection scope.
 
 Validation is offline — no schema is fetched. Usage::
 
