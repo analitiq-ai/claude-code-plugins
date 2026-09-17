@@ -84,16 +84,12 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ROOT = REPO_ROOT / "plugins" / "analitiq-connector-builder"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "prose-hosts"
 
-#: The published resource each marker entity names, and the schema URL the
-#: validator routes it by. The spellings are the resource slugs the convention
-#: uses, so a marker naming a resource this gate cannot validate fails loudly
-#: rather than being skipped.
-ENTITY_SCHEMA = {
-    "connector": ev.CONNECTOR_SCHEMA,
-    "api-endpoint": ev.ENDPOINT_SCHEMA,
-    "type-map-read": ev.TYPE_MAP_SCHEMAS["type-map-read.json"],
-    "type-map-write": ev.TYPE_MAP_SCHEMAS["type-map-write.json"],
-}
+#: The published resources a marker entity may name — the spellings are the
+#: resource slugs the convention uses, so a marker naming a resource this
+#: gate cannot validate fails loudly rather than being skipped. The validator
+#: detects each document's kind from its own shape, so nothing here routes by
+#: schema URL; only membership is asked.
+KNOWN_ENTITIES = {"connector", "api-endpoint", "type-map-read", "type-map-write"}
 
 
 # ---------------------------------------------------------------------------
@@ -596,7 +592,7 @@ def _grading_entity(marker: Marker, label: str) -> str:
         # report rather than a coin to flip. None falls through to the
         # membership assertion below, which already says what to do instead.
         kinds = rules[marker.rule].artifact_kinds
-        hosted = [s for s in kinds if s in ENTITY_SCHEMA]
+        hosted = [s for s in kinds if s in KNOWN_ENTITIES]
         assert len(hosted) < 2, (
             f"{label}: '<!-- invalid: {marker.rule} -->' binds {hosted}, so "
             "which document this block grades is ambiguous — use a 'validate:' "
@@ -604,9 +600,9 @@ def _grading_entity(marker: Marker, label: str) -> str:
         entity = hosted[0] if hosted else kinds[0]
     else:
         entity = marker.entity
-    assert entity in ENTITY_SCHEMA, (
+    assert entity in KNOWN_ENTITIES, (
         f"{label}: grades as {entity!r}, which this gate cannot validate as a "
-        f"document. Known resources: {sorted(ENTITY_SCHEMA)} — a rule scope "
+        f"document. Known resources: {sorted(KNOWN_ENTITIES)} — a rule scope "
         "that names no single published document (a type map's direction, a "
         "connector package) needs a 'validate:' marker pointing at the "
         "document that carries the shape instead.")
@@ -631,8 +627,7 @@ def _findings(entity: str, document: Any, tmp_path: Path,
     else:
         path = tmp_path / f"{entity}.json"
     path.write_text(json.dumps(document, indent=2), encoding="utf-8")
-    return ev._errors(validate_document(
-        document, doc_path=path.resolve(), schema_url=ENTITY_SCHEMA[entity]))
+    return ev._errors(validate_document(document, doc_path=path.resolve()))
 
 
 def _graded_document(marker: Marker, body: str, label: str,
@@ -778,7 +773,7 @@ def _endpoint_rule() -> str:
     # the registry losing every api-endpoint-only rule is the defect to report.
     return next(  # skipcq: PTC-W0063
         r.id for r in all_rules()
-        if [s for s in r.artifact_kinds if s in ENTITY_SCHEMA] == ["api-endpoint"]
+        if [s for s in r.artifact_kinds if s in KNOWN_ENTITIES] == ["api-endpoint"]
     )
 
 
@@ -812,7 +807,7 @@ def test_invalid_disposition_rejects_a_resource_with_no_document():
     from analitiq.contracts.shared.rules import all_rules
     rule = next(
         (r for r in all_rules()
-         if not any(s in ENTITY_SCHEMA for s in r.artifact_kinds)), None)
+         if not any(s in KNOWN_ENTITIES for s in r.artifact_kinds)), None)
     if rule is None:  # every scope gained a document: real blocks cover it
         pytest.skip("no rule scoped outside the published documents")
     with pytest.raises(AssertionError, match="cannot validate as a document"):

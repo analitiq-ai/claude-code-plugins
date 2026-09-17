@@ -228,10 +228,31 @@ def test_an_assertion_must_read_a_document_docs_resolves():
     assert any("absent-name" in p for p in problems)
 
 
-def test_a_validate_spec_names_exactly_one_selector():
-    both = {"glob": "a.json", "entity": "pipeline", "schema_url": "https://x/y.json"}
-    assert any("exactly one" in p for p in _problems({"validate": [both]}))
-    assert any("exactly one" in p for p in _problems({"validate": [{"glob": "a.json"}]}))
+def test_a_validate_spec_rejects_unknown_keys():
+    unknown = {"glob": "a.json", "entity": "pipeline", "schema_url": "https://x/y.json"}
+    assert any("unknown keys" in p for p in _problems({"validate": [unknown]}))
+
+
+def test_a_validate_spec_entity_is_optional():
+    # No `entity`: the plain validator detects the document's kind from its
+    # own shape instead of the pipeline plugin's `--entity`-selected adapter.
+    assert _problems({"validate": [{"glob": "a.json"}]}) == []
+
+
+def test_a_validate_spec_must_name_a_glob():
+    problems = _problems({"validate": [{"entity": "pipeline"}]})
+    assert any("missing required key 'glob'" in p for p in problems)
+
+
+def test_a_validate_spec_bundle_root_without_entity_is_refused():
+    # bundle_root is only read on the entity route; naming it alone is a
+    # silent no-op the shape check must catch instead of blessing.
+    problems = _problems({"validate": [{"glob": "a.json", "bundle_root": "b"}]})
+    assert any("bundle_root" in p and "entity" in p for p in problems)
+
+
+def test_a_validate_spec_bundle_root_with_entity_is_accepted():
+    assert _problems({"validate": [{"glob": "a.json", "entity": "pipeline", "bundle_root": "b"}]}) == []
 
 
 def test_a_seed_source_that_does_not_exist_is_refused():

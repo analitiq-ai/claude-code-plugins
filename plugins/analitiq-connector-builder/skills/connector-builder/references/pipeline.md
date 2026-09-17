@@ -131,17 +131,9 @@ either kind.
 ### 4. Validate the domain (barrier)
 
 Invoke `connector-schema-validator` over the connector body and type
-map(s):
-
-- Connector → `https://schemas.analitiq.ai/connector/latest.json`.
-- Read map (`type-map-read.json`) →
-  `https://schemas.analitiq.ai/type-map-read/latest.json`.
-- Write map (`type-map-write.json`, database only) →
-  `https://schemas.analitiq.ai/type-map-write/latest.json`.
-
-Validate each map the connector's `kind` calls for, under the filename
-that kind requires (`RULE-PKG-030`), passing the matching schema URL
-above.
+map(s); it detects each document's kind from its own shape. Validate each
+map the connector's `kind` calls for, under the filename that kind requires
+(`RULE-PKG-030`), so the connector's sibling walk can find it.
 
 Validation covers the JSON documents above; the package files are
 governed by rules of their own (`RULE-PKG-007`, `RULE-PKG-009`,
@@ -196,8 +188,7 @@ Database connectors skip this phase entirely.
      echoes the connector-wide pagination (`ProviderFacts.pagination` →
      style + params) into the branch's `EndpointFacts.pagination`
      (`io-contracts.md` §EndpointFacts).
-   - `connector-schema-validator` validates the endpoint against
-     `https://schemas.analitiq.ai/api-endpoint/latest.json`, with the same
+   - `connector-schema-validator` validates the endpoint, with the same
      per-artifact 5-pass fix loop as phase 4 (re-dispatch
      `endpoint-creator` with `Diagnostics.findings` and the
      `EndpointCreatorOutput` it produced).

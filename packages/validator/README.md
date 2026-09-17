@@ -97,9 +97,8 @@ The kind is detected from the document's shape — no `--kind` flag. Point
 `--document` at `definition/connector.json` to also trigger cross-file coverage:
 it discovers the sibling `type-map-read.json` / `type-map-write.json` and
 `endpoints/*.json` from the connector's directory. A `connection` / `stream` /
-`pipeline` document is validated purely against its contract model. `--schema-url`,
-`--semantic-only`, `--json-only`, and `--no-cache` are accepted but are no-ops
-(validation is always model-driven and offline).
+`pipeline` document is validated purely against its contract model. Validation
+is always model-driven and offline — `--document` is the only flag.
 
 Output is a JSON report (`{"passed": bool, "findings": [...]}`) on stdout; the
 process exits non-zero exactly when `passed` is `false` — a `fail` finding at

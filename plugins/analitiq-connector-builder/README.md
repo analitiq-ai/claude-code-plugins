@@ -108,9 +108,7 @@ Run directly (console entry point `analitiq-validate`):
 
 ```bash
 pip install -r requirements-dev.txt      # from the repo root
-analitiq-validate \
-  --schema-url https://schemas.analitiq.ai/connector/latest.json \
-  --document path/to/connector.json
+analitiq-validate --document path/to/connector.json
 ```
 
 Output is a single `Diagnostics` JSON object. Exit 0 iff `passed: true`. The

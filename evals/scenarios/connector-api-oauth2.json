@@ -8,16 +8,13 @@
   "expect": "build",
   "validate": [
     {
-      "glob": "xero/definition/connector.json",
-      "schema_url": "https://schemas.analitiq.ai/connector/latest.json"
+      "glob": "xero/definition/connector.json"
     },
     {
-      "glob": "xero/definition/endpoints/*.json",
-      "schema_url": "https://schemas.analitiq.ai/api-endpoint/latest.json"
+      "glob": "xero/definition/endpoints/*.json"
     },
     {
-      "glob": "xero/definition/type-map-read.json",
-      "schema_url": "https://schemas.analitiq.ai/type-map-read/latest.json"
+      "glob": "xero/definition/type-map-read.json"
     }
   ],
   "docs": {

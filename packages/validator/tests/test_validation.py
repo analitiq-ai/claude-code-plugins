@@ -1276,13 +1276,6 @@ def test_type_map_is_graded_by_its_declared_direction_under_any_filename(
     assert graded_as_write is (direction == "write"), findings
 
 
-def test_schema_url_does_not_decide_type_map_direction(validator, tmp_path):
-    doc = _type_map_doc([_STRING_RULE], "write")
-    findings = validator.validate_document(
-        doc, doc_path=tmp_path / "type-map-read.json", schema_url=_TM_READ_SCHEMA)
-    assert not _errors(findings), findings
-
-
 def test_type_map_whose_direction_and_schema_disagree_is_a_model_error(validator):
     doc = _type_map_doc([_STRING_RULE], "write")
     doc["$schema"] = _TM_READ_SCHEMA
