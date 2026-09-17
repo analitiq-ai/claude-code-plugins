@@ -1,0 +1,27 @@
+id: RULE-ENDP-075
+statement: >
+  A query parameter that declares a serialization `style` together with
+  an `explode` flag MUST declare a pairing that has a defined query-string
+  serialization, and when the parameter's declared type is a container, a
+  pairing that serializes that container type.
+tier: shape
+severity: error
+artifact_kinds: [api-endpoint]
+validator: "analitiq.contracts.endpoints::Param._validate"
+owners: [connector-plugin, engine]
+targets: [Param]
+fixture_model: Param
+rationale: >
+  The published schema types `style` as an open string, so a document can
+  name a pairing OpenAPI gives no query-string spelling, or one that spells
+  only the other container (`deepObject` spells an object, the delimited
+  styles an array). Nothing then exists to send, and as the engine reads it
+  today it refuses such a declaration before the first request rather than
+  guess a spelling onto the provider's wire. Refusing it here moves that
+  failure to authoring time. The table follows OpenAPI's own serialization
+  definitions, not the engine, so it stays correct if the engine's reading
+  changes; if the engine later serializes a pairing OpenAPI leaves
+  undefined, this rule would refuse a document that engine could send, and
+  the table is the one place to widen.
+status: active
+superseded_by: null

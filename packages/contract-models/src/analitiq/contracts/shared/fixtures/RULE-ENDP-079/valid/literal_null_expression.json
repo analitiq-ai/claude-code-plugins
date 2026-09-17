@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "path": "/items",
+  "query": {
+    "cursor": {
+      "literal": null
+    }
+  }
+}

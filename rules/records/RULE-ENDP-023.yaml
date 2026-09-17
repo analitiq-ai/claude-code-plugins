@@ -11,6 +11,7 @@ artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [ReadOperation]
+fixture_model: ReadOperation
 rationale: >
   A response path that resolves to nothing does not fail at run time: it
   yields an empty value, and every predicate built on it holds

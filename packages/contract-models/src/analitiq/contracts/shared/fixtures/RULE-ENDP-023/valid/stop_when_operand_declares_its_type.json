@@ -1,0 +1,61 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/items",
+    "query": {
+      "offset": {
+        "from_param": "offset"
+      }
+    }
+  },
+  "params": {
+    "offset": {
+      "in": "query",
+      "type": "integer",
+      "required": false,
+      "controlled_by": "pagination"
+    }
+  },
+  "response": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "total": {
+          "type": "integer"
+        }
+      }
+    },
+    "records": {
+      "ref": "response.body.data"
+    }
+  },
+  "pagination": {
+    "type": "offset",
+    "offset": {
+      "param": "offset",
+      "initial": 0,
+      "increment_by": {
+        "ref": "response.record_count"
+      }
+    },
+    "stop_when": {
+      "gte": [
+        {
+          "ref": "response.body.total"
+        },
+        5
+      ]
+    }
+  }
+}

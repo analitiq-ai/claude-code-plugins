@@ -9,6 +9,7 @@ artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [ReadOperation, WriteOperation]
+fixture_model: ReadOperation
 rationale: >
   The resolver dispatches on the one key it recognises, in its own
   precedence order, and ignores whatever else the dict carries. So a dict

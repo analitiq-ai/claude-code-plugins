@@ -1,0 +1,7 @@
+{
+  "method": "GET",
+  "path": "/items",
+  "query": {
+    "limit": null
+  }
+}

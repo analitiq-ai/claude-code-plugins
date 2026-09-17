@@ -1,0 +1,9 @@
+{
+  "in": "query",
+  "type": "array",
+  "required": false,
+  "minItems": 3,
+  "maxItems": 1,
+  "style": "form",
+  "explode": true
+}

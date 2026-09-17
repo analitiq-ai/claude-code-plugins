@@ -1,0 +1,7 @@
+{
+  "in": "query",
+  "type": "number",
+  "required": false,
+  "minimum": 10.0,
+  "maximum": 1.0
+}

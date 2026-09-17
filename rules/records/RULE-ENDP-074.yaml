@@ -1,0 +1,28 @@
+id: RULE-ENDP-074
+statement: >
+  Every replication cursor field MUST resolve to a record-shape node whose own
+  `type` names exactly one JSON type besides `null`, and that type MUST be one
+  that can hold a cursor: a string moment or an integer.
+tier: coherence
+severity: error
+artifact_kinds: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation]
+fixture_model: ReadOperation
+rationale: >
+  The stored cursor is the last record's value for this field, and as the
+  engine reads it today, the field's own `type` is what says how that value
+  reads back on the next run: a string as an ISO moment, an integer as epoch
+  ticks or a monotonic id. A field whose `type` names no real type or a
+  union of them gives the reader nothing to choose, and the engine refuses
+  it before the first request. A number, boolean or container field is
+  worse: it is refused only when a stored cursor is read back, after the
+  first run has read everything and committed a checkpoint the stream can
+  never resume from. A field typed only through `anyOf` or a
+  `native_type`/`arrow_type` pair satisfies the typedness rule for other
+  paths and still gives the cursor reader nothing to read. The predicate
+  also stands on the contract alone: a watermark whose type the document
+  leaves open cannot be compared, whatever reads it.
+status: active
+superseded_by: null

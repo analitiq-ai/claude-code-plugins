@@ -1,0 +1,12 @@
+{
+  "metadata": {
+    "batch_id": {
+      "ref": "response.body.id"
+    }
+  },
+  "success_when": {
+    "exists": {
+      "ref": "response.metadata.batch_id"
+    }
+  }
+}

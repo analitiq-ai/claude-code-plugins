@@ -1,0 +1,27 @@
+id: RULE-ENDP-078
+statement: >
+  A replication cursor field typed `integer` MUST declare either an epoch
+  cursor format, making it a moment, or no cursor format at all, making it an
+  id; a cursor mapping over an id MUST declare no `format` and MUST NOT take
+  the window form.
+tier: coherence
+severity: error
+artifact_kinds: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation]
+fixture_model: ReadOperation
+rationale: >
+  An integer cursor is either a moment counted in epoch ticks or an id
+  counted in records, and the cursor field's `format` is the only thing that
+  says which. A calendar format on an integer claims a moment the value
+  cannot spell. An id has no "now", so a window over it has no end, and a
+  mapping `format` over it asks for an id rendered as a date. As the engine
+  reads it today, each of these is refused when the first stored cursor is
+  read back, which is after the whole first read has run and committed its
+  checkpoint. Refusing it here moves that failure to authoring time; the
+  predicate reads only the document, so a stale reading of the engine can
+  make this rule stricter than needed but never lets through a pairing whose
+  meaning the document leaves undecided.
+status: active
+superseded_by: null

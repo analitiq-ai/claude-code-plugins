@@ -21,6 +21,7 @@ Stream-side endpoint references (``EndpointRef``) live in ``analitiq.contracts.s
 """
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -57,6 +58,7 @@ from analitiq.contracts.shared.arrow_shape import (
 )
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
+    HEADER_NAME_PATTERN,
     HEADER_NAME_PROPERTY_NAMES,
     HeaderName,
     MediaType,
@@ -183,11 +185,15 @@ PATH_PLACEHOLDER_NAME_RE = re.compile(PATH_PLACEHOLDER_NAME_PATTERN)
 PATH_PLACEHOLDER_RE = re.compile(r"\{([^{}]+)\}")
 RECORD_FIELD_PATH_RE = re.compile(RECORD_FIELD_PATH_PATTERN)
 METADATA_KEY_RE = re.compile(METADATA_KEY_PATTERN)
+HEADER_NAME_RE = re.compile(HEADER_NAME_PATTERN)
 ARROW_TYPE_RE = re.compile(ARROW_TYPE_PATTERN)
 
 RESERVED_RESPONSE_SCOPES: frozenset[str] = frozenset(
     {"body", "headers", "status", "records", "record_count", "metadata"}
 )
+#: The response sub-scopes a write's declared expressions resolve against.
+#: `records` and `record_count` describe a read's page and are absent here.
+WRITE_RESPONSE_SCOPES: frozenset[str] = frozenset({"body", "headers", "status", "metadata"})
 
 # Declarative mirror of the read/write `response.metadata` key rules: every key
 # matches `METADATA_KEY_PATTERN` and none collides with a reserved response
@@ -532,6 +538,26 @@ _PARAM_SCHEMA_RULES: dict[str, Any] = {
 }
 
 
+#: What each OpenAPI query `(style, explode)` pair serializes. A pair absent
+#: here has no defined query-string spelling; a pair present spells only the
+#: container types it lists.
+QUERY_STYLE_SERIALIZES: dict[tuple[str, bool], frozenset[str]] = {
+    ("form", True): frozenset({"array", "object"}),
+    ("form", False): frozenset({"array", "object"}),
+    ("spaceDelimited", False): frozenset({"array"}),
+    ("pipeDelimited", False): frozenset({"array"}),
+    ("deepObject", True): frozenset({"object"}),
+}
+QUERY_STYLES: tuple[str, ...] = tuple(sorted({style for style, _ in QUERY_STYLE_SERIALIZES}))
+
+#: Each lower bound a param may declare, beside the upper bound it pairs with.
+_PARAM_INTERVALS: tuple[tuple[str, str], ...] = (
+    ("minimum", "maximum"),
+    ("min_length", "max_length"),
+    ("min_items", "max_items"),
+)
+
+
 class Param(_EndpointModel):
     """One operation-input contract."""
 
@@ -581,7 +607,54 @@ class Param(_EndpointModel):
                 f"query params with type={self.type!r} must declare `style` and `explode` "
                 "(spec: §Parameter Validation and Operators)"
                 )
+        if self.location == "query" and self.style is not None and self.explode is not None:
+            self._reject_unserializable_query_style(self.style, self.explode)
+        self._reject_unsatisfiable_bounds()
         return self
+
+    def _reject_unserializable_query_style(self, style: str, explode: bool) -> None:
+        if style not in QUERY_STYLES:
+            raise violation(
+                "RULE-ENDP-075", "query-style-not-serializable",
+                f"style {style!r} has no query-string serialization; declare one of "
+                f"{list(QUERY_STYLES)}"
+            )
+        serializes = QUERY_STYLE_SERIALIZES.get((style, explode))
+        if serializes is None:
+            defined = sorted(
+                f"{s} explode={e}" for s, e in QUERY_STYLE_SERIALIZES if s == style
+            )
+            raise violation(
+                "RULE-ENDP-075", "query-style-explode-pair-undefined",
+                f"style {style!r} with explode={explode} has no defined query-string "
+                f"serialization; declare one of {defined}"
+            )
+        if self.type in ("array", "object") and self.type not in serializes:
+            raise violation(
+                "RULE-ENDP-075", "query-style-does-not-serialize-type",
+                f"style {style!r} with explode={explode} serializes "
+                f"{' and '.join(sorted(serializes))}, not a param typed {self.type!r}"
+            )
+
+    def _reject_unsatisfiable_bounds(self) -> None:
+        for name in ("minimum", "maximum"):
+            bound = getattr(self, name)
+            if bound is not None and not math.isfinite(bound):
+                raise violation(
+                    "RULE-ENDP-076", "param-bound-not-finite",
+                    f"{name}={bound!r} is not a finite number, so no value can be "
+                    "compared against it"
+                )
+        for low_name, high_name in _PARAM_INTERVALS:
+            low, high = getattr(self, low_name), getattr(self, high_name)
+            if low is not None and high is not None and low > high:
+                low_key = type(self).model_fields[low_name].alias or low_name
+                high_key = type(self).model_fields[high_name].alias or high_name
+                raise violation(
+                    "RULE-ENDP-076", "param-interval-admits-nothing",
+                    f"{low_key}={low!r} exceeds {high_key}={high!r}, so no value "
+                    "can satisfy both"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -957,6 +1030,18 @@ KeysetPagination.model_rebuild()
 # carries only the two real shapes, mirroring the runtime contract.
 
 
+#: How a cursor mapping renders its bound.
+CursorFormat = Literal["date-time", "date", "epoch_seconds", "epoch_milliseconds"]
+CURSOR_FORMATS: tuple[str, ...] = get_args(CursorFormat)
+#: The formats under which an integer counts time rather than records.
+EPOCH_CURSOR_FORMATS: frozenset[str] = frozenset({"epoch_seconds", "epoch_milliseconds"})
+#: The JSON types a stored cursor reads back as: a string moment, or an
+#: integer that is either epoch ticks or a monotonic id.
+CURSOR_JSON_TYPES: tuple[str, ...] = ("string", "integer")
+_LOWER_BOUND_OPERATORS: frozenset[str] = frozenset({"gt", "gte"})
+_UPPER_BOUND_OPERATORS: frozenset[str] = frozenset({"lt", "lte"})
+
+
 class SingleCursorMapping(_EndpointModel):
     """Single-param cursor mapping. Spec: §Replication."""
 
@@ -967,7 +1052,7 @@ class SingleCursorMapping(_EndpointModel):
     )
     param: str = Field(..., min_length=1)
     operator: Literal["gt", "gte", "lt", "lte"]
-    format: Literal["date-time", "date", "epoch_seconds", "epoch_milliseconds"] | None = Field(default=None)
+    format: CursorFormat | None = Field(default=None)
 
 
 class WindowCursorMapping(_EndpointModel):
@@ -982,7 +1067,7 @@ class WindowCursorMapping(_EndpointModel):
     end_param: str = Field(..., min_length=1)
     start_operator: Literal["gt", "gte", "lt", "lte"]
     end_operator: Literal["gt", "gte", "lt", "lte"]
-    format: Literal["date-time", "date", "epoch_seconds", "epoch_milliseconds"] | None = Field(default=None)
+    format: CursorFormat | None = Field(default=None)
 
 
 _WINDOW_CM_FIELDS: tuple[str, ...] = ("start_param", "end_param", "start_operator", "end_operator")
@@ -1057,6 +1142,28 @@ class Replication(_EndpointModel):
                     "exactly one form)"
                 )
         return data
+
+    @model_validator(mode="after")
+    def _bounds_face_forward(self) -> "Replication":
+        for i, cm in enumerate(self.cursor_mappings):
+            if isinstance(cm, SingleCursorMapping):
+                if cm.operator not in _LOWER_BOUND_OPERATORS:
+                    raise violation(
+                        "RULE-ENDP-077", "single-cursor-mapping-upper-bound",
+                        f"cursor_mappings[{i}] binds {cm.param!r} with operator "
+                        f"{cm.operator!r}, an upper bound; an incremental read "
+                        "resumes from a lower bound, so declare gt/gte or a "
+                        "start/end window"
+                    )
+            elif (cm.start_operator not in _LOWER_BOUND_OPERATORS
+                    or cm.end_operator not in _UPPER_BOUND_OPERATORS):
+                raise violation(
+                    "RULE-ENDP-077", "window-cursor-mapping-reversed",
+                    f"cursor_mappings[{i}] declares start_operator "
+                    f"{cm.start_operator!r} and end_operator {cm.end_operator!r}; "
+                    "a window's start is gt/gte and its end lt/lte"
+                )
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -1247,6 +1354,14 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
                     "RULE-ENDP-001", "path-params-mismatch",
                     f"extra={sorted(extra)!r}; missing={sorted(missing)!r}",
                 )
+        bare_nulls = sorted(k for k, v in (self.query or {}).items() if v is None)
+        if bare_nulls:
+            raise violation(
+                "RULE-ENDP-079", "query-declares-bare-null",
+                f"request.query declares null for {bare_nulls!r}; a null has no "
+                "query-string spelling. Omit the key, or write `{literal: null}` "
+                "to state that it is sent as absent"
+            )
         return self
 
 
@@ -2016,6 +2131,16 @@ class Idempotency(DeclaredHeaderNames, _EndpointModel):
             return []
         return [(self.name, "idempotency.name")]
 
+    @model_validator(mode="after")
+    def _header_name_is_a_token(self) -> "Idempotency":
+        if self.location == "header" and not HEADER_NAME_RE.fullmatch(self.name):
+            raise violation(
+                "RULE-ENDP-080", "idempotency-header-name-not-a-token",
+                f"idempotency.name {self.name!r} is placed in a header but does "
+                f"not match {HEADER_NAME_PATTERN!r}"
+            )
+        return self
+
 
 class WriteResponse(_EndpointModel):
     """Optional write-result extraction block."""
@@ -2058,27 +2183,33 @@ class WriteResponse(_EndpointModel):
         return self
 
     @model_validator(mode="after")
-    def _reject_record_count(self) -> "WriteResponse":
-        # `response.record_count` is available only for read operations
-        # (§API Write Response Contract); write-response expressions must not
-        # reference it. `iter_expression_strings` (the shared resolver grammar)
-        # reaches the `Any`-typed `success_when` operands and function inputs a
-        # typed walk would miss — including bare-string templates — while skipping
+    def _reads_only_write_scopes(self) -> "WriteResponse":
+        # `iter_expression_strings` (the shared resolver grammar) reaches the
+        # `Any`-typed `success_when` operands and function inputs a typed walk
+        # would miss — including bare-string templates — while skipping
         # `literal` subtrees (a `{"literal": {...}}` payload is protected data,
-        # not an executable ref). Tokens are stripped like the resolver.
-        def _is_record_count(token: str) -> bool:
-            t = token.strip()
-            return t == "response.record_count" or t.startswith("response.record_count.")
-
-        for kind, s in iter_expression_strings(self.model_dump(by_alias=True)):
-            hits = [s] if kind == "ref" else template_placeholders(s)
-            if any(_is_record_count(h) for h in hits):
+        # not an executable ref).
+        for token in _expression_tokens(self.model_dump(by_alias=True)):
+            head, _, rest = token.partition(".")
+            if head != "response" or not rest:
+                continue
+            sub_scope = rest.split(".", 1)[0]
+            if sub_scope in WRITE_RESPONSE_SCOPES:
+                continue
+            if sub_scope in RESERVED_RESPONSE_SCOPES:
                 raise violation(
-                    "RULE-ENDP-030", "write-response-references-record-count",
-                    "write-response expressions must not reference "
-                    "`response.record_count` (read-only response scope; spec: "
-                    "§API Write Response Contract)"
+                    "RULE-ENDP-030", "write-response-references-read-only-scope",
+                    f"write-response expression references {token!r}; "
+                    f"`response.{sub_scope}` is a read-only response scope "
+                    "(spec: §API Write Response Contract)"
                 )
+            raise violation(
+                "RULE-ENDP-030", "write-response-scope-unknown",
+                f"write-response expression references {token!r}, whose "
+                f"response sub-scope {sub_scope!r} is not one of "
+                f"{sorted(WRITE_RESPONSE_SCOPES)!r}, the scopes a write "
+                "response carries (spec: §API Write Response Contract)"
+            )
         return self
 
 
@@ -3057,28 +3188,35 @@ def _validate_expression_shapes(value: Any, where: str) -> None:
     )
 
 
-def _matches_singleton(value: Any, key: str) -> bool:
-    """True when ``value`` is a ``{key: <str>}`` dict, with optional ``x-*`` siblings.
+def _is_singleton(value: Any, key: str) -> bool:
+    """True when ``value`` is a ``{key: <anything>}`` dict, with optional ``x-*`` siblings.
 
     Tolerating ``x-*`` siblings (spec §Extension Policy) is required so an
     extension key on a binding expression does not hide it from the
     dangling-param walk that runs against the param-wiring.
     """
-    if not isinstance(value, dict):
+    if not isinstance(value, dict) or key not in value:
         return False
-    if key not in value or not isinstance(value[key], str):
-        return False
-    for k in value:
-        if k == key:
-            continue
-        if isinstance(k, str) and k.startswith("x-"):
-            continue
-        return False
-    return True
+    return all(
+        k == key or (isinstance(k, str) and k.startswith("x-")) for k in value
+    )
+
+
+def _matches_singleton(value: Any, key: str) -> bool:
+    """True when ``value`` is a ``{key: <str>}`` singleton dict."""
+    return _is_singleton(value, key) and isinstance(value[key], str)
 
 
 def _collect_singleton_values(value: Any, key: str) -> list[str]:
-    """Walk ``value``; return every string from a ``{key: str}`` singleton dict (x-* tolerant).
+    """Every string payload of a ``{key: str}`` singleton dict in ``value``."""
+    return [
+        payload for payload in _collect_singleton_payloads(value, key)
+        if isinstance(payload, str)
+    ]
+
+
+def _collect_singleton_payloads(value: Any, key: str) -> list[Any]:
+    """Walk ``value``; return the payload of every ``{key: ...}`` singleton dict (x-* tolerant).
 
     A `literal` payload is NOT walked. `resolve_value_expression` returns a
     literal's contents verbatim, so a `from_param`/`from_input` inside one is
@@ -3091,18 +3229,18 @@ def _collect_singleton_values(value: Any, key: str) -> list[str]:
     `path_params` rules exist to eliminate, re-entering through the door the
     `from_input` binding opened.
     """
-    found: list[str] = []
+    found: list[Any] = []
     if isinstance(value, dict):
-        if _matches_singleton(value, key):
+        if _is_singleton(value, key):
             found.append(value[key])
             return found
         if "literal" in value:
             return found
         for v in value.values():
-            found.extend(_collect_singleton_values(v, key))
+            found.extend(_collect_singleton_payloads(v, key))
     elif isinstance(value, list):
         for item in value:
-            found.extend(_collect_singleton_values(item, key))
+            found.extend(_collect_singleton_payloads(item, key))
     return found
 
 
@@ -3183,10 +3321,24 @@ def _validate_param_wiring(
     # the singleton check would fall through to recursion and the user would
     # only see a misleading "param not referenced" error rooted at the
     # param-binding-uniqueness validator — pointing at the wrong failure site.
-    _validate_expression_shapes(request.path_params, "request.path_params")
-    _validate_expression_shapes(request.headers, "request.headers")
-    _validate_expression_shapes(request.query, "request.query")
-    _validate_expression_shapes(getattr(request, "body", None), "request.body")
+    for slot in _REQUEST_EXPRESSION_SLOTS:
+        where = f"request.{slot}"
+        try:
+            _validate_expression_shapes(getattr(request, slot, None), where)
+        except ValueError as detail:
+            raise violation(
+                "RULE-ENDP-022", "request-slot-expression-shape", str(detail)
+            ) from None
+        # Same reason, one step on: a non-string name is a well-shaped binding
+        # the name walks below skip, so it too would surface only as
+        # "param not referenced".
+        for name in _collect_singleton_payloads(getattr(request, slot, None), "from_param"):
+            if not isinstance(name, str):
+                raise violation(
+                    "RULE-ENDP-008", "binding-name-not-a-string",
+                    f"{where} binds from_param={name!r}; a binding names a "
+                    "declared param by its string name"
+                )
 
     # `path_params` is documented and authored only as `{from_param}` /
     # `{from_input}` singleton bindings (spec: §Request Parameter Binding) —
@@ -4034,7 +4186,7 @@ def _sweep_expression_sites(
         _validate_expression_shapes(payload, where)
         for token in _expression_tokens(payload):
             _reject_unknown_scope(where, token, site.operation)
-            _reject_unknown_response_scope(where, token, site.operation)
+            _reject_unknown_response_scope(site, token)
             if not site.can_read_response and token.split(".")[0] == "response":
                 # Scope-level, not path-level. Checking only whether the path
                 # RESOLVES let `request.query = {"ref":
@@ -4045,7 +4197,8 @@ def _sweep_expression_sites(
                 # is built before the response exists, so the ref interpolates
                 # nothing regardless of what it names: the provider is called
                 # with the value missing and answers 200.
-                raise ValueError(
+                raise _response_reference_refusal(
+                    site, "response-reference-in-request-slot",
                     f"{where} references {token!r}, but a request is built "
                     "before the response exists, so no `response.*` value is "
                     "available here — it would interpolate to nothing and the "
@@ -4065,7 +4218,8 @@ def _sweep_expression_sites(
                 # where it was fixed.
                 key = token.split(".", 2)[2].split(".")[0]
                 if key not in metadata_keys:
-                    raise ValueError(
+                    raise _response_reference_refusal(
+                        site, "response-metadata-key-not-declared",
                         f"{where} references {token!r}, but "
                         f"{key!r} is not a declared `response.metadata` key "
                         f"(declared: {sorted(metadata_keys)!r}). "
@@ -4078,7 +4232,8 @@ def _sweep_expression_sites(
             try:
                 node = resolve_declared_path(response_schema, segments)
             except SchemaResolutionError as exc:
-                raise ValueError(
+                raise _response_reference_refusal(
+                    site, "response-path-not-declared",
                     f"{where} references {token!r}, which does not resolve in "
                     f"response.schema: {exc.reason} "
                     "(spec: §API Response Extraction — declared-path resolution)"
@@ -4086,13 +4241,15 @@ def _sweep_expression_sites(
             try:
                 materialized = materialize_node(node, response_schema)
             except SchemaResolutionError as exc:
-                raise ValueError(
+                raise _response_reference_refusal(
+                    site, "response-path-self-contradictory-node",
                     f"{where} references {token!r}, which resolves in "
                     f"response.schema to a self-contradictory node: {exc.reason} "
                     "(spec: §API Response Extraction — declared-path resolution)"
                 ) from None
             if not _declares_a_type(materialized, response_schema):
-                raise ValueError(
+                raise _response_reference_refusal(
+                    site, "response-path-untyped-node",
                     f"{where} references {token!r}, which resolves in "
                     "response.schema to a node that declares no `type` (and no "
                     "`native_type`/`arrow_type` pair). Declare the type of the "
@@ -4101,6 +4258,20 @@ def _sweep_expression_sites(
                     "resolution)"
                 )
 
+
+
+def _response_reference_refusal(
+    site: _ExpressionSite, message_id: str, detail: str
+) -> RuleViolation:
+    """The refusal of a response reference, attributed where a rule states it.
+
+    RULE-ENDP-023 is the read operation's statement; the same checks on a
+    write's sites are stated by no rule yet, and stay unattributed rather than
+    borrow one that does not describe them.
+    """
+    if site.operation is _OperationKind.READ:
+        return violation("RULE-ENDP-023", message_id, detail)
+    return unattributed_violation(detail)
 
 
 def _unresolved_harm(operation: _OperationKind) -> str:
@@ -4157,9 +4328,7 @@ def _reject_unknown_scope(where: str, token: str, operation: _OperationKind) -> 
     )
 
 
-def _reject_unknown_response_scope(
-    where: str, token: str, operation: _OperationKind
-) -> None:
+def _reject_unknown_response_scope(site: _ExpressionSite, token: str) -> None:
     """A `response.*` token must name a real response sub-scope.
 
     The hole this closes is the one RULE-ENDP-023 exists to close, one segment
@@ -4182,10 +4351,11 @@ def _reject_unknown_response_scope(
     sub_scope = stripped[len("response."):].split(".", 1)[0] if "." in stripped else ""
     if sub_scope in RESERVED_RESPONSE_SCOPES:
         return
-    raise ValueError(
-        f"{where} references {token!r}, whose response sub-scope "
+    raise _response_reference_refusal(
+        site, "response-sub-scope-unknown",
+        f"{site.where} references {token!r}, whose response sub-scope "
         f"{sub_scope or '(none)'!r} is not one of "
-        f"{sorted(RESERVED_RESPONSE_SCOPES)!r}. {_unresolved_harm(operation)} "
+        f"{sorted(RESERVED_RESPONSE_SCOPES)!r}. {_unresolved_harm(site.operation)} "
         "(spec: §API Response Extraction)"
     )
 
@@ -4490,7 +4660,64 @@ def _validate_cursor_fields_in_record_shape(
     except ValueError as detail:
         raise violation("RULE-ENDP-013", "cursor-record-shape-unusable", str(detail)) from None
     for cm in replication.cursor_mappings:
-        _check_cursor_field_in_node(_cursor_field_of(cm), items, where="items", root=root)
+        field = _check_cursor_field_in_node(
+            _cursor_field_of(cm), items, where="items", root=root
+        )
+        _check_cursor_field_holds_the_mapping(cm, field)
+
+
+def _check_cursor_field_holds_the_mapping(
+    cm: SingleCursorMapping | WindowCursorMapping, field: Any
+) -> None:
+    """The cursor field's own declaration must say how a stored cursor reads
+    back, and the mapping must be one that reading can render."""
+    declared = field.get("type") if isinstance(field, dict) else None
+    if isinstance(declared, str):
+        types = [declared]
+    elif isinstance(declared, list):
+        types = [t for t in declared if isinstance(t, str) and t != "null"]
+    else:
+        types = []
+    if len(types) != 1:
+        raise violation(
+            "RULE-ENDP-074", "cursor-field-not-one-json-type",
+            f"replication cursor_field {cm.cursor_field!r} declares type "
+            f"{declared!r}; a cursor field declares one JSON type in its own "
+            "`type`, optionally beside null"
+        )
+    if types[0] not in CURSOR_JSON_TYPES:
+        raise violation(
+            "RULE-ENDP-074", "cursor-field-type-cannot-hold-cursor",
+            f"replication cursor_field {cm.cursor_field!r} declares type "
+            f"{types[0]!r}; a cursor is a string moment or an integer"
+        )
+    if types[0] != "integer":
+        return
+    field_format = field.get("format")
+    if not isinstance(field_format, str):
+        field_format = None
+    if field_format in EPOCH_CURSOR_FORMATS:
+        return
+    if field_format in CURSOR_FORMATS:
+        raise violation(
+            "RULE-ENDP-078", "integer-cursor-field-calendar-format",
+            f"replication cursor_field {cm.cursor_field!r} is an integer "
+            f"declaring format {field_format!r}; an integer is a moment only "
+            f"under {sorted(EPOCH_CURSOR_FORMATS)!r}"
+        )
+    if isinstance(cm, WindowCursorMapping):
+        raise violation(
+            "RULE-ENDP-078", "window-over-id-cursor",
+            f"replication cursor_field {cm.cursor_field!r} is an integer id; a "
+            "start/end window needs a moment, so declare the field a string or "
+            f"an integer under {sorted(EPOCH_CURSOR_FORMATS)!r}"
+        )
+    if cm.format is not None:
+        raise violation(
+            "RULE-ENDP-078", "id-cursor-mapping-declares-format",
+            f"replication cursor_field {cm.cursor_field!r} is an integer id, but "
+            f"its mapping declares format {cm.format!r}; an id is sent as itself"
+        )
 
 
 def _validate_record_field_path(
@@ -4555,7 +4782,7 @@ def _cursor_field_of(cm: Any) -> str:
 
 def _check_cursor_field_in_node(
     cursor_field: str, items_node: dict[str, Any], *, where: str, root: Any
-) -> None:
+) -> Any:
     """A ``cursor_field`` must resolve under the record shape by declared-path
     resolution — the same algorithm `response.records` and the pagination /
     metadata refs use, so an author never has to hold two traversal rules.
@@ -4566,6 +4793,7 @@ def _check_cursor_field_in_node(
     also declare a type, the same requirement `_validate_record_field_path`
     holds `filters`/`order_by_field` to: an incremental comparison built over
     an untyped node has nothing to tell it what a valid watermark looks like.
+    Returns the materialized node.
     """
     segments = cursor_field.split(".")
     try:
@@ -4599,3 +4827,4 @@ def _check_cursor_field_in_node(
             "can tell what a valid comparison looks like "
             "(spec: §Cross-Field Validation)"
         )
+    return materialized

@@ -1,0 +1,5 @@
+{
+  "generated_keys": {
+    "template": "${response.records}"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "in": "query",
+  "type": "number",
+  "required": false,
+  "maximum": Infinity
+}

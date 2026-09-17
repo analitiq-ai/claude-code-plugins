@@ -1,0 +1,7 @@
+{
+  "in": "query",
+  "type": "array",
+  "required": false,
+  "style": "pipeDelimited",
+  "explode": false
+}

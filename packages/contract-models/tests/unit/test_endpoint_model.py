@@ -351,15 +351,6 @@ class TestCursorFieldsInRecordShape:
         with pytest.raises(ValidationError, match="declares no `type`"):
             parse_endpoint(self._payload_with_cursor_field("updated_at", {"updated_at": {}}))
 
-    def test_cursor_field_typed_only_via_anyof_accepted(self):
-        # The common nullable idiom — every anyOf branch declares a type, so
-        # the union ({string, null}) is a real, usable type even with no
-        # top-level `type` key.
-        parse_endpoint(self._payload_with_cursor_field(
-            "updated_at",
-            {"updated_at": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
-        ))
-
     def test_cursor_field_with_an_untyped_anyof_branch_rejected(self):
         # One branch declaring nothing makes the union unbounded — not a
         # usable type.
@@ -368,14 +359,6 @@ class TestCursorFieldsInRecordShape:
                 "updated_at",
                 {"updated_at": {"anyOf": [{"type": "string"}, {}]}},
             ))
-
-    def test_cursor_field_typed_via_a_ref_branch_inside_anyof_accepted(self):
-        payload = self._payload_with_cursor_field(
-            "updated_at",
-            {"updated_at": {"anyOf": [{"$ref": "#/$defs/T"}, {"type": "null"}]}},
-        )
-        payload["operations"]["read"]["response"]["schema"]["$defs"] = {"T": {"type": "string"}}
-        parse_endpoint(payload)
 
     def test_dotted_cursor_field_traverses_nested_objects(self):
         parse_endpoint(self._payload_with_cursor_field(

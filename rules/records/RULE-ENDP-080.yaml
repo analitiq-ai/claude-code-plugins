@@ -1,0 +1,23 @@
+id: RULE-ENDP-080
+statement: >
+  A write operation's `idempotency` placed in a header MUST name that header
+  with an HTTP field-name token.
+tier: shape
+severity: error
+artifact_kinds: [api-endpoint]
+validator: "analitiq.contracts.endpoints::Idempotency._header_name_is_a_token"
+owners: [connector-plugin, engine]
+targets: [Idempotency]
+fields: [name]
+fixture_model: Idempotency
+rationale: >
+  Placed in a header, `idempotency.name` becomes an HTTP field name, and a
+  field name is a token: a space, colon or parenthesis makes a header no
+  client can send. The field admits more because the body placement names a
+  JSON field; the placement is what decides the grammar, so the check
+  applies only there. As the engine reads it today, a non-token name is
+  refused when the write plan is built, before the first batch. Refusing it
+  here names the defect at authoring time, and the grammar is HTTP's, so the
+  check does not depend on that reading.
+status: active
+superseded_by: null

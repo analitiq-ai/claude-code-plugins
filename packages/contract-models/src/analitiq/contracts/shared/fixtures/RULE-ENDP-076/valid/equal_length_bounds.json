@@ -1,0 +1,7 @@
+{
+  "in": "query",
+  "type": "string",
+  "required": false,
+  "minLength": 2,
+  "maxLength": 2
+}

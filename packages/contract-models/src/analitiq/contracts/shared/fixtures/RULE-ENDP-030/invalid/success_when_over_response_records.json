@@ -1,0 +1,7 @@
+{
+  "success_when": {
+    "not_empty": {
+      "ref": "response.records"
+    }
+  }
+}

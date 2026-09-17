@@ -384,7 +384,7 @@ def _p_write_request_slot_response_ref() -> list[dict]:
     return _validate(_endpoint_with_write(request_extra={"query": {"c": {"ref": "response.body.id"}}}))
 
 
-def _p_write_records_tail() -> list[dict]:
+def _p_write_records_barred() -> list[dict]:
     return _validate(_endpoint_with_write(
         response={"success_when": {"empty": {"ref": "response.records.errors"}}},
     ))
@@ -930,7 +930,8 @@ PROBES: tuple[Probe, ...] = (
           message_re=r"not a declared"),
     Probe("write-request-slot-response-ref", "error", _p_write_request_slot_response_ref,
           message_re=r"built before the response exists"),
-    Probe("write-records-tail-unchecked", "clean", _p_write_records_tail),
+    Probe("write-records-barred", "error", _p_write_records_barred,
+          message_re=r"read-only"),
     Probe("write-headers-tail-unchecked", "clean", _p_write_headers_tail),
     Probe("write-status-ref-unchecked", "clean", _p_write_status_ref),
     Probe("write-truncate-insert-accepted", "clean", _p_write_truncate_insert),
@@ -1191,7 +1192,7 @@ _SCOPE_TABLE_ROWS: tuple[tuple[str, tuple[str, tuple[str, ...]], tuple[str, tupl
      ("declared-key", ("write-metadata-undeclared-key",))),
     ("`response.records.<path>`",
      ("spelling-only", ("read-records-tail-unchecked",)),
-     ("spelling-only", ("write-records-tail-unchecked",))),
+     ("barred", ("write-records-barred",))),
     ("`response.headers.<name>`",
      ("spelling-only", ("read-headers-tail-unchecked",)),
      ("spelling-only", ("write-headers-tail-unchecked",))),
