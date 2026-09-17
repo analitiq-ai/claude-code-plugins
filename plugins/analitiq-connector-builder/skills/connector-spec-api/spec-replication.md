@@ -119,11 +119,13 @@ read back through it. It must name exactly one JSON type besides `null` in
 its own `type`, and that type must be `string` or `integer`
 (`RULE-ENDP-074`); a number, boolean or container leaves the next run nothing
 it can compare. Write a nullable cursor as `{"type": ["string", "null"]}`:
-the declaration is read off that node and no deeper, so a type named only
-inside an `anyOf`/`oneOf` branch is refused — the reader that reads a stored
-cursor back does not descend a union, and a document it cannot read is one
-that ships and then fails on the first incremental run. An integer says which
-kind of integer it is in its own `format`: `epoch_seconds` or
+the declaration is read off that node and no deeper, so a type reached only
+through an `anyOf`/`oneOf` branch, a `$ref` or an `allOf` is refused — the
+reader that reads a stored cursor back descends none of them, and a document
+it cannot read is one that ships and then fails on the first incremental run.
+Spell the cursor field out in place even where the rest of the record shape
+uses `$defs`. An integer says which kind of integer it is in its own
+`format` — on that same node, for the same reason: `epoch_seconds` or
 `epoch_milliseconds` makes it a moment, a calendar cursor format is refused
 outright — a moment an integer cannot spell — and anything else, a provider's
 own width token or no format at all, makes it a monotonic id

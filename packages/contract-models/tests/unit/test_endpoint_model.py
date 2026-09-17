@@ -401,6 +401,51 @@ class TestCursorFieldsInRecordShape:
                 ]}},
             ))
 
+    def test_cursor_field_typed_only_through_a_ref_is_rejected(self):
+        # `{"$ref": ...}` is the same divergence as `anyOf`, one level up.
+        # RULE-ENDP-013 resolves the pointer to prove the path lands on
+        # something typed, but the engine's cursor reader never resolves one:
+        # `records_items_schema` walks `properties` and hands
+        # `record_field_declaration` the node as authored, whose `type` key is
+        # absent. Accepting this ships a document that dies on the first
+        # cursor read.
+        payload = self._payload_with_cursor_field(
+            "updated_at", {"updated_at": {"$ref": "#/$defs/T"}}
+        )
+        payload["operations"]["read"]["response"]["schema"]["$defs"] = {"T": {"type": "string"}}
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(payload)
+
+    def test_cursor_field_typed_only_through_an_allof_is_rejected(self):
+        # The other way to reach a type without writing one: the engine reads
+        # no more of an `allOf` than it reads of an `anyOf`.
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(self._payload_with_cursor_field(
+                "updated_at", {"updated_at": {"allOf": [{"type": "string"}]}},
+            ))
+
+    def test_integer_cursor_field_reads_its_own_format_not_a_refs(self):
+        # The case where both sides accept and disagree about what the
+        # document says: the node writes `type: integer` itself, so neither
+        # side refuses it, but the `format` sits behind the `$ref`. The engine
+        # reads `format=None` and treats the cursor as an id; grading the
+        # resolved node here would read `epoch_milliseconds` and call it a
+        # moment. Nothing fails on the first run — only on the second, once a
+        # checkpoint exists to render back. The mapping declares a `format`,
+        # which RULE-ENDP-078 refuses on an id, so the two readings give
+        # opposite verdicts and the assertion pins the engine's.
+        payload = self._payload_with_cursor_field("updated_at", {})
+        payload["operations"]["read"]["response"]["schema"]["$defs"] = {
+            "F": {"type": "integer", "format": "epoch_milliseconds"},
+        }
+        items = payload["operations"]["read"]["response"]["schema"]["items"]
+        items["properties"] = {"updated_at": {"type": "integer", "$ref": "#/$defs/F"}}
+        payload["operations"]["read"]["replication"]["cursor_mappings"][0]["format"] = (
+            "epoch_milliseconds"
+        )
+        with pytest.raises(ValidationError, match="is an integer id"):
+            parse_endpoint(payload)
+
     def test_cursor_field_with_an_untyped_anyof_branch_rejected(self):
         # One branch declaring nothing makes the union unbounded — not a
         # usable type.

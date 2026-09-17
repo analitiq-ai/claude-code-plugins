@@ -21,9 +21,12 @@ rationale: >
   read back, which is after the whole first read has run and committed its
   checkpoint. The `format` read is the field node's own key, the one
   `record_field_declaration` takes in the engine; a format sitting inside an
-  `anyOf`/`oneOf` branch is invisible to that reader, which is why
-  RULE-ENDP-074 refuses a cursor field typed that way before this rule is
-  reached. Refusing it here moves that failure to authoring time; the
+  `anyOf`/`oneOf` branch, or behind a `$ref` or an `allOf`, is invisible to
+  that reader, which is why RULE-ENDP-074 refuses a cursor field typed that
+  way before this rule is reached. A field that writes its `type` itself and
+  hides only its `format` behind a pointer passes RULE-ENDP-074 and lands
+  here, where reading the authored node is what makes this rule call it an id
+  — the same thing the engine calls it. Refusing it here moves that failure to authoring time; the
   predicate reads only the document, so a stale reading of the engine can
   make this rule stricter than needed but never lets through a pairing whose
   meaning the document leaves undecided.

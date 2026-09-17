@@ -22,12 +22,15 @@ rationale: >
   from. The reading is the field node's own `type` key and no deeper —
   `declared_json_types` in the engine's response-schema reader takes
   `field["type"]` and does not descend a union — so a field typed only
-  through `anyOf`/`oneOf`, or only by a `native_type`/`arrow_type` pair, is
-  refused here for the same reason: it satisfies the typedness rule other
+  through `anyOf`/`oneOf`, through a `$ref` or an `allOf`, or only by a
+  `native_type`/`arrow_type` pair, is refused here for the same reason: it satisfies the typedness rule other
   paths ask about and still names no JSON type the cursor reader can see.
-  Reading the union through would be the worse error of the two available: it
-  would bless the one spelling that validates clean, ships, and then dies on
-  the first cursor read. The predicate also stands on the contract alone: a
+  The same holds for a type reached through a `$ref` or an `allOf`: those
+  resolve for the typedness rule the path check asks, and the cursor reader
+  resolves neither, because `records_items_schema` walks `properties` and
+  follows no pointer. Reading any of them through would be the worse error of
+  the two available: it would bless the spellings that validate clean, ship,
+  and then die on the first cursor read. The predicate also stands on the contract alone: a
   watermark whose type the document leaves open cannot be compared, whatever
   reads it.
 status: active

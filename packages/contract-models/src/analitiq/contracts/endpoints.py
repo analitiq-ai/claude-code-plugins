@@ -4773,14 +4773,22 @@ def _check_cursor_field_holds_the_mapping(
     Read off the field node's own `type` and `format` and no deeper, because
     that is the reading the engine performs when it reads a stored cursor back:
     `cdk.api.response_schema.declared_json_types` takes `field["type"]`, and
-    `record_field_declaration` takes `field["format"]` off that same node.
-    Neither descends an `anyOf`/`oneOf`. So `{"anyOf": [{"type": "string"},
-    {"type": "null"}]}` is refused here even though it states exactly what
-    `{"type": ["string", "null"]}` states — reading the union through would
-    resolve a type the engine cannot see, and bless a document that validates
-    clean, ships, and then dies on the first cursor read. The refusal names the
-    spelling that does work, because a generated schema usually emits the other
-    one.
+    `record_field_declaration` takes `field["format"]` off that same node. It
+    descends nothing — not an `anyOf`/`oneOf` branch, not a `$ref`, not an
+    `allOf`. So `{"anyOf": [{"type": "string"}, {"type": "null"}]}` is refused
+    here even though it states exactly what `{"type": ["string", "null"]}`
+    states, and `{"$ref": "#/$defs/Timestamp"}` is refused however plainly the
+    pointer's target is typed: reading either one through would resolve a type
+    the engine cannot see, and bless a document that validates clean, ships,
+    and then dies on the first cursor read. The refusal names the spelling that
+    does work, because a generated schema usually emits one of the others.
+
+    The `format` half is the quieter failure. A node that writes `type:
+    integer` itself and carries its `format` behind a `$ref` is accepted by
+    both sides, which then disagree about what it says — an epoch moment here,
+    a bare id in the engine. Nothing fails until the second run, when a
+    committed checkpoint has to be rendered back into a request. Reading the
+    authored node is what keeps the two readings the same one.
     """
     declared = field.get("type") if isinstance(field, dict) else None
     if isinstance(declared, str):
@@ -4794,9 +4802,9 @@ def _check_cursor_field_holds_the_mapping(
             "RULE-ENDP-074", "cursor-field-not-one-json-type",
             f"replication cursor_field {cm.cursor_field!r} declares type "
             f"{declared!r}; a cursor field declares one JSON type in its own "
-            "`type`, optionally beside null — a type named only inside an "
-            "`anyOf`/`oneOf` branch is not read back, so spell it "
-            '`{"type": ["<type>", "null"]}`'
+            "`type`, optionally beside null — a type reached only through an "
+            "`anyOf`/`oneOf` branch, a `$ref` or an `allOf` is not read back, "
+            'so spell it `{"type": ["<type>", "null"]}`'
         )
     if types[0] not in CURSOR_JSON_TYPES:
         raise violation(
@@ -4906,7 +4914,15 @@ def _check_cursor_field_in_node(
     also declare a type, the same requirement `_validate_record_field_path`
     holds `filters`/`order_by_field` to: an incremental comparison built over
     an untyped node has nothing to tell it what a valid watermark looks like.
-    Returns the materialized node.
+
+    Returns the node AS AUTHORED, not the materialized one. Resolution proves
+    the path lands on something typed; it does not decide what the cursor
+    reader will see there, and those are different questions with different
+    answers. `cdk.api.response_schema.records_items_schema` walks `properties`
+    and resolves no pointer, so `record_field_declaration` reads the `type`
+    and `format` keys the author wrote on the node itself.
+    :func:`_check_cursor_field_holds_the_mapping` has to grade that same node
+    or it grades a document the engine never sees.
     """
     segments = cursor_field.split(".")
     try:
@@ -4940,4 +4956,4 @@ def _check_cursor_field_in_node(
             "can tell what a valid comparison looks like "
             "(spec: §Cross-Field Validation)"
         )
-    return materialized
+    return node
