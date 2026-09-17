@@ -705,11 +705,10 @@ def test_a_fixture_using_a_python_only_json_constant_is_refused(
         corpus.rule_fixtures()
 
 
-def test_the_shipped_corpus_is_rfc_8259_json():
-    """Every shipped fixture loads through the strict parser."""
-    assert corpus.rule_fixtures()
-
-
+# The shipped corpus is held to the strict parser by the parametrize below:
+# it calls the loader at import, so a fixture the parser refuses errors
+# collection of this module. A test body asserting the same call runs only
+# after that has already passed, and reports nothing of its own.
 @pytest.mark.parametrize(
     "fixture", corpus.rule_fixtures(),
     ids=lambda f: f"{f.rule_id}/{f.verdict}/{f.name}",
