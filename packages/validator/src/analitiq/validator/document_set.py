@@ -16,24 +16,31 @@ takes the request model that names the unit being submitted
 `ValidationEnvelope`. A caller states what it is sending by choosing the
 function: nothing here reads content to work out whether it was handed one
 document or a package, or which kind of package, and no entry point takes a
-parameter that selects between them. One package request model serves both
-package entry points precisely because the function carries the kind.
+parameter that selects between them. One package request model serves every
+package entry point precisely because the function carries the kind.
 
 **The request model is the argument gate.** A key outside the document-key
-grammar, a non-string value, a key that is also a directory of another, a
-package past the document ceiling, an `entity` outside the published document
+grammar, a value that is not text, a key that is also a directory of another,
+a package past the document ceiling, an `entity` outside the published document
 schema names — each is a `pydantic.ValidationError` raised at construction, for
 an in-process caller and a remote one alike, so there is one gate rather than
-one per transport. Nothing below re-checks an argument the model already
-refuses, and a malformed argument never becomes a finding. Document *content*
-is the opposite and is what this module exists to judge: unparseable text, a
-wrong shape, a contract-model failure or a cross-file inconsistency is a
-finding on that document's key.
+one per transport. A `bytes` value is the exception the model does not refuse:
+pydantic decodes it to `str` in lax mode, byte-order mark included, so a caller
+that read its files as bytes has that document reported as unreadable *content*
+rather than as a malformed argument. Nothing below re-checks an argument the
+model already refuses, and a malformed argument never becomes a finding.
+Document *content* is the opposite and is what this module exists to judge:
+unparseable text, a wrong shape, a contract-model failure or a cross-file
+inconsistency is a finding rather than a raised error.
 
-An exception raised while validating is a defect in this package: it
-propagates. Turning one into a finding would fail an author's document for a
-bug the author cannot fix. The per-check `check-crashed` containment of the
-path-based route is a different mechanism and is untouched.
+An exception raised by this module's own assembly or scoping is a defect in
+this package: it propagates. Turning one into a finding would fail an author's
+document for a bug the author cannot fix. `_run_guarded` in
+`analitiq.validator._core` is a separate, older mechanism and is untouched: it
+contains a crash inside a check bound to one rule, and inside whole-document
+dispatch where `validate_document` applies it, as a `check-crashed`
+`notApplicable` finding — so a crash inside the path-based route this module
+delegates a single document to still comes back as a finding.
 
 Every function below raises `NotImplementedError` — the behaviour they must
 satisfy is fixed by `packages/validator/tests/test_document_set.py`, whose
@@ -48,11 +55,13 @@ if TYPE_CHECKING:
     # Annotation-only. `from __future__ import annotations` defers every
     # annotation here to a string, and no body below needs a model at runtime,
     # so nothing imports the contract package when this module loads. That is
-    # what keeps the import order safe: this module is imported before the
-    # per-kind modules whose `try/except ImportError` turns a missing
-    # `analitiq-contract-models` into the structured "missing dependency"
-    # diagnostic, and an unconditional import here would pre-empt that guard
-    # with a raw traceback instead.
+    # what keeps the import order safe: this module is imported before
+    # `connectors`, whose `try/except ImportError` around its contract-model
+    # imports turns a missing `analitiq-contract-models` into the structured
+    # "missing dependency" diagnostic, and an unconditional import here would
+    # pre-empt that guard with a raw traceback instead. The cost is that these
+    # annotations do not resolve at run time: `typing.get_type_hints` on the
+    # entry points below needs the request models handed to it as a namespace.
     from analitiq.contracts.validation_requests import (
         ValidatePackageRequest,
         ValidateSingleDocumentRequest,
@@ -85,12 +94,14 @@ class Finding(_FindingRequired, total=False):
 
 class ValidationEnvelope(TypedDict):
     """The result of every entry point below: flat, not a nested per-document
-    breakdown — each finding's own `path` carries its document key, so a
-    document validated this way and the same document validated through the
-    path-based single-document route report through one shape. `passed` is the
-    `finding_costs_a_pass` reduction over `findings`, which is not the same as
-    "no finding at `severity: error`": an unchecked error-tier rule costs a
-    pass too."""
+    breakdown — a finding carries the `path` the check that produced it
+    reports, so a document validated this way and the same document validated
+    through the path-based single-document route report through one shape. The
+    one `path` this module decides itself is an embedded connector subtree's,
+    scoped under that subtree's key prefix. `passed` is `False` exactly when
+    `findings` holds one that `finding_costs_a_pass` accepts, which is not the
+    same as "a finding at `severity: error`": an unchecked error-tier rule
+    costs a pass too."""
 
     passed: bool
     findings: list[Finding]
@@ -127,8 +138,8 @@ def validate_single_document(
 
 def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnvelope:
     """Validate a connector package supplied as in-memory documents instead of
-    files on disk: the connector document, its sibling type maps, and its
-    `endpoints/*.json` files, cross-checked the way
+    files on disk: the connector document, its sibling type maps, and — for an
+    api connector — its `endpoints/*.json` files, cross-checked the way
     `analitiq.validator.check_coverage` already does from a filesystem path.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
@@ -155,6 +166,11 @@ def validate_pipeline_package(request: ValidatePackageRequest) -> ValidationEnve
     `_assemble_bundle` reads such a subtree's `connector.json` only for its
     `connector_id`, and `_connector_endpoint_sets` reads the subtree's endpoint
     ids only for stream-ref resolution.
+
+    `ValidationEnvelope` is the shape a caller reads, so a finding an assembled
+    adapter mints in a local shape of its own — one carrying no `message_id` or
+    `kind`, which `finding_costs_a_pass` still grades — is normalized to a
+    `Finding` before it reaches the envelope.
 
     Not yet implemented — raises `NotImplementedError`. Signature and
     behaviour are fixed by `packages/validator/tests/test_document_set.py`.

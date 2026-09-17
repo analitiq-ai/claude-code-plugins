@@ -73,10 +73,14 @@ fixes what an implementation must satisfy, `xfail` until each case's function
 is built. Read that module and that test file for the contract itself — it is
 not restated here.
 
-The contract is deliberately narrow: a `DocumentSet` never carries a directory
-to read from, and its keys are never resolved against a filesystem — the offline
-guarantee stated above for single-document validation, extended to a set of
-documents instead of one.
+The contract is deliberately narrow. Each entry point takes the request model
+that names the unit being submitted — `ValidateSingleDocumentRequest` or
+`ValidatePackageRequest`, both from `analitiq.contracts.validation_requests`,
+which own the document-key grammar and the text-only value type and are where a
+malformed argument is refused. A request never carries a directory to read from,
+and its keys are never resolved against a filesystem — the offline guarantee
+stated above for single-document validation, extended to a set of documents
+instead of one.
 
 ## Install
 

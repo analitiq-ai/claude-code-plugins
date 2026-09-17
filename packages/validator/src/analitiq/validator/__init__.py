@@ -20,7 +20,8 @@ signatures ahead of their implementation — every function it exports
 currently raises `NotImplementedError`; see that module's docstring and
 `__all__` below for what it contributes to this package's surface. Its entry
 points take the request models in `analitiq.contracts.validation_requests`,
-which own the document-set shape and gate every argument.
+which own the document-set shape and are where a malformed argument is
+refused.
 """
 from ._core import finding, finding_costs_a_pass, main, validate_document
 from .document_set import (
