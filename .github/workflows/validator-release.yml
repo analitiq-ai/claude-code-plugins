@@ -120,8 +120,8 @@ jobs:
         run: |
           python -m venv "${{ runner.temp }}/v-smoke"
           "${{ runner.temp }}/v-smoke/bin/pip" install --quiet "${{ runner.temp }}"/v-dist/*.whl "${{ runner.temp }}"/cm-dist/*.whl
-          STAGED="${{ runner.temp }}/v-src" "${{ runner.temp }}/v-smoke/bin/python" -c "
-          import os, pathlib
+          STAGED="${{ runner.temp }}/v-src" DIST="${{ runner.temp }}/v-dist" "${{ runner.temp }}/v-smoke/bin/python" -c "
+          import os, pathlib, tarfile, zipfile
           import analitiq.validator as v
           from analitiq.validator import case_mismatch, rule_cases
 
@@ -137,6 +137,14 @@ jobs:
           missing = [str(r) for r in expected if not (installed / r).is_file()]
           assert not missing, f'wheel dropped staged data files: {missing}'
           print('data files shipped:', len(expected))
+
+          # The installed tree carries the bytecode pip compiles, so bytecode
+          # the build host left in the staged tree shows only in the archives.
+          dist = pathlib.Path(os.environ['DIST'])
+          archived = [n for w in dist.glob('*.whl') for n in zipfile.ZipFile(w).namelist()]
+          archived += [n for s in dist.glob('*.tar.gz') for n in tarfile.open(s).getnames()]
+          bytecode = [n for n in archived if n.endswith('.pyc') or '__pycache__' in n]
+          assert not bytecode, f'build-host bytecode shipped: {bytecode}'
 
           cases = rule_cases()
           assert cases, 'rule case corpus shipped empty'
