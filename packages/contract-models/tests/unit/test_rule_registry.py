@@ -720,7 +720,13 @@ def test_no_orphan_fixture_directories(monkeypatch, tmp_path):
     its fixtures — the rule leaves the corpus and the files stay on disk
     exercising nothing. The accessor refuses to load such a corpus.
     """
-    unclaimed = next(r.id for r in all_rules() if r.fixture_model is None)
+    unclaimed = next(
+        (r.id for r in all_rules() if r.fixture_model is None), None
+    )
+    assert unclaimed is not None, (
+        "every rule claims a fixture corpus, so there is no unclaimed id to "
+        "write an orphan directory under — this test grades nothing"
+    )
     _write_fixture(tmp_path, unclaimed, "valid", "a.json")
     monkeypatch.setattr(corpus, "FIXTURES_DIR", tmp_path)
     with pytest.raises(ValueError, match=unclaimed):
@@ -761,7 +767,10 @@ def test_fixture_matches_enforcement(fixture):
 
 @pytest.mark.parametrize("verdict", ["valid", "invalid"])
 def test_a_fixture_with_its_verdict_flipped_is_a_mismatch(verdict):
-    fixture = next(f for f in corpus.rule_fixtures() if f.verdict == verdict)
+    fixture = next(
+        (f for f in corpus.rule_fixtures() if f.verdict == verdict), None
+    )
+    assert fixture is not None, f"no {verdict} fixture in the corpus"
     flipped = "invalid" if verdict == "valid" else "valid"
     assert corpus.fixture_mismatch(dataclasses.replace(fixture, verdict=flipped))
 

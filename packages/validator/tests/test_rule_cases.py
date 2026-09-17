@@ -51,7 +51,12 @@ def test_every_rule_with_cases_has_two_of_each_verdict():
 
 
 def _case(rule_id: str, verdict: str) -> RuleCase:
-    return next(c for c in rule_cases() if c.rule_id == rule_id and c.verdict == verdict)
+    case = next(
+        (c for c in rule_cases() if c.rule_id == rule_id and c.verdict == verdict),
+        None,
+    )
+    assert case is not None, f"no {verdict} case for {rule_id} in the corpus"
+    return case
 
 
 def test_a_valid_verdict_on_a_violating_case_is_a_mismatch():
@@ -132,8 +137,15 @@ def test_a_directory_for_an_unknown_rule_is_refused(monkeypatch, tmp_path):
 
 def test_a_rule_not_enforced_by_a_validator_check_is_refused(monkeypatch, tmp_path):
     rule = next(
-        r for r in all_rules()
-        if not (r.validator or "").startswith("analitiq.validator.")
+        (
+            r for r in all_rules()
+            if not (r.validator or "").startswith("analitiq.validator.")
+        ),
+        None,
+    )
+    assert rule is not None, (
+        "every rule is enforced by a validator check, so there is no rule "
+        "this refusal could be shown on — this test grades nothing"
     )
     _write_case(tmp_path, rule.id, "valid", "a", "bundle.json")
     with pytest.raises(ValueError, match=rule.id):
