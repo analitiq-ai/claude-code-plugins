@@ -80,7 +80,7 @@ read, `response.metadata` keys on either operation:
 |---|---|---|
 | `response.body.<path>` | resolved against `response.schema`, must declare a type (RULE-ENDP-023) | **not resolved** — see below |
 | `response.metadata.<key>` | must name a declared key | must name a declared key |
-| `response.records.<path>` | spelling only | spelling only |
+| `response.records.<path>` | spelling only | **barred** — read-only scope |
 | `response.headers.<name>` | spelling only | spelling only |
 | `response.status` | spelling only | spelling only |
 | `response.record_count` | spelling only | **barred** — read-only scope |

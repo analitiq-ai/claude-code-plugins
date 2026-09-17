@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Covers: every rule this plugin owns that binds an **`api-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 16 of the 86 below have no validator, so nothing rejects
+all hold: 16 of the 94 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **37** shape · **32** coherence · **8** reference · **4** process · **5** choice.
+In this file: **41** shape · **36** coherence · **8** reference · **4** process · **5** choice.
 
 ## Contents
 
@@ -67,6 +67,10 @@ than edited.
 | RULE-ENDP-065 | A read response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name. | `api-endpoint` | error | validator | `^[a-z][a-z0-9_]*$` |
 | RULE-ENDP-069 | Every `${...}` placeholder in a `filters` map template landing MUST begin with a declared resolution scope. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-073 | A response extraction's `records.ref` MUST be `response.body` or start with `response.body.`. | `api-endpoint` | error | validator | — |
+| RULE-ENDP-075 | A query parameter that declares a serialization `style` together with an `explode` flag MUST declare a pairing that has a defined query-string serialization, and when the parameter's declared type is a container, a pairing that serializes that container type. | `api-endpoint` | error | validator | — |
+| RULE-ENDP-076 | A parameter's declared numeric bounds MUST be finite, and no declared lower bound — `minimum`, `minLength`, `minItems` — MUST exceed the upper bound it pairs with. | `api-endpoint` | error | validator | — |
+| RULE-ENDP-079 | A request's `query` map MUST NOT declare a key whose value is a bare `null`. | `api-endpoint` | error | validator | — |
+| RULE-ENDP-080 | A write operation's `idempotency` placed in a header MUST name that header with an HTTP field-name token. | `api-endpoint` | error | validator | — |
 | RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | `content-length` |
 | RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | `content-type` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
@@ -105,9 +109,9 @@ single field looks wrong.
 | RULE-ENDP-025 | A write mode MUST NOT declare both a `from_input` path_params binding and `batching`. | `api-endpoint` | error | validator |
 | RULE-ENDP-026 | Every `$ref` in an embedded response or input schema MUST be an in-document pointer that resolves to a schema node in the same document, and the schema MUST NOT use a keyword that retargets the base URI or defers a reference to evaluation time. | `api-endpoint` | error | validator |
 | RULE-ENDP-028 | A `from_param` path_params binding on a write operation MUST name a param that declares a default. | `api-endpoint` | error | validator |
-| RULE-ENDP-030 | A write operation's response expressions MUST NOT reference `response.record_count`, a scope only a read response carries. | `api-endpoint` | error | validator |
+| RULE-ENDP-030 | A write operation's response expressions MUST read `response` only through the scopes a write response carries — `body`, `headers`, `status` and `metadata` — and so MUST NOT reference `response.record_count`, `response.records` or any other sub-scope. | `api-endpoint` | error | validator |
 | RULE-ENDP-032 | A request slot MUST NOT ref a per-run scope directly; a per-run value MUST reach the request through a declared param. | `api-endpoint` | error | validator |
-| RULE-ENDP-033 | Every ref and every `${...}` template placeholder in a request slot MUST lead with one of the resolution scopes the contract declares. | `api-endpoint` | error | validator |
+| RULE-ENDP-033 | Every ref and every `${...}` template placeholder an API endpoint operation declares, wherever in the operation it sits, MUST lead with one of the resolution scopes the contract declares. | `api-endpoint` | error | validator |
 | RULE-ENDP-034 | A `from_input` binding MUST NOT be authored at a request site the engine builds before a record is in scope. | `api-endpoint` | error | validator |
 | RULE-ENDP-035 | A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record. | `api-endpoint` | error | validator |
 | RULE-ENDP-063 | Every value an embedded request or response schema records under `examples` MUST satisfy the schema node that declares it. | `api-endpoint` | error | validator |
@@ -116,6 +120,10 @@ single field looks wrong.
 | RULE-ENDP-070 | A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST name a param the same operation declares. | `api-endpoint` | error | validator |
 | RULE-ENDP-071 | Two `filters` map entries anywhere in the map MUST NOT resolve to the same landing site. | `api-endpoint` | error | validator |
 | RULE-ENDP-072 | A `filters` map entry's `template` MUST interpolate `${stream.filters.<field>.value}` for the field/operator entry it is declared on, and MUST NOT interpolate any other `stream.filters.*` reference. | `api-endpoint` | error | validator |
+| RULE-ENDP-074 | Every replication cursor field MUST resolve to a record-shape node whose own `type` names exactly one JSON type besides `null`, and that type MUST be one that can hold a cursor: a string moment or an integer. | `api-endpoint` | error | validator |
+| RULE-ENDP-077 | A single-parameter cursor mapping MUST bound the read from below, with `gt` or `gte`; a window cursor mapping MUST bound its start from below, with `gt` or `gte`, and its end from above, with `lt` or `lte`. | `api-endpoint` | error | validator |
+| RULE-ENDP-078 | A replication cursor field typed `integer` MUST declare either an epoch cursor format, making it a moment, or no cursor format at all, making it an id; a cursor mapping over an id MUST declare no `format` and MUST NOT take the window form. | `api-endpoint` | error | validator |
+| RULE-ENDP-081 | Every `path_params` binding in a request MUST source its placeholder's value through `from_param` or, on a write, through `from_input`; a ref, literal or template with neither binds no path segment. | `api-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
 ## Reference
