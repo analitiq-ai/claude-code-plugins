@@ -651,6 +651,42 @@ def test_coverage_flags_missing_read_map(tmp_path, connector_base, validator):
     assert any("type-map-read.json" in e["message"] for e in errors)
 
 
+def test_an_endpoint_that_holds_a_json_null_is_graded(
+        tmp_path, connector_base, validator):
+    # A file holding `null` is read successfully and holds no document. A walk
+    # that reads the loader's VALUE cannot tell that from a file it failed to
+    # read, so it drops the document reporting nothing — a clean pass over a
+    # file nothing graded. Every other malformed payload is rejected by the
+    # model, which is what keeps the gap out of sight.
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+                {"widgets.json": _endpoint("STRING", "Utf8")})
+    (tmp_path / "endpoints" / "widgets.json").write_text("null")
+    errors = _errors(validator.validate_document(
+        connector_base, doc_path=tmp_path / "connector.json"))
+    assert errors, "an endpoint holding a JSON null was graded by nothing"
+
+
+def test_a_sibling_connector_that_holds_a_json_null_is_not_called_unparseable(
+        tmp_path, connector_base, validator):
+    # The endpoint-anchored route names why `transports` could not be read, and
+    # the reasons ask for different edits: a file that did not parse is fixed by
+    # fixing its JSON, one holding `null` by writing a connector into it.
+    # Reading the loader's value collapses the second into the first and sends
+    # the author looking for a syntax error that is not there.
+    (tmp_path / "connector.json").write_text("null")
+    ep_path = tmp_path / "endpoints" / "widgets.json"
+    ep_path.parent.mkdir(parents=True)
+    ep_doc = _keyset_endpoint(initial=None, transport_ref="main")
+    ep_path.write_text(json.dumps(ep_doc))
+    findings = validator.validate_document(ep_doc, doc_path=ep_path)
+    skipped = [f for f in findings
+               if str(f.get("message_id", "")).startswith("transport-ref-check-skipped")]
+    assert skipped, [f.get("message_id") for f in findings]
+    assert skipped[0]["message_id"] != "transport-ref-check-skipped-unparseable", (
+        skipped[0]["message"])
+
+
 def test_coverage_flags_missing_endpoints_directory(tmp_path, connector_base, validator):
     # RULE-PKG-035: an API connector's release ships at least one endpoint
     # document. No `endpoints/` directory at all is the more severe of its two

@@ -965,12 +965,24 @@ def is_addressed_endpoint_path(doc_path: Path) -> bool:
     return doc_path.parent.name == "endpoints"
 
 
+# Sentinel for "nothing was read", distinct from a file that holds a JSON null:
+# `json.loads("null")` is `None`, so a loader answering with `None` leaves its
+# caller unable to tell a file it could not read from one it read a null out of,
+# and the two need opposite handling. The same distinction
+# `analitiq.contracts.shared.json_schema._MISSING` draws for a pointer that lands
+# on a null.
+_UNREAD = object()
+
+
 def _load_json_sibling(
     path: Path, *, rule: str | None, message_id: str,
 ) -> tuple[Any, list[dict]]:
     """Read a sibling JSON document, reporting a read/parse failure — carrying,
     when the caller names one, the rule that sibling's content would otherwise
     satisfy.
+
+    Answers `_UNREAD` when nothing was read, never `None`: a document is whatever
+    the file held, and `null` is one of the things it can hold.
 
     `rule` is a parameter because the callers are different checks, each
     attributing an unreadable sibling to whichever obligation it was reading
@@ -983,19 +995,19 @@ def _load_json_sibling(
         # reached by whatever carries a matching name. A directory raises with an
         # errno that says nothing about the package; a FIFO waits for a writer
         # that never comes, and the check never returns at all.
-        return None, [finding(
+        return _UNREAD, [finding(
             rule=rule, message_id=message_id, kind="fail", path="/",
             message=f"sibling {path.name} is not a regular file; nothing was read from it.")]
     try:
         return json.loads(path.read_text()), []
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        return None, [finding(
+        return _UNREAD, [finding(
             rule=rule, message_id=message_id, kind="fail", path="/",
             message=f"sibling {path.name} could not be read or parsed ({exc}).")]
 
 
 def _load_type_map(path: Path) -> tuple[Any | None, list[dict]]:
-    """A type-map document, or `None` plus an unparseable-sibling finding."""
+    """A type-map document, or `_UNREAD` plus an unparseable-sibling finding."""
     return _load_json_sibling(
         path, rule="RULE-PKG-030", message_id="type-map-unparseable")
 
@@ -1159,10 +1171,7 @@ def _type_map_siblings_by_direction(
     for path in type_map_sibling_paths(parent):
         doc, load = _load_type_map(path)
         findings.extend(load)
-        if load:
-            # What was already reported is what the loader answered with, not
-            # what it parsed to: `null` parses to no document and no finding,
-            # and reading the value would let that one payload through ungraded.
+        if doc is _UNREAD:
             continue
         declared, held_by = directions.claim(path.name, doc)
         if declared is None:
@@ -1328,7 +1337,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             continue
         ep_doc, load = _load_json_sibling(
             ep_path, rule=None, message_id="endpoint-file-unreadable")
-        if ep_doc is None:
+        if ep_doc is _UNREAD:
             findings.extend(load)
             continue
         # Each sibling endpoint is a full api-endpoint document — validate it
@@ -1436,7 +1445,7 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
                 if doc_path
                 else None
             )
-            connector_doc = None
+            connector_doc: Any = _UNREAD
             sibling_exists = sibling is not None and sibling.is_file()
             if sibling_exists:
                 # `rule=None`: a read/parse failure has not evaluated
@@ -1455,7 +1464,7 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
             # here is the cases where it could not be resolved, each naming
             # which one happened.
             if not isinstance(transports, dict):
-                if connector_doc is not None:
+                if connector_doc is not _UNREAD:
                     # Connector found, but its `transports` is missing or not an
                     # object. `_endpoint_transport_ref_findings` returns [] there —
                     # correct at the CONNECTOR-anchored call site, where the
@@ -1474,10 +1483,9 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
                             "object, so there was nothing to resolve the name against. "
                             "Validate the connector to see why.")))
                 elif sibling_exists:
-                    # The file IS there and WAS read — it just did not parse.
-                    # Branching on `connector_doc is None` alone said "not
-                    # reachable", contradicting the parse error emitted beside it
-                    # under the same id.
+                    # The file IS there and nothing was read out of it. Reporting
+                    # this as "not reachable" would contradict the parse error
+                    # emitted beside it under the same id.
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
                         message_id="transport-ref-check-skipped-unparseable",
