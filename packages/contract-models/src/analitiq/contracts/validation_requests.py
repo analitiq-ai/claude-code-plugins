@@ -1,4 +1,4 @@
-"""Requests to validate a set of authored documents supplied as text.
+"""Requests to validate authored documents supplied as text.
 
 A request carries the documents, not a location to read them from. These
 models gate the request's shape only: a request they refuse is malformed,
@@ -7,7 +7,9 @@ contract — is not judged here.
 """
 from __future__ import annotations
 
-from typing import Annotated
+import json
+from pathlib import Path
+from typing import Annotated, Literal
 
 from pydantic import Field, RootModel, StringConstraints, model_validator
 
@@ -78,3 +80,23 @@ class ValidatePackageRequest(StrictModel):
     documents."""
 
     documents: DocumentSet
+
+
+#: Written by `scripts/render_schemas.py document-schemas`: the names of the
+#: published schemas whose root model declares `$schema`, each describing one
+#: kind of authored document.
+DOCUMENT_SCHEMAS_PATH = Path(__file__).with_name("document_schemas.json")
+DOCUMENT_SCHEMAS_KEY = "document_schemas"
+DOCUMENT_SCHEMA_NAMES: tuple[str, ...] = tuple(
+    json.loads(DOCUMENT_SCHEMAS_PATH.read_text())[DOCUMENT_SCHEMAS_KEY])
+
+
+class ValidateSingleDocumentRequest(StrictModel):
+    """A request to validate one document, supplied as its file text."""
+
+    document: DocumentText = Field(
+        ..., description="The document's file text, unparsed.")
+    entity: Literal[DOCUMENT_SCHEMA_NAMES] = Field(  # type: ignore[valid-type]
+        ...,
+        description="Name of the published schema the document is written against.",
+    )
