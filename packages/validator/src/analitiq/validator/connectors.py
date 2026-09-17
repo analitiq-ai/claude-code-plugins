@@ -1406,7 +1406,7 @@ _DISCRIMINATOR_MESSAGE_IDS = ("union_tag_not_found", "union_tag_invalid")
 # does not say the field is missing, and it does not name the values that would
 # resolve it. For a tag that is present and wrong it already names both, so only
 # the absent case is replaced.
-_TAG_NOT_FOUND_MESSAGE = "no `direction`; a type map declares 'read' or 'write'"
+_TAG_NOT_FOUND_MESSAGE = "`direction` is missing; a type map declares 'read' or 'write'"
 
 # Either way nothing past the discriminator was measured, and a report that does
 # not say so reads as one defect rather than one defect so far.
@@ -1419,11 +1419,11 @@ def _type_map_discriminator_findings(doc: Any) -> list[dict]:
 
     Pydantic locates a discriminator failure at the document root: no member was
     entered, so there is no member field to locate it inside. The finding is
-    about `direction` all the same, and `path` is what a consumer routes on —
-    the pipeline plugin's validate script concatenates it onto a file site to
-    place the finding. Leaving it at the root would point the same class of
-    defect at two different places depending on whether the direction was wrong
-    or unusable."""
+    about `direction` all the same, and every other route that rejects one
+    reports it at `/direction` — a caller grading a map against a direction the
+    map does not declare, and the sibling walk behind it. Leaving this one at the
+    root would put the same class of defect in two places depending on which
+    route saw the document, and `path` is what a consumer routes on."""
     findings = _model_findings(doc, _TYPE_MAP_ADAPTER)
     for f in findings:
         if f.get("message_id") not in _DISCRIMINATOR_MESSAGE_IDS:

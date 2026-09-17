@@ -1377,6 +1377,34 @@ def test_an_unusable_direction_is_answered_on_the_discriminator(
     assert "direction" in errors[0]["message"], errors
 
 
+def test_the_discriminator_answer_says_what_is_wrong_and_what_went_ungraded(validator):
+    # Pydantic's sentence for an absent tag names the field and stops: it never
+    # says the field is missing, and it names neither value that would resolve
+    # it. For a tag present and wrong it names both, so only the absent case is
+    # replaced.
+    #
+    # Nothing past the discriminator was measured either way — the tag selects
+    # the model the rest is graded against — and a report that does not say so
+    # reads as one defect rather than one so far.
+    absent, wrong = (_errors(validator.validate_document(_unusable(bad)))[0]["message"]
+                     for bad in (_ABSENT, "Write"))
+    assert "missing" in absent, absent
+    for message in (absent, wrong):
+        assert "'read'" in message and "'write'" in message, message
+        assert "Nothing else in the document was graded" in message, message
+
+
+def test_a_borrowed_diagnostic_does_not_carry_the_document_back_whole(validator):
+    # A model error's sentence comes from pydantic, which renders the failing
+    # input into it. This package is the gate over documents it did not author,
+    # and the sentence reaches a CI log and an agent's context, so an oversized
+    # value is clipped rather than echoed.
+    oversized = "X" * 5000
+    [error] = _errors(validator.validate_document(_unusable(oversized)))
+    assert oversized not in error["message"], len(error["message"])
+    assert len(error["message"]) < 500, len(error["message"])
+
+
 def test_an_envelope_declaring_nothing_is_still_answered_on_the_discriminator(validator):
     # `$schema` is the other field that names a direction, so a document
     # carrying it could be answered by its Literal rather than by the
