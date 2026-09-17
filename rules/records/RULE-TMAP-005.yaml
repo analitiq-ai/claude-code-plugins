@@ -1,6 +1,6 @@
 id: RULE-TMAP-005
 statement: >
-  A `regex` read rule's native_type pattern MUST compile under the ECMA-262 regex
+  A `regex` read rule's native_type pattern MUST compile under the RE2 regex
   dialect.
 tier: shape
 severity: error
@@ -9,10 +9,16 @@ validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin]
 targets: [TypeMapReadRegexRule]
 rationale: >
-  The map is published under a JSON Schema whose pattern dialect is ECMA-262
-  and is read by more than one runtime, so a Python-only named-capture spelling
-  compiles wherever the author tested it and fails wherever it ships. The
-  authoring hazard is that both spellings look like ordinary regex, and without
-  a compile check the two directions reject it at different layers.
+  The engine compiles a read rule's matcher with RE2 when it loads the connector
+  and refuses the run on a pattern RE2 cannot parse, so a matcher that compiles
+  only under a richer dialect passes authoring and fails where it ships. The
+  dialects diverge in each direction — the lookaround, atomic groups and
+  backreferences an author reaches for by habit are not RE2 syntax, and RE2
+  admits syntax of its own that a backtracking engine refuses — and either kind
+  reads as ordinary regex on the page, so only compiling under the dialect that
+  will match it tells the author which one they wrote. This states the engine as
+  it stands: the check runs stricter than the runtime if the engine's matcher
+  comes to accept what this check's RE2 rejects, and looser if the check
+  resolves an RE2 release accepting what the engine's refuses.
 status: active
 superseded_by: null

@@ -123,10 +123,9 @@ validates with zero findings and simply never fires.
 A `${name}` on a rule's rendered side names a **named capture group** on its
 matcher side (`RULE-TMAP-003` read, `RULE-TMAP-016` write) — but only the read
 side is enforced: an unbacked write-side `${name}` surfaces first at DDL
-render, so verify that half yourself. Both directions compile the matcher as
-ECMA-262, so write the capture form `(?<name>…)`; the Python-only
-`(?P<name>…)` is rejected on either side (`RULE-TMAP-005` read,
-`RULE-TMAP-009` write).
+render, so verify that half yourself. Write every capture as `(?<name>…)` —
+`RULE-TMAP-005` (read) and `RULE-TMAP-009` (write) carry what a matcher must
+compile under.
 
 - Read map: placeholders in `arrow_type`, captures in `native_type` —
   `native_type: "^NUMERIC\\((?<precision>[1-9]|[12]\\d|3[0-8]),\\s*(?<scale>\\d|[12]\\d|3[0-8])\\)$"`,
