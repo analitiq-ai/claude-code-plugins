@@ -4727,14 +4727,23 @@ def _check_cursor_field_holds_the_mapping(
         for leaf in leaves
         if "integer" in _json_types_of(leaf)
     }
-    if len(formats) > 1:
+    # Compared by what each branch says about reading the cursor back, not by
+    # the token it spells that with: a format outside the cursor vocabulary
+    # says nothing about the reading, so `int64` beside `uint64` declares an id
+    # twice and agrees. What the branches may not do is disagree —
+    # `epoch_seconds` beside `epoch_milliseconds` is one stored value under two
+    # scales, and an epoch format beside none is a value that is a moment or an
+    # id depending on which branch is read.
+    readings = {fmt if fmt in CURSOR_FORMATS else None for fmt in formats}
+    if len(readings) > 1:
         raise violation(
             "RULE-ENDP-078", "integer-cursor-field-two-formats",
             f"replication cursor_field {cm.cursor_field!r} declares "
             f"{sorted(f or '(none)' for f in formats)!r} across its branches; "
-            "an integer cursor declares one epoch format, or none at all"
+            "an integer cursor reads back one way — under one cursor format, "
+            "or under none at all"
         )
-    field_format = formats.pop() if formats else None
+    field_format = readings.pop() if readings else None
     if field_format in EPOCH_CURSOR_FORMATS:
         return
     if field_format in CURSOR_FORMATS:

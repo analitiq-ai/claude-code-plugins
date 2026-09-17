@@ -384,21 +384,46 @@ class TestCursorFieldsInRecordShape:
         parse_endpoint(self._payload_with_cursor_field(
             "updated_at",
             {"updated_at": {"anyOf": [
-                {"type": "integer", "format": "unix-seconds"}, {"type": "null"},
+                {"type": "integer", "format": "epoch_seconds"}, {"type": "null"},
             ]}},
         ))
+
+    def test_integer_cursor_field_under_anyof_is_refused_by_its_own_format(self):
+        # The verdict turns on the branch's own `format`: a calendar format is
+        # a moment an integer cannot spell. Without the per-branch read the
+        # field is an id and the document passes, so this is the case that
+        # holds that read in place.
+        with pytest.raises(ValidationError, match="a moment only under"):
+            parse_endpoint(self._payload_with_cursor_field(
+                "updated_at",
+                {"updated_at": {"anyOf": [
+                    {"type": "integer", "format": "date-time"}, {"type": "null"},
+                ]}},
+            ))
 
     def test_integer_cursor_field_whose_branches_disagree_on_format_is_rejected(self):
         # Two epoch scales for one stored value: reading it back picks one, and
         # the document does not say which (RULE-ENDP-078).
-        with pytest.raises(ValidationError, match="one epoch format"):
+        with pytest.raises(ValidationError, match="reads back one way"):
             parse_endpoint(self._payload_with_cursor_field(
                 "updated_at",
                 {"updated_at": {"anyOf": [
-                    {"type": "integer", "format": "unix-seconds"},
-                    {"type": "integer", "format": "unix-millis"},
+                    {"type": "integer", "format": "epoch_seconds"},
+                    {"type": "integer", "format": "epoch_milliseconds"},
                 ]}},
             ))
+
+    def test_integer_cursor_field_whose_branches_declare_two_id_formats_is_accepted(self):
+        # Neither names a cursor format, so both branches say the same thing
+        # about reading the value back — it is an id — and the document leaves
+        # nothing for RULE-ENDP-078 to call undecided.
+        parse_endpoint(self._payload_with_cursor_field(
+            "updated_at",
+            {"updated_at": {"anyOf": [
+                {"type": "integer", "format": "int64"},
+                {"type": "integer", "format": "uint64"},
+            ]}},
+        ))
 
     def test_cursor_field_with_an_untyped_anyof_branch_rejected(self):
         # One branch declaring nothing makes the union unbounded — not a

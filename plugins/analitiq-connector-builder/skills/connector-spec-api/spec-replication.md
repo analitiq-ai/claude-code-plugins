@@ -120,9 +120,12 @@ its `type`, or across every branch of an `anyOf`/`oneOf` — and that type must
 be `string` or `integer` (`RULE-ENDP-074`); a number, boolean or container
 leaves the next run nothing it can compare. An integer says which kind of
 integer it is in its own `format`: `epoch_seconds` or `epoch_milliseconds`
-makes it a moment, no format at all makes it a monotonic id
-(`RULE-ENDP-078`). An id has no "now", so it takes neither the window variant
-nor a mapping `format`.
+makes it a moment, a calendar cursor format is refused outright — a moment an
+integer cannot spell — and anything else, a provider's own width token or no
+format at all, makes it a monotonic id (`RULE-ENDP-078`). Branches must agree
+on which of the two the value is, so two epoch scales across an `anyOf` are
+refused where two width tokens are not. An id has no "now", so it takes
+neither the window variant nor a mapping `format`.
 
 ## More than one cursor mapping
 
