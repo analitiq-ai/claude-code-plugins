@@ -441,9 +441,9 @@ def test_the_tokenizer_reads_every_escape_re2_compiles():
 
 
 @pytest.mark.parametrize("control", ["a", "f", "n", "r", "t", "v"])
-def test_an_atom_dead_in_every_case_is_no_case_finding(control):
-    # No normalized native contains a control character in any case, so the
-    # atom is dead for a reason its case does not explain.
+def test_a_control_escape_is_no_case_finding(control):
+    # A control character has no case, so folding case adds no match and the
+    # atom is never dead by case, whether or not a normalized native holds it.
     assert case_dead_atoms(rf"^A\{control}B$") == ()
 
 
