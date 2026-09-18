@@ -25,19 +25,19 @@ name: release-please
 # `validator-v*` by hand, which also matches their documented discipline: a minor
 # bump is a coordinated engine rollout, not something a commit type should infer.
 #
-# Consequence worth remembering: a HUMAN-pushed tag triggers those workflows
-# normally. Tags created by THIS action with GITHUB_TOKEN would not - GitHub
-# suppresses triggers from that token to prevent loops - which is why no publish
-# job can be wired to release-please output.
+# The action runs with RELEASE_PLEASE_TOKEN, a fine-grained token scoped to this
+# repo, not GITHUB_TOKEN: GitHub starts no workflow for events GITHUB_TOKEN
+# causes, so its Release PRs would get no CI, and main requires CI to merge.
+# The same token makes the plugin tags this action pushes (`<component>-v*`)
+# trigger workflows; none listens on them, and the PyPI tags above stay manual.
 
 on:
   push:
     branches:
       - main
 
-permissions:
-  contents: write
-  pull-requests: write
+# The action writes only through RELEASE_PLEASE_TOKEN.
+permissions: {}
 
 jobs:
   release-please:
@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           # Defaults read release-please-config.json and
           # .release-please-manifest.json from the repo root.
 
