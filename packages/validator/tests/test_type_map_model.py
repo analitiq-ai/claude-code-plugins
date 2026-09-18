@@ -367,9 +367,11 @@ def test_schemaless_container_must_not_collapse_to_scalar():
     (r"^A[^]<>]B$", False),
     (r"^A[\]<>]B$", False),
     (r"^A[[:alpha:]<>]B$", False),
-    # A non-ASCII digit is no repetition count, so the braces are literals
-    # and the native does not end in `[]`.
+    # Braces RE2 cannot read as a repetition count are literals, so the native
+    # does not end in `[]`.
     ("^INT\\[\\]{\u0661}$", False),
+    (r"^INT\[\]{01}$", False),
+    (r"^INT\[\]{1000000000}$", False),
     (r"^ARRAY<(?<t>[A-Z]+)>$", True),
     # However a literal `<`, `>`, `[` or `]` is spelled, it is that character.
     (r"^INT\[\]$", True),
