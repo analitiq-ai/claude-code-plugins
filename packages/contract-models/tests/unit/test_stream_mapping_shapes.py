@@ -908,13 +908,19 @@ class TestValidationRulePayload:
         "a{1001}",
         # A lone surrogate, which JSON can spell and UTF-8 cannot encode.
         "\ud800",
-        # Compiles alone, but its `\Q` quotes whatever follows it, so it is no
-        # subexpression: grouped, the closing parenthesis is quoted away.
-        r"\Qabc",
+        # Compiles only as a group, where it closes the group and opens an
+        # unanchored alternative.
+        "a)|(b",
     ])
     def test_a_pattern_re2_refuses_is_refused(self, source):
         with pytest.raises(ValidationError, match="not valid RE2"):
             self._rule("pattern", source)
+
+    def test_a_pattern_that_compiles_only_alone_is_refused_as_ungroupable(self):
+        # Its `\Q` quotes to the end of the pattern, so as a group the quote
+        # swallows the closing parenthesis. The pattern itself is valid RE2.
+        with pytest.raises(ValidationError, match="compiles alone but not as a group"):
+            self._rule("pattern", r"\Qabc")
 
     def test_a_plain_pattern_is_accepted(self):
         assert self._rule("pattern", r"^\d{3}-\d{4}$").value == r"^\d{3}-\d{4}$"

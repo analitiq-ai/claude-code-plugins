@@ -1308,18 +1308,25 @@ def _a_regex_source(value: Any) -> str | None:
     # rule in (through pyarrow's `match_substring_regex`), never in stdlib
     # `re`, which answers a different question in both directions: `\p{L}+` is
     # an ordinary RE2 pattern `re` refuses, and `(a)\1` a backreference `re`
-    # accepts and RE2 cannot compile. A pattern is a subexpression, so it must
-    # compile as a group too: `\Qabc` compiles alone, and grouped, its quote
-    # swallows the closing parenthesis.
+    # accepts and RE2 cannot compile. The engine as it stands also embeds the
+    # pattern as the group in `^(?:…)`, and neither compile implies the other:
+    # `a)|(b` compiles only grouped, where it escapes the group, and `\Qabc`
+    # only alone, since grouped its quote swallows the closing parenthesis.
     if not isinstance(value, str):
         return "is not a regular expression"
     if not value:
         return "is an empty regular expression, which every row matches"
     try:
         compile_re2(value)
-        compile_re2(f"(?:{value})")
     except ValueError as refusal:
         return str(refusal)
+    try:
+        compile_re2(f"(?:{value})")
+    except ValueError as refusal:
+        return (
+            "compiles alone but not as a group, `(?:…)`, which is how it is "
+            f"matched (an unclosed `\\Q` quote does this); grouped, it {refusal}"
+        )
     return None
 
 
