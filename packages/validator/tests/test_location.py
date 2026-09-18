@@ -1,15 +1,17 @@
-"""A document read from memory is graded exactly as the same files on disk.
+"""A document read from memory is graded exactly as the same files on disk, and
+a document on disk is graded in the layout its path spells.
 
 Every cross-file check reads a document's siblings through a `Location`, so one
-implementation serves both trees. These cases hold the two trees to the same
-answer: each layout is written to disk and validated by path, then handed over
-as text keyed by package-relative path and validated from memory, and the two
-finding lists must agree entry for entry, order included.
+implementation serves both trees. The equivalence cases hold the two trees to
+the same answer: each layout is written to disk and validated by path, then
+handed over as text keyed by package-relative path and validated from memory,
+and the two finding lists must agree entry for entry, order included.
 
-Only layouts a key→text map can hold appear here — regular files, and the
+Only layouts a key→text map can hold appear in those — regular files, and the
 directories their keys imply. A FIFO, a dangling link or an empty directory has
 no in-memory spelling, so the disk tree's answers for those stay graded where
-they are, in `test_validation.py`.
+they are, in `test_validation.py`. Links are disk-only too, and are graded
+below, where a `Path` becomes a location.
 """
 from __future__ import annotations
 
@@ -132,8 +134,8 @@ LAYOUTS = {
     "api endpoint, no connector": ("endpoints/thing.json", {
         "endpoints/thing.json": _endpoint("thing", transport_ref="api"),
     }),
-    # Not under `endpoints/`, so there is no package to look for a connector in,
-    # though one sits beside it.
+    # Not under `endpoints/`, so the connector lookup does not run, though a
+    # connector sits beside it.
     "api endpoint at the package root": ("thing.json", {
         "connector.json": {**_API, "transports": {"api": {}}},
         "thing.json": _endpoint("thing", transport_ref="api"),
@@ -145,16 +147,20 @@ LAYOUTS = {
 }
 
 
+def _write(root: Path, package: dict) -> None:
+    for key, doc in package.items():
+        path = root / key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_text(doc))
+
+
 @pytest.mark.parametrize("entry, package", LAYOUTS.values(), ids=LAYOUTS.keys())
 def test_memory_tree_grades_as_the_same_files_on_disk(validator, tmp_path, entry, package):
     texts = {key: _text(doc) for key, doc in package.items()}
-    # The package sits one level down so that a lookup reaching above its root
-    # lands in a directory holding nothing but the package.
+    # One level down, so that a lookup climbing above the package root would
+    # find a directory holding nothing but the package.
     root = tmp_path / "pkg"
-    for key, text in texts.items():
-        path = root / key
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
+    _write(root, package)
     document = package[entry]
 
     on_disk = validator.validate_document(document, doc_path=root / entry)
@@ -191,3 +197,83 @@ def test_a_pattern_crossing_names_is_refused(tmp_path, pattern, walk):
     for root in (Location(tmp_path, DISK), Location(PurePosixPath("."), MemoryTree({"a/z.json": ""}))):
         with pytest.raises(ValueError, match="single name"):
             list(getattr(root, walk)(pattern))
+
+
+# ---------------------------------------------------------------------------
+# A `Path` becomes a location in the layout it spells. A link stands where the
+# link is, and `..` is collapsed against the names written, not against where
+# a link leads.
+# ---------------------------------------------------------------------------
+
+_UNDECLARED = {**_API, "transports": {"other": _API["transports"]["api"]}}
+
+
+def _endpoint_047(findings: list[dict]) -> list[tuple[str, str]]:
+    return [(f["kind"], f["message_id"]) for f in findings if f.get("rule") == "RULE-ENDP-047"]
+
+
+def _assert_cli_agrees(cli, expected: Path, got: Path) -> None:
+    """The CLI on `got` answers exactly as on `expected`, a package that passes."""
+    want, have = cli.run("--document", str(expected)), cli.run("--document", str(got))
+    assert json.loads(want.stdout)["passed"], want.stdout
+    assert (have.returncode, json.loads(have.stdout)) == (want.returncode, json.loads(want.stdout))
+
+
+def test_a_linked_endpoint_is_graded_against_the_connector_beside_the_link(tmp_path, validator):
+    doc = _endpoint("thing", transport_ref="api")
+    _write(tmp_path, {"pkg/connector.json": _UNDECLARED, "shared/endpoints/thing.json": doc,
+                      "shared/connector.json": _API})
+    (tmp_path / "pkg/endpoints").mkdir()
+    (tmp_path / "pkg/endpoints/thing.json").symlink_to(tmp_path / "shared/endpoints/thing.json")
+
+    findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/endpoints/thing.json")
+
+    assert ("fail", "transport-ref-undeclared") in _endpoint_047(findings), findings
+
+
+def test_the_cli_grades_a_linked_connector_with_the_package_beside_the_link(tmp_path, validator_cli):
+    _write(tmp_path / "regular", _API_PACKAGE)
+    _write(tmp_path / "linked", {k: v for k, v in _API_PACKAGE.items() if k != "connector.json"})
+    _write(tmp_path / "shared", {"connector.json": _API})
+    (tmp_path / "linked/connector.json").symlink_to(tmp_path / "shared/connector.json")
+
+    _assert_cli_agrees(validator_cli, tmp_path / "regular/connector.json",
+                       tmp_path / "linked/connector.json")
+
+
+def test_the_cli_reads_the_document_where_it_reads_its_siblings(tmp_path, validator_cli):
+    """After a linked directory, `link/..` spelled is not where the kernel
+    lands, so a document read by the kernel would come from one package and be
+    graded against another's siblings."""
+    package = {**_API_PACKAGE, "endpoints/v1__records.json": _endpoint("v1__records", transport_ref="api")}
+    _write(tmp_path / "good", package)
+    _write(tmp_path / "other", {"connector.json": _UNDECLARED, "endpoints/README.md": ""})
+    (tmp_path / "good/link").symlink_to(tmp_path / "other/endpoints")
+
+    _assert_cli_agrees(validator_cli, tmp_path / "good/connector.json",
+                       tmp_path / "good/link/../connector.json")
+
+
+def test_a_dotdot_is_collapsed_before_the_layout_is_read(tmp_path, validator):
+    """Left in, `sub/..` makes the parent's name `..`, and the endpoint is no
+    longer seen at its `endpoints/` home."""
+    doc = _endpoint("thing", transport_ref="api")
+    _write(tmp_path, {"connector.json": _UNDECLARED, "endpoints/thing.json": doc})
+    (tmp_path / "endpoints/sub").mkdir()
+
+    findings = validator.validate_document(doc, doc_path=tmp_path / "endpoints/sub/../thing.json")
+
+    assert ("fail", "transport-ref-undeclared") in _endpoint_047(findings), findings
+
+
+def test_an_endpoint_outside_an_endpoints_directory_reads_no_connector(tmp_path, validator):
+    """The connector lookup is for `endpoints/{id}.json` one level below its
+    connector. From anywhere else, a connector two levels up is not this
+    endpoint's."""
+    doc = _endpoint("thing", transport_ref="api")
+    _write(tmp_path, {"connector.json": _UNDECLARED, "pkg/thing.json": doc})
+
+    findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/thing.json")
+
+    assert _endpoint_047(findings) == [
+        ("notApplicable", "transport-ref-check-skipped-no-sibling")], findings

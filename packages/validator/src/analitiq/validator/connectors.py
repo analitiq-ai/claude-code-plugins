@@ -1416,14 +1416,14 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
             ref for _, ref in _api_operation_transport_refs(doc) if isinstance(ref, str)
         })
         if declared_refs:
-            # Resolve the sibling connector when the layout gives us one:
+            # Look up the sibling connector when the layout gives us one:
             # `endpoints/{id}.json` sits one level below `connector.json`. The
             # connector-builder skill validates each endpoint on its own, so a
             # blind warning here would fire on every pass of its fix loop and
             # could never be cleared — an alarm that cannot be acted on trains
             # authors to ignore the id. Only warn when the connector genuinely
-            # is not reachable. Outside that layout two levels up is no package
-            # at all, and a connector found there is not this endpoint's.
+            # is not reachable. Outside that layout, a connector two levels up
+            # is not this endpoint's.
             sibling = location.parent.parent / "connector.json" if addressed else None
             connector_doc: Any = _UNREAD
             sibling_exists = sibling is not None and sibling.is_file()
