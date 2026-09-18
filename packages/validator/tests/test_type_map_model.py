@@ -270,6 +270,23 @@ def test_regex_rejects_python_named_group():
         assert "(?<name>…)" in refusal, refusal
 
 
+@pytest.mark.parametrize("matcher", [
+    r"^INT\[\]{0}$",
+    r"^INT(?:\[\]){0,0}$",
+    r"^A(?:b){0}?$",
+    # A flag group or an empty quote takes no place of its own, so the count
+    # falls on what precedes it.
+    r"^Ab(?i){0}$",
+    r"^Ab\Q\E{0}$",
+    r"^N\((?<p>[1-9]){0}[1-9]\)$",
+])
+def test_regex_rejects_a_zero_count_repetition(matcher):
+    for adapter, rule_id in ((READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")):
+        refusal = _refusal(adapter, _regex_rule(adapter, matcher))
+        assert rule_id in refusal, refusal
+        assert "zero times" in refusal, refusal
+
+
 def test_python_named_group_spelling_inside_a_quote_is_a_literal():
     # `\Q…\E` quotes its contents, so the spelling there opens no group. The
     # quoted `<…>` is literal container syntax, so the read rule renders `Json`.
@@ -309,8 +326,6 @@ def test_regex_only_re2_accepts_is_accepted(adapter):
 def test_named_group_compiles_as_written():
     # No `(?<name>` → `(?P<name>` rewrite stands between the author and RE2: the
     # compiled matcher carries the capture under the name the rule spells.
-    from analitiq.contracts.type_map import compile_matcher
-
     assert compile_matcher(r"(?<p>\d+)X").regex.groupindex == {"p": 1}
 
 
@@ -381,6 +396,10 @@ def test_schemaless_container_must_not_collapse_to_scalar():
     # A repetition count is no literal, so the native still ends in `[]`.
     (r"^INT\[\]{2}$", True),
     (r"^INT\[\]{1,3}$", True),
+    # A count that admits an occurrence leaves the `[]` matchable.
+    (r"^INT\[\]{0,}$", True),
+    (r"^INT\[\]{0,1}$", True),
+    (r"^INT(\[\])?$", True),
     (r"^ARRAY<(?<t>[A-Z]+)>$", True),
     # However a literal `<`, `>`, `[` or `]` is spelled, it is that character.
     (r"^INT\[\]$", True),

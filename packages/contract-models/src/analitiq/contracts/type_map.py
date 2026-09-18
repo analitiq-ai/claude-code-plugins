@@ -174,6 +174,10 @@ class _GroupClose:
 _Token = _Atom | _GroupOpen | _GroupClose
 
 
+class _RefusedSpelling(ValueError):
+    """A construct RE2 compiles that the contract refuses in a matcher."""
+
+
 @dataclass(frozen=True, slots=True)
 class CompiledMatcher:
     """A type-map matcher compiled in RE2, with the tokens it was read into."""
@@ -214,17 +218,14 @@ def compile_matcher(pattern: str) -> CompiledMatcher:
     regex = _re2_compile(pattern)
     try:
         tokens = _tokenize(pattern)
+    except _RefusedSpelling:
+        raise
     except (ValueError, IndexError) as exc:
         # RE2 accepted the pattern, so this is the tokenizer's defect and never
         # the author's: it must not reach the caller as a refused matcher.
         raise RuntimeError(
             f"the matcher tokenizer cannot read {pattern!r}, which RE2 accepted"
         ) from exc
-    if any(isinstance(t, _GroupOpen) and t.opener.startswith("(?P<") for t in tokens):
-        raise ValueError(
-            "matcher spells a named group '(?P<name>…)'; the contract takes "
-            "only '(?<name>…)'"
-        )
     return CompiledMatcher(regex, tokens)
 
 
@@ -291,6 +292,12 @@ def _is_repetition(span: str) -> bool:
     return _re2_compile("a" + span).fullmatch("a" + span) is None
 
 
+def _repeats_zero_times(repetition: str) -> bool:
+    """Whether a span `_is_repetition` accepted admits no occurrence of what it
+    repeats: its upper count, the last one it spells, is zero."""
+    return repetition[1:-1].split(",")[-1] == "0"
+
+
 def _class_end(pattern: str, start: int) -> int:
     """Where the character class opening at `pattern[start]` (a `[`) ends: after
     the first `]` closing a class RE2 compiles on its own.
@@ -314,7 +321,9 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
     Only called from `compile_matcher`, after RE2 accepted the pattern, so every
     construct is well formed. Anchors, alternation and repetition are consumed
     without a token. An inline flag group applies to the rest of the group it
-    sits in, as RE2 scopes it."""
+    sits in, as RE2 scopes it.
+
+    _RefusedSpelling for a construct RE2 compiles and the contract refuses."""
     tokens: list[_Token] = []
     flags: frozenset[str] = frozenset()
     open_groups: list[tuple[_GroupOpen, frozenset[str]]] = []
@@ -326,7 +335,8 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
             quote_end = pattern.find("\\E", i + 2)
             if quote_end < 0:
                 quote_end = len(pattern)
-            tokens.extend(_literal(c, flags) for c in pattern[i + 2:quote_end])
+            quoted = pattern[i + 2:quote_end]
+            tokens.extend(_literal(c, flags) for c in quoted)
             i = quote_end + 2
         elif char == "\\":
             end = _escape_end(pattern, i)
@@ -348,7 +358,12 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
         elif char == "(":
             inner = flags
             capture = None
-            if pattern.startswith(("(?<", "(?P<"), i):
+            if pattern.startswith("(?P<", i):
+                raise _RefusedSpelling(
+                    "matcher spells a named group '(?P<name>…)'; the contract "
+                    "takes only '(?<name>…)'"
+                )
+            if pattern.startswith("(?<", i):
                 opener = pattern[i:pattern.index(">", i) + 1]
                 capture = next(captures)
             elif pattern.startswith("(?", i):
@@ -364,8 +379,8 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
                 opener = "("
                 capture = next(captures)
             group = _GroupOpen(opener, capture, i + len(opener), inner)
-            tokens.append(group)
             open_groups.append((group, flags))
+            tokens.append(group)
             flags = inner
             i = group.end
         elif char == ")":
@@ -377,8 +392,15 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
             and (candidate := _REPETITION_CANDIDATE.match(pattern, i))
             and _is_repetition(candidate.group())
         ):
+            if _repeats_zero_times(candidate.group()):
+                raise _RefusedSpelling(
+                    f"matcher repeats something zero times ({candidate.group()!r}), "
+                    "so what it repeats is never matched"
+                )
             i = candidate.end()
-        elif char in "*+?^$|":
+        elif char in "*+?":
+            i += 1
+        elif char in "^$|":
             i += 1
         elif char == ".":
             tokens.append(_Atom(char, char, None, flags))
