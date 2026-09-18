@@ -1773,7 +1773,6 @@ def test_a_borrowed_diagnostic_keeps_the_constraint_it_was_rejected_by(validator
     # contract's own pattern carries no input at all, and its whole length is
     # the vocabulary an author needs to fix the value. Clipping it leaves them
     # a fragment of the legal alternatives and an ellipsis.
-    from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL
     doc = {"$schema": TYPE_MAP_READ_SCHEMA_URL, "direction": "read",
            "rules": [{"match": "exact", "native_type": "X", "arrow_type": "NotAnArrowFamily"}]}
     [error] = _errors(validator.validate_document(doc))

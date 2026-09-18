@@ -832,7 +832,6 @@ def test_bundle_per_connection_crash_preserves_earlier_findings(tmp_path, monkey
     monkeypatch.setattr(V, "_connection_type_map_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    validators = _ids(diag["findings"])
     assert _legacy_name_reported(diag["findings"]), diag["findings"]  # postgresql's, decided first
     crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"]
     assert len(crash) == 1, diag["findings"]
