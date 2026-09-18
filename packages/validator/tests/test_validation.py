@@ -1565,13 +1565,25 @@ def _database_tree(root: Path, *, read_map: str | None, write_map: bool, endpoin
     return root / "connector.json"
 
 
+def _assert_endpoint_checks_survive(root, connector, validator, read_map_text, reported):
+    _write_defective_endpoints(root, connector, read_map_text)
+    errors = _errors(validator.validate_document(connector, doc_path=root / "connector.json"))
+    assert any(reported in e["message"] for e in errors), errors
+    assert _defects_reported(errors) == set(_ENDPOINT_DEFECTS), (
+        sorted(_defects_reported(errors)), [e["message"] for e in errors])
+
+
 @pytest.mark.parametrize("state,text,reported", _BROKEN_READ_MAPS, ids=[s for s, _, _ in _BROKEN_READ_MAPS])
 def test_endpoint_checks_run_when_read_map_is_broken(tmp_path, connector_base, validator, state, text, reported):
-    _write_defective_endpoints(tmp_path, connector_base, text)
-    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
-    assert any(reported in e["message"] for e in errors), (state, errors)
-    assert _defects_reported(errors) == set(_ENDPOINT_DEFECTS), (
-        state, sorted(_defects_reported(errors)), [e["message"] for e in errors])
+    _assert_endpoint_checks_survive(tmp_path, connector_base, validator, text, reported)
+
+
+def test_endpoint_checks_run_when_read_map_text_is_refused_outside_jsondecodeerror(
+        tmp_path, connector_base, validator, text_refused_outside_jsondecodeerror):
+    # Reported as unparseable like any other bad text, never as a crash of the
+    # coverage check, which would replace every endpoint verdict with one finding.
+    _assert_endpoint_checks_survive(tmp_path, connector_base, validator,
+                                    text_refused_outside_jsondecodeerror, "could not be read or parsed")
 
 
 @pytest.mark.parametrize("text", [t for _, t, _ in _BROKEN_READ_MAPS], ids=[s for s, _, _ in _BROKEN_READ_MAPS])
@@ -1693,6 +1705,15 @@ def test_cli_unreadable_document_exit1(tmp_path, validator_cli):
     r = validator_cli.run("--document", str(tmp_path))
     assert r.returncode == 1
     assert json.loads(r.stdout)["passed"] is False
+
+
+def test_cli_text_refused_outside_jsondecodeerror_is_unreadable(
+        tmp_path, validator_cli, text_refused_outside_jsondecodeerror):
+    path = tmp_path / "doc.json"
+    path.write_text(text_refused_outside_jsondecodeerror)
+    r = validator_cli.run("--document", str(path))
+    assert r.returncode == 1, r.stderr
+    assert [f["message_id"] for f in json.loads(r.stdout)["findings"]] == ["unreadable-document"]
 
 
 def test_cli_missing_arg_exit2(validator_cli):
