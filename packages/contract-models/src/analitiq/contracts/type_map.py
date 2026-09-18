@@ -129,8 +129,8 @@ _RE2_OPTIONS.log_errors = False
 _FOLD_CASE_FLAG = "i"
 _OCTAL_DIGITS = "01234567"
 # What an escape letter means is RE2's grammar; this tokenizer restates the part
-# of it the compiled program does not expose, and refuses a letter it does not
-# know. The escapes spelling one character are read by `_escaped_character`.
+# of it the compiled program does not expose, and raises on a letter it does
+# not know. The escapes spelling one character are read by `_escaped_character`.
 _CONTROL_ESCAPES = {"a": "\a", "f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v"}
 _CHARACTER_SET_ESCAPES = frozenset("dDsSwWCpP")
 _ZERO_WIDTH_ESCAPES = frozenset("bBAz")
@@ -186,6 +186,16 @@ class CompiledMatcher:
     regex: Any
     tokens: tuple[_Token, ...]
 
+    def fullmatch(self, subject: str) -> Any:
+        """RE2's match of the whole `subject`, or None.
+
+        RE2 reads UTF-8, so a subject with no UTF-8 encoding (a lone surrogate,
+        which JSON can spell) is matched by nothing."""
+        try:
+            return self.regex.fullmatch(subject)
+        except UnicodeEncodeError:
+            return None
+
     @property
     def literal_text(self) -> str:
         """The matcher's literal characters in order, with its syntax dropped."""
@@ -212,8 +222,8 @@ def compile_matcher(pattern: str) -> CompiledMatcher:
     """Compile a type-map matcher in RE2, the dialect the rule is matched in.
 
     ValueError carrying RE2's own parse error when RE2 refuses the pattern, and
-    when a named group is spelled `(?P<name>…)`: RE2 takes that spelling too, so
-    that refusal is the contract's choice of one spelling, not the dialect's.
+    when the pattern holds RE2 syntax the contract refuses: a named group
+    spelled `(?P<name>…)`, or a repetition whose upper count is zero.
     """
     regex = _re2_compile(pattern)
     try:
@@ -294,7 +304,8 @@ def _is_repetition(span: str) -> bool:
 
 def _repeats_zero_times(repetition: str) -> bool:
     """Whether a span `_is_repetition` accepted admits no occurrence of what it
-    repeats: its upper count, the last one it spells, is zero."""
+    repeats: its upper count is zero, `{0}` or `{n,0}`; a span ending in `,`
+    has no upper count."""
     return repetition[1:-1].split(",")[-1] == "0"
 
 

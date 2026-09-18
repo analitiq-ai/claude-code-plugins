@@ -782,6 +782,14 @@ def test_coverage_matches_a_regex_rule_with_re2_semantics(validator):
     assert validator._render_arrow_type("N٣", rules) is None
 
 
+def test_coverage_matches_no_regex_rule_against_a_native_re2_cannot_read(validator):
+    # An endpoint's raw JSON can spell a lone surrogate, which has no UTF-8
+    # encoding for RE2 to read, so the native is left uncovered rather than
+    # crashing the check.
+    rules = [{"match": "regex", "native_type": r"^A.*$", "arrow_type": "Utf8"}]
+    assert validator._render_arrow_type("A\ud800", rules) is None
+
+
 def _within(seconds, call):
     """`call()`, failed rather than stalled when it has not returned in time."""
     def _stalled(_signum, _frame):
