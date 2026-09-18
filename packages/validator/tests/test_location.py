@@ -1,6 +1,5 @@
 """A document read from memory is graded exactly as the same files on disk, and
-a document on disk is graded in the layout its path spells, stepping up at
-`..` where a read of the path does.
+a document on disk is graded in the layout its path spells.
 
 Every cross-file check reads a document's siblings through a `Location`, so one
 implementation serves both trees. The equivalence cases hold the two trees to
@@ -204,8 +203,9 @@ def test_a_pattern_crossing_names_is_refused(tmp_path, pattern, walk):
 
 # ---------------------------------------------------------------------------
 # A `Path` becomes a location in the layout it spells. A link stands where the
-# link is, except that `..` out of a link steps up from where it leads, as a
-# read of the path does. Links are relative, as a checkout holds them.
+# link is, and a `..` is collapsed against the names written before it, unless
+# a read of the path steps up somewhere else. Links are relative, as a checkout
+# holds them.
 # ---------------------------------------------------------------------------
 
 _UNDECLARED = {**_API, "transports": {"other": _API["transports"]["api"]}}
@@ -244,29 +244,43 @@ def test_the_cli_grades_a_linked_connector_with_the_package_beside_the_link(tmp_
                        tmp_path / "linked/connector.json")
 
 
-@pytest.mark.parametrize("chain", [["../real/endpoints"], ["hop", "../real/endpoints"]],
-                         ids=["one link", "a link to a link"])
-def test_a_dotdot_after_a_link_is_graded_where_the_kernel_lands(tmp_path, validator_cli, chain):
-    """`link/..` is the parent of where the link leads. Collapsed against the
-    names written instead, the document the kernel reads would be graded
+def _split(cli, given: Path) -> list[str]:
+    """What the CLI reports on `given`, which `located` refuses."""
+    result = cli.run("--document", str(given))
+    with pytest.raises(ValueError):
+        located(given)
+    return [f["message_id"] for f in json.loads(result.stdout)["findings"]]
+
+
+@pytest.mark.parametrize("links, given", [
+    ({"spelled/link": "../real/endpoints"}, "spelled/link/../connector.json"),
+    ({"spelled/link": "hop", "spelled/hop": "../real/endpoints"}, "spelled/link/../connector.json"),
+    ({"spelled/endpoints": "../real/endpoints", "real/endpoints/inner": "../b"},
+     "spelled/endpoints/inner/../connector.json"),
+    ({"real/b/up": ".."}, "real/b/up/../real/connector.json"),
+    ({"spelled/link": "../real/endpoints"}, "spelled/link/../b/x/../connector.json"),
+], ids=["one link", "a link to a link", "a link inside a linked directory", "a link to its parent",
+        "a name only the link's side holds"])
+def test_a_dotdot_out_of_a_link_to_elsewhere_is_refused(tmp_path, validator_cli, links, given):
+    """A read of `link/..` opens the parent of where the link leads. Collapsed
+    against the names written instead, one package's document would be graded
     against another package's siblings."""
     _write(tmp_path / "real", _API_PACKAGE)
+    (tmp_path / "real/b/x").mkdir(parents=True)
     _write(tmp_path / "spelled", {"connector.json": _UNDECLARED})
-    for name, target in zip(["link", *chain], chain):
-        (tmp_path / "spelled" / name).symlink_to(target)
+    for name, target in links.items():
+        (tmp_path / name).symlink_to(target)
 
-    _assert_cli_agrees(validator_cli, tmp_path / "real/connector.json",
-                       tmp_path / "spelled/link/../connector.json")
+    assert _split(validator_cli, tmp_path / given) == ["unreadable-document"]
 
 
-def test_type_maps_are_collected_where_the_kernel_lands(tmp_path, validator):
+def test_type_maps_are_not_collected_through_a_dotdot_out_of_a_link_to_elsewhere(tmp_path, validator):
     _write(tmp_path / "real", {"type-map-read.json": _map("read"), "endpoints/README.md": ""})
-    _write(tmp_path / "spelled", {"type-map-read.json": "{not json"})
+    _write(tmp_path / "spelled", {"type-map-read.json": _map("read")})
     (tmp_path / "spelled/link").symlink_to("../real/endpoints")
 
-    collection = validator.collect_type_maps(tmp_path / "spelled/link/..", rule=None)
-
-    assert (list(collection.maps), collection.findings) == (["read"], [])
+    with pytest.raises(ValueError):
+        validator.collect_type_maps(tmp_path / "spelled/link/..", rule=None)
 
 
 def test_a_dotdot_is_stepped_up_before_the_layout_is_read(tmp_path, validator):
@@ -297,10 +311,10 @@ def test_an_endpoint_outside_an_endpoints_directory_reads_no_connector(tmp_path,
         ("notApplicable", "transport-ref-check-skipped-no-sibling")], findings
 
 
-def test_a_dotdot_out_of_a_link_leaves_the_links_above_it_standing(tmp_path, validator):
-    """Only the link the `..` steps out of is followed. Resolving the whole
-    path instead would carry the linked `endpoints/` above it to its target,
-    out of the package holding it."""
+def test_a_dotdot_out_of_a_link_landing_where_its_names_spell_is_collapsed(tmp_path, validator):
+    """`inner/..` lands back in the linked `endpoints/`, so the path is graded
+    as spelled. Resolving it instead would carry that `endpoints/` to its
+    target, out of the package holding it."""
     doc = _endpoint("thing", transport_ref="api")
     _write(tmp_path, {"pkg/connector.json": _UNDECLARED, "shared/connector.json": _API,
                       "shared/endpoints/thing.json": doc, "shared/endpoints/real/README.md": ""})
@@ -371,7 +385,7 @@ def test_a_dotdot_out_of_a_directory_that_cannot_be_searched_is_refused(tmp_path
 @pytest.mark.parametrize("chains, given", [
     ({"c": (30, "pkg"), "pkg/a": (15, "sub")}, "c0/a0/../connector.json"),
     ({"h": (25, "pkg"), "c": (25, "pkg")}, "h0/../c0/connector.json"),
-], ids=["all stepped out of", "some after the dotdot"])
+], ids=["all before the dotdot", "some after the dotdot"])
 def test_more_links_than_one_lookup_follows_are_unreadable(tmp_path, validator_cli, chains, given):
     """The kernel bounds every link one lookup follows, whether a `..` steps
     out of it or not."""
@@ -387,34 +401,11 @@ def test_more_links_than_one_lookup_follows_are_unreadable(tmp_path, validator_c
         "unreadable-document"], result.stdout
 
 
-def test_a_link_target_steps_up_from_where_the_link_is(tmp_path, validator_cli):
-    """`inner`'s own `..` leaves the linked `endpoints/` it sits in, so it
-    steps up out of `shared/endpoints`, not out of `pkg/endpoints`."""
-    _write(tmp_path / "shared", _API_PACKAGE)
-    (tmp_path / "shared/sibling").mkdir()
-    _write(tmp_path / "pkg", {"connector.json": _API})
-    (tmp_path / "pkg/endpoints").symlink_to("../shared/endpoints")
-    (tmp_path / "shared/endpoints/inner").symlink_to("../sibling")
-
-    _assert_cli_agrees(validator_cli, tmp_path / "shared/connector.json",
-                       tmp_path / "pkg/endpoints/inner/../connector.json")
-
-
-def test_a_link_to_its_own_parent_steps_up_from_that_parent(tmp_path, validator_cli):
-    _write(tmp_path / "real", _API_PACKAGE)
-    (tmp_path / "real/b").mkdir()
-    (tmp_path / "real/b/up").symlink_to("..")
-
-    _assert_cli_agrees(validator_cli, tmp_path / "real/connector.json",
-                       tmp_path / "real/b/up/../real/connector.json")
-
-
 def test_a_linked_directory_under_endpoints_is_not_walked(tmp_path, validator):
     """Through a loop of links, every file below it would be reported again at
     each turn."""
     _write(tmp_path / "pkg", _API_PACKAGE)
-    _write(tmp_path / "elsewhere", {"z.json": _endpoint("z")})
-    (tmp_path / "pkg/endpoints/sub").symlink_to("../../elsewhere")
+    (tmp_path / "pkg/endpoints/sub").symlink_to(".")
 
     findings = validator.validate_document(_API, doc_path=tmp_path / "pkg/connector.json")
 

@@ -1476,8 +1476,8 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                 else:
                     if location is None:
                         reason = ("no path was given, so there is no directory to "
-                                  "read the connector from. Validate the connector "
-                                  "to resolve it")
+                                  "read the connector from. Validate it at its path, "
+                                  "`endpoints/{endpoint_id}.json` beside its connector")
                     elif addressed:
                         reason = ("there is no connector.json file beside the "
                                   "`endpoints/` directory holding this document. "

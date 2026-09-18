@@ -388,7 +388,8 @@ def main() -> int:
 
     try:
         # Read as given, so a path the kernel refuses is refused for the
-        # kernel's own reason; the location names the file that read opened.
+        # kernel's own reason, then located, which refuses a path it would
+        # grade somewhere other than where that read opened it.
         document = json.loads(Path(args.document).read_text())
         location = located(Path(args.document))
     except _JSON_READ_ERRORS as exc:

@@ -180,42 +180,37 @@ def _one_name(pattern: str) -> str:
 def located(where: Path | Location) -> Location:
     """`where` as a location: a `Path` names a place on disk.
 
-    A link is followed only where a `..` steps out of it: otherwise a linked
-    document belongs to the directory holding the link, so its siblings are
-    read there and not where the link's target lives. Absolute, so that
+    A link stands where it is, so a linked document's siblings are read in the
+    directory holding the link, not where its target lives. Absolute, so that
     `parent` of a relative path names the directory it sits in rather than
     stopping at `.`.
     """
     if isinstance(where, Location):
         return where
-    return Location(_stepped_up(Path(where).absolute()), DISK)
+    return Location(_collapsed(Path(where).absolute()), DISK)
 
 
-def _stepped_up(path: Path) -> Path:
-    """`path` without its `..`, naming the file a read of it opens.
+def _collapsed(path: Path) -> Path:
+    """`path` with each `..` collapsed against the name written before it.
 
-    POSIX steps up from where a link leads, so only the link a `..` leaves is
-    followed. Whether a `..` can be taken at all is the kernel's to say, so the
-    path up to the last one is looked up first and its refusal raised as it
-    stands; every link followed below is then one that lookup followed, so the
-    steps end. Win32 collapses `..` against the names written before it opens
-    anything.
+    POSIX steps up from where a link leads, so a read of `link/..` can open a
+    directory other than the one the names spell, and the document would be
+    read from one directory while its siblings are read from another. The
+    kernel is asked whether the two agree, up to the last `..`, and the path
+    is refused where they do not; a lookup it cannot make is refused for its
+    own reason.
     """
-    if os.name == "nt":
-        return Path(os.path.normpath(path))
-    if ".." in path.parts:
-        last = len(path.parts) - path.parts[::-1].index("..")
-        os.stat(Path(*path.parts[:last]))
-
-    def step(spelled: Path) -> Path:
-        walked = Path(spelled.anchor)
-        for name in spelled.parts[1:]:
-            if name != "..":
-                walked /= name
-                continue
-            while walked.is_symlink():
-                walked = step(walked.parent / os.readlink(walked))
-            walked = walked.parent
-        return walked
-
-    return step(path)
+    if ".." not in path.parts:
+        return path
+    last = len(path.parts) - path.parts[::-1].index("..")
+    prefix = Path(*path.parts[:last])
+    read = os.stat(prefix)
+    try:
+        agree = os.path.samestat(read, os.stat(os.path.normpath(prefix)))
+    except OSError:
+        agree = False
+    if not agree:
+        raise ValueError(
+            f"{path}: a `..` steps out of a link, so reading this path opens a different "
+            f"directory than its names spell; pass the path without the `..`")
+    return Path(os.path.normpath(path))
