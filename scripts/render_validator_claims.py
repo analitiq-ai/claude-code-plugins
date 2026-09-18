@@ -1174,12 +1174,13 @@ def run_probe(probe: Probe) -> ProbeFailure | None:
     if probe.expect not in ("clean", "error", "silent"):
         raise ValueError(f"probe {probe.id!r}: unknown expectation {probe.expect!r}")
     findings = probe.build()
-    # The validator's own last-resort guard converts a crash into a finding
-    # whose message embeds the exception text. That text can contain the same
-    # vocabulary as the real rejection message, so a crashed check could
-    # otherwise satisfy an expect="error" probe while every user gets
-    # "validator bug — please report" instead of the rejection the prose
-    # promises. A crash never proves a claim, in either direction.
+    # A guard that contains a crash emits a finding whose message embeds the
+    # exception text. The validator's is `notApplicable`: it hides the findings
+    # the crashed check would have made, so an expect="clean" probe passes, and
+    # its text can satisfy a `require_re`. The pipeline adapter's is
+    # error-severity and can satisfy an expect="error" probe. Either way users
+    # get "validator bug — please report" instead of what the prose promises. A
+    # crash never proves a claim, in either direction.
     #
     # Recognised by the id each guard publishes for it — the validator's, and
     # the pipeline adapter's for its own containment — not by its wording: the

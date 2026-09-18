@@ -1707,8 +1707,8 @@ def test_the_discriminator_answer_says_what_is_wrong_and_what_went_ungraded(vali
 
 
 def test_a_borrowed_diagnostic_does_not_carry_the_document_back_whole(validator):
-    # A model error's sentence comes from pydantic, which renders the failing
-    # input into it. This package is the gate over documents it did not author,
+    # A discriminator error's sentence comes from pydantic, which renders the
+    # failing tag into it. This package is the gate over documents it did not author,
     # and the sentence reaches a CI log and an agent's context, so an oversized
     # value is clipped rather than echoed.
     oversized = "X" * 5000
@@ -2340,7 +2340,7 @@ def test_type_map_sibling_paths_selects_the_type_map_documents(validator, tmp_pa
 def test_type_map_sibling_paths_orders_what_the_directory_hands_back(validator):
     # Directory order is the filesystem's, and it is not sorted: two callers
     # taking it as given would disagree about which of two documents declaring
-    # one direction already held it. A stub stands in for the directory because
+    # one direction declared it first. A stub stands in for the directory because
     # a real one cannot be made to hand back an unsorted listing on demand.
     class _Scrambled:
         def glob(self, pattern):
@@ -2355,11 +2355,11 @@ def test_type_map_directions_gives_each_direction_to_the_first_to_declare_it(val
     directions = validator.TypeMapDirections()
     first = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "read")
     assert directions.claim("a.json", first) == ("read", None)
-    # The later document declares a direction another already holds, so it takes
-    # none — and the direction comes back anyway, because that is what a caller
+    # The later document declares a direction another declared first, so it
+    # takes none — and the direction comes back anyway, because that is what a caller
     # names in the message it reports.
     assert directions.claim("b.json", first) == ("read", "a.json")
-    # A second holder does not displace the first for any subsequent document.
+    # A later declaration does not displace the first for any subsequent document.
     assert directions.claim("c.json", first) == ("read", "a.json")
 
 

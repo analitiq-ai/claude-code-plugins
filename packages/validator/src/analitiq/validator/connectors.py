@@ -1114,8 +1114,8 @@ def type_map_sibling_paths(parent: Path) -> list[Path]:
     Which files are type-map documents is one question with one answer, asked
     wherever maps are collected — beside a connector here, beside a connection
     by the pipeline plugin's adapter. The order is part of the answer: it is
-    what makes "the document already holding a direction" the same document
-    from either side.
+    what makes "the document that declared a direction first" the same
+    document from either side.
     """
     return sorted(parent.glob(_TYPE_MAP_GLOB))
 
@@ -1332,8 +1332,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             message_id="write-map-not-allowed", kind="fail", path="/",
             message=(
                 "api connector must not ship a type-map document declaring direction "
-                f"'write'; sibling {declared_by['write']} declares it, and the write "
-                "direction is database-only.")))
+                f"'write'; sibling {declared_by['write']} declares it, and an api "
+                "connector has no write direction.")))
     if not isinstance(read_rules, list):
         # notApplicable, not fail: the check knows exactly which rule it would
         # be grading (RULE-PKG-033) — the read map itself is missing, unreadable,
@@ -1531,8 +1531,8 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
                             "Validate the connector to see why.")))
                 elif sibling_exists:
                     # The file IS there and nothing was read out of it. Reporting
-                    # this as "not reachable" would contradict the parse error
-                    # emitted beside it under the same id.
+                    # this as "not reachable" would contradict the read/parse
+                    # finding emitted beside it.
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
                         message_id="transport-ref-check-skipped-unparseable",

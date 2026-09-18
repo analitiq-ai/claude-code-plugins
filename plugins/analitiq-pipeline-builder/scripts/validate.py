@@ -166,8 +166,9 @@ def _contained(findings: list[dict], path: str):
 
 def _model_findings(entity: str, doc) -> list[dict]:
     """Validate a single connection/stream/pipeline document against its published
-    contract model, mapping each Pydantic error to a finding (the same mapping the
-    validator itself uses internally)."""
+    contract model, mapping each Pydantic error to a finding. The message is the
+    validator's own rendering of the error, so a document value it echoes is
+    clipped here exactly as it is there."""
     if entity == "connection":
         from analitiq.contracts.connection import ConnectionInput as Model
     elif entity == "stream":
@@ -177,13 +178,14 @@ def _model_findings(entity: str, doc) -> list[dict]:
     else:  # pragma: no cover - guarded by the entity choices
         raise ValueError(f"no contract model for entity {entity!r}")
     from pydantic import ValidationError
+    from analitiq.validator._core import _model_error_message
     try:
         Model.model_validate(doc)
         return []
     except ValidationError as exc:
         return [
             _finding("contract-model", "error",
-                     "/" + "/".join(str(p) for p in err["loc"]), err["msg"])
+                     "/" + "/".join(str(p) for p in err["loc"]), _model_error_message(err))
             for err in exc.errors()
         ]
 
@@ -240,8 +242,8 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
     finding, mirroring the published connector-side check.
 
     Appends directly to the caller's shared `findings` list rather than
-    building a local one to return: the legacy check and each collected file
-    are independently-decidable units, each in its own `_contained` guard, so a
+    building a local one to return: the legacy check, each file's collection,
+    and each kept file's grading run in their own `_contained` guard, so a
     crash in one costs only its own finding — never a list of already-decided
     results a crash partway through would otherwise discard before this
     function got the chance to return it."""
@@ -261,11 +263,10 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
                 f"{LEGACY_TYPE_MAP_FILENAME} is the pre-split filename; the engine never "
                 "reads it. Split it into type-map-read.json (native → Arrow) and, for the "
                 "write direction, type-map-write.json (Arrow → native)."))
-    # Which files are maps, which one is the map for a direction, and what the
-    # dead pre-split name means are the published validator's answers — the same
-    # ones it gives beside a connector. What differs here is only the reporting:
-    # findings rooted at the connection site, each file decided inside its own
-    # crash guard.
+    # Which files are maps, which document declared a direction first, and what
+    # the dead pre-split name means are the published validator's answers. This
+    # function drops a direction two documents declare, and reports at the
+    # connection site with each file inside its own crash guard.
     directions = TypeMapDirections()
     # Collected first and graded after, because a document is graded only once
     # the whole directory says it is the map for its direction: a second

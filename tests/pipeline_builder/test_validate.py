@@ -139,6 +139,19 @@ def test_invalid_single_document(tmp_path, entity, doc, validator_id):
     ), diag["findings"]
 
 
+def test_a_contract_model_finding_does_not_carry_the_document_back_whole(tmp_path):
+    # A discriminated union's sentence renders the tag it was handed, so an
+    # oversized one would arrive whole in a CI log. The tag is clipped the way
+    # the validator clips it, and the accepted tags after it survive.
+    oversized = "S" * 5000
+    doc = json.loads(json.dumps(STREAM))
+    doc["source"]["endpoint_ref"]["scope"] = oversized
+    diag = V.diagnostics_for("stream", _write(tmp_path, "stream.json", doc))
+    [tag] = [f for f in diag["findings"] if f["path"] == "/source/endpoint_ref"]
+    assert oversized not in tag["message"] and len(tag["message"]) < 500, len(tag["message"])
+    assert "'connection'" in tag["message"], tag["message"][-200:]
+
+
 def test_active_pipeline_requires_stream_single_document(tmp_path):
     # the published pipeline contract enforces active => >=1 stream reference at the
     # single-document level; an active pipeline with empty streams is rejected without
@@ -649,17 +662,18 @@ def test_bundle_flags_invalid_connection_write_type_map(tmp_path):
         for f in bad), diag["findings"]
 
 
-def test_bundle_rejects_two_connection_maps_declaring_one_direction(tmp_path):
+@pytest.mark.parametrize("defective", ["type-map-read.json", "type-map-write.json"])
+def test_bundle_rejects_two_connection_maps_declaring_one_direction(tmp_path, defective):
     # The same rule the published validator applies beside a connector, at the
     # site this adapter owns: a direction two documents declare has no map, so
-    # the collision is reported and neither document is graded. The earlier
-    # document carries a defect of its own — reporting it would say which of the
-    # two the order happened to reach first.
+    # the collision is reported and neither document is graded. Whichever of the
+    # two carries a defect of its own, reporting it would say which one the
+    # order happened to reach first or last.
     doc = _build_bundle(tmp_path)
-    _write(tmp_path, "connections/postgresql/definition/type-map-read.json",
-           _tm([{"match": "exact", "arrow_type": "utf8", "native_type": "TEXT"}], "write"))
-    _write(tmp_path, "connections/postgresql/definition/type-map-write.json",
-           _tm(TYPE_MAP_WRITE, "write"))
+    for name in ("type-map-read.json", "type-map-write.json"):
+        rules = ([{"match": "exact", "arrow_type": "utf8", "native_type": "TEXT"}]
+                 if name == defective else TYPE_MAP_WRITE)
+        _write(tmp_path, f"connections/postgresql/definition/{name}", _tm(rules, "write"))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
     collision = [f for f in diag["findings"] if "both declare direction" in f["message"]]

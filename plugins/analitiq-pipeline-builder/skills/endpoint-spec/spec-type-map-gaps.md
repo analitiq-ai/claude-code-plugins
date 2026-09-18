@@ -54,6 +54,8 @@ printf '%s' '["citext", "vector(3)"]' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/t
 - **Write probes** — the distinct `arrow_type` strings frozen into the endpoint
   documents, after read-side resolution and judgment are complete.
 
+`--direction` names the probes' vocabulary — `read` for native types, `write`
+for `arrow_type` strings — and every `--map` must declare that direction.
 `resolved` gives the rendered value per covered probe; `gaps` lists the
 uncovered ones. Pass only map files that exist.
 

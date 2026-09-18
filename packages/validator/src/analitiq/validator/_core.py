@@ -15,9 +15,9 @@ This module owns the parts that are independent of any particular artifact kind:
   whose validity is its contract model plus the `$schema`-omission check
   registers via `register_model_and_schema_kind()` instead of hand-writing
   that combination;
-- `_bounded()` — the one width a borrowed diagnostic, or a document value
-  echoed inside one, is clipped to, so a finding is bounded the same way
-  whichever route the text arrived by;
+- `_bounded()` — the one width a diagnostic borrowed from another library, or
+  a document value it echoes, is clipped to; messages the contract models write
+  are not clipped;
 - `_run_guarded()` — a crash in one check becomes a single `notApplicable`
   finding so the others survive;
 - `finding_costs_a_pass()` — whether one finding, on its own, keeps a document
