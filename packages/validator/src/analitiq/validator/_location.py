@@ -4,15 +4,16 @@ A cross-file check reads a document's siblings through a `Location` — a key
 inside a `Tree` — never through the filesystem, so one implementation of each
 check serves a document found on disk and a package handed over as text.
 Navigation (`parent`, `name`, joining a name) is lexical arithmetic on the key;
-every question about what is actually there goes to the tree.
+every question a check asks about what is actually there goes to the tree.
 """
 from __future__ import annotations
 
+import errno
 import io
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from fnmatch import fnmatch, fnmatchcase
+from fnmatch import fnmatchcase
 from pathlib import Path, PurePath, PurePosixPath
 from typing import Iterable, Iterator, Mapping
 
@@ -67,29 +68,11 @@ class DiskTree(Tree):
     def glob(self, key: Path, pattern: str) -> Iterable[Path]:
         return key.glob(pattern)
 
-    def rglob(self, key: Path, pattern: str) -> Iterator[Path]:
-        # Not `Path.rglob`, which never descends through a linked directory: a
-        # link stands where it is, so what it leads to is part of this tree.
-        return _below(key, pattern, frozenset())
-
-
-def _below(directory: Path, pattern: str, walking: frozenset[tuple[int, int]]) -> Iterator[Path]:
-    """What `DiskTree.rglob` answers, `walking` holding the identity of every
-    directory the descent is inside, so that a link back to one of them is not
-    entered again: its contents are already being read."""
-    status = directory.stat()
-    identity = (status.st_dev, status.st_ino)
-    if identity in walking:
-        return
-    with os.scandir(directory) as scan:
-        entries = list(scan)
-    for entry in entries:
-        path = directory / entry.name
-        # Case-folded where the platform folds names, as `Path.rglob` matches.
-        if fnmatch(entry.name, pattern):
-            yield path
-        if entry.is_dir():
-            yield from _below(path, pattern, walking | {identity})
+    def rglob(self, key: Path, pattern: str) -> Iterable[Path]:
+        # Never descends through a linked directory, and must not: a checkout
+        # holds the link, not what it leads to, and a link can lead anywhere on
+        # the host running the check.
+        return key.rglob(pattern)
 
 
 DISK = DiskTree()
@@ -198,8 +181,8 @@ def _one_name(pattern: str) -> str:
 def located(where: Path | Location) -> Location:
     """`where` as a location: a `Path` names a place on disk.
 
-    Never resolved: a linked document belongs to the directory holding the
-    link, so its siblings are read there and not where the link's target
+    A link is not resolved: a linked document belongs to the directory holding
+    the link, so its siblings are read there and not where the link's target
     lives. Absolute, so that `parent` of a relative path names the directory it
     sits in rather than stopping at `.`.
     """
@@ -208,17 +191,35 @@ def located(where: Path | Location) -> Location:
     return Location(_stepped_up(Path(where).absolute()), DISK)
 
 
+#: Links followed while stepping up out of them, past which the path is refused
+#: as a loop, as the kernel refuses one.
+_LINK_HOPS = 40
+
+
 def _stepped_up(path: Path) -> Path:
-    """`path` without its `..`, each taken as the kernel takes it: up from
-    where a link leads, not up from the link. Collapsed against the names
-    written instead, the path would name a different file than a read of it
-    opens."""
-    walked = Path(path.anchor)
-    for name in path.parts[1:]:
-        if name != "..":
-            walked /= name
-        elif walked.is_symlink():
-            walked = Path(os.path.realpath(walked)).parent
-        else:
+    """`path` without its `..`, naming the file a read of it opens.
+
+    POSIX steps up from where a link leads, so only the link a `..` leaves is
+    followed and every link above it keeps its name. Win32 collapses `..`
+    against the names written before it opens anything.
+    """
+    if os.name == "nt":
+        return Path(os.path.normpath(path))
+    followed = 0
+
+    def step(path: Path) -> Path:
+        nonlocal followed
+        walked = Path(path.anchor)
+        for name in path.parts[1:]:
+            if name != "..":
+                walked /= name
+                continue
+            while walked.is_symlink():
+                followed += 1
+                if followed > _LINK_HOPS:
+                    raise OSError(errno.ELOOP, os.strerror(errno.ELOOP), str(path))
+                walked = step(walked.parent / os.readlink(walked))
             walked = walked.parent
-    return walked
+        return walked
+
+    return step(path)

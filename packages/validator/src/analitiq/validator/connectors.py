@@ -1421,9 +1421,9 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
             # connector-builder skill validates each endpoint on its own, so a
             # blind warning here would fire on every pass of its fix loop and
             # could never be cleared — an alarm that cannot be acted on trains
-            # authors to ignore the id. Only warn when the connector genuinely
-            # is not reachable. Outside that layout, a connector two levels up
-            # is not this endpoint's.
+            # authors to ignore the id. Warn only when there is no connector to
+            # read: outside that layout, a connector two levels up is not this
+            # endpoint's.
             sibling = location.parent.parent / "connector.json" if addressed else None
             connector_doc: Any = _UNREAD
             sibling_exists = sibling is not None and sibling.is_file()
@@ -1464,8 +1464,8 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                             "Validate the connector to see why.")))
                 elif sibling_exists:
                     # The file IS there and nothing was read out of it. Reporting
-                    # this as "not reachable" would contradict the read/parse
-                    # finding emitted beside it.
+                    # it as absent would contradict the read/parse finding
+                    # emitted beside it.
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
                         message_id="transport-ref-check-skipped-unparseable",
@@ -1476,15 +1476,19 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                             "`transports` could not be read. Fix the error reported "
                             "above and re-run.")))
                 else:
+                    reason = (
+                        "no path was given, so there is no directory to read the "
+                        "connector from" if location is None else
+                        "the connector is read from beside the `endpoints/` directory "
+                        "holding this document, and there is no connector.json file "
+                        "there or the document is not in one")
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
                         message_id="transport-ref-check-skipped-no-sibling",
                         kind="notApplicable", path="/",
                         message=(
-                            f"transport_ref {declared_refs!r} not checked: the connector "
-                            "is read from beside the `endpoints/` directory holding this "
-                            "document, and none was found there or the document is not in "
-                            "one. Validate the connector to resolve it.")))
+                            f"transport_ref {declared_refs!r} not checked: {reason}. "
+                            "Validate the connector to resolve it.")))
     # Each api-endpoint document goes through the checks shared with
     # `check_coverage`'s sibling-endpoint loop; `transports` is None wherever
     # the branches above could not resolve it, and RULE-ENDP-047 stays silent

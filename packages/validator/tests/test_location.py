@@ -1,5 +1,6 @@
 """A document read from memory is graded exactly as the same files on disk, and
-a document on disk is graded in the layout its path spells.
+a document on disk is graded in the layout its path spells, stepping up at
+`..` where a read of the path does.
 
 Every cross-file check reads a document's siblings through a `Location`, so one
 implementation serves both trees. The equivalence cases hold the two trees to
@@ -201,8 +202,8 @@ def test_a_pattern_crossing_names_is_refused(tmp_path, pattern, walk):
 
 # ---------------------------------------------------------------------------
 # A `Path` becomes a location in the layout it spells. A link stands where the
-# link is, except that `..` steps up from where a link leads, as a read of the
-# path does.
+# link is, except that `..` out of a link steps up from where it leads, as a
+# read of the path does. Links are relative, as a checkout holds them.
 # ---------------------------------------------------------------------------
 
 _UNDECLARED = {**_API, "transports": {"other": _API["transports"]["api"]}}
@@ -247,7 +248,7 @@ def test_a_dotdot_after_a_link_is_graded_where_the_kernel_lands(tmp_path, valida
     against another package's siblings."""
     _write(tmp_path / "real", _API_PACKAGE)
     _write(tmp_path / "spelled", {"connector.json": _UNDECLARED})
-    (tmp_path / "spelled/link").symlink_to(tmp_path / "real/endpoints")
+    (tmp_path / "spelled/link").symlink_to("../real/endpoints")
 
     _assert_cli_agrees(validator_cli, tmp_path / "real/connector.json",
                        tmp_path / "spelled/link/../connector.json")
@@ -256,7 +257,7 @@ def test_a_dotdot_after_a_link_is_graded_where_the_kernel_lands(tmp_path, valida
 def test_type_maps_are_collected_where_the_kernel_lands(tmp_path, validator):
     _write(tmp_path / "real", {"type-map-read.json": _map("read"), "endpoints/README.md": ""})
     _write(tmp_path / "spelled", {"type-map-read.json": "{not json"})
-    (tmp_path / "spelled/link").symlink_to(tmp_path / "real/endpoints")
+    (tmp_path / "spelled/link").symlink_to("../real/endpoints")
 
     collection = validator.collect_type_maps(tmp_path / "spelled/link/..", rule=None)
 
@@ -291,23 +292,38 @@ def test_an_endpoint_outside_an_endpoints_directory_reads_no_connector(tmp_path,
         ("notApplicable", "transport-ref-check-skipped-no-sibling")], findings
 
 
-def test_an_endpoint_under_a_linked_subdirectory_is_nested(tmp_path, validator):
+def test_a_dotdot_out_of_a_link_leaves_the_links_above_it_standing(tmp_path, validator):
+    """Only the link the `..` steps out of is followed. Resolving the whole
+    path instead would carry the linked `endpoints/` above it to its target,
+    out of the package holding it."""
+    doc = _endpoint("thing", transport_ref="api")
+    _write(tmp_path, {"pkg/connector.json": _UNDECLARED, "shared/connector.json": _API,
+                      "shared/endpoints/thing.json": doc, "shared/endpoints/real/README.md": ""})
+    (tmp_path / "pkg/endpoints").symlink_to("../shared/endpoints")
+    (tmp_path / "shared/endpoints/inner").symlink_to("real")
+
+    findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/endpoints/inner/../thing.json")
+
+    assert ("fail", "transport-ref-undeclared") in _endpoint_047(findings), findings
+
+
+def test_a_link_loop_before_a_dotdot_is_unreadable(tmp_path, validator_cli):
+    """Followed without a bound, a loop would never be stepped out of."""
+    _write(tmp_path / "pkg", _API_PACKAGE)
+    (tmp_path / "pkg/loop").symlink_to("loop")
+
+    result = validator_cli.run("--document", str(tmp_path / "pkg/loop/../connector.json"))
+
+    assert [f["message_id"] for f in json.loads(result.stdout)["findings"]] == [
+        "unreadable-document"], result.stdout
+
+
+def test_a_linked_directory_under_endpoints_is_not_walked(tmp_path, validator):
+    """A checkout holds the link, not what it leads to, and a link can lead
+    anywhere on the host running the check."""
     _write(tmp_path / "pkg", _API_PACKAGE)
     _write(tmp_path / "elsewhere", {"z.json": _endpoint("z")})
-    (tmp_path / "pkg/endpoints/sub").symlink_to(tmp_path / "elsewhere")
-
-    findings = validator.validate_document(_API, doc_path=tmp_path / "pkg/connector.json")
-
-    assert [f["message"] for f in findings if f["message_id"] == "endpoint-file-nested"] == [
-        "endpoint file 'endpoints/sub/z.json' is nested; endpoints must be flat at "
-        "'endpoints/{endpoint_id}.json' (the engine resolves them by id)."], findings
-
-
-def test_a_link_back_into_the_endpoints_walk_is_not_entered_again(tmp_path, validator):
-    """Its contents are already being graded where the walk first reached
-    them; entering it again would never end."""
-    _write(tmp_path / "pkg", _API_PACKAGE)
-    (tmp_path / "pkg/endpoints/again").symlink_to(tmp_path / "pkg/endpoints")
+    (tmp_path / "pkg/endpoints/sub").symlink_to("../../elsewhere")
 
     findings = validator.validate_document(_API, doc_path=tmp_path / "pkg/connector.json")
 
