@@ -33,9 +33,8 @@ require_contract_models("analitiq.contracts", "analitiq.validator")
 from analitiq.contracts.type_map import (  # noqa: E402
     TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL,
 )
-from analitiq.validator import (  # noqa: E402
-    declared_direction, type_map_sibling_paths, validate_document,
-)
+from analitiq.validator import collect_type_maps, validate_document  # noqa: E402
+from analitiq.validator.connectors import _type_map_sibling_paths  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / "plugins" / "analitiq-connector-builder" / "skills"
@@ -62,7 +61,7 @@ def _stage(example_dir: Path, dest_root: Path) -> Path:
     if body is None:  # _example_dirs() filters for this, but fail usefully if staged directly
         raise FileNotFoundError(f"{example_dir} has no *.example.json to stage")
     shutil.copy(body, definition / "connector.json")
-    for src in type_map_sibling_paths(example_dir):
+    for src in _type_map_sibling_paths(example_dir):
         shutil.copy(src, definition / src.name)
     endpoints = example_dir / "endpoints"
     if endpoints.is_dir():
@@ -218,7 +217,7 @@ def test_example_type_maps_validate(example_dir: Path, tmp_path: Path) -> None:
     documented in `spec-type-maps.md`, not covered here.
     """
     definition = _stage(example_dir, tmp_path).parent
-    present = type_map_sibling_paths(definition)
+    present = _type_map_sibling_paths(definition)
     assert present, f"{example_dir.name} ships no type map"
 
     for map_path in present:
@@ -231,9 +230,8 @@ def test_example_type_maps_validate(example_dir: Path, tmp_path: Path) -> None:
 
 
 def _write_map(example_dir: Path) -> Path | None:
-    return next((p for p in type_map_sibling_paths(example_dir)
-                 if declared_direction(json.loads(p.read_text(encoding="utf-8"))) == "write"),
-                None)
+    kept = collect_type_maps(example_dir, rule=None).maps.get("write")
+    return example_dir / kept[0] if kept else None
 
 
 @pytest.mark.parametrize(

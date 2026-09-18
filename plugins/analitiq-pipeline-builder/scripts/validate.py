@@ -28,25 +28,23 @@ entry point. This adapter routes each entity as follows:
     "unrecognized artifact" finding. Routing by the caller-supplied ``--entity``,
     which is already known here, guarantees the right model runs and yields
     per-field findings instead.
-  * ``type-map`` -> ``analitiq.validator.type_map_findings`` as the direction
-    the document declares, at ``scope="connection"``; one declaring neither goes
-    to ``analitiq.validator.type_map_discriminator_findings``, which names the
-    field rather than picking a direction to report the rest through.
-    ``_connection_type_map_findings`` below collects the maps beside a
-    connection the same way, keying each by what it declares.
-    ``scope`` is how the gap-only nature of a connection map (``RULE-TMAP-018``)
-    reaches the published check, which otherwise holds a write map to a
-    connector's full vocabulary (``RULE-TMAP-017``).
+  * ``type-map`` -> ``analitiq.validator.type_map_findings_as_declared`` at
+    ``scope="connection"``. ``scope`` is how the gap-only nature of a connection
+    map (``RULE-TMAP-018``) reaches the published check, which otherwise holds a
+    write map to a connector's full vocabulary (``RULE-TMAP-017``).
   * ``pipeline`` with ``--bundle-root`` -> additionally
     ``analitiq.validator.validate_pipeline_bundle`` over the on-disk bundle, for the
     cross-document referential integrity no single document can verify. A draft
     bundle passes ``require_runnable=False`` (a not-yet-runnable draft is not an
-    authoring error); an ``active`` pipeline is held to full runnability.
+    authoring error); an ``active`` pipeline is held to full runnability. The
+    published bundle validator receives assembled documents, never a
+    connection's directory, so the bundle pass also hands each connection's
+    ``definition/`` to ``analitiq.validator.collect_type_maps`` — the collection
+    a connector's siblings go through — roots every finding at the file it
+    concerns, and grades each map it kept as the ``type-map`` entity.
 
-Each check below is the adapter's own: it reads something on disk — a
-connection's directory, a downloaded connector's endpoint files — that the
-published validator never receives, so the published contract structurally
-cannot make it:
+One check is the adapter's own, because it reads files the published
+validator never receives:
 
   * ``connector-endpoint-ref`` — the published bundle validator receives
     connector *identity* only (slugs), never connector endpoint *contents*, so it
@@ -58,15 +56,6 @@ cannot make it:
     referenced endpoint is absent. It never errors — connectors are trusted
     registry artifacts pinned by ``connector_version`` at runtime — and it never
     edits the connector; the orchestrator aligns the stream's ref instead.
-  * ``connection-type-map`` — the published bundle validator receives assembled
-    documents, never a connection's directory, so it cannot see the type-map
-    files the engine loads beside ``connection.json``. The bundle pass therefore
-    collects every type-map sibling beside it through the published
-    ``type_map_sibling_paths``, validates in full (via the published validator) every
-    document it read except the ones a second declaration of one direction took
-    that direction from, and rejects the dead pre-split ``type-map.json``
-    filename with a migration finding, mirroring the published connector-side
-    check at connection scope.
 
 Validation is offline — no schema is fetched. Usage::
 
@@ -212,100 +201,28 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
 
 
 def _type_map_findings(doc) -> list[dict]:
-    """Validate a connection-scoped type-map document as the direction it
-    declares. It takes no path: a name selects which files are type-map
-    documents and nothing further, so the declaration is the only direction a
-    document has.
-
-    One declaring neither direction goes to the published answer for that case,
-    which names the discriminator and keeps a payload that is no type-map
-    envelope at all inside the type-map models, where `--entity` already said
-    that is what it is, rather than sending it back out to kind detection to be
-    called unrecognized. `scope` is not threaded there because no direction was
-    chosen, and `scope` decides the write vocabulary alone."""
-    from analitiq.validator import (
-        declared_direction, type_map_discriminator_findings, type_map_findings,
-    )
-    declared = declared_direction(doc)
-    if declared is None:
-        return type_map_discriminator_findings(doc)
-    return type_map_findings(doc, declared, scope="connection")
+    """Grade a connection-scoped type-map document as the direction it declares."""
+    from analitiq.validator import type_map_findings_as_declared
+    return type_map_findings_as_declared(doc, scope="connection")
 
 
 def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
-    """Validate the connection-scoped type maps beside one connection.json —
-    file-level checks the published bundle validator structurally cannot make
-    (it receives assembled documents, never the connection's directory). A
-    collected map is validated in full via the published validator unless a
-    second document declares its direction, which leaves that direction to
-    neither of them; the dead pre-split filename is rejected with a migration
-    finding, mirroring the published connector-side check.
+    """The published validator's collection of the type maps beside one
+    connection.json, each finding rooted at the file it concerns, and every map
+    it kept graded at connection scope. The collection cites no rule: the
+    record it cites beside a connector binds a connector package.
 
-    Appends directly to the caller's shared `findings` list rather than
-    building a local one to return: the legacy check, each file's collection,
-    and each kept file's grading run in their own `_contained` guard, so a
-    crash in one costs only its own finding — never a list of already-decided
-    results a crash partway through would otherwise discard before this
-    function got the chance to return it."""
-    definition = conn_dir / "definition"
+    Appends to the caller's list rather than returning one so that a crash
+    grading one map costs only that map's finding, never the findings already
+    decided."""
+    from analitiq.validator import collect_type_maps
     site = f"connections/{conn_dir.name}/definition"
-    from analitiq.validator import (
-        LEGACY_TYPE_MAP_FILENAME,
-        TypeMapDirections,
-        legacy_type_map_present,
-        type_map_sibling_paths,
-    )
-    legacy_site = f"{site}/{LEGACY_TYPE_MAP_FILENAME}"
-    with _contained(findings, legacy_site):
-        if legacy_type_map_present(definition):
-            findings.append(_finding(
-                "connection-type-map", "error", legacy_site,
-                f"{LEGACY_TYPE_MAP_FILENAME} is the pre-split filename; the engine never "
-                "reads it. Split it into type-map-read.json (native → Arrow) and, for the "
-                "write direction, type-map-write.json (Arrow → native)."))
-    # Which files are maps, which document declared a direction first, and what
-    # the dead pre-split name means are the published validator's answers. This
-    # function drops a direction two documents declare, and reports at the
-    # connection site with each file inside its own crash guard.
-    directions = TypeMapDirections()
-    # Collected first and graded after, because a document is graded only once
-    # the whole directory says it is the map for its direction: a second
-    # declaration arriving later takes the direction from both, and a defect
-    # already reported against the earlier one could not be taken back.
-    collected: list[tuple[str, object, str | None]] = []
-    for path in type_map_sibling_paths(definition):
-        fname = path.name
-        with _contained(findings, f"{site}/{fname}"):
-            if not path.is_file():
-                # A directory or dangling symlink the loader will try to open
-                # would pass silently here and fail at the engine — the most
-                # expensive place to find out.
-                findings.append(_finding(
-                    "connection-type-map", "error", f"{site}/{fname}",
-                    f"{fname} is collected as a type-map document but is not a readable "
-                    "file (directory or dangling symlink); the engine's loader will fail "
-                    "to open it."))
-                continue
-            try:
-                doc = _read_json(path)
-            except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-                findings.append(_finding("connection-type-map", "error", f"{site}/{fname}",
-                                         f"Cannot read {fname}: {exc}"))
-                continue
-            declared, held_by = directions.claim(fname, doc)
-            if held_by is not None:
-                collected[:] = [e for e in collected if e[2] != declared]
-                findings.append(_finding(
-                    "connection-type-map", "error", f"{site}/{fname}",
-                    f"{held_by} and {fname} both declare direction {declared!r}; a "
-                    "connection carries one type-map document per direction, and "
-                    "neither of these is it."))
-                continue
-            collected.append((fname, doc, declared))
-    for fname, doc, _ in collected:
-        with _contained(findings, f"{site}/{fname}"):
-            findings.extend({**f, "path": f"{site}/{fname}{f.get('path', '')}"}
-                            for f in _type_map_findings(doc))
+    collection = collect_type_maps(conn_dir / "definition", rule=None)
+    for name, f in collection.findings:
+        findings.extend(_at_site(f"{site}/{name}", [f]))
+    for name, doc in collection.maps.values():
+        with _contained(findings, f"{site}/{name}"):
+            findings.extend(_at_site(f"{site}/{name}", _type_map_findings(doc)))
 
 
 def _at_site(site: str, findings: list[dict]) -> list[dict]:
@@ -462,12 +379,9 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
             # Connection-scoped type maps are files the engine loads beside the
             # connection, invisible to the assembled-document bundle, and depend
             # only on conn_json.parent — never on whether connection.json itself
-            # parsed — so they are checked unconditionally: a crash inside is
-            # contained per-file by _connection_type_map_findings itself, so
-            # this outer guard is a backstop, never costs the bundle's completeness
-            # (which would otherwise misreport a live connection as unresolved),
-            # and a genuinely malformed or legacy type-map file is still reported
-            # even when connection.json itself is unreadable.
+            # parsed — so they are checked unconditionally, and a crash inside
+            # never costs the bundle's completeness (which would otherwise
+            # misreport a live connection as unresolved).
             with _contained(findings, f"connections/{conn_json.parent.name}"):
                 _connection_type_map_findings(conn_json.parent, findings)
     if section.crashed:

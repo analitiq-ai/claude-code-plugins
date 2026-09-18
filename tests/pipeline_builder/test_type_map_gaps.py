@@ -207,6 +207,23 @@ def test_cli_missing_map_names_the_file(tmp_path, capsys):
     assert str(missing) in err.err
 
 
+@pytest.mark.parametrize("nested", ["map", "probes"])
+def test_cli_rejects_input_nested_past_the_parser(tmp_path, capsys, nested):
+    # Valid JSON nested deeper than the parser descends raises RecursionError,
+    # not a decode error; it is unreadable input like any other, not a crash.
+    deep = "[" * 100_000 + "]" * 100_000
+    m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
+    if nested == "map":
+        m.write_text(deep)
+    probes = tmp_path / "probes.json"
+    probes.write_text(deep if nested == "probes" else '["citext"]')
+    rc = G.main(["--direction", "read", "--map", str(m), "--probes-file", str(probes)])
+    assert rc == 2
+    err = capsys.readouterr()
+    assert not err.out
+    assert "recursion" in err.err
+
+
 def test_duplicate_probes_deduped(tmp_path):
     result = G.resolve("read", ["vector(3)", "vector(3)"], [_map(tmp_path, "r.json", CONNECTOR_READ)])
     assert result["gaps"] == ["vector(3)"]

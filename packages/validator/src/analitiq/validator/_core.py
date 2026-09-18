@@ -112,6 +112,13 @@ def _bounded(text: str, limit: int = 200) -> str:
     return text if len(text) <= limit else f"{text[:limit]}…"
 
 
+# Every way reading a JSON document off disk fails on what the file holds
+# rather than on this package. OSError covers a missing, directory or
+# unreadable path; RecursionError is valid JSON nested deeper than the parser
+# will descend, which `json` raises instead of a decode error.
+_JSON_READ_ERRORS = (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError)
+
+
 # Pydantic error types whose sentence renders a value taken from the failing
 # document, each keyed to the `ctx` entry holding that value. Only the value is
 # clipped: the rest of the sentence is the constraint that rejected it — for a
@@ -362,10 +369,7 @@ def main() -> int:
     document_path = Path(args.document)
     try:
         document = json.loads(document_path.read_text())
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        # OSError subsumes FileNotFoundError / IsADirectoryError / PermissionError,
-        # so an unreadable document always yields the finding + exit 1 (never a
-        # bare traceback), matching _load_type_map and the documented contract.
+    except _JSON_READ_ERRORS as exc:
         print(json.dumps({"passed": False, "findings": [finding(
             message_id="unreadable-document", kind="fail", path="",
             message=f"Cannot read document: {exc}")]}))

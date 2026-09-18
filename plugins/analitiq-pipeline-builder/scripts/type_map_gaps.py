@@ -68,11 +68,12 @@ def _load_rules(path: Path, direction: str) -> list:
     resolves while something about it is still wrong — an advisory that is most
     often the explanation for a gap reported below it, and dropping it leaves the
     gap looking uncaused."""
+    from analitiq.validator import finding_costs_a_pass, type_map_findings
+    from analitiq.validator._core import _JSON_READ_ERRORS
     try:
         doc = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except _JSON_READ_ERRORS as exc:
         raise ValueError(f"{path}: {exc}") from exc
-    from analitiq.validator import finding_costs_a_pass, type_map_findings
     # The connection scope is the one either kind of map can meet: a connection
     # map covers only the gaps it fills, and a connector map rendering the whole
     # vocabulary clears the weaker bar too.
@@ -144,10 +145,11 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         return _fail(str(exc))
 
+    from analitiq.validator._core import _JSON_READ_ERRORS
     try:
         raw = Path(args.probes_file).read_text() if args.probes_file else sys.stdin.read()
         probes = json.loads(raw)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except _JSON_READ_ERRORS as exc:
         return _fail(f"cannot read probes: {exc}")
     if not isinstance(probes, list) or not all(isinstance(p, str) for p in probes):
         return _fail("probes must be a JSON array of strings")

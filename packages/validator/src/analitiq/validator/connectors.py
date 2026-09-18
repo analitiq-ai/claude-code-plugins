@@ -45,10 +45,12 @@ import json
 import re
 import reprlib
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Callable, Iterator, Literal
 
 from ._core import (
+    _JSON_READ_ERRORS,
     contract_model_domain,
     finding,
     register_kind,
@@ -111,11 +113,9 @@ except ImportError as exc:  # pragma: no cover - dependency guard
 
 _READ_MAP_FILENAME = "type-map-read.json"
 _WRITE_MAP_FILENAME = "type-map-write.json"
-LEGACY_TYPE_MAP_FILENAME = "type-map.json"
-# Which siblings are type-map documents at all. It selects the candidates and
-# nothing more — each one's direction is the one its body declares, so no part
-# of the name decides one. The name is still rendered into findings, which is
-# what sends an author to the file a rule was read from.
+_LEGACY_MAP_FILENAME = "type-map.json"
+# Which siblings are type-map documents. It selects the candidates and nothing
+# more: each one's direction is the one its body declares.
 _TYPE_MAP_GLOB = "type-map-*.json"
 
 _CONNECTOR_SENTINELS = ("transports", "connection_contract", "default_transport", "auth")
@@ -968,9 +968,7 @@ def is_addressed_endpoint_path(doc_path: Path) -> bool:
 # Sentinel for "nothing was read", distinct from a file that holds a JSON null:
 # `json.loads("null")` is `None`, so a loader answering with `None` leaves its
 # caller unable to tell a file it could not read from one it read a null out of,
-# and the two need opposite handling. The same distinction
-# `analitiq.contracts.shared.json_schema._MISSING` draws for a pointer that lands
-# on a null.
+# and the two need opposite handling.
 _UNREAD = object()
 
 
@@ -1000,16 +998,10 @@ def _load_json_sibling(
             message=f"sibling {path.name} is not a regular file; nothing was read from it.")]
     try:
         return json.loads(path.read_text()), []
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except _JSON_READ_ERRORS as exc:
         return _UNREAD, [finding(
             rule=rule, message_id=message_id, kind="fail", path="/",
             message=f"sibling {path.name} could not be read or parsed ({exc}).")]
-
-
-def _load_type_map(path: Path) -> tuple[Any, list[dict]]:
-    """A type-map document, or `_UNREAD` plus an unparseable-sibling finding."""
-    return _load_json_sibling(
-        path, rule="RULE-PKG-030", message_id="type-map-unparseable")
 
 
 def _no_map_reason(direction: str, declared_by: dict[str, str]) -> str:
@@ -1071,7 +1063,7 @@ def _type_map_document_findings(doc: Any, direction: str, scope: str) -> list[di
     # does not have, burying the disagreement the model states above them. A
     # direction that is missing or unusable disagrees with nothing, and is graded
     # as named.
-    declared = declared_direction(doc)
+    declared = _declared_direction(doc)
     if declared is not None and declared != direction:
         return findings
     rules = _type_map_rules(doc)
@@ -1086,49 +1078,38 @@ def _read_from(name: str, findings: list[dict]) -> list[dict]:
 
     A document finding locates itself with a pointer into the document it
     graded, so forwarded beside a connector it reads as a defect in
-    `connector.json` — which carries no such node. Any collected name can hold a
-    map, so the file is not recoverable from the direction either. This is the
-    convention the loader's own findings already follow.
+    `connector.json`, which carries no such node.
     """
     return [{**f, "message": f"{name}: {f['message']}"} for f in findings]
 
 
-def legacy_type_map_present(parent: Path) -> bool:
+def _legacy_type_map_present(parent: Path) -> bool:
     """Whether `parent` carries the dead pre-split type-map name.
 
-    The name is what is refused, so what sits under it decides nothing: a
-    directory or a broken link carrying it is the same dead name as a document,
-    and answering only for a regular file would let an author keep the name by
-    making it something else. Published because both scopes that walk a
-    definition directory must refuse it alike — pinning the name alone leaves
-    each side free to disagree about what carrying it means.
+    The name is what is refused, so a directory or a broken link carrying it
+    counts: answering only for a regular file would let an author keep the name
+    by making it something else.
     """
-    dead = parent / LEGACY_TYPE_MAP_FILENAME
+    dead = parent / _LEGACY_MAP_FILENAME
     return dead.exists() or dead.is_symlink()
 
 
-def type_map_sibling_paths(parent: Path) -> list[Path]:
-    """The entries in `parent` whose names mark them as type-map documents, in
-    the order they are considered.
+def _type_map_sibling_paths(parent: Path) -> list[Path]:
+    """The entries in `parent` whose names mark them as type-map documents.
 
-    Which files are type-map documents is one question with one answer, asked
-    wherever maps are collected — beside a connector here, beside a connection
-    by the pipeline plugin's adapter. The order is part of the answer: it is
-    what makes "the document that declared a direction first" the same
-    document from either side.
+    Sorted because directory order is the filesystem's, and "the document that
+    declared a direction first" has to name the same document on every one.
     """
     return sorted(parent.glob(_TYPE_MAP_GLOB))
 
 
-def declared_direction(doc: Any) -> str | None:
+def _declared_direction(doc: Any) -> str | None:
     """The direction a type-map document declares, or None when it declares
     none the models would accept.
 
-    Published because every scope holding a type map asks this and has to get
-    one answer. A payload that is no object declares nothing, exactly as an
-    object carrying no `direction` does — the two are different defects, and
-    which one it is belongs to the caller reporting it, not to the reading.
-    `TypeMapDirections` is the collection-scoped answer built on this one.
+    A payload that is no object declares nothing, exactly as an object carrying
+    no `direction` does — the two are different defects, and which one it is
+    belongs to the caller reporting it, not to the reading.
     """
     if not isinstance(doc, dict):
         return None
@@ -1136,106 +1117,77 @@ def declared_direction(doc: Any) -> str | None:
     return declared if declared in ("read", "write") else None
 
 
-class TypeMapDirections:
-    """Which collected document first declared each direction, in the order
-    `type_map_sibling_paths` returns them.
+@dataclass(frozen=True)
+class TypeMapSiblings:
+    """The type-map documents collected from one directory.
 
-    Which directions a set of maps covers is a question about the documents,
-    not about their names: a name selects which files are maps and nothing
-    further, so counting names answers with what the set was meant to contain
-    while the consumer answers with what it declares. Keying on the declaration
-    is what makes one answer, at whichever scope the documents were collected
-    from.
+    `maps` holds each direction exactly one readable document declares, with
+    the name it was read from. `declared_by` names the first document to declare
+    every direction anything declared. The two differ exactly where a direction
+    is declared more than once, and a coverage check needs both: one package
+    shipped nothing for the direction, the other shipped it twice, and the two
+    ask for opposite edits.
 
-    A direction is offered to each document declaring it in turn, and the first
-    offer is the one the answer is reported against: `claim` names it back, so a
-    caller reporting a second declaration can say which document it collided
-    with. Being named that way is not holding the direction — a direction two
-    documents declare has no map, and a caller counting coverage counts none for
-    it. What each caller reports is its own: the finding shapes and the sites
-    they are rooted at differ by scope, and only the rule deciding what collides
-    with what is shared.
+    `findings` pairs each finding with the name of the entry it concerns, so a
+    caller holding the directory at a different site can root it at that file.
+    Every message names that entry, so a caller that cannot root a pointer at
+    the file still reports which one to open.
     """
 
-    def __init__(self) -> None:
-        self._holders: dict[str, str] = {}
-
-    def claim(self, name: str, doc: Any) -> tuple[str | None, str | None]:
-        """Offer one document, named `name`, to the direction it declares.
-
-        Returns `(direction, held_by)`. `direction` is the direction the
-        document declares, or None when it declares none usable. `held_by`
-        names the document that declared that direction first, and is None
-        when this one is first — so a caller reads a claim as `held_by is None`,
-        and has the direction to name either way.
-        """
-        declared = declared_direction(doc)
-        if declared is None:
-            return None, None
-        held_by = self._holders.get(declared)
-        if held_by is None:
-            self._holders[declared] = name
-        return declared, held_by
-
-    def holders(self) -> dict[str, str]:
-        """Each direction a collected document declared, named by the document
-        the answer for it is reported against.
-
-        A direction is here because something declared it, which is a different
-        question from whether anything is the map for it: a caller grading what
-        the package ships asks this, and one grading a map's rules asks what the
-        collector kept.
-        """
-        return dict(self._holders)
+    maps: dict[str, tuple[str, Any]]
+    declared_by: dict[str, str]
+    findings: list[tuple[str, dict]]
 
 
-def _type_map_siblings_by_direction(
-    parent: Path,
-) -> tuple[dict[str, tuple[str, Any]], dict[str, str], list[dict]]:
-    """Every sibling type-map document, keyed by the direction its body declares,
-    with the filename it was read from kept beside it for the messages, and
-    beside that every direction some sibling declared.
+def collect_type_maps(parent: Path, *, rule: str | None) -> TypeMapSiblings:
+    """Collect the type-map documents in `parent` by the direction each declares.
 
-    The two are different answers and both are needed: what a consumer can take
-    is what one document alone declares, while what the package ships is what
-    anything declared. A check reading only the first cannot tell a package that
-    shipped nothing for a direction from one that shipped for it twice.
+    Published because a connector's maps and a connection's are collected by
+    one rule, and any second implementation of it answers differently at the
+    edges. `rule` is what the collection's own findings cite: the record
+    binding the directory being collected, which differs by scope, so it is
+    the caller's to name — `None` where no record binds it.
 
-    A document declaring no usable direction fills no direction and is graded
-    through the union keyed on `direction`, which names the discriminator rather
-    than picking a direction to report through. A direction two documents
-    declare is filled by neither, and neither is graded — grading one would
-    report every defect of a document no consumer can choose, and which of the
-    two that was would be decided by the order the names sort in.
+    A document declaring no usable direction is graded through the union keyed
+    on `direction`, which names the discriminator rather than picking a
+    direction to report through. A direction two documents declare is held by
+    neither: filename order is not an answer to which map a consumer takes, so
+    grading either would report on a document no consumer can choose.
     """
-    documents: dict[str, tuple[str, Any]] = {}
-    findings: list[dict] = []
-    directions = TypeMapDirections()
-    for path in type_map_sibling_paths(parent):
-        doc, load = _load_type_map(path)
-        findings.extend(load)
+    findings: list[tuple[str, dict]] = []
+    if _legacy_type_map_present(parent):
+        findings.append((_LEGACY_MAP_FILENAME, finding(
+            rule=rule,
+            message_id="legacy-type-map-filename", kind="fail", path="/",
+            message=(
+                f"sibling {_LEGACY_MAP_FILENAME} is the pre-split name, collected as no "
+                "direction's map; each direction's map is a document declaring it, authored "
+                f"as {_READ_MAP_FILENAME} or {_WRITE_MAP_FILENAME}."))))
+    maps: dict[str, tuple[str, Any]] = {}
+    declared_by: dict[str, str] = {}
+    for path in _type_map_sibling_paths(parent):
+        name = path.name
+        doc, load = _load_json_sibling(path, rule=rule, message_id="type-map-unparseable")
+        findings.extend((name, f) for f in load)
         if doc is _UNREAD:
             continue
-        declared, held_by = directions.claim(path.name, doc)
+        declared = _declared_direction(doc)
         if declared is None:
-            findings.extend(_read_from(path.name, type_map_discriminator_findings(doc)))
+            findings.extend(
+                (name, f) for f in _read_from(name, _type_map_discriminator_findings(doc)))
             continue
-        if held_by is not None:
-            # The direction is left to nobody rather than to whichever document
-            # the order reached first: filename order is not an answer to which
-            # map a consumer takes, and picking by it would render every check
-            # that reads the map from a document no consumer can choose.
-            documents.pop(declared, None)
-            findings.append(finding(
-                rule="RULE-PKG-030",
+        first = declared_by.setdefault(declared, name)
+        if first != name:
+            maps.pop(declared, None)
+            findings.append((name, finding(
+                rule=rule,
                 message_id="type-map-direction-duplicated", kind="fail", path="/direction",
                 message=(
-                    f"siblings {held_by} and {path.name} both declare direction "
-                    f"{declared!r}; a package carries one type-map document per "
-                    "direction, and neither of these is it.")))
+                    f"siblings {first} and {name} both declare direction {declared!r}; one "
+                    "document declares each direction, so neither of these is its map."))))
             continue
-        documents[declared] = (path.name, doc)
-    return documents, directions.holders(), findings
+        maps[declared] = (name, doc)
+    return TypeMapSiblings(maps, declared_by, findings)
 
 
 def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
@@ -1261,20 +1213,9 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                 f"type-map coverage skipped: connector 'kind'={kind!r} is not in the "
                 "closed enum (the model enforces this)."))]
 
-    findings: list[dict] = []
-    parent = doc_path.parent
-    if legacy_type_map_present(parent):
-        findings.append(finding(
-            rule="RULE-PKG-030",
-            message_id="legacy-type-map-filename", kind="fail", path="/",
-            message=(
-                f"sibling {LEGACY_TYPE_MAP_FILENAME} is the pre-split name; it is collected "
-                f"as no direction's map. Give the read direction a `direction` of its own "
-                f"as {_READ_MAP_FILENAME} (and add {_WRITE_MAP_FILENAME} for database "
-                "connectors).")))
-
-    documents, declared_by, load_findings = _type_map_siblings_by_direction(parent)
-    findings.extend(load_findings)
+    collection = collect_type_maps(doc_path.parent, rule="RULE-PKG-030")
+    findings = [f for _, f in collection.findings]
+    documents, declared_by = collection.maps, collection.declared_by
 
     if kind in _STORAGE_KINDS:
         for direction in ("read", "write"):
@@ -1284,14 +1225,9 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         return findings
 
     # A read map that cannot be rendered from is carried forward rather than
-    # returned on: the rendering is what needs it, and returning here would
-    # withhold every endpoint-anchored check as well, hiding every defect in
-    # every endpoint document behind one broken file. What is carried is
-    # whatever `doc.get("rules")` holds when `doc` is a dict — `None` when no
-    # sibling holds the read direction (none declares it, or more than one
-    # does), and whatever value the dict's
-    # `rules` key holds otherwise, list or not — so the readers below ask
-    # whether it is a list rather than whether it is set.
+    # returned on: returning here would withhold every endpoint-anchored check
+    # too, hiding every defect in every endpoint document behind one broken
+    # file. What is carried need not be a list, so the readers below ask that.
     read_rules: Any = None
     read_source: str | None = None
     if "read" not in documents:
@@ -1323,10 +1259,9 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
 
     # api: no write map, and every endpoint's natives must be covered by the read map.
     if "write" in declared_by:
-        # What is refused is shipping a document that declares the direction, so
-        # a second document declaring it is not what lifts the refusal: read off
-        # the kept map, the author deletes one and only then learns the
-        # direction was never allowed.
+        # Read off `declared_by`, not the kept maps: two documents declaring the
+        # direction leave no kept map, and the author would delete one only to
+        # learn the direction was never allowed.
         findings.append(finding(
             rule="RULE-PKG-030",
             message_id="write-map-not-allowed", kind="fail", path="/",
@@ -1347,7 +1282,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                 "sibling holds the read direction, or the one that does has a "
                 "`rules` that is not a list. Endpoint native_type/arrow_type "
                 "agreement is unverified until it is fixed.")))
-    endpoint_dir = parent / "endpoints"
+    endpoint_dir = doc_path.parent / "endpoints"
     if not endpoint_dir.is_dir():
         findings.append(finding(
             rule="RULE-PKG-035",
@@ -1586,19 +1521,24 @@ def _validate_database_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
 
 
 def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    # A document handed here stands alone, so the only direction it has is the
-    # one it declares. The filename is not read: a name is evidence only where
-    # something located the file by it, which `check_coverage` does and this
-    # does not, and resolving direction from the name means a map whose envelope
-    # is wrong is graded as the thing it is not. With no usable `direction`
-    # there is nothing to grade against either: the union keyed on it answers
-    # once, naming the discriminator, where picking a direction to report
-    # through would tell the author of a write map that its correct `$schema` is
-    # the wrong one.
-    declared = declared_direction(doc)
+    # A document handed here stands alone: no filename located it, so the
+    # direction it declares is the only one it has.
+    return type_map_findings_as_declared(doc)
+
+
+def type_map_findings_as_declared(
+    doc: Any, scope: Literal["connector", "connection"] = "connector",
+) -> list[dict]:
+    """Grade a type-map document as the direction it declares.
+
+    With no usable `direction` there is nothing to grade against: the union
+    keyed on it answers once, naming the discriminator, where picking a
+    direction to report through would tell the author of a write map that its
+    correct `$schema` is the wrong one."""
+    declared = _declared_direction(doc)
     if declared is None:
-        return type_map_discriminator_findings(doc)
-    return type_map_findings(doc, declared)
+        return _type_map_discriminator_findings(doc)
+    return type_map_findings(doc, declared, scope)
 
 
 _DISCRIMINATOR_MESSAGE_IDS = ("union_tag_not_found", "union_tag_invalid")
@@ -1615,21 +1555,13 @@ _UNGRADED_TAIL = (". Nothing else in the document was graded — `direction` "
                   "selects the model the rest is measured against.")
 
 
-def type_map_discriminator_findings(doc: Any) -> list[dict]:
+def _type_map_discriminator_findings(doc: Any) -> list[dict]:
     """The answer for a type map whose `direction` resolves to no model.
 
-    Pydantic locates a discriminator failure at the document root: no member was
-    entered, so there is no member field to locate it inside. The finding is
-    about `direction` all the same, and every other route that rejects one
-    reports it at `/direction` — a caller grading a map against a direction the
-    map does not declare, and the sibling walk behind it. Leaving this one at the
-    root would put the same class of defect in two places depending on which
-    route saw the document, and `path` is what a consumer routes on.
-
-    Published because a caller that already knows it holds a type map has no
-    direction to name for one declaring none, so `type_map_findings` is not the
-    call it can make — and the alternative is each such caller reaching into the
-    union itself and answering differently."""
+    Pydantic locates a discriminator failure at the document root, since no
+    member was entered. It is reported at `/direction`, where a `direction`
+    disagreeing with the one named is reported too, because `path` is what a
+    consumer routes on."""
     findings = _model_findings(doc, _TYPE_MAP_ADAPTER)
     for f in findings:
         if f.get("message_id") not in _DISCRIMINATOR_MESSAGE_IDS:

@@ -1060,7 +1060,7 @@ PROBES: tuple[Probe, ...] = (
     Probe("type-map-coverage-counts-declarations", "clean",
           _p_type_map_coverage_counts_declarations),
     Probe("type-map-duplicate-direction-rejected", "error", _p_type_map_duplicate_direction,
-          message_re=r"both declare direction .*neither of these is it"),
+          message_re=r"both declare direction .*neither of these is its map"),
     # The collision also fails coverage: the missing-map finding for that
     # direction fires, and its reason separates a duplicated direction from one
     # nothing declared.

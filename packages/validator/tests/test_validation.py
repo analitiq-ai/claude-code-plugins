@@ -1442,6 +1442,31 @@ def test_an_unparseable_sibling_is_reported_as_unparseable_and_nothing_else(tmp_
     assert [f["message_id"] for f in findings] == ["type-map-unparseable"], findings
 
 
+def test_a_sibling_nested_past_the_parser_is_reported_as_unparseable(tmp_path, validator):
+    # Deep nesting is valid JSON the parser gives up on with a RecursionError,
+    # not a decode error. Uncaught it ends the whole coverage check, so one
+    # sibling costs the package every other finding about its maps.
+    (tmp_path / "type-map-read.json").write_text("[" * 100_000 + "]" * 100_000)
+    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(
+        [{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "write")))
+    (tmp_path / "connector.json").write_text("{}")
+    findings = validator.check_coverage(_min_connector("file"), tmp_path / "connector.json")
+    ids = [f["message_id"] for f in findings]
+    assert ids[0] == "type-map-unparseable", findings
+    assert any(f["path"].startswith("/rules/") for f in findings), findings
+
+
+def test_cli_reports_a_document_nested_past_the_parser_as_unreadable(
+        tmp_path, monkeypatch, capsys):
+    from analitiq.validator import _core
+    document = tmp_path / "connector.json"
+    document.write_text("[" * 100_000 + "]" * 100_000)
+    monkeypatch.setattr("sys.argv", ["validator", "--document", str(document)])
+    assert _core.main() == 1
+    out = json.loads(capsys.readouterr().out)
+    assert [f["message_id"] for f in out["findings"]] == ["unreadable-document"], out
+
+
 def test_coverage_reports_a_collected_sibling_that_is_not_a_regular_file(tmp_path, validator):
     # The pattern collects directory entries, not documents, so what it hands
     # the loader is whatever carries the name. A directory raises on the read
@@ -2324,55 +2349,65 @@ def test_type_map_findings_reports_its_own_crash_as_unchecked(validator, monkeyp
     assert validator.finding_costs_a_pass(findings[0]) is True
 
 
-# --- the collection half, shared with every caller holding a directory of maps ---
+# --- the collection, shared with every caller holding a directory of maps ---
 
-def test_type_map_sibling_paths_selects_the_type_map_documents(validator, tmp_path):
+def _read_doc():
+    return _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "read")
+
+
+def test_collect_type_maps_collects_by_name_shape_and_keys_by_declaration(validator, tmp_path):
     # The pre-split name and the connector beside them are not maps: what makes
     # a file one is the shape of its name, and nothing about the name says which
     # direction it holds.
-    for name in ("type-map-write.json", "type-map-read.json", "type-map.json",
-                 "connector.json", "type-map-extra.json"):
-        (tmp_path / name).write_text("{}")
-    assert {p.name for p in validator.type_map_sibling_paths(tmp_path)} == {
-        "type-map-extra.json", "type-map-read.json", "type-map-write.json"}
+    for name in ("type-map.json", "connector.json"):
+        (tmp_path / name).write_text(json.dumps(_read_doc()))
+    (tmp_path / "type-map-extra.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
+    collection = validator.collect_type_maps(tmp_path, rule=None)
+    assert {d: name for d, (name, _) in collection.maps.items()} == {"write": "type-map-extra.json"}
+    assert [(name, f["message_id"]) for name, f in collection.findings] == [
+        ("type-map.json", "legacy-type-map-filename")]
 
 
-def test_type_map_sibling_paths_orders_what_the_directory_hands_back(validator):
-    # Directory order is the filesystem's, and it is not sorted: two callers
-    # taking it as given would disagree about which of two documents declaring
-    # one direction declared it first. A stub stands in for the directory because
-    # a real one cannot be made to hand back an unsorted listing on demand.
+def test_type_map_sibling_paths_orders_what_the_directory_hands_back():
+    # Directory order is the filesystem's, and it is not sorted: two runs taking
+    # it as given could disagree about which of two documents declaring one
+    # direction declared it first. A stub stands in for the directory because a
+    # real one cannot be made to hand back an unsorted listing on demand.
+    from analitiq.validator.connectors import _type_map_sibling_paths
+
     class _Scrambled:
         def glob(self, pattern):
             assert pattern == _TYPE_MAP_GLOB
             return iter(Path(f"/d/type-map-{c}.json") for c in "cabd")
 
-    assert [p.name for p in validator.type_map_sibling_paths(_Scrambled())] == [
+    assert [p.name for p in _type_map_sibling_paths(_Scrambled())] == [
         f"type-map-{c}.json" for c in "abcd"]
 
 
-def test_type_map_directions_gives_each_direction_to_the_first_to_declare_it(validator):
-    directions = validator.TypeMapDirections()
-    first = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "read")
-    assert directions.claim("a.json", first) == ("read", None)
-    # The later document declares a direction another declared first, so it
-    # takes none — and the direction comes back anyway, because that is what a caller
-    # names in the message it reports.
-    assert directions.claim("b.json", first) == ("read", "a.json")
-    # A later declaration does not displace the first for any subsequent document.
-    assert directions.claim("c.json", first) == ("read", "a.json")
+def test_collect_type_maps_reports_every_later_declaration_against_the_first(validator, tmp_path):
+    for c in "abc":
+        (tmp_path / f"type-map-{c}.json").write_text(json.dumps(_read_doc()))
+    collection = validator.collect_type_maps(tmp_path, rule=None)
+    assert collection.maps == {}
+    assert collection.declared_by == {"read": "type-map-a.json"}
+    duplicated = [(name, f["message"]) for name, f in collection.findings
+                  if f["message_id"] == "type-map-direction-duplicated"]
+    assert [name for name, _ in duplicated] == ["type-map-b.json", "type-map-c.json"]
+    assert all("type-map-a.json" in message for _, message in duplicated), duplicated
 
 
-@pytest.mark.parametrize("bad", ["Write", "", None, 5, _ABSENT])
-def test_type_map_directions_holds_nothing_for_a_document_declaring_none(validator, bad):
-    # Nothing was chosen, so nothing collided: a caller reporting a collision on
-    # this would name a direction the document never claimed, and a second such
-    # document would be reported as duplicating it.
-    directions = validator.TypeMapDirections()
-    assert directions.claim("a.json", _unusable(bad)) == (None, None)
-    assert directions.claim("b.json", _unusable(bad)) == (None, None)
-
-
-def test_type_map_directions_holds_nothing_for_a_payload_that_is_no_document(validator):
-    directions = validator.TypeMapDirections()
-    assert directions.claim("a.json", ["not", "an", "object"]) == (None, None)
+@pytest.mark.parametrize("payload", [
+    *(pytest.param(_unusable(bad), id=repr(bad)) for bad in ["Write", "", None, 5]),
+    pytest.param(_unusable(_ABSENT), id="absent"),
+    pytest.param(["not", "an", "object"], id="no object"),
+])
+def test_collect_type_maps_takes_no_direction_for_a_document_declaring_none(
+        validator, tmp_path, payload):
+    # Nothing was declared, so nothing collided: reporting a collision here would
+    # name a direction neither document claimed.
+    for c in "ab":
+        (tmp_path / f"type-map-{c}.json").write_text(json.dumps(payload))
+    collection = validator.collect_type_maps(tmp_path, rule=None)
+    assert collection.maps == {} and collection.declared_by == {}
+    assert not any(f["message_id"] == "type-map-direction-duplicated"
+                   for _, f in collection.findings), collection.findings
