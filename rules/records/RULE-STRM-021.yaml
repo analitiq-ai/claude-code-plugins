@@ -30,17 +30,16 @@ rationale: >
   backreference `re` accepts and RE2 cannot compile. The engine as it stands
   embeds the pattern as the group in `^(?:…)`, and this rule compiles it both
   alone and grouped, since neither compile implies the other. A pattern RE2
-  refuses alone either fails its stream at run time or, like `a)|(b`,
-  compiles only grouped: it closes the engine's group early and adds an
-  unanchored alternative, so the run silently matches something other than
-  what the author wrote. `\Qabc` compiles only alone, since grouped its quote
-  swallows the closing parenthesis, and fails its stream at run time. Were
-  the engine to match in another dialect, this check could go stale in either
-  direction, refusing patterns that dialect runs or passing ones it cannot
-  compile; were it to stop grouping the pattern, the grouped compile would be
-  stricter than the run, refusing a pattern such as `\Qabc` that would then
-  match. A payload that is the right kind but
-  constrains nothing — a negative `min_length`, an empty pattern, a range with
+  refuses alone either fails its stream at run time or compiles only
+  grouped, where it closes the engine's group early, so the run silently
+  matches something other than what the author wrote; `a)|(b` that way adds
+  an unanchored alternative. `\Qabc` compiles only alone, since grouped its
+  quote swallows the closing parenthesis, and fails its stream at run time.
+  Were the engine to match in another dialect, this check could go stale in
+  either direction, refusing patterns that dialect runs or passing ones it
+  cannot compile; were it to stop grouping the pattern, the grouped compile
+  would be stricter than the run, refusing a pattern such as `\Qabc` that
+  would then match. A payload that is the right kind but constrains nothing — a negative `min_length`, an empty pattern, a range with
   neither bound — fails no row and is reported nowhere, which reads exactly
   like a rule that passed; one that admits nothing — a negative `max_length`,
   a range whose `min` sits above its `max`, an empty admitted-value list —
