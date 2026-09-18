@@ -117,8 +117,9 @@ def _validate_type_map_arrow_type(value: str) -> None:
     # by `validate_template_bounds` at the rule level.
     validate_cross_params(value)
 
+
 # ---------------------------------------------------------------------------
-# Matchers: compiled and matched in RE2, the dialect type-map rules execute in
+# Matchers: compiled and matched in RE2, the dialect the contract fixes for them
 # ---------------------------------------------------------------------------
 
 # A refused matcher is reported as a finding; RE2 would also write it to stderr.
@@ -127,21 +128,25 @@ _RE2_OPTIONS.log_errors = False
 
 _FOLD_CASE_FLAG = "i"
 _OCTAL_DIGITS = "01234567"
-# The escapes RE2 reads as one character, or one of a set of characters. What an
-# escape letter means is RE2's grammar; this tokenizer restates the part of it
-# the compiled program does not expose, and refuses a letter it does not know.
-_CHARACTER_ESCAPES = frozenset("dDsSwWCafnrtvpPx" + _OCTAL_DIGITS)
+# What an escape letter means is RE2's grammar; this tokenizer restates the part
+# of it the compiled program does not expose, and refuses a letter it does not
+# know. The escapes spelling one character are read by `_escaped_character`.
+_CONTROL_ESCAPES = {"a": "\a", "f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v"}
+_CHARACTER_SET_ESCAPES = frozenset("dDsSwWCpP")
 _ZERO_WIDTH_ESCAPES = frozenset("bBAz")
-_REPETITION = re.compile(r"\{\d+(?:,\d*)?\}")
+# RE2 reads a repetition count in ASCII digits only; `{` followed by anything
+# else is a literal.
+_REPETITION = re.compile(r"\{[0-9]+(?:,[0-9]*)?\}")
 
 
 @dataclass(frozen=True, slots=True)
 class _Atom:
     """One position of a matcher that consumes exactly one character.
 
-    `pattern` matches the same characters as `text` when compiled on its own,
-    without the inline `flags` in force where `text` sits; `literal` is the
-    character itself when the atom is a literal one."""
+    `text` is the atom as the matcher spells it. `pattern` is a pattern of its
+    own matching the characters the atom matches where it sits, less the inline
+    `flags` in force there. `literal` is the character itself when the atom
+    stands for exactly one."""
 
     text: str
     pattern: str
@@ -151,10 +156,12 @@ class _Atom:
 
 @dataclass(frozen=True, slots=True)
 class _GroupOpen:
-    """A group opener; `flags` are the inline flags in force inside it."""
+    """A group opener; `flags` are the inline flags in force inside it, and
+    `capture` is the group's number in RE2's numbering, None when it does not
+    capture."""
 
     opener: str
-    name: str | None
+    capture: int | None
     end: int
     flags: frozenset[str]
 
@@ -190,6 +197,14 @@ def _re2_error_text(exc: Exception) -> str:
     return detail.decode("utf-8", "replace") if isinstance(detail, bytes) else str(detail)
 
 
+def _re2_compile(pattern: str) -> Any:
+    """ValueError carrying RE2's own parse error when RE2 refuses `pattern`."""
+    try:
+        return re2.compile(pattern, options=_RE2_OPTIONS)
+    except re2.error as exc:
+        raise ValueError(f"matcher is not valid RE2 ({_re2_error_text(exc)})") from exc
+
+
 def compile_matcher(pattern: str) -> CompiledMatcher:
     """Compile a type-map matcher in RE2, the dialect the rule is matched in.
 
@@ -197,11 +212,15 @@ def compile_matcher(pattern: str) -> CompiledMatcher:
     when a named group is spelled `(?P<name>…)`: RE2 takes that spelling too, so
     that refusal is the contract's choice of one spelling, not the dialect's.
     """
+    regex = _re2_compile(pattern)
     try:
-        regex = re2.compile(pattern, options=_RE2_OPTIONS)
-    except re2.error as exc:
-        raise ValueError(f"matcher is not valid RE2 ({_re2_error_text(exc)})") from exc
-    tokens = _tokenize(pattern)
+        tokens = _tokenize(pattern)
+    except (ValueError, IndexError) as exc:
+        # RE2 accepted the pattern, so this is the tokenizer's defect and never
+        # the author's: it must not reach the caller as a refused matcher.
+        raise RuntimeError(
+            f"the matcher tokenizer cannot read {pattern!r}, which RE2 accepted"
+        ) from exc
     if any(isinstance(t, _GroupOpen) and t.opener.startswith("(?P<") for t in tokens):
         raise ValueError(
             "matcher spells a named group '(?P<name>…)'; the contract takes "
@@ -234,6 +253,19 @@ def _literal(char: str, flags: frozenset[str], text: str | None = None) -> _Atom
     return _Atom(text or char, f"\\x{{{ord(char):X}}}", char, flags)
 
 
+def _escaped_character(escape: str) -> str | None:
+    """The one character `escape` spells, or None when it spells a set of
+    characters or a position."""
+    letter = escape[1]
+    if letter.isascii() and not letter.isalnum():
+        return letter
+    if letter == "x":
+        return chr(int(escape[2:].strip("{}"), 16))
+    if letter in _OCTAL_DIGITS:
+        return chr(int(escape[1:], 8))
+    return _CONTROL_ESCAPES.get(letter)
+
+
 def _escape_end(pattern: str, start: int) -> int:
     """Where the escape opening at `pattern[start]` (a backslash) ends."""
     letter = pattern[start + 1]
@@ -252,20 +284,20 @@ def _escape_end(pattern: str, start: int) -> int:
 
 
 def _class_end(pattern: str, start: int) -> int:
-    """Where the character class opening at `pattern[start]` (a `[`) ends.
+    """Where the character class opening at `pattern[start]` (a `[`) ends: after
+    the first `]` closing a class RE2 compiles on its own.
 
-    A `]` first in the class, after any `^`, is a member rather than its end."""
-    i = start + 1 + pattern.startswith("^", start + 1)
-    first = True
-    while first or pattern[i] != "]":
-        first = False
-        if pattern.startswith("[:", i) and (posix_end := pattern.find(":]", i + 2)) >= 0:
-            i = posix_end + 2
-        elif pattern[i] == "\\":
-            i = _escape_end(pattern, i)
-        else:
-            i += 1
-    return i + 1
+    Each `]` before the class's own end is a member, so the class cut there is
+    unterminated and RE2 refuses it. Asking RE2 leaves its class grammar — a
+    `]` first in the class, POSIX classes, a range ending at `[` — to RE2."""
+    end = start + 1
+    while True:
+        end = pattern.index("]", end) + 1
+        try:
+            _re2_compile(pattern[start:end])
+        except ValueError:
+            continue
+        return end
 
 
 def _tokenize(pattern: str) -> tuple[_Token, ...]:
@@ -278,6 +310,7 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
     tokens: list[_Token] = []
     flags: frozenset[str] = frozenset()
     open_groups: list[tuple[_GroupOpen, frozenset[str]]] = []
+    captures = itertools.count(1)
     i = 0
     while i < len(pattern):
         char = pattern[i]
@@ -290,9 +323,9 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
         elif char == "\\":
             end = _escape_end(pattern, i)
             letter = pattern[i + 1]
-            if letter.isascii() and not letter.isalnum():
-                tokens.append(_literal(letter, flags, pattern[i:end]))
-            elif letter in _CHARACTER_ESCAPES:
+            if (character := _escaped_character(pattern[i:end])) is not None:
+                tokens.append(_literal(character, flags, pattern[i:end]))
+            elif letter in _CHARACTER_SET_ESCAPES:
                 tokens.append(_Atom(pattern[i:end], pattern[i:end], None, flags))
             elif letter not in _ZERO_WIDTH_ESCAPES:
                 raise RuntimeError(
@@ -306,10 +339,10 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
             i = end
         elif char == "(":
             inner = flags
-            name = None
+            capture = None
             if pattern.startswith(("(?<", "(?P<"), i):
                 opener = pattern[i:pattern.index(">", i) + 1]
-                name = opener[opener.index("<") + 1:-1]
+                capture = next(captures)
             elif pattern.startswith("(?", i):
                 spec_end = min(k for k in (pattern.find(")", i), pattern.find(":", i)) if k >= 0)
                 on, _, off = pattern[i + 2:spec_end].partition("-")
@@ -321,7 +354,8 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
                 opener = pattern[i:spec_end + 1]
             else:
                 opener = "("
-            group = _GroupOpen(opener, name, i + len(opener), inner)
+                capture = next(captures)
+            group = _GroupOpen(opener, capture, i + len(opener), inner)
             tokens.append(group)
             open_groups.append((group, flags))
             flags = inner
@@ -345,14 +379,20 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
 
 def _named_group_source(pattern: str, name: str) -> str:
     """The `(?<name>…)` group's sub-pattern, as a pattern of its own: the source
-    between its opener and closer, under the inline flags in force there.
+    between its opener and closer, under the inline flags in force there. A
+    name given to more than one group is read as the group RE2 binds it to.
 
     KeyError when the matcher has no group of that name."""
-    for token in compile_matcher(pattern).tokens:
-        if isinstance(token, _GroupClose) and token.opened_by.name == name:
+    compiled = compile_matcher(pattern)
+    capture = compiled.regex.groupindex[name]
+    for token in compiled.tokens:
+        if isinstance(token, _GroupClose) and token.opened_by.capture == capture:
             group = token.opened_by
             return _with_flags(pattern[group.end:token.start], group.flags)
-    raise KeyError(name)
+    raise RuntimeError(
+        f"RE2 numbers the {name!r} group of {pattern!r} {capture}, and the matcher "
+        "tokenizer closes no group it numbers so"
+    )
 
 
 def _capture_language(native: str, name: str, probes: tuple[str, ...]) -> frozenset[str]:
@@ -385,7 +425,7 @@ def _normalized_native_characters() -> bytes:
 
     Read off `normalize_native_type` itself rather than a model of it. Bytes
     because the RE2 binding re-encodes a `str` subject on every search, and this
-    subject is searched once per atom. Surrogates are excluded: they are not
+    subject is searched for every atom. Surrogates are excluded: they are not
     characters and have no UTF-8 encoding."""
     every = "".join(map(chr, itertools.chain(range(0xD800), range(0xE000, sys.maxunicode + 1))))
     block = 1024

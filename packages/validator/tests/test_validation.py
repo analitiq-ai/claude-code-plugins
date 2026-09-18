@@ -775,8 +775,8 @@ def test_coverage_exact_match_normalizes_both_sides(validator):
 
 
 def test_coverage_matches_a_regex_rule_with_re2_semantics(validator):
-    # RE2's `\d` is ASCII, so a non-ASCII digit is not covered by a rule the
-    # engine would not resolve it with either.
+    # RE2's `\d` is ASCII, so a rule spelling digits with it does not cover a
+    # non-ASCII digit.
     rules = [{"match": "regex", "native_type": r"^N\d$", "arrow_type": "Int8"}]
     assert validator._render_arrow_type("N3", rules) == "Int8"
     assert validator._render_arrow_type("N٣", rules) is None
@@ -1964,6 +1964,11 @@ def test_duplicate_exact_read_rule_warns_across_case_and_whitespace(validator):
     (r"^A[]a]B$", "silent", "A]B"),
     (r"^FOO(?<x>[A-Za-z]+)$", "silent", "FOOX"),
     (r"^varchar\((?<n>\d+)\)$", "warns", "varchar(1)"),
+    (r"^[[:lower:]]$", "warns", "a"),
+    (r"^\x{6A}AR$", "warns", "jAR"),
+    (r"^\141AR$", "warns", "aAR"),
+    (r"^\Qvar", "warns", "var"),
+    (r"^A[+-[:]b:]]$", "warns", "A+b:]]"),
     # Refused by the contract, so there is no pattern for the warning to read.
     (r"^(?P<x>\d)X$", "refused", None),
     (r"^A(?<t>[0-9])B\k<t>$", "refused", None),

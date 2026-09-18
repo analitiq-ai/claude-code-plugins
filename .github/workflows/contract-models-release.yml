@@ -84,7 +84,7 @@ jobs:
 
       - name: Install build tooling
         # The dependency set is owned by requirements-dev.txt — never inline a
-        # version here (tests.yml states the same rule at its install step).
+        # version here.
         run: pip install --quiet build -r requirements-dev.txt
 
       - name: Build guards (version match, minimal, no alq/private leak, boto3-free)

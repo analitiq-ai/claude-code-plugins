@@ -272,8 +272,8 @@ def test_python_named_group_spelling_inside_a_quote_is_a_literal():
 
 
 def test_regex_named_backreference_rejected():
-    # RE2 has no backreferences, so `\k<name>` is refused where the engine
-    # would refuse it, with the parse error RE2 gives.
+    # RE2 has no backreferences, so `\k<name>` is refused with the parse error
+    # RE2 gives.
     refusal = _refusal(READ, _regex_rule(READ, r"(?<x>\w+)_\k<x>"))
     assert "RULE-TMAP-005" in refusal, refusal
     assert r"invalid escape sequence: \k" in refusal, refusal
@@ -360,12 +360,35 @@ def test_schemaless_container_must_not_collapse_to_scalar():
     _accepts(READ, [{"match": "exact", "native_type": "JSONB", "arrow_type": "Utf8"}])  # bare name: not flagged
 
 
-def test_container_syntax_is_read_from_a_regex_rules_literals_only():
-    # `<` and `>` inside a class are members of a set, not a parameterization.
-    _accepts(READ, [{"match": "regex", "native_type": r"^A[<>]B$", "arrow_type": "Utf8"}])
-    refusal = _refusal(READ, {"match": "regex", "native_type": r"^ARRAY<(?<t>[A-Z]+)>$",
-                              "arrow_type": "Utf8"})
-    assert "RULE-TMAP-002" in refusal, refusal
+@pytest.mark.parametrize("native,is_container", [
+    # A class's members are a set, not a parameterization, however the class
+    # is spelled.
+    (r"^A[<>]B$", False),
+    (r"^A[^]<>]B$", False),
+    (r"^A[\]<>]B$", False),
+    (r"^A[[:alpha:]<>]B$", False),
+    # A non-ASCII digit is no repetition count, so the braces are literals
+    # and the native does not end in `[]`.
+    ("^INT\\[\\]{\u0661}$", False),
+    (r"^ARRAY<(?<t>[A-Z]+)>$", True),
+    # However a literal `<`, `>`, `[` or `]` is spelled, it is that character.
+    (r"^INT\[\]$", True),
+    (r"^ARRAY\<INT\>$", True),
+    (r"^ARRAY\Q<INT>\E$", True),
+    (r"^ARRAY\Q<INT>", True),
+    (r"^ARRAY\x{3C}INT\x3E$", True),
+    (r"^ARRAY\74INT\076$", True),
+    # A range may end at `[`; what follows the class is literal again.
+    (r"^ARRAY<[+-[:]>:]X]$", True),
+    (r"^ARRAY<[+-[:]>:]$", True),
+])
+def test_container_syntax_is_read_from_a_regex_rules_literals_only(native, is_container):
+    rule = {"match": "regex", "native_type": native, "arrow_type": "Utf8"}
+    if is_container:
+        refusal = _refusal(READ, rule)
+        assert "RULE-TMAP-002" in refusal, refusal
+    else:
+        _accepts(READ, [rule])
 
 
 def test_schemaless_native_maps_to_container_canonicals_only():
@@ -503,9 +526,18 @@ def test_capture_whose_class_opens_with_a_bracket_is_read_whole():
                      "arrow_type": "Decimal128(${p}, 0)"}])
 
 
+def test_a_repeated_group_name_is_read_as_the_group_re2_binds():
+    # RE2 binds a repeated name to the group opened first, which here is the
+    # outer, unbounded one, so that is the capture the bound is checked on.
+    refusal = _refusal(READ, {"match": "regex",
+                              "native_type": r"^N\((?<p>(?<p>[1-9])\d*)\)$",
+                              "arrow_type": "Decimal128(${p}, 0)"})
+    assert "RULE-TMAP-010" in refusal, refusal
+
+
 def test_capture_is_read_under_the_inline_flags_in_force():
-    # The probe is uppercased; a lowercase capture under `(?i)` matches it, so
-    # the capture's language is taken case-insensitively too.
+    # The unit probes are spelt in uppercase; a lowercase capture under `(?i)`
+    # matches them, so the capture's language is taken case-insensitively too.
     _accepts(READ, [{"match": "regex",
                      "native_type": rf"(?i)^ts\((?<u>{_units('Timestamp').lower()})\)$",
                      "arrow_type": "Timestamp(${u})"}])
