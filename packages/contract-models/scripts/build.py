@@ -55,10 +55,10 @@ README = PKG_DIR / "README.md"
 # scope, boto3-free, namespace, generated __init__) are what fail loud in CI.
 PRIVATE_CODENAME = "alq"
 
-# Third-party the public package may import. It is pure Pydantic contract
-# models; anything else would either make it non-portable or drag private code
-# into a published artifact.
-ALLOWED_THIRD_PARTY = {"pydantic", "analitiq"}
+# Third-party the public package may import. It is Pydantic contract models plus
+# the regex engine type-map matchers execute under; anything else would either
+# make it non-portable or drag private code into a published artifact.
+ALLOWED_THIRD_PARTY = {"pydantic", "analitiq", "re2"}
 
 _INIT_BANNER = (
     "# GENERATED — do not edit. Written by contract-models/scripts/build.py at\n"
