@@ -67,8 +67,28 @@ class DiskTree(Tree):
     def glob(self, key: Path, pattern: str) -> Iterable[Path]:
         return key.glob(pattern)
 
-    def rglob(self, key: Path, pattern: str) -> Iterable[Path]:
-        return key.rglob(pattern)
+    def rglob(self, key: Path, pattern: str) -> Iterator[Path]:
+        # Not `Path.rglob`, which never descends through a linked directory: a
+        # link stands where it is, so what it leads to is part of this tree.
+        return _below(key, pattern, frozenset())
+
+
+def _below(directory: Path, pattern: str, walking: frozenset[tuple[int, int]]) -> Iterator[Path]:
+    """What `DiskTree.rglob` answers, `walking` holding the identity of every
+    directory the descent is inside, so that a link back to one of them is not
+    entered again: its contents are already being read."""
+    status = directory.stat()
+    identity = (status.st_dev, status.st_ino)
+    if identity in walking:
+        return
+    with os.scandir(directory) as scan:
+        entries = list(scan)
+    for entry in entries:
+        path = directory / entry.name
+        if fnmatchcase(entry.name, pattern):
+            yield path
+        if entry.is_dir():
+            yield from _below(path, pattern, walking | {identity})
 
 
 DISK = DiskTree()
@@ -177,11 +197,27 @@ def _one_name(pattern: str) -> str:
 def located(where: Path | Location) -> Location:
     """`where` as a location: a `Path` names a place on disk.
 
-    Absolutised lexically, never resolved: a linked document belongs to the
-    directory holding the link, so its siblings are read there and not where
-    the link's target lives. Absolute, so that `parent` of a relative path
-    names the directory it sits in rather than stopping at `.`.
+    Never resolved: a linked document belongs to the directory holding the
+    link, so its siblings are read there and not where the link's target
+    lives. Absolute, so that `parent` of a relative path names the directory it
+    sits in rather than stopping at `.`.
     """
     if isinstance(where, Location):
         return where
-    return Location(Path(os.path.abspath(where)), DISK)
+    return Location(_stepped_up(Path(where).absolute()), DISK)
+
+
+def _stepped_up(path: Path) -> Path:
+    """`path` without its `..`, each taken as the kernel takes it: up from
+    where a link leads, not up from the link. Collapsed against the names
+    written instead, the path would name a different file than a read of it
+    opens."""
+    walked = Path(path.anchor)
+    for name in path.parts[1:]:
+        if name != "..":
+            walked /= name
+        elif walked.is_symlink():
+            walked = Path(os.path.realpath(walked)).parent
+        else:
+            walked = walked.parent
+    return walked

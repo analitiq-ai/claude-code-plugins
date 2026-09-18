@@ -1481,10 +1481,10 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                         message_id="transport-ref-check-skipped-no-sibling",
                         kind="notApplicable", path="/",
                         message=(
-                            f"transport_ref {declared_refs!r} not checked: no sibling "
-                            "connector.json was reachable from this document's path, so "
-                            "its `transports` could not be read. Validate the connector "
-                            "to resolve it.")))
+                            f"transport_ref {declared_refs!r} not checked: the connector "
+                            "is read from beside the `endpoints/` directory holding this "
+                            "document, and none was found there or the document is not in "
+                            "one. Validate the connector to resolve it.")))
     # Each api-endpoint document goes through the checks shared with
     # `check_coverage`'s sibling-endpoint loop; `transports` is None wherever
     # the branches above could not resolve it, and RULE-ENDP-047 stays silent

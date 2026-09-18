@@ -386,16 +386,14 @@ def main() -> int:
     parser.add_argument("--document", required=True, help="Path to the JSON document to validate.")
     args = parser.parse_args()
 
+    document_path = Path(args.document)
     try:
-        # Read where it is graded: the location collapses `..` against the
-        # names written, and the kernel would follow a link before one.
-        location = located(Path(args.document))
-        document = json.loads(location.read_text())
+        document = json.loads(document_path.read_text())
     except _JSON_READ_ERRORS as exc:
         print(json.dumps({"passed": False, "findings": [_unreadable_document_finding(exc)]}))
         return 1
 
-    findings = validate_document(document, doc_path=location)
+    findings = validate_document(document, doc_path=document_path)
     passed = _passed(findings)
     print(json.dumps({"passed": passed, "findings": findings}, indent=2))
     return 0 if passed else 1
