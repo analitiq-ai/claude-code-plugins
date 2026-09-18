@@ -705,6 +705,14 @@ def test_bundle_grades_a_connection_map_under_any_collected_filename(tmp_path):
         for f in diag["findings"]), diag["findings"]
 
 
+# Text the parser refuses without raising a decode error: nesting deeper than
+# it descends, and an integer longer than its digit limit.
+_PARSER_REFUSALS = {
+    "nested past the parser": "[" * 100_000 + "]" * 100_000,
+    "integer past the digit limit": '{"n": 1' + "0" * 5_000 + "}",
+}
+
+
 def _plant(definition: Path, scenario: str) -> None:
     """Lay out one way a connection's or a connector's type-map siblings can be."""
     read = json.dumps(_tm(TYPE_MAP_READ, "read"))
@@ -722,8 +730,8 @@ def _plant(definition: Path, scenario: str) -> None:
         target.write_text("[ not valid json")
     elif scenario == "not utf-8":
         target.write_bytes(b"\xff\xfe")
-    elif scenario == "nested past the parser":
-        target.write_text("[" * 100_000 + "]" * 100_000)
+    elif scenario in _PARSER_REFUSALS:
+        target.write_text(_PARSER_REFUSALS[scenario])
     elif scenario == "no direction":
         target.write_text(json.dumps({"rules": TYPE_MAP_READ}))
     elif scenario == "no object":
@@ -739,7 +747,7 @@ def _plant(definition: Path, scenario: str) -> None:
 
 
 @pytest.mark.parametrize("scenario", [
-    "duplicated", "unparseable", "not utf-8", "nested past the parser", "no direction",
+    "duplicated", "unparseable", "not utf-8", *_PARSER_REFUSALS, "no direction",
     "no object", "directory", "dangling symlink", "fifo",
     "legacy directory", "legacy dangling symlink", "legacy no object",
 ])
@@ -763,7 +771,11 @@ def test_connection_type_maps_are_collected_as_a_connector_collects_its_own(tmp_
     assert not any("rule" in f for f in connection), connection
     assert [{k: v for k, v in f.items() if k not in ("rule", "path")} for f in connection] == [
         {k: v for k, v in f.items() if k not in ("rule", "path")} for f in connector]
-    assert [f["path"].split(".json", 1)[1] for f in connection] == [f["path"] for f in connector]
+    # A finding about a whole file is addressed at the file: the pointer to a
+    # document's root joined onto it would name a key "" inside it.
+    assert not any(f["path"].endswith("/") for f in connection), connection
+    assert [f["path"].split(".json", 1)[1] or "/" for f in connection] == [
+        f["path"] for f in connector]
 
 
 def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
@@ -997,14 +1009,14 @@ def test_type_map_entity_crash_preserves_legacy_finding_and_sibling_direction(tm
     assert bad_write, diag["findings"]  # processed after the crash, still got its turn
 
 
-def test_type_map_nested_past_the_parser_preserves_legacy_finding_and_sibling_direction(tmp_path):
-    # Valid JSON nested deeper than the parser descends is an unreadable map
-    # like any other: it costs the legacy-name finding nothing, and the write
-    # map beside it is still graded.
+@pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
+def test_type_map_the_parser_refuses_preserves_legacy_finding_and_sibling_direction(
+        tmp_path, text):
+    # A map the parser refuses is an unreadable map like any other: it costs the
+    # legacy-name finding nothing, and the write map beside it is still graded.
     doc = _build_bundle(tmp_path)
     _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
-    (tmp_path / "connections/postgresql/definition/type-map-read.json").write_text(
-        "[" * 100_000 + "]" * 100_000)
+    (tmp_path / "connections/postgresql/definition/type-map-read.json").write_text(text)
     _write(tmp_path, "connections/postgresql/definition/type-map-write.json",
            _tm([{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "write"))  # invalid casing
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
@@ -1018,10 +1030,35 @@ def test_type_map_nested_past_the_parser_preserves_legacy_finding_and_sibling_di
     assert bad_write, diag["findings"]
 
 
+@pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
+def test_a_document_the_parser_refuses_is_reported_as_unreadable(tmp_path, text):
+    (tmp_path / "connection.json").write_text(text)
+    diag = V.diagnostics_for("connection", tmp_path / "connection.json")
+    assert [(f["validator"], f["message"].split(":")[0]) for f in diag["findings"]] == [
+        ("document", "Cannot read document")], diag["findings"]
+
+
+@pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
+@pytest.mark.parametrize("member", [
+    "pipelines/p/streams/orders.json",
+    "connectors/postgresql/definition/connector.json",
+    "connectors/postgresql/definition/endpoints/orders.json",
+])
+def test_a_bundle_member_the_parser_refuses_costs_no_crash(tmp_path, text, member):
+    # Each is read by the adapter itself, not the validator; a refusal it does
+    # not catch ends the section reading it as an adapter crash. The connector
+    # ships an endpoint so its connector.json is read for the endpoint's owner too.
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, "connectors/postgresql/definition/endpoints/orders.json", {"endpoint_id": "orders"})
+    (tmp_path / member).write_text(text)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert "adapter-crash" not in _ids(diag["findings"]), diag["findings"]
+
+
 def test_bundle_findings_crash_unrelated_to_exclusion_does_not_mislabel_it(tmp_path, monkeypatch):
     # an ordinary, already-reported read error (no guard fired) can exclude a
     # bundle member in the same run a completely unrelated guard elsewhere
-    # (the connection-type-map check) genuinely crashes in. The exclusion and
+    # (grading the type maps beside a connection) genuinely crashes in. The exclusion and
     # the crash are unrelated: `crashed` must reflect only the four
     # bundle-assembly sites that can actually exclude a member, not "any
     # adapter-crash finding anywhere", or the ordinary exclusion gets

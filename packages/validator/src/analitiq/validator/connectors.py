@@ -984,9 +984,8 @@ def _load_json_sibling(
 
     `rule` is a parameter because the callers are different checks, each
     attributing an unreadable sibling to whichever obligation it was reading
-    that sibling to satisfy — RULE-PKG-030 for a type-map load, `None` where
-    the read precedes any rule evaluation — rather than a shared default that
-    could name the wrong one.
+    that sibling to satisfy, rather than a shared default that could name the
+    wrong one.
     """
     if not path.is_file():
         # The pattern collects directory entries, not documents, so the read is

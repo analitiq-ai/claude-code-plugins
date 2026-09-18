@@ -231,9 +231,10 @@ def _at_site(site: str, findings: list[dict]) -> list[dict]:
     A document graded on its own reports a pointer into itself (`/scope`), which
     is the whole address when that document is what was validated. A bundle
     holds many, so the same pointer names none of them — the reader is told
-    what is wrong and not which file to open. Same shape
-    `_connection_type_map_findings` uses for the maps beside a connection."""
-    return [{**f, "path": f"{site}{f.get('path', '')}"} for f in findings]
+    what is wrong and not which file to open. A finding about the whole
+    document (`/`) is addressed at the file itself."""
+    return [{**f, "path": site if f.get("path", "") in ("", "/") else f"{site}{f['path']}"}
+            for f in findings]
 
 
 def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:
@@ -241,9 +242,10 @@ def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:
     non-object payload, append an error finding and return None — so a malformed
     sibling becomes a clear diagnostic instead of an uncaught traceback or a
     silently dropped document."""
+    from analitiq.validator._core import _JSON_READ_ERRORS
     try:
         doc = _read_json(path)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except _JSON_READ_ERRORS as exc:
         findings.append(_finding("document", "error", "", f"Cannot read {path.name}: {exc}"))
         return None
     if not isinstance(doc, dict):
@@ -267,6 +269,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     whether that exclusion came from an actual crash (worth its own labeled
     finding) or an already-reported ordinary read error (which needs no second,
     misleading one)."""
+    from analitiq.validator._core import _JSON_READ_ERRORS
     # `validate_pipeline_bundle` takes filename-less dicts, so every check that
     # needs a name — RULE-PKG-031, on where an endpoint document ships — is run
     # here, per file, where the names are known.
@@ -402,7 +405,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
             with _contained(findings, f"connectors/{conn_json.parent.parent.name}") as outcome:
                 try:
                     cid = _read_json(conn_json).get("connector_id")
-                except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+                except (*_JSON_READ_ERRORS, AttributeError):
                     cid = None
                 if isinstance(cid, str) and cid:
                     connectors.add(cid)
@@ -444,6 +447,7 @@ def _connector_endpoint_sets(root: Path, findings: list[dict]) -> dict[str, set[
     a filesystem failure there would otherwise escape every per-connector
     guard below and return nothing at all, rather than whatever connectors
     were already found before it."""
+    from analitiq.validator._core import _JSON_READ_ERRORS
     sets: dict[str, set[str]] = {}
     with _contained(findings, "connectors"):
         for ep_dir in sorted(root.glob("connectors/*/definition/endpoints")):
@@ -456,7 +460,7 @@ def _connector_endpoint_sets(root: Path, findings: list[dict]) -> dict[str, set[
                     ids.add(ep_json.stem)
                     try:
                         eid = _read_json(ep_json).get("endpoint_id")
-                    except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+                    except (*_JSON_READ_ERRORS, AttributeError):
                         eid = None
                     if isinstance(eid, str) and eid:
                         ids.add(eid)
@@ -464,7 +468,7 @@ def _connector_endpoint_sets(root: Path, findings: list[dict]) -> dict[str, set[
                     keys = {slug_dir.name}
                     try:
                         cid = _read_json(slug_dir / "definition" / "connector.json").get("connector_id")
-                    except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+                    except (*_JSON_READ_ERRORS, AttributeError):
                         cid = None
                     if isinstance(cid, str) and cid:
                         keys.add(cid)
@@ -595,9 +599,10 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     """Validate one document and return the Diagnostics envelope. Raises nothing
     for validation failures — those become findings; only a genuinely unreadable
     document short-circuits."""
+    from analitiq.validator._core import _JSON_READ_ERRORS
     try:
         doc = _read_json(document_path)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except _JSON_READ_ERRORS as exc:
         return _diagnostics([_finding("document", "error", "", f"Cannot read document: {exc}")])
 
     if entity == "database-endpoint":

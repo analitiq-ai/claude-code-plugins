@@ -207,21 +207,28 @@ def test_cli_missing_map_names_the_file(tmp_path, capsys):
     assert str(missing) in err.err
 
 
-@pytest.mark.parametrize("nested", ["map", "probes"])
-def test_cli_rejects_input_nested_past_the_parser(tmp_path, capsys, nested):
-    # Valid JSON nested deeper than the parser descends raises RecursionError,
-    # not a decode error; it is unreadable input like any other, not a crash.
-    deep = "[" * 100_000 + "]" * 100_000
+# Text the parser refuses without raising a decode error: nesting deeper than
+# it descends, and an integer longer than its digit limit.
+_PARSER_REFUSALS = {
+    "nested past the parser": "[" * 100_000 + "]" * 100_000,
+    "integer past the digit limit": '{"n": 1' + "0" * 5_000 + "}",
+}
+
+
+@pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
+@pytest.mark.parametrize("refused", ["map", "probes"])
+def test_cli_rejects_input_the_parser_refuses(tmp_path, capsys, refused, text):
+    # Unreadable input like any other, not a crash, and named like any other.
     m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
-    if nested == "map":
-        m.write_text(deep)
+    if refused == "map":
+        m.write_text(text)
     probes = tmp_path / "probes.json"
-    probes.write_text(deep if nested == "probes" else '["citext"]')
+    probes.write_text(text if refused == "probes" else '["citext"]')
     rc = G.main(["--direction", "read", "--map", str(m), "--probes-file", str(probes)])
     assert rc == 2
     err = capsys.readouterr()
     assert not err.out
-    assert "recursion" in err.err
+    assert (str(m) if refused == "map" else "cannot read probes") in err.err
 
 
 def test_duplicate_probes_deduped(tmp_path):

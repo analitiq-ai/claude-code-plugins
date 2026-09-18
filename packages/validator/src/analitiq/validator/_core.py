@@ -113,10 +113,10 @@ def _bounded(text: str, limit: int = 200) -> str:
 
 
 # Every way reading a JSON document off disk fails on what the file holds
-# rather than on this package. OSError covers a missing, directory or
-# unreadable path; RecursionError is valid JSON nested deeper than the parser
-# will descend, which `json` raises instead of a decode error.
-_JSON_READ_ERRORS = (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError)
+# rather than on this package. OSError is the path; ValueError is text that is
+# not UTF-8, not JSON, or JSON with an integer past the parser's digit limit;
+# RecursionError is JSON nested deeper than the parser descends.
+_JSON_READ_ERRORS = (OSError, ValueError, RecursionError)
 
 
 # Pydantic error types whose sentence renders a value taken from the failing

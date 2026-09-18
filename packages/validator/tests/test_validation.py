@@ -1439,14 +1439,23 @@ def test_an_unparseable_sibling_is_reported_as_unparseable_and_nothing_else(tmp_
     (tmp_path / "type-map-read.json").write_text("[ not json")
     (tmp_path / "connector.json").write_text("{}")
     findings = validator.check_coverage(_min_connector("file"), tmp_path / "connector.json")
-    assert [f["message_id"] for f in findings] == ["type-map-unparseable"], findings
+    assert [(f["message_id"], f.get("rule")) for f in findings] == [
+        ("type-map-unparseable", "RULE-PKG-030")], findings
 
 
-def test_a_sibling_nested_past_the_parser_is_reported_as_unparseable(tmp_path, validator):
-    # Deep nesting is valid JSON the parser gives up on with a RecursionError,
-    # not a decode error. Uncaught it ends the whole coverage check, so one
-    # sibling costs the package every other finding about its maps.
-    (tmp_path / "type-map-read.json").write_text("[" * 100_000 + "]" * 100_000)
+# Text the parser refuses without raising a decode error: nesting deeper than
+# it descends, and an integer longer than its digit limit.
+_PARSER_REFUSALS = {
+    "nested past the parser": "[" * 100_000 + "]" * 100_000,
+    "integer past the digit limit": '{"n": 1' + "0" * 5_000 + "}",
+}
+
+
+@pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
+def test_a_sibling_the_parser_refuses_is_reported_as_unparseable(tmp_path, validator, text):
+    # Uncaught, the refusal ends the whole coverage check, so one sibling costs
+    # the package every other finding about its maps.
+    (tmp_path / "type-map-read.json").write_text(text)
     (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(
         [{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "write")))
     (tmp_path / "connector.json").write_text("{}")
@@ -1456,11 +1465,12 @@ def test_a_sibling_nested_past_the_parser_is_reported_as_unparseable(tmp_path, v
     assert any(f["path"].startswith("/rules/") for f in findings), findings
 
 
-def test_cli_reports_a_document_nested_past_the_parser_as_unreadable(
-        tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
+def test_cli_reports_a_document_the_parser_refuses_as_unreadable(
+        tmp_path, monkeypatch, capsys, text):
     from analitiq.validator import _core
     document = tmp_path / "connector.json"
-    document.write_text("[" * 100_000 + "]" * 100_000)
+    document.write_text(text)
     monkeypatch.setattr("sys.argv", ["validator", "--document", str(document)])
     assert _core.main() == 1
     out = json.loads(capsys.readouterr().out)
@@ -2394,6 +2404,21 @@ def test_collect_type_maps_reports_every_later_declaration_against_the_first(val
                   if f["message_id"] == "type-map-direction-duplicated"]
     assert [name for name, _ in duplicated] == ["type-map-b.json", "type-map-c.json"]
     assert all("type-map-a.json" in message for _, message in duplicated), duplicated
+
+
+def test_collect_type_maps_attributes_every_finding_about_the_siblings_to_the_rule_given(
+        validator, tmp_path):
+    (tmp_path / "type-map.json").write_text(json.dumps(_read_doc()))
+    (tmp_path / "type-map-a.json").write_text(json.dumps(_read_doc()))
+    (tmp_path / "type-map-b.json").write_text(json.dumps(_read_doc()))
+    (tmp_path / "type-map-c.json").write_text("[ not json")
+    (tmp_path / "type-map-d.json").mkdir()
+    collection = validator.collect_type_maps(tmp_path, rule="RULE-PKG-030")
+    assert sorted((name, f["message_id"], f.get("rule")) for name, f in collection.findings) == [
+        ("type-map-b.json", "type-map-direction-duplicated", "RULE-PKG-030"),
+        ("type-map-c.json", "type-map-unparseable", "RULE-PKG-030"),
+        ("type-map-d.json", "type-map-unparseable", "RULE-PKG-030"),
+        ("type-map.json", "legacy-type-map-filename", "RULE-PKG-030")]
 
 
 @pytest.mark.parametrize("payload", [
