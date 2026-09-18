@@ -1,7 +1,7 @@
 id: RULE-TMAP-005
 statement: >
-  A `regex` read rule's native_type pattern MUST compile under the ECMA-262 regex
-  dialect.
+  A `regex` read rule's native_type pattern MUST compile under the RE2 regex
+  dialect, and a named capture in it MUST be spelled `(?<name>…)`.
 tier: shape
 severity: error
 artifact_kinds: [type-map]
@@ -9,10 +9,19 @@ validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin]
 targets: [TypeMapReadRegexRule]
 rationale: >
-  The map is published under a JSON Schema whose pattern dialect is ECMA-262
-  and is read by more than one runtime, so a Python-only named-capture spelling
-  compiles wherever the author tested it and fails wherever it ships. The
-  authoring hazard is that both spellings look like ordinary regex, and without
-  a compile check the two directions reject it at different layers.
+  The engine compiles a read rule's matcher with RE2 when it loads the connector
+  and refuses the run on a pattern RE2 cannot parse, so a matcher that compiles
+  only under a richer dialect passes authoring and fails where it ships. The
+  lookaround, atomic groups and backreferences an author reaches for by habit
+  are not RE2 syntax and read as ordinary regex on the page, so only compiling
+  under the dialect that will match it tells the author which one they wrote.
+  RE2 also takes Python's `(?P<name>…)` spelling; this contract takes only
+  `(?<name>…)`, which makes the spelling the contract's choice rather than the
+  dialect's. This states the engine as it stands: it validates the map
+  against the contract models and then compiles the matcher with RE2. The gate
+  compiles with a dialect other than RE2, so the two disagree in both
+  directions: a matcher the gate admits and RE2 cannot parse passes authoring
+  and is refused at load, and one the gate refuses and RE2 would take is
+  rejected here although RE2 compiles it.
 status: active
 superseded_by: null

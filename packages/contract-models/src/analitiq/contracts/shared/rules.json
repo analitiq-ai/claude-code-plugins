@@ -7323,7 +7323,7 @@
   },
   {
    "id": "RULE-TMAP-005",
-   "statement": "A `regex` read rule's native_type pattern MUST compile under the ECMA-262 regex dialect.\n",
+   "statement": "A `regex` read rule's native_type pattern MUST compile under the RE2 regex dialect, and a named capture in it MUST be spelled `(?<name>…)`.\n",
    "tier": "shape",
    "severity": "error",
    "artifact_kinds": [
@@ -7342,7 +7342,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The map is published under a JSON Schema whose pattern dialect is ECMA-262 and is read by more than one runtime, so a Python-only named-capture spelling compiles wherever the author tested it and fails wherever it ships. The authoring hazard is that both spellings look like ordinary regex, and without a compile check the two directions reject it at different layers.\n",
+   "rationale": "The engine compiles a read rule's matcher with RE2 when it loads the connector and refuses the run on a pattern RE2 cannot parse, so a matcher that compiles only under a richer dialect passes authoring and fails where it ships. The lookaround, atomic groups and backreferences an author reaches for by habit are not RE2 syntax and read as ordinary regex on the page, so only compiling under the dialect that will match it tells the author which one they wrote. RE2 also takes Python's `(?P<name>…)` spelling; this contract takes only `(?<name>…)`, which makes the spelling the contract's choice rather than the dialect's. This states the engine as it stands: it validates the map against the contract models and then compiles the matcher with RE2. The gate compiles with a dialect other than RE2, so the two disagree in both directions: a matcher the gate admits and RE2 cannot parse passes authoring and is refused at load, and one the gate refuses and RE2 would take is rejected here although RE2 compiles it.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7425,7 +7425,7 @@
   },
   {
    "id": "RULE-TMAP-009",
-   "statement": "A write `regex` rule's arrow_type matcher MUST compile under the ECMA-262 regex dialect, and the native_type DDL it renders MUST carry only well-formed placeholders.\n",
+   "statement": "A write `regex` rule's arrow_type matcher MUST compile under the RE2 regex dialect with any named capture spelled `(?<name>…)`, and the native_type DDL it renders MUST carry only well-formed placeholders.\n",
    "tier": "shape",
    "severity": "error",
    "artifact_kinds": [
@@ -7444,7 +7444,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The write direction inverts which key is the matcher, so the regex dialect obligation moves onto `arrow_type` while the placeholder obligation moves onto `native_type` — an author carrying a read rule's habits across writes the right syntax in the wrong key. A pattern that does not compile is not a narrower match, it is a rule the engine cannot load at the moment it needs to render DDL.\n",
+   "rationale": "The write direction inverts which key is the matcher, so the regex dialect obligation moves onto `arrow_type` while the placeholder obligation moves onto `native_type` — an author carrying a read rule's habits across writes the right syntax in the wrong key. The engine compiles that matcher with RE2 when it loads the connector, so a pattern that does not compile is not a narrower match: the whole map is refused at load, before any DDL is rendered and on runs that would never render any. RE2 also takes Python's `(?P<name>…)` spelling; this contract takes only `(?<name>…)`, the same spelling a read rule takes, which makes it the contract's choice rather than the dialect's. This states the engine as it stands: it validates the map against the contract models and then compiles the matcher with RE2. The gate compiles with a dialect other than RE2, so the two disagree in both directions: a matcher the gate admits and RE2 cannot parse passes authoring and is refused at load, and one the gate refuses and RE2 would take is rejected here although RE2 compiles it.\n",
    "status": "active",
    "superseded_by": null
   },

@@ -1,8 +1,8 @@
 id: RULE-TMAP-009
 statement: >
-  A write `regex` rule's arrow_type matcher MUST compile under the ECMA-262
-  regex dialect, and the native_type DDL it renders MUST carry only well-formed
-  placeholders.
+  A write `regex` rule's arrow_type matcher MUST compile under the RE2 regex
+  dialect with any named capture spelled `(?<name>…)`, and the native_type DDL
+  it renders MUST carry only well-formed placeholders.
 tier: shape
 severity: error
 artifact_kinds: [type-map]
@@ -13,8 +13,16 @@ rationale: >
   The write direction inverts which key is the matcher, so the regex dialect
   obligation moves onto `arrow_type` while the placeholder obligation moves onto
   `native_type` — an author carrying a read rule's habits across writes the right
-  syntax in the wrong key. A pattern that does not compile is not a narrower
-  match, it is a rule the engine cannot load at the moment it needs to render
-  DDL.
+  syntax in the wrong key. The engine compiles that matcher with RE2 when it
+  loads the connector, so a pattern that does not compile is not a narrower
+  match: the whole map is refused at load, before any DDL is rendered and on
+  runs that would never render any. RE2 also takes Python's `(?P<name>…)`
+  spelling; this contract takes only `(?<name>…)`, the same spelling a read
+  rule takes, which makes it the contract's choice rather than the dialect's. This states the engine as it stands: it validates the map
+  against the contract models and then compiles the matcher with RE2. The gate
+  compiles with a dialect other than RE2, so the two disagree in both
+  directions: a matcher the gate admits and RE2 cannot parse passes authoring
+  and is refused at load, and one the gate refuses and RE2 would take is
+  rejected here although RE2 compiles it.
 status: active
 superseded_by: null
