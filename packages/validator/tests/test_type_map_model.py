@@ -2,14 +2,20 @@
 validity the validator delegates to. The PR premise ("the model rejects it, so
 the validator catches it") rests on these, so they are pinned directly.
 """
+import string
+
 import pytest
+import re2
 from pydantic import TypeAdapter, ValidationError
 
+from analitiq.contracts import type_map
 from analitiq.contracts.type_map import (
     TYPE_MAP_READ_SCHEMA_URL,
     TYPE_MAP_WRITE_SCHEMA_URL,
     TypeMapReadDoc,
     TypeMapWriteDoc,
+    case_dead_atoms,
+    compile_matcher,
     normalize_native_type,
 )
 
@@ -372,6 +378,9 @@ def test_schemaless_container_must_not_collapse_to_scalar():
     ("^INT\\[\\]{\u0661}$", False),
     (r"^INT\[\]{01}$", False),
     (r"^INT\[\]{1000000000}$", False),
+    # A repetition count is no literal, so the native still ends in `[]`.
+    (r"^INT\[\]{2}$", True),
+    (r"^INT\[\]{1,3}$", True),
     (r"^ARRAY<(?<t>[A-Z]+)>$", True),
     # However a literal `<`, `>`, `[` or `]` is spelled, it is that character.
     (r"^INT\[\]$", True),
@@ -391,6 +400,46 @@ def test_container_syntax_is_read_from_a_regex_rules_literals_only(native, is_co
         assert "RULE-TMAP-002" in refusal, refusal
     else:
         _accepts(READ, [rule])
+
+
+def test_the_tokenizer_reads_every_escape_re2_compiles():
+    # The tokenizer restates RE2's escape grammar, so RE2 says which escapes
+    # exist; one the tokenizer does not know raises instead of compiling.
+    options = re2.Options()
+    options.log_errors = False
+    escapes = []
+    for char in string.ascii_letters + string.digits:
+        try:
+            re2.compile(rf"^A\{char}B$", options=options)
+        except re2.error:
+            continue
+        escapes.append(rf"^A\{char}B$")
+    assert escapes, "RE2 compiled no escape; the probe no longer measures anything"
+    for pattern in escapes:
+        compile_matcher(pattern)
+
+
+def test_an_atom_dead_in_every_case_is_no_case_finding():
+    # No normalized native contains a tab or a newline in any case, so the
+    # atom is dead for a reason its case does not explain.
+    assert case_dead_atoms(r"^A\tB$") == ()
+    assert case_dead_atoms(r"^A\nB$") == ()
+
+
+def test_a_tokenizer_failure_on_a_matcher_re2_accepts_is_raised_not_refused(monkeypatch):
+    def unreadable(pattern):
+        raise ValueError(f"cannot read {pattern!r}")
+
+    monkeypatch.setattr(type_map, "_tokenize", unreadable)
+    with pytest.raises(RuntimeError):
+        _accepts(READ, [{"match": "regex", "native_type": "^A$", "arrow_type": "Utf8"}])
+
+
+def test_a_fragment_re2_refuses_is_raised_not_refused():
+    # A fragment is cut out of a matcher RE2 accepted, so RE2 refusing one is
+    # the tokenizer's defect, never the author's.
+    with pytest.raises(RuntimeError):
+        type_map._compile_fragment("(", "^(A)$")
 
 
 def test_schemaless_native_maps_to_container_canonicals_only():

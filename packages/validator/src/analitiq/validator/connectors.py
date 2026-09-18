@@ -33,7 +33,7 @@ module adds only what a single-document model cannot express:
   and structurally invisible to that model validator — so the cross-file half of
   the rule lives here;
 - **advisory quality warnings** the contract tolerates: duplicate type-map
-  rules, dead uppercase-only read patterns, and write-map vocabulary gaps
+  rules, read patterns spelling a case no native uses, and write-map vocabulary gaps
   (`RULE-TMAP-014`/`RULE-TMAP-022`/`RULE-TMAP-017`).
 
 At import this module registers its detector→validator pairs with the core
@@ -178,7 +178,7 @@ def _first_match_render(value: str, rules: list, matcher_key: str, render_key: s
             try:
                 compiled = compile_matcher(matcher_value)
             except ValueError:
-                # The model reports an uncompilable matcher; it renders nothing.
+                # The model reports a matcher the contract refuses; it renders nothing.
                 continue
             m = compiled.regex.fullmatch(probe)
             if not m:
@@ -583,7 +583,8 @@ def _write_vocabulary_findings(rules: list) -> list[dict]:
 
 def _type_map_rule_warnings(rules: list, direction: str) -> list[dict]:
     """Advisory (non-error) type-map checks the contract tolerates: duplicate
-    rules (later ones unreachable) and read patterns that can never match."""
+    rules (later ones unreachable) and read-pattern atoms whose case no
+    normalized native uses."""
     if not isinstance(rules, list):
         return []
     matcher_key = "native_type" if direction == "read" else "arrow_type"
@@ -623,7 +624,7 @@ def _type_map_rule_warnings(rules: list, direction: str) -> list[dict]:
             try:
                 dead = case_dead_atoms(matcher)
             except ValueError:
-                # The model reports an uncompilable matcher.
+                # The model reports a matcher the contract refuses.
                 dead = ()
             if dead:
                 findings.append(finding(

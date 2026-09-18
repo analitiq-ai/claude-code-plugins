@@ -1303,16 +1303,15 @@ def _an_upper_length(value: Any) -> str | None:
 
 
 def _a_regex_source(value: Any) -> str | None:
-    # Shape only: a non-empty string. Deliberately NOT "and it compiles" —
-    # whether a source compiles is a question about a dialect, and the dialect
-    # this pattern runs under is RE2 (the engine applies a `pattern` rule
-    # through pyarrow's `match_substring_regex`), which this package cannot
-    # reach. Grading it with stdlib `re` instead would answer a different
-    # question in both directions: `\p{L}+` is an ordinary RE2 pattern that
-    # `re` refuses, and `(a)\1` is a backreference `re` accepts and RE2
-    # cannot compile. The CDK owns the RE2 verdict, where `google-re2` is a
-    # dependency and `cdk.type_map.rules` states why it is not a contract
-    # invariant.
+    # Shape only: a non-empty string. Whether a source compiles is a question
+    # about a dialect, and the dialect this pattern runs under is RE2 (the
+    # engine applies a `pattern` rule through pyarrow's
+    # `match_substring_regex`). Grading it with stdlib `re` would answer a
+    # different question in both directions: `\p{L}+` is an ordinary RE2
+    # pattern that `re` refuses, and `(a)\1` is a backreference `re` accepts
+    # and RE2 cannot compile. This check does not ask RE2 either, so a pattern
+    # RE2 refuses passes here and, as the engine stands, fails its stream at
+    # run time.
     if not isinstance(value, str):
         return "is not a regular expression"
     if not value:

@@ -15,8 +15,8 @@ which key is the *matcher* and which is *rendered*:
 Source of truth for both the published `type-map-read` / `type-map-write` JSON
 Schemas and the connector validator (which validates via `model_validate`).
 Only *error*-level rules live here — things that make a document invalid.
-Advisory quality checks that the contract tolerates (duplicate rules, dead
-uppercase-only patterns, write-vocabulary coverage gaps) are not contract
+Advisory quality checks that the contract tolerates (duplicate rules, read
+patterns spelling a case no native uses, write-vocabulary coverage gaps) are not contract
 violations and stay in the validator as warnings.
 """
 from __future__ import annotations
@@ -144,8 +144,8 @@ class _Atom:
 
     `text` is the atom as the matcher spells it. `pattern` is a pattern of its
     own matching the characters the atom matches where it sits, less the inline
-    `flags` in force there. `literal` is the character itself when the atom
-    stands for exactly one."""
+    `flags` in force there. `literal` is the character the atom spells, before
+    `flags` apply, when it spells exactly one."""
 
     text: str
     pattern: str
@@ -452,8 +452,8 @@ def case_dead_atoms(matcher: str) -> tuple[str, ...]:
 
     An atom is case-dead when, under the inline flags in force where it sits, it
     matches no character a normalized native contains, while its
-    case-insensitive form matches one. ValueError when the matcher does not
-    compile."""
+    case-insensitive form matches one. ValueError when the contract refuses
+    the matcher."""
     characters = _normalized_native_characters()
 
     def matches_one(pattern: str) -> bool:
