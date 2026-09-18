@@ -2019,6 +2019,21 @@ def test_regex_case_check_stays_cheap_across_a_whole_map(validator, tmp_path):
     assert elapsed < 1.0, elapsed
 
 
+def test_regex_case_check_cost_does_not_grow_with_repeated_atoms(validator, tmp_path):
+    # A matcher has no length bound, and an atom's verdict is fixed by how it
+    # is spelled and the flags in force, so repeating one costs nothing more.
+    from analitiq.contracts import type_map
+
+    type_map._normalized_native_characters()
+    rules = [{"match": "regex", "native_type": "^" + "a" * 20_000 + "$", "arrow_type": "Utf8"}]
+    started = time.perf_counter()
+    findings = validator.validate_document(
+        _type_map_doc(rules, "read"), doc_path=tmp_path / "type-map-read.json")
+    elapsed = time.perf_counter() - started
+    assert any(w.get("rule") == "RULE-TMAP-014" for w in _warnings(findings)), findings
+    assert elapsed < 1.0, elapsed
+
+
 def test_write_vocabulary_gap_warns(validator, tmp_path):
     # A write map missing whole canonical families → advisory warning.
     p = tmp_path / "type-map-write.json"

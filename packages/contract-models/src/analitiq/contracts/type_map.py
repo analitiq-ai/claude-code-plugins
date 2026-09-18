@@ -489,6 +489,9 @@ def case_dead_atoms(matcher: str) -> tuple[str, ...]:
     the matcher."""
     characters = _normalized_native_characters()
 
+    # A matcher has no length bound, and repeating an atom repeats its search
+    # of the whole table.
+    @functools.cache
     def matches_one(pattern: str) -> bool:
         return _compile_fragment(pattern, matcher).search(characters) is not None
 
