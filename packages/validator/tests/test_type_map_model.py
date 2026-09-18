@@ -270,6 +270,23 @@ def test_regex_rejects_python_named_group():
         assert "(?<name>…)" in refusal, refusal
 
 
+@pytest.mark.parametrize("matcher", [
+    r"^INT\[\]{0}$",
+    r"^INT(?:\[\]){0,0}$",
+    r"^A(?:b){0}?$",
+    # A flag group or an empty quote takes no place of its own, so the count
+    # falls on what precedes it.
+    r"^Ab(?i){0}$",
+    r"^Ab\Q\E{0}$",
+    r"^N\((?<p>[1-9]){0}[1-9]\)$",
+])
+def test_regex_rejects_a_zero_count_repetition(matcher):
+    for adapter, rule_id in ((READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")):
+        refusal = _refusal(adapter, _regex_rule(adapter, matcher))
+        assert rule_id in refusal, refusal
+        assert "zero times" in refusal, refusal
+
+
 def test_python_named_group_spelling_inside_a_quote_is_a_literal():
     # `\Q…\E` quotes its contents, so the spelling there opens no group. The
     # quoted `<…>` is literal container syntax, so the read rule renders `Json`.
@@ -379,9 +396,9 @@ def test_schemaless_container_must_not_collapse_to_scalar():
     # A repetition count is no literal, so the native still ends in `[]`.
     (r"^INT\[\]{2}$", True),
     (r"^INT\[\]{1,3}$", True),
-    # A zero count deletes what it repeats; an optional `[]` can still match.
-    (r"^INT\[\]{0}$", False),
-    (r"^INT(?:\[\]){0,0}$", False),
+    # A count that admits an occurrence leaves the `[]` matchable.
+    (r"^INT\[\]{0,}$", True),
+    (r"^INT\[\]{0,1}$", True),
     (r"^INT(\[\])?$", True),
     (r"^ARRAY<(?<t>[A-Z]+)>$", True),
     # However a literal `<`, `>`, `[` or `]` is spelled, it is that character.
@@ -426,10 +443,6 @@ def test_an_atom_dead_in_every_case_is_no_case_finding():
     # atom is dead for a reason its case does not explain.
     assert case_dead_atoms(r"^A\tB$") == ()
     assert case_dead_atoms(r"^A\nB$") == ()
-
-
-def test_an_atom_repeated_zero_times_is_no_case_finding():
-    assert case_dead_atoms(r"^A(?:b){0}$") == ()
 
 
 def test_a_tokenizer_failure_on_a_matcher_re2_accepts_is_raised_not_refused(monkeypatch):

@@ -174,6 +174,10 @@ class _GroupClose:
 _Token = _Atom | _GroupOpen | _GroupClose
 
 
+class _RefusedSpelling(ValueError):
+    """A construct RE2 compiles that the contract refuses in a matcher."""
+
+
 @dataclass(frozen=True, slots=True)
 class CompiledMatcher:
     """A type-map matcher compiled in RE2, with the tokens it was read into."""
@@ -214,17 +218,14 @@ def compile_matcher(pattern: str) -> CompiledMatcher:
     regex = _re2_compile(pattern)
     try:
         tokens = _tokenize(pattern)
+    except _RefusedSpelling:
+        raise
     except (ValueError, IndexError) as exc:
         # RE2 accepted the pattern, so this is the tokenizer's defect and never
         # the author's: it must not reach the caller as a refused matcher.
         raise RuntimeError(
             f"the matcher tokenizer cannot read {pattern!r}, which RE2 accepted"
         ) from exc
-    if any(isinstance(t, _GroupOpen) and t.opener.startswith("(?P<") for t in tokens):
-        raise ValueError(
-            "matcher spells a named group '(?P<name>…)'; the contract takes "
-            "only '(?<name>…)'"
-        )
     return CompiledMatcher(regex, tokens)
 
 
@@ -319,16 +320,14 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
 
     Only called from `compile_matcher`, after RE2 accepted the pattern, so every
     construct is well formed. Anchors, alternation and repetition are consumed
-    without a token, and a repetition that admits no occurrence drops the atoms
-    it repeats. An inline flag group applies to the rest of the group it sits
-    in, as RE2 scopes it."""
+    without a token. An inline flag group applies to the rest of the group it
+    sits in, as RE2 scopes it.
+
+    _RefusedSpelling for a construct RE2 compiles and the contract refuses."""
     tokens: list[_Token] = []
     flags: frozenset[str] = frozenset()
-    open_groups: list[tuple[_GroupOpen, int, frozenset[str]]] = []
+    open_groups: list[tuple[_GroupOpen, frozenset[str]]] = []
     captures = itertools.count(1)
-    # Where in `tokens` the operand a repetition would apply to starts; None
-    # when that operand consumes no character.
-    operand: int | None = None
     i = 0
     while i < len(pattern):
         char = pattern[i]
@@ -338,20 +337,15 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
                 quote_end = len(pattern)
             quoted = pattern[i + 2:quote_end]
             tokens.extend(_literal(c, flags) for c in quoted)
-            # RE2 repeats the last quoted character alone.
-            operand = len(tokens) - 1 if quoted else None
             i = quote_end + 2
         elif char == "\\":
             end = _escape_end(pattern, i)
             letter = pattern[i + 1]
-            operand = len(tokens)
             if (character := _escaped_character(pattern[i:end])) is not None:
                 tokens.append(_literal(character, flags, pattern[i:end]))
             elif letter in _CHARACTER_SET_ESCAPES:
                 tokens.append(_Atom(pattern[i:end], pattern[i:end], None, flags))
-            elif letter in _ZERO_WIDTH_ESCAPES:
-                operand = None
-            else:
+            elif letter not in _ZERO_WIDTH_ESCAPES:
                 raise RuntimeError(
                     f"RE2 accepted the escape {pattern[i:end]!r} in {pattern!r}, "
                     "which the matcher tokenizer does not know"
@@ -359,13 +353,17 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
             i = end
         elif char == "[":
             end = _class_end(pattern, i)
-            operand = len(tokens)
             tokens.append(_Atom(pattern[i:end], pattern[i:end], None, flags))
             i = end
         elif char == "(":
             inner = flags
             capture = None
-            if pattern.startswith(("(?<", "(?P<"), i):
+            if pattern.startswith("(?P<", i):
+                raise _RefusedSpelling(
+                    "matcher spells a named group '(?P<name>…)'; the contract "
+                    "takes only '(?<name>…)'"
+                )
+            if pattern.startswith("(?<", i):
                 opener = pattern[i:pattern.index(">", i) + 1]
                 capture = next(captures)
             elif pattern.startswith("(?", i):
@@ -374,7 +372,6 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
                 inner = (flags | set(on)) - set(off)
                 if pattern[spec_end] == ")":
                     flags = inner
-                    operand = None
                     i = spec_end + 1
                     continue
                 opener = pattern[i:spec_end + 1]
@@ -382,12 +379,12 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
                 opener = "("
                 capture = next(captures)
             group = _GroupOpen(opener, capture, i + len(opener), inner)
-            open_groups.append((group, len(tokens), flags))
+            open_groups.append((group, flags))
             tokens.append(group)
             flags = inner
             i = group.end
         elif char == ")":
-            group, operand, flags = open_groups.pop()
+            group, flags = open_groups.pop()
             tokens.append(_GroupClose(group, i))
             i += 1
         elif (
@@ -395,21 +392,20 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
             and (candidate := _REPETITION_CANDIDATE.match(pattern, i))
             and _is_repetition(candidate.group())
         ):
-            if operand is not None and _repeats_zero_times(candidate.group()):
-                # The group markers stay: a named group is still read by its span.
-                tokens[operand:] = [t for t in tokens[operand:] if not isinstance(t, _Atom)]
+            if _repeats_zero_times(candidate.group()):
+                raise _RefusedSpelling(
+                    f"matcher repeats something zero times ({candidate.group()!r}), "
+                    "so what it repeats is never matched"
+                )
             i = candidate.end()
         elif char in "*+?":
             i += 1
         elif char in "^$|":
-            operand = None
             i += 1
         elif char == ".":
-            operand = len(tokens)
             tokens.append(_Atom(char, char, None, flags))
             i += 1
         else:
-            operand = len(tokens)
             tokens.append(_literal(char, flags))
             i += 1
     return tuple(tokens)
