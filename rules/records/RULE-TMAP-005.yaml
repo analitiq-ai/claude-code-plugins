@@ -1,7 +1,8 @@
 id: RULE-TMAP-005
 statement: >
   A `regex` read rule's native_type pattern MUST compile under the RE2 regex
-  dialect, and a named capture in it MUST be spelled `(?<name>…)`.
+  dialect, a named capture in it MUST be spelled `(?<name>…)`, and it MUST
+  NOT repeat anything zero times.
 tier: shape
 severity: error
 artifact_kinds: [type-map]
@@ -17,7 +18,10 @@ rationale: >
   under the dialect that will match it tells the author which one they wrote.
   RE2 also takes Python's `(?P<name>…)` spelling; this contract takes only
   `(?<name>…)`, which makes the spelling the contract's choice rather than the
-  dialect's. This states the engine as it stands: it validates the map
+  dialect's. A zero-count repetition is refused
+  for the same reason: what it repeats is never matched, so it can only be an
+  authoring mistake, and reading past it would mean redoing RE2's choice of
+  which operand a repetition applies to. This states the engine as it stands: it validates the map
   against the contract models and then compiles the matcher with RE2. The gate
   compiles with RE2 as well, so the two agree while their RE2 releases parse
   the same syntax. Where the engine's release accepts a construct the gate's

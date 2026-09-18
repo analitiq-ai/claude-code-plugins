@@ -2,9 +2,10 @@ id: RULE-STRM-021
 statement: >
   A validation rule's `value` MUST carry a payload of the shape its `type`
   reads, and that payload MUST constrain something: a length MUST be a
-  non-negative integer, a pattern a non-empty string RE2 compiles, a range an object
-  carrying a `min`, a `max` or both and no other key, with `min` no greater
-  than `max` when both are present, an admitted-value set a non-empty list.
+  non-negative integer, a pattern a non-empty string RE2 compiles both alone
+  and as a group, a range an object carrying a `min`, a `max` or both and no
+  other key, with `min` no greater than `max` when both are present, an
+  admitted-value set a non-empty list.
 tier: coherence
 severity: error
 artifact_kinds: [stream]
@@ -22,15 +23,17 @@ rationale: >
   reliably; the others do not: a wrong-shaped `pattern` payload can still
   interpolate into a syntactically valid, silently-wrong regex, and a
   wrong-shaped `in_list` payload can iterate into a value set with no error
-  rather than raising. A pattern is compiled in RE2, the dialect the engine
-  applies a `pattern` rule in (through pyarrow's `match_substring_regex`),
+  rather than raising. This rule compiles a pattern in RE2, the dialect the
+  engine applies a `pattern` rule in (through pyarrow's `match_substring_regex`),
   never in stdlib `re`, which answers a different question in both
   directions — `\p{L}+` is an ordinary RE2 pattern `re` refuses, `(a)\1` a
-  backreference `re` accepts and RE2 cannot compile. A pattern RE2 refuses
+  backreference `re` accepts and RE2 cannot compile. A pattern is a
+  subexpression, so it must compile as a group too: `\Qabc` compiles alone,
+  and grouped, its quote swallows the closing parenthesis. A pattern RE2 refuses
   would otherwise pass here and, as the engine stands, fail its stream at run
-  time. Were the engine to match in another dialect, this check would go
-  stale in both directions at once, refusing patterns that dialect runs and
-  passing ones it cannot compile. A
+  time. Were the engine to match in another dialect, this check could go
+  stale in either direction, refusing patterns that dialect runs or passing
+  ones it cannot compile. A
   payload that is the right kind but constrains nothing — a negative `min_length`, an empty pattern, a range with neither
   bound — fails no row and is reported nowhere, which reads exactly like a
   rule that passed; one that admits nothing — a negative `max_length`, a

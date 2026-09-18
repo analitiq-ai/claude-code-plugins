@@ -1,7 +1,8 @@
 id: RULE-TMAP-009
 statement: >
   A write `regex` rule's arrow_type matcher MUST compile under the RE2 regex
-  dialect with any named capture spelled `(?<name>…)`, and the native_type DDL
+  dialect with any named capture spelled `(?<name>…)` and no zero-count
+  repetition, and the native_type DDL
   it renders MUST carry only well-formed placeholders.
 tier: shape
 severity: error
@@ -18,7 +19,11 @@ rationale: >
   match: the whole map is refused at load, before any DDL is rendered and on
   runs that would never render any. RE2 also takes Python's `(?P<name>…)`
   spelling; this contract takes only `(?<name>…)`, the same spelling a read
-  rule takes, which makes it the contract's choice rather than the dialect's. This states the engine as it stands: it validates the map
+  rule takes, which makes it the contract's choice rather than the dialect's.
+  A zero-count repetition is refused
+  for the same reason: what it repeats is never matched, so it can only be an
+  authoring mistake, and reading past it would mean redoing RE2's choice of
+  which operand a repetition applies to. This states the engine as it stands: it validates the map
   against the contract models and then compiles the matcher with RE2. The gate
   compiles with RE2 as well, so the two agree while their RE2 releases parse
   the same syntax. Where the engine's release accepts a construct the gate's
