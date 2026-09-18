@@ -32,10 +32,11 @@ rationale: >
   alone and grouped, since neither compile implies the other. A pattern RE2
   refuses alone either fails its stream at run time or compiles only
   grouped, where it closes the engine's group early and runs only because
-  the engine's own parentheses complete it; followed by a top-level `|`, as
-  in `a)|(b`, it adds an unanchored alternative, so the run silently matches
-  something other than what the author wrote. `\Qabc` compiles only alone, since grouped its
-  quote swallows the closing parenthesis, and fails its stream at run time.
+  the engine's own parentheses complete it, and what it then matches can
+  differ from what it reads as: `a)|(b` adds an unanchored alternative, so
+  the run silently matches rows such as `xb` that `a|b` would not. `\Qabc`
+  compiles only alone, since grouped its quote swallows the closing
+  parenthesis, and fails its stream at run time.
   Were the engine to match in another dialect, this check could go stale in
   either direction, refusing patterns that dialect runs or passing ones it
   cannot compile; were it to stop grouping the pattern, the grouped compile
