@@ -3,10 +3,12 @@ transport the sibling connector.json declares.
 
 The connector model's `_transport_refs_resolvable` already gates every
 connector-INTERNAL ref site, but an endpoint is a separate document: no
-single-document validator can see both sides, so the rule is only checkable from
-the connector-anchored walk in `check_coverage`. These tests drive it exactly
-that way — through `validate_document(connector, doc_path=...)` over a real
-on-disk connector package.
+single-document validator can see both sides, so the rule is checkable only
+where both documents are in hand: the connector-anchored walk in
+`check_coverage`, and the standalone endpoint route's lookup of its sibling
+`connector.json`. Most tests here drive the first, through
+`validate_document(connector, doc_path=...)` over a real on-disk connector
+package; `TestStandaloneEndpointValidation` drives the second.
 """
 import json
 from pathlib import Path
@@ -473,10 +475,9 @@ class TestStandaloneEndpointValidation:
     def test_a_non_absolute_document_path_still_finds_the_sibling(
         self, tmp_path, monkeypatch, shape
     ):
-        """`Path("thing.json").parent.parent` is `.`, so a relative `--document`
-        run from inside `endpoints/` missed the connector entirely and downgraded
-        a genuinely broken `transport_ref` to a warning — a silent pass on the
-        one check this adds."""
+        """`Path("thing.json").parent.parent` is `.`, so a lookup that did not
+        anchor a relative or `..` path would miss the connector and report a
+        broken `transport_ref` as notApplicable rather than a fail."""
         from analitiq.validator._location import located
         from analitiq.validator.connectors import _validate_api_endpoint
 

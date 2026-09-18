@@ -1099,8 +1099,9 @@ _Directory = TypeVar("_Directory", Path, Location)
 def _type_map_sibling_paths(parent: _Directory) -> list[_Directory]:
     """The entries in `parent` whose names mark them as type-map documents.
 
-    Sorted because directory order is the filesystem's, and "the document that
-    declared a direction first" has to name the same document on every one.
+    Sorted because a tree lists its entries in no particular order, and "the
+    document that declared a direction first" has to name the same document on
+    every listing.
     """
     return sorted(parent.glob(_TYPE_MAP_GLOB))
 
@@ -1199,8 +1200,8 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
         return []
     if doc_path is None:
         # No rule to name: PKG-030/032/033/035 are each about a sibling file
-        # or directory this function reads by path, so without one none of
-        # them can be checked, let alone singled out. A document validated
+        # or directory this function reads beside the document, so without a
+        # location none of them can be checked, let alone singled out. A document validated
         # this way can no longer report coverage passed — that question was
         # never asked of it.
         return [finding(

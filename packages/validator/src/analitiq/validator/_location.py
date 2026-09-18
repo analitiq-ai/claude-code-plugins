@@ -52,7 +52,7 @@ class Tree(ABC):
 
 
 class DiskTree(Tree):
-    """The filesystem. A key is the `Path` a caller handed over, used as given."""
+    """The filesystem. A key is a `Path`."""
 
     def is_file(self, key: Path) -> bool:
         return key.is_file()
@@ -74,8 +74,10 @@ class DiskTree(Tree):
         return key.rglob(pattern)
 
     def ancestor(self, key: Path, levels: int) -> Path:
-        # Made absolute first: `Path("thing.json").parent.parent` is `.`, so a
-        # relative key would stop short of the directory it names.
+        # Resolved first: `Path("thing.json").parent.parent` is `.`, so a
+        # relative key would stop short of the directory it names. Resolving
+        # also follows links, so a linked document is anchored where its
+        # target lives, not where it was authored.
         anchor = key.resolve()
         for _ in range(levels):
             anchor = anchor.parent
@@ -89,9 +91,9 @@ class MemoryTree(Tree):
     """A package handed over as text keyed by package-relative POSIX path.
 
     Every key is a regular file, and a directory is every path some key sits
-    under — the package root included. The keys are taken as the request model
-    admits them: relative, with no `.` or `..` segment, and none both a
-    document and the directory of another.
+    under — the package root included. The keys are those a `DocumentSet`
+    (`analitiq.contracts.validation_requests`) admits; this tree re-checks none
+    of them.
     """
 
     def __init__(self, texts: Mapping[str, str]) -> None:
@@ -165,14 +167,30 @@ class Location:
         return self.tree.read_text(self.key)
 
     def glob(self, pattern: str) -> Iterator[Location]:
-        return (Location(key, self.tree) for key in self.tree.glob(self.key, pattern))
+        return (Location(key, self.tree)
+                for key in self.tree.glob(self.key, _one_name(pattern)))
 
     def rglob(self, pattern: str) -> Iterator[Location]:
-        return (Location(key, self.tree) for key in self.tree.rglob(self.key, pattern))
+        return (Location(key, self.tree)
+                for key in self.tree.rglob(self.key, _one_name(pattern)))
 
     def ancestor(self, levels: int) -> Location | None:
+        if levels < 1:
+            raise ValueError(f"levels must be at least 1, got {levels}")
         key = self.tree.ancestor(self.key, levels)
         return None if key is None else Location(key, self.tree)
+
+
+def _one_name(pattern: str) -> str:
+    """`pattern`, refused unless it matches within one name.
+
+    pathlib reads `/` and `**` as crossing directories and the memory tree
+    matches names alone, so such a pattern would be answered differently by
+    the two trees.
+    """
+    if "/" in pattern or "**" in pattern:
+        raise ValueError(f"pattern must match a single name, got {pattern!r}")
+    return pattern
 
 
 def located(where: Path | Location) -> Location:

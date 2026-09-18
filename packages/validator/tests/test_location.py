@@ -19,7 +19,8 @@ from pathlib import Path, PurePosixPath
 import pytest
 
 from analitiq.contracts.endpoint_identity import build_database_object, derive_db_endpoint_id
-from analitiq.validator._location import Location, MemoryTree
+from analitiq.validator._core import _passed
+from analitiq.validator._location import DISK, Location, MemoryTree
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 _H = "https://schemas.analitiq.ai"
@@ -33,7 +34,8 @@ def _endpoint(endpoint_id: str, native: str = "STRING", arrow: str = "Utf8",
               transport_ref: str | None = None) -> dict:
     doc = _corpus("valid_read.json")
     doc["endpoint_id"] = endpoint_id
-    doc["operations"]["read"]["request"]["path"] = f"/v1/{endpoint_id}"
+    # The path the id derives from, so the id itself is never the defect.
+    doc["operations"]["read"]["request"]["path"] = "/" + endpoint_id.replace("__", "/")
     if transport_ref is not None:
         doc["operations"]["read"]["request"]["transport_ref"] = transport_ref
     doc["operations"]["read"]["response"]["schema"]["items"]["properties"] = {
@@ -75,7 +77,7 @@ LAYOUTS = {
     # Path order compares parts, string order compares characters: `a-b.json`
     # sorts after the nested `a/z.json` as a path and before it as a string, so
     # these two findings come out in disk order only while memory keys sort as
-    # paths do.
+    # paths do. `test_locations_sort_as_paths` holds that order to disk's.
     "api package, nested endpoint beside a hyphenated one": ("connector.json", {
         **_API_PACKAGE,
         "endpoints/a-b.json": _endpoint("a-b", native="BOOLEAN", arrow="Boolean"),
@@ -91,6 +93,19 @@ LAYOUTS = {
         **_API_PACKAGE, "type-map.json": _map("read")}),
     "api package, no endpoints": ("connector.json", {
         "connector.json": _API, "type-map-read.json": _map("read")}),
+    "api package, endpoints holding no json": ("connector.json", {
+        "connector.json": _API, "type-map-read.json": _map("read"),
+        "endpoints/README.md": "notes"}),
+    "api package, a file named endpoints": ("connector.json", {
+        "connector.json": _API, "type-map-read.json": _map("read"), "endpoints": "notes"}),
+    "api package, legacy type-map name on a directory": ("connector.json", {
+        **_API_PACKAGE, "type-map.json/x.json": _map("read")}),
+    "api package, type-map name on a directory": ("connector.json", {
+        **_API_PACKAGE, "type-map-extra.json/x.json": _map("read")}),
+    # Every other layout sits at the root, where a key's name and the key are
+    # the same string; below it they are not.
+    "api package below the root": ("connectors/c/definition/connector.json", {
+        f"connectors/c/definition/{key}": doc for key, doc in _API_PACKAGE.items()}),
     "api package, endpoint unparseable": ("connector.json", {
         **_API_PACKAGE, "endpoints/v2__broken.json": "{not json"}),
     "api package, directory under an endpoint name": ("connector.json", {
@@ -128,7 +143,7 @@ LAYOUTS = {
 def test_memory_tree_grades_as_the_same_files_on_disk(validator, tmp_path, entry, package):
     texts = {key: _text(doc) for key, doc in package.items()}
     # The package sits one level down so that a lookup reaching above its root
-    # lands in a directory this test controls and leaves empty.
+    # lands in a directory holding nothing but the package.
     root = tmp_path / "pkg"
     for key, text in texts.items():
         path = root / key
@@ -144,3 +159,39 @@ def test_memory_tree_grades_as_the_same_files_on_disk(validator, tmp_path, entry
     # package root; the same sibling in memory is named by its key.
     anchored = json.dumps(on_disk).replace(f"{root.resolve()}/", "")
     assert json.loads(anchored) == in_memory
+
+
+def test_a_covered_package_passes_from_memory(validator):
+    entry, package = LAYOUTS["api package, covered"]
+    tree = MemoryTree({key: _text(doc) for key, doc in package.items()})
+    findings = validator.validate_document(
+        package[entry], doc_path=Location(PurePosixPath(entry), tree))
+    assert _passed(findings), findings
+
+
+def test_locations_sort_as_paths():
+    """Both trees sort through `Location`, so comparing them cannot see this
+    order change; comparing it with the order of the paths it wraps can."""
+    keys = [PurePosixPath(k) for k in ("endpoints/a.json", "endpoints/a-b.json", "endpoints/a/z.json")]
+    tree = MemoryTree({str(k): "" for k in keys})
+    assert [loc.key for loc in sorted(Location(k, tree) for k in keys)] == sorted(keys)
+
+
+@pytest.mark.parametrize("pattern", ["a/*.json", "**/*.json", "**"])
+@pytest.mark.parametrize("walk", ["glob", "rglob"])
+def test_a_pattern_crossing_names_is_refused(tmp_path, pattern, walk):
+    """pathlib crosses directories on `/` and `**`, and the memory tree matches
+    names alone, so the two trees would answer such a pattern differently."""
+    for root in (Location(tmp_path, DISK), Location(PurePosixPath("."), MemoryTree({"a/z.json": ""}))):
+        with pytest.raises(ValueError, match="single name"):
+            list(getattr(root, walk)(pattern))
+
+
+@pytest.mark.parametrize("levels", [0, -1])
+def test_an_ancestor_below_one_level_is_refused(tmp_path, levels):
+    """At zero levels the disk tree would answer the key itself and the memory
+    tree the package root."""
+    for location in (Location(tmp_path / "x.json", DISK),
+                     Location(PurePosixPath("endpoints/x.json"), MemoryTree({"endpoints/x.json": ""}))):
+        with pytest.raises(ValueError, match="at least 1"):
+            location.ancestor(levels)
