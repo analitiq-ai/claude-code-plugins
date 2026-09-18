@@ -291,6 +291,12 @@ def _is_repetition(span: str) -> bool:
     return _re2_compile("a" + span).fullmatch("a" + span) is None
 
 
+def _repeats_zero_times(repetition: str) -> bool:
+    """Whether a span `_is_repetition` accepted admits no occurrence of what it
+    repeats: its upper count, the last one it spells, is zero."""
+    return repetition[1:-1].split(",")[-1] == "0"
+
+
 def _class_end(pattern: str, start: int) -> int:
     """Where the character class opening at `pattern[start]` (a `[`) ends: after
     the first `]` closing a class RE2 compiles on its own.
@@ -313,12 +319,16 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
 
     Only called from `compile_matcher`, after RE2 accepted the pattern, so every
     construct is well formed. Anchors, alternation and repetition are consumed
-    without a token. An inline flag group applies to the rest of the group it
-    sits in, as RE2 scopes it."""
+    without a token, and a repetition that admits no occurrence drops the atoms
+    it repeats. An inline flag group applies to the rest of the group it sits
+    in, as RE2 scopes it."""
     tokens: list[_Token] = []
     flags: frozenset[str] = frozenset()
-    open_groups: list[tuple[_GroupOpen, frozenset[str]]] = []
+    open_groups: list[tuple[_GroupOpen, int, frozenset[str]]] = []
     captures = itertools.count(1)
+    # Where in `tokens` the operand a repetition would apply to starts; None
+    # when that operand consumes no character.
+    operand: int | None = None
     i = 0
     while i < len(pattern):
         char = pattern[i]
@@ -326,16 +336,22 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
             quote_end = pattern.find("\\E", i + 2)
             if quote_end < 0:
                 quote_end = len(pattern)
-            tokens.extend(_literal(c, flags) for c in pattern[i + 2:quote_end])
+            quoted = pattern[i + 2:quote_end]
+            tokens.extend(_literal(c, flags) for c in quoted)
+            # RE2 repeats the last quoted character alone.
+            operand = len(tokens) - 1 if quoted else None
             i = quote_end + 2
         elif char == "\\":
             end = _escape_end(pattern, i)
             letter = pattern[i + 1]
+            operand = len(tokens)
             if (character := _escaped_character(pattern[i:end])) is not None:
                 tokens.append(_literal(character, flags, pattern[i:end]))
             elif letter in _CHARACTER_SET_ESCAPES:
                 tokens.append(_Atom(pattern[i:end], pattern[i:end], None, flags))
-            elif letter not in _ZERO_WIDTH_ESCAPES:
+            elif letter in _ZERO_WIDTH_ESCAPES:
+                operand = None
+            else:
                 raise RuntimeError(
                     f"RE2 accepted the escape {pattern[i:end]!r} in {pattern!r}, "
                     "which the matcher tokenizer does not know"
@@ -343,6 +359,7 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
             i = end
         elif char == "[":
             end = _class_end(pattern, i)
+            operand = len(tokens)
             tokens.append(_Atom(pattern[i:end], pattern[i:end], None, flags))
             i = end
         elif char == "(":
@@ -357,6 +374,7 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
                 inner = (flags | set(on)) - set(off)
                 if pattern[spec_end] == ")":
                     flags = inner
+                    operand = None
                     i = spec_end + 1
                     continue
                 opener = pattern[i:spec_end + 1]
@@ -364,12 +382,12 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
                 opener = "("
                 capture = next(captures)
             group = _GroupOpen(opener, capture, i + len(opener), inner)
+            open_groups.append((group, len(tokens), flags))
             tokens.append(group)
-            open_groups.append((group, flags))
             flags = inner
             i = group.end
         elif char == ")":
-            group, flags = open_groups.pop()
+            group, operand, flags = open_groups.pop()
             tokens.append(_GroupClose(group, i))
             i += 1
         elif (
@@ -377,13 +395,21 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
             and (candidate := _REPETITION_CANDIDATE.match(pattern, i))
             and _is_repetition(candidate.group())
         ):
+            if operand is not None and _repeats_zero_times(candidate.group()):
+                # The group markers stay: a named group is still read by its span.
+                tokens[operand:] = [t for t in tokens[operand:] if not isinstance(t, _Atom)]
             i = candidate.end()
-        elif char in "*+?^$|":
+        elif char in "*+?":
+            i += 1
+        elif char in "^$|":
+            operand = None
             i += 1
         elif char == ".":
+            operand = len(tokens)
             tokens.append(_Atom(char, char, None, flags))
             i += 1
         else:
+            operand = len(tokens)
             tokens.append(_literal(char, flags))
             i += 1
     return tuple(tokens)

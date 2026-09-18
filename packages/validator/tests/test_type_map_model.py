@@ -379,6 +379,10 @@ def test_schemaless_container_must_not_collapse_to_scalar():
     # A repetition count is no literal, so the native still ends in `[]`.
     (r"^INT\[\]{2}$", True),
     (r"^INT\[\]{1,3}$", True),
+    # A zero count deletes what it repeats; an optional `[]` can still match.
+    (r"^INT\[\]{0}$", False),
+    (r"^INT(?:\[\]){0,0}$", False),
+    (r"^INT(\[\])?$", True),
     (r"^ARRAY<(?<t>[A-Z]+)>$", True),
     # However a literal `<`, `>`, `[` or `]` is spelled, it is that character.
     (r"^INT\[\]$", True),
@@ -422,6 +426,10 @@ def test_an_atom_dead_in_every_case_is_no_case_finding():
     # atom is dead for a reason its case does not explain.
     assert case_dead_atoms(r"^A\tB$") == ()
     assert case_dead_atoms(r"^A\nB$") == ()
+
+
+def test_an_atom_repeated_zero_times_is_no_case_finding():
+    assert case_dead_atoms(r"^A(?:b){0}$") == ()
 
 
 def test_a_tokenizer_failure_on_a_matcher_re2_accepts_is_raised_not_refused(monkeypatch):
