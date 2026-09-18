@@ -1304,17 +1304,20 @@ def _an_upper_length(value: Any) -> str | None:
 
 
 def _a_regex_source(value: Any) -> str | None:
-    # Compiled in RE2, the dialect the engine matches a `pattern` rule in
-    # (through pyarrow's `match_substring_regex`), never in stdlib `re`, which
-    # answers a different question in both directions: `\p{L}+` is an ordinary
-    # RE2 pattern `re` refuses, and `(a)\1` is a backreference `re` accepts and
-    # RE2 cannot compile.
+    # Compiled in RE2, the dialect the engine as it stands matches a `pattern`
+    # rule in (through pyarrow's `match_substring_regex`), never in stdlib
+    # `re`, which answers a different question in both directions: `\p{L}+` is
+    # an ordinary RE2 pattern `re` refuses, and `(a)\1` a backreference `re`
+    # accepts and RE2 cannot compile. A pattern is a subexpression, so it must
+    # compile as a group too: `\Qabc` compiles alone, and grouped, its quote
+    # swallows the closing parenthesis.
     if not isinstance(value, str):
         return "is not a regular expression"
     if not value:
         return "is an empty regular expression, which every row matches"
     try:
         compile_re2(value)
+        compile_re2(f"(?:{value})")
     except ValueError as refusal:
         return str(refusal)
     return None

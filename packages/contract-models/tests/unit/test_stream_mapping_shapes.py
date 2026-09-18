@@ -908,6 +908,9 @@ class TestValidationRulePayload:
         "a{1001}",
         # A lone surrogate, which JSON can spell and UTF-8 cannot encode.
         "\ud800",
+        # Compiles alone, but its `\Q` quotes whatever follows it, so it is no
+        # subexpression: grouped, the closing parenthesis is quoted away.
+        r"\Qabc",
     ])
     def test_a_pattern_re2_refuses_is_refused(self, source):
         with pytest.raises(ValidationError, match="not valid RE2"):
