@@ -28,7 +28,6 @@ import sys
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
-import re2
 from pydantic import Field, model_validator
 
 from analitiq.contracts.arrow_grammar import (
@@ -39,6 +38,7 @@ from analitiq.contracts.arrow_grammar import (
 )
 from analitiq.contracts.endpoints import ARROW_TYPE_PATTERN
 from analitiq.contracts.shared.common import StrictModel, schema_url_for
+from analitiq.contracts.shared.re2_dialect import compile_re2
 from analitiq.contracts.shared.rules import violation
 
 #: Per-direction schema URLs declared by every `type-map-read.json` /
@@ -122,10 +122,6 @@ def _validate_type_map_arrow_type(value: str) -> None:
 # Matchers: compiled and matched in RE2, the dialect the contract fixes for them
 # ---------------------------------------------------------------------------
 
-# A refused matcher is reported as a finding; RE2 would also write it to stderr.
-_RE2_OPTIONS = re2.Options()
-_RE2_OPTIONS.log_errors = False
-
 _FOLD_CASE_FLAG = "i"
 _OCTAL_DIGITS = "01234567"
 # What an escape letter means is RE2's grammar; this tokenizer restates the part
@@ -191,19 +187,6 @@ class CompiledMatcher:
         )
 
 
-def _re2_error_text(exc: Exception) -> str:
-    detail = exc.args[0] if exc.args else exc
-    return detail.decode("utf-8", "replace") if isinstance(detail, bytes) else str(detail)
-
-
-def _re2_compile(pattern: str) -> Any:
-    """ValueError carrying RE2's own parse error when RE2 refuses `pattern`."""
-    try:
-        return re2.compile(pattern, options=_RE2_OPTIONS)
-    except re2.error as exc:
-        raise ValueError(f"matcher is not valid RE2 ({_re2_error_text(exc)})") from exc
-
-
 def compile_matcher(pattern: str) -> CompiledMatcher:
     """Compile a type-map matcher in RE2, the dialect the rule is matched in.
 
@@ -211,7 +194,10 @@ def compile_matcher(pattern: str) -> CompiledMatcher:
     when a named group is spelled `(?P<name>…)`: RE2 takes that spelling too, so
     that refusal is the contract's choice of one spelling, not the dialect's.
     """
-    regex = _re2_compile(pattern)
+    try:
+        regex = compile_re2(pattern)
+    except ValueError as refusal:
+        raise ValueError(f"matcher {refusal}") from refusal
     try:
         tokens = _tokenize(pattern)
     except (ValueError, IndexError) as exc:
@@ -288,7 +274,7 @@ def _is_repetition(span: str) -> bool:
     RE2 reads some digit spans (a leading zero, an overlong count) as literal
     text. A repetition of `a` matches only `a`s, so `a` + span matching its own
     spelling is RE2 reading the braces as literals."""
-    return _re2_compile("a" + span).fullmatch("a" + span) is None
+    return compile_re2("a" + span).fullmatch("a" + span) is None
 
 
 def _repeats_zero_times(repetition: str) -> bool:
@@ -308,7 +294,7 @@ def _class_end(pattern: str, start: int) -> int:
     while True:
         end = pattern.index("]", end) + 1
         try:
-            _re2_compile(pattern[start:end])
+            compile_re2(pattern[start:end])
         except ValueError:
             continue
         return end

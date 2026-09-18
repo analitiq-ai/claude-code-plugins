@@ -63,7 +63,7 @@ state is what each member *means*:
 - `required` — the field must be present.
 - `not_null` — the field must be present and non-null.
 - `min_length` / `max_length` — string length bound (integer `value`).
-- `pattern` — the value matches the regex in `value`.
+- `pattern` — the value matches the regex in `value`, written in RE2: no lookaround, no backreferences.
 - `range` — the numeric value falls inside the `{min, max}` in `value`.
 - `in_list` — the value is one of the array in `value`.
 

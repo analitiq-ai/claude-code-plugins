@@ -895,16 +895,23 @@ class TestValidationRulePayload:
         with pytest.raises(ValidationError, match="every row satisfies"):
             self._rule("min_length", -1)
 
-    def test_a_pattern_is_graded_as_a_string_not_as_a_dialect(self):
-        # RULE-STRM-021 asks only that a `pattern` payload is a non-empty
-        # string. It deliberately does NOT ask whether the source compiles:
-        # the dialect this pattern runs under is RE2, and grading it with
-        # stdlib `re` answers the wrong question in both directions.
-        # `\p{L}+` is an ordinary RE2 pattern that `re` refuses, and
-        # `a{4294967295}` makes `re.compile` raise `OverflowError` — not even
-        # `re.error` — which would escape as a crash rather than a finding.
-        for source in (r"^\p{L}+$", "a{4294967295}", "[", "(?P<"):
-            assert self._rule("pattern", source).value == source
+    def test_a_pattern_is_graded_in_re2_not_in_stdlib_re(self):
+        # `\p{L}+` is an ordinary RE2 pattern that stdlib `re` refuses.
+        assert self._rule("pattern", r"^\p{L}+$").value == r"^\p{L}+$"
+
+    @pytest.mark.parametrize("source", [
+        "[",
+        "(?P<",
+        # A backreference: stdlib `re` compiles it, RE2 has none.
+        r"(a)\1",
+        # Past RE2's repetition bound; stdlib `re` compiles it.
+        "a{1001}",
+        # A lone surrogate, which JSON can spell and UTF-8 cannot encode.
+        "\ud800",
+    ])
+    def test_a_pattern_re2_refuses_is_refused(self, source):
+        with pytest.raises(ValidationError, match="not valid RE2"):
+            self._rule("pattern", source)
 
     def test_a_plain_pattern_is_accepted(self):
         assert self._rule("pattern", r"^\d{3}-\d{4}$").value == r"^\d{3}-\d{4}$"
