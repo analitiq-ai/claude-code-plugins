@@ -12,7 +12,7 @@ import io
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from fnmatch import fnmatchcase
+from fnmatch import fnmatch, fnmatchcase
 from pathlib import Path, PurePath, PurePosixPath
 from typing import Iterable, Iterator, Mapping
 
@@ -85,7 +85,8 @@ def _below(directory: Path, pattern: str, walking: frozenset[tuple[int, int]]) -
         entries = list(scan)
     for entry in entries:
         path = directory / entry.name
-        if fnmatchcase(entry.name, pattern):
+        # Case-folded where the platform folds names, as `Path.rglob` matches.
+        if fnmatch(entry.name, pattern):
             yield path
         if entry.is_dir():
             yield from _below(path, pattern, walking | {identity})
