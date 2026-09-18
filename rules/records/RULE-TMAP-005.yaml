@@ -17,13 +17,11 @@ rationale: >
   under the dialect that will match it tells the author which one they wrote.
   RE2 also takes Python's `(?P<name>…)` spelling; this contract takes only
   `(?<name>…)`, which makes the spelling the contract's choice rather than the
-  dialect's. This states the engine as it stands: it first validates the map
-  against the contract-model release it pins, which runs this same gate, and
-  then compiles the matcher with RE2. The gate is only as close to RE2 as the
-  dialect it compiles with. A matcher the gate admits and RE2 cannot parse
-  passes authoring and is refused at load. One the gate refuses and RE2 would
-  take is refused at load too, by the engine's own copy of the gate, and becomes
-  a usable map rejected only when this gate and the release the engine pins
-  compile with different dialects.
+  dialect's. This states the engine as it stands: it validates the map
+  against the contract models and then compiles the matcher with RE2. The gate
+  compiles with a dialect other than RE2, so the two disagree in both
+  directions: a matcher the gate admits and RE2 cannot parse passes authoring
+  and is refused at load, and one the gate refuses and RE2 would take is
+  rejected here although RE2 compiles it.
 status: active
 superseded_by: null
