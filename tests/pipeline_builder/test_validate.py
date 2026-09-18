@@ -9,6 +9,7 @@ there are no committed fixtures to drift from the contract.
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -44,6 +45,10 @@ H = "https://schemas.analitiq.ai"
 # ruleless cases, which carry no id here.
 def _ids(findings) -> list:
     return [f.get("validator") if "kind" not in f else f.get("rule") for f in findings]
+
+
+def _legacy_name_reported(findings) -> bool:
+    return any(f.get("message_id") == "legacy-type-map-filename" for f in findings)
 
 
 # The rule ids the deleted `bundle-connection-ref` / `bundle-endpoint-ref`
@@ -138,6 +143,19 @@ def test_invalid_single_document(tmp_path, entity, doc, validator_id):
     ), diag["findings"]
 
 
+def test_a_contract_model_finding_does_not_carry_the_document_back_whole(tmp_path):
+    # A discriminated union's sentence renders the tag it was handed, so an
+    # oversized one would arrive whole in a CI log. The tag is clipped the way
+    # the validator clips it, and the accepted tags after it survive.
+    oversized = "S" * 5000
+    doc = json.loads(json.dumps(STREAM))
+    doc["source"]["endpoint_ref"]["scope"] = oversized
+    diag = V.diagnostics_for("stream", _write(tmp_path, "stream.json", doc))
+    [tag] = [f for f in diag["findings"] if f["path"] == "/source/endpoint_ref"]
+    assert oversized not in tag["message"] and len(tag["message"]) < 500, len(tag["message"])
+    assert "'connection'" in tag["message"], tag["message"][-200:]
+
+
 def test_active_pipeline_requires_stream_single_document(tmp_path):
     # the published pipeline contract enforces active => >=1 stream reference at the
     # single-document level; an active pipeline with empty streams is rejected without
@@ -218,9 +236,9 @@ def test_bundle_endpoint_missing_id_warns(tmp_path):
 
 def test_diagnostics_fails_closed_on_a_published_notapplicable_finding():
     """`_diagnostics` reduces published `analitiq.validator` findings through
-    `analitiq.validator.finding_costs_a_pass` itself, not a second predicate
-    that only ever knew about `severity`. A `notApplicable` naming an error-tier
-    rule
+    the published `analitiq.validator.finding_costs_a_pass`, not a second
+    predicate that only ever knew about `severity`. A `notApplicable` naming an
+    error-tier rule
     carries no `severity` at all — the bug this pins is that check reading its
     absence as "fine" instead of as "unchecked, and error-tier rules don't get
     that benefit of the doubt."""
@@ -364,37 +382,6 @@ def test_cli_usage_error(tmp_path):
     assert excinfo.value.code == 2
 
 
-def test_cli_type_map_entity_without_direction_is_a_usage_error():
-    with pytest.raises(SystemExit) as excinfo:
-        V.main(["--entity", "type-map", "--document", "x.json"])
-    assert excinfo.value.code == 2
-
-
-def test_cli_direction_with_non_type_map_entity_is_a_usage_error():
-    with pytest.raises(SystemExit) as excinfo:
-        V.main(["--entity", "connection", "--direction", "read", "--document", "x.json"])
-    assert excinfo.value.code == 2
-
-
-def test_diagnostics_for_requires_direction_with_type_map_entity(tmp_path):
-    # The guard raises before the document is ever read, so a path that
-    # names no real file still proves it.
-    with pytest.raises(ValueError, match="direction must be"):
-        V.diagnostics_for("type-map", tmp_path / "type-map-read.json")
-
-
-def test_diagnostics_for_rejects_an_unsupported_direction_value(tmp_path):
-    # Membership, not just presence: a non-null value outside {read, write}
-    # must not slip past the guard into TYPE_MAP_FILENAMES[direction].
-    with pytest.raises(ValueError, match="direction must be"):
-        V.diagnostics_for("type-map", tmp_path / "type-map-read.json", direction="bogus")
-
-
-def test_diagnostics_for_rejects_direction_with_non_type_map_entity(tmp_path):
-    with pytest.raises(ValueError, match="direction is invalid"):
-        V.diagnostics_for("connection", tmp_path / "connection.json", direction="read")
-
-
 def test_endpoint_id_helper(capsys):
     import endpoint_id  # sibling of validate.py on sys.path
     rc = endpoint_id.main(["--schema", "public", "--name", "orders"])
@@ -451,9 +438,10 @@ def test_bundle_non_dict_sibling(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Connection-scoped type maps: the "type-map" entity's two --direction values
-# plus the bundle's file-level checks. Rule *content* findings come from the
-# published validator; the adapter owns only the filename gates.
+# Connection-scoped type maps: the `type-map` entity, graded as the direction
+# each document declares, plus the bundle's file-level checks. Every rule and
+# envelope finding comes from the published validator; what the adapter owns
+# here is which files it collects and where it reports them.
 # ---------------------------------------------------------------------------
 
 TYPE_MAP_READ = [
@@ -463,10 +451,9 @@ TYPE_MAP_READ = [
     {"match": "regex", "native_type": "^VECTOR\\((?<n>[0-9]+)\\)$", "arrow_type": "Json"},
 ]
 # Deliberately direction-ASYMMETRIC: the regex rule's canonical is a matcher
-# pattern, which is a contract-model error under read grading — so the "valid as
-# --direction write" assertions below pin that a write map is graded in the
-# write direction (a regression to the read default would fail them). An
-# exact-rule-only fixture validates clean under either direction and pins nothing.
+# pattern, a contract-model error under read grading. A fixture valid under
+# either direction passes whichever model ran, so only an asymmetric one shows
+# which direction the grading came from.
 TYPE_MAP_WRITE = [
     {"match": "exact", "arrow_type": "Json", "native_type": "JSONB"},
     {"match": "regex", "arrow_type": "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$",
@@ -484,50 +471,87 @@ def _tm(rules: list, direction: str) -> dict:
     ("write", "type-map-write.json", _tm(TYPE_MAP_WRITE, "write")),
 ])
 def test_valid_type_map_entity(tmp_path, direction, fname, doc):
-    diag = V.diagnostics_for("type-map", _write(tmp_path, fname, doc), direction=direction)
+    diag = V.diagnostics_for("type-map", _write(tmp_path, fname, doc))
     assert diag["passed"], diag["findings"]
 
 
-def test_type_map_entity_rejects_wrong_filename(tmp_path):
-    # the gate must fire ALONE, so the rename is not buried under content findings
-    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", TYPE_MAP_READ), direction="read")
+def test_type_map_entity_forwards_the_published_findings_verbatim(tmp_path):
+    # the adapter holds no type-map judgment of its own: what the published
+    # grader says at the declared direction and connection scope IS the output.
+    # A reintroduced filter, re-shape or scope drift fails here.
+    from analitiq.validator import type_map_findings
+    # The map earns a finding at connection scope, so the equality has content:
+    # over a clean document both sides are empty and a reintroduced filter passes.
+    doc = _tm(TYPE_MAP_WRITE + [{"match": "exact", "arrow_type": "Json",
+                                 "native_type": "JSON"}], "write")
+    published = type_map_findings(doc, "write", scope="connection")
+    assert published, "the document must earn a finding or this asserts nothing"
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-write.json", doc))
+    assert diag["findings"] == published
+
+
+def test_type_map_entity_grades_a_document_under_any_filename(tmp_path):
+    # A name says nothing about direction, so a valid read map is a valid read
+    # map wherever it sits. Where a document belongs is the bundle's question,
+    # asked of the connection's directory and answered there.
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "some-map.json", _tm(TYPE_MAP_READ, "read")))
+    assert diag["passed"], diag["findings"]
+
+
+def test_write_shaped_rules_in_a_read_map_fail_the_read_model(tmp_path):
+    # the declared direction selects the read model, so write-shaped rules fail
+    # it as content — the write map's regex rule renders a matcher pattern where
+    # the read model reads a canonical
+    diag = V.diagnostics_for(
+        "type-map", _write(tmp_path, "type-map-read.json", _tm(TYPE_MAP_WRITE, "read")))
     assert not diag["passed"]
-    assert _ids(diag["findings"]) == ["connection-type-map"], diag["findings"]
-    assert "type-map-read.json" in diag["findings"][0]["message"]
+    assert any(f.get("rule") == "RULE-TMAP-006" and f.get("path") == "/rules/1/regex"
+               for f in diag["findings"]), diag["findings"]
+    assert not any(f.get("path") in {"/direction", "/$schema"}
+                   for f in diag["findings"]), diag["findings"]
 
 
-@pytest.mark.parametrize("direction,fname,declared_rules,declared", [
-    ("write", "type-map-write.json", TYPE_MAP_READ, "read"),
-    ("read", "type-map-read.json", TYPE_MAP_WRITE, "write"),
+@pytest.mark.parametrize("fname,rules,declared", [
+    ("type-map-read.json", TYPE_MAP_WRITE, "write"),
+    ("type-map-write.json", TYPE_MAP_READ, "read"),
 ])
-def test_type_map_entity_rejects_a_document_declaring_the_other_direction(
-        tmp_path, direction, fname, declared_rules, declared):
-    # the name asserts a direction, so a document declaring the other one
-    # contradicts the slot it sits in. The disagreement is reported where it
-    # is written — the fields naming the direction — not as an adapter verdict
-    # over a document the published grader already rejects.
-    doc = _tm(declared_rules, declared)
-    diag = V.diagnostics_for("type-map", _write(tmp_path, fname, doc), direction=direction)
-    assert not diag["passed"]
-    assert "connection-type-map" not in _ids(diag["findings"]), diag["findings"]
-    assert {f.get("path") for f in diag["findings"]} >= {"/$schema", "/direction"}, diag["findings"]
+def test_map_is_graded_as_what_it_declares_under_the_other_filename(
+        tmp_path, fname, rules, declared):
+    # Each map sits under the other direction's conventional name and is still
+    # graded as the direction it declares, so both pass. Grading by the name
+    # instead would reject the `$schema` and `direction` each correctly carries.
+    diag = V.diagnostics_for("type-map", _write(tmp_path, fname, _tm(rules, declared)))
+    assert diag["passed"], diag["findings"]
 
 
-def test_type_map_entity_direction_mismatch_is_caught(tmp_path):
-    # a write-shaped map under --direction read fails the filename gate, not the model
-    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", TYPE_MAP_WRITE), direction="write")
-    assert not diag["passed"]
-    assert any(f.get("validator") == "connection-type-map" for f in diag["findings"]), diag["findings"]
+def test_the_filename_decides_none_of_what_is_reported(tmp_path):
+    # A malformed read map under the write direction's conventional name. Its
+    # defects are the rules', and the envelope it correctly declares earns
+    # nothing — a name that still decided would add `/direction` and `/$schema`
+    # here and bury the defect the author has to fix.
+    doc = _tm([{"match": {"arrow_type": "string"}, "exact": "VARCHAR${"}], "read")
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-write.json", doc))
+    assert not diag["passed"], diag["findings"]
+    paths = {f.get("path") for f in diag["findings"]}
+    assert any(p and p.startswith("/rules") for p in paths), diag["findings"]
+    assert not {"/direction", "/$schema"} & paths, diag["findings"]
 
 
-@pytest.mark.parametrize("doc", [
-    _tm([], "read"),                                              # empty rules — model min_length error
-    _tm([{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "read"),  # lowercase canonical fails the Arrow pattern
+@pytest.mark.parametrize("doc,path,message_id", [
+    (_tm([], "read"), "/rules", "too_short"),
+    (_tm([{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "read"),
+     "/rules/0/exact/arrow_type", "string_pattern_mismatch"),
 ])
-def test_invalid_type_map_content(tmp_path, doc):
-    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", doc), direction="read")
+def test_invalid_type_map_content(tmp_path, doc, path, message_id):
+    # the defect each fixture carries, not merely that something failed: an
+    # envelope finding alone (`/direction` or `/$schema`) would satisfy a
+    # `kind == "fail"` assertion without the model
+    # ever reaching the rules
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", doc))
     assert not diag["passed"]
-    assert any(f.get("rule") is None and f.get("kind") == "fail" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("rule") is None and f.get("kind") == "fail"
+               and f.get("path") == path and f.get("message_id") == message_id
+               for f in diag["findings"]), diag["findings"]
 
 
 def test_bundle_with_valid_connection_type_maps(tmp_path):
@@ -538,16 +562,27 @@ def test_bundle_with_valid_connection_type_maps(tmp_path):
     assert diag["passed"], diag["findings"]
 
 
-def test_bundle_rejects_dead_type_map_filename(tmp_path):
-    # the engine never reads the pre-split name — a lingering file is silently inert
-    # at runtime, so the bundle pass rejects it with a migration finding
+@pytest.mark.parametrize("shape", ["regular file", "directory", "dangling symlink"])
+def test_bundle_rejects_dead_type_map_filename(tmp_path, shape):
+    # the engine never reads the pre-split name — a lingering entry is silently
+    # inert at runtime, so the bundle pass rejects it with a migration finding.
+    # What carries the name decides nothing: the name is what is refused, and
+    # both scopes refuse it through the one published predicate.
     doc = _build_bundle(tmp_path)
-    _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
+    dead = tmp_path / "connections/postgresql/definition/type-map.json"
+    dead.parent.mkdir(parents=True, exist_ok=True)
+    if shape == "regular file":
+        _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
+    elif shape == "directory":
+        dead.mkdir()
+    else:
+        dead.symlink_to(dead.parent / "nothing-here.json")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    migration = [f for f in diag["findings"] if f.get("validator") == "connection-type-map"]
+    migration = [f for f in diag["findings"] if f.get("message_id") == "legacy-type-map-filename"]
     assert migration, diag["findings"]
     assert migration[0]["severity"] == "error"
+    assert migration[0]["path"].startswith("connections/postgresql/definition/type-map.json")
     assert "type-map-read.json" in migration[0]["message"]  # the migration direction
 
 
@@ -571,58 +606,43 @@ def test_bundle_unreadable_connection_type_map(tmp_path):
     p.write_text("[ not valid json")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    assert any(f.get("validator") == "connection-type-map" and "Cannot read" in f["message"]
+    assert any(f.get("message_id") == "type-map-unparseable"
+               and f["path"].startswith("connections/postgresql/definition/type-map-read.json")
                for f in diag["findings"]), diag["findings"]
 
 
-def test_type_map_entity_forwards_the_published_findings_verbatim(tmp_path):
-    # the adapter holds no type-map judgment of its own past the filename: what
-    # the published grader says at this direction and scope IS the output. A
-    # reintroduced filter, re-shape or scope drift fails here.
-    from analitiq.validator import type_map_findings
-    # The map earns a finding at connection scope, so the equality has content:
-    # over a clean document both sides are empty and a reintroduced filter passes.
-    doc = _tm(TYPE_MAP_WRITE + [{"match": "exact", "arrow_type": "Json",
-                                 "native_type": "JSON"}], "write")
-    published = type_map_findings(doc, "write", scope="connection")
-    assert published, "the document must earn a finding or this asserts nothing"
-    diag = V.diagnostics_for(
-        "type-map", _write(tmp_path, "type-map-write.json", doc), direction="write")
-    assert diag["findings"] == published
-
-
-def test_type_map_entity_rejects_dict_without_rules_key(tmp_path):
-    # naming the direction is the assertion, so a stray connection document under
-    # a type-map filename is graded as the type map it claims to be — it never
-    # reaches the shape-detecting dispatch that would grade it as a connection
-    # and pass it clean while the engine's loader chokes
-    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", CONN_PG), direction="read")
+def test_type_map_entity_rejects_a_document_that_declares_no_direction(tmp_path):
+    # The entity routing is what makes this fail. Handed to kind detection a
+    # stray connection document matches the connection detector and passes
+    # clean; held to the type-map models it declares no direction, and the union
+    # keyed on `direction` answers on the discriminator.
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", CONN_PG))
     assert not diag["passed"]
-    missing = {f["path"] for f in diag["findings"] if f.get("message_id") == "missing"}
-    assert "/rules" in missing, diag["findings"]
+    assert any(f.get("message_id") == "union_tag_not_found" and f.get("path") == "/direction"
+               for f in diag["findings"]), diag["findings"]
 
 
 def test_type_map_entity_rejects_bare_array(tmp_path):
-    # the legacy pre-envelope shape (a bare rules array, no {$schema, direction,
-    # rules} wrapper) is rejected as the wrong type for the document itself,
-    # rather than by an adapter gate that only knew it was not a dict
+    # the legacy pre-envelope shape: a bare rules array with no
+    # {$schema, direction, rules} wrapper. It declares no direction and is no
+    # object either, so it is refused as an envelope rather than sent back out
+    # to kind detection to be called unrecognized.
     diag = V.diagnostics_for(
         "type-map",
         _write(tmp_path, "type-map-read.json",
-               [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
-        direction="read")
+               [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]))
     assert not diag["passed"]
-    assert [(f["path"], f.get("message_id")) for f in diag["findings"]] == [("/", "model_type")], \
-        diag["findings"]
+    assert any(f.get("message_id") == "model_attributes_type" and f.get("path") == "/"
+               for f in diag["findings"]), diag["findings"]
 
 
 def test_connection_write_map_is_not_held_to_the_connector_vocabulary(tmp_path):
     # RULE-TMAP-017 presumes a connector's full-vocabulary write map; a gap-only
-    # connection map never satisfies it by design. The adapter says so by naming
-    # the scope it is grading at, rather than by discarding the finding after the
-    # fact — for the entity run and the bundle alike
+    # connection map never satisfies it by design, so the adapter says which
+    # scope it holds rather than filtering the finding back out — for the entity
+    # run and the bundle alike
     diag = V.diagnostics_for(
-        "type-map", _write(tmp_path, "type-map-write.json", _tm(TYPE_MAP_WRITE, "write")), direction="write")
+        "type-map", _write(tmp_path, "type-map-write.json", _tm(TYPE_MAP_WRITE, "write")))
     assert diag["passed"], diag["findings"]
     assert not any(f.get("rule") == "RULE-TMAP-017" for f in diag["findings"])
 
@@ -648,6 +668,116 @@ def test_bundle_flags_invalid_connection_write_type_map(tmp_path):
         for f in bad), diag["findings"]
 
 
+@pytest.mark.parametrize("defective", ["type-map-read.json", "type-map-write.json"])
+def test_bundle_rejects_two_connection_maps_declaring_one_direction(tmp_path, defective):
+    # The same rule the published validator applies beside a connector, at the
+    # site this adapter owns: a direction two documents declare has no map, so
+    # the collision is reported and neither document is graded. Whichever of the
+    # two carries a defect of its own, reporting it would say which one the
+    # order happened to reach first or last.
+    doc = _build_bundle(tmp_path)
+    for name in ("type-map-read.json", "type-map-write.json"):
+        rules = ([{"match": "exact", "arrow_type": "utf8", "native_type": "TEXT"}]
+                 if name == defective else TYPE_MAP_WRITE)
+        _write(tmp_path, f"connections/postgresql/definition/{name}", _tm(rules, "write"))
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"]
+    collision = [f for f in diag["findings"] if "both declare direction" in f["message"]]
+    assert collision, diag["findings"]
+    assert collision[0]["path"].startswith(
+        "connections/postgresql/definition/type-map-write.json"), collision[0]
+    assert "type-map-read.json" in collision[0]["message"], collision[0]
+    assert not [f for f in diag["findings"] if f.get("rule") is None
+                and f.get("kind") == "fail" and "/rules/" in f["path"]], diag["findings"]
+
+
+def test_bundle_grades_a_connection_map_under_any_collected_filename(tmp_path):
+    # Selecting the candidates is the name's whole say, so a collected map under
+    # an unconventional name is graded like any other rather than sitting beside
+    # the connection unread.
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, "connections/postgresql/definition/type-map-natives.json",
+           _tm([{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "read"))
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"]
+    assert any(f["path"].startswith(
+        "connections/postgresql/definition/type-map-natives.json/rules")
+        for f in diag["findings"]), diag["findings"]
+
+
+# Text the parser refuses without raising a decode error: nesting deeper than
+# it descends, and an integer longer than its digit limit.
+_PARSER_REFUSALS = {
+    "nested past the parser": "[" * 100_000 + "]" * 100_000,
+    "integer past the digit limit": '{"n": 1' + "0" * 5_000 + "}",
+}
+
+
+def _plant(definition: Path, scenario: str) -> None:
+    """Lay out one way a connection's or a connector's type-map siblings can be."""
+    read = json.dumps(_tm(TYPE_MAP_READ, "read"))
+    definition.mkdir(parents=True, exist_ok=True)
+    if scenario == "duplicated":
+        for name in ("type-map-read.json", "type-map-extra.json", "type-map-more.json"):
+            (definition / name).write_text(read)
+        return
+    target = definition / "type-map-read.json"
+    if scenario.startswith("legacy"):
+        target.write_text(read)
+        target = definition / "type-map.json"
+        scenario = scenario.removeprefix("legacy ")
+    if scenario == "unparseable":
+        target.write_text("[ not valid json")
+    elif scenario == "not utf-8":
+        target.write_bytes(b"\xff\xfe")
+    elif scenario in _PARSER_REFUSALS:
+        target.write_text(_PARSER_REFUSALS[scenario])
+    elif scenario == "no direction":
+        target.write_text(json.dumps({"rules": TYPE_MAP_READ}))
+    elif scenario == "no object":
+        target.write_text(json.dumps(TYPE_MAP_READ))
+    elif scenario == "directory":
+        target.mkdir()
+    elif scenario == "dangling symlink":
+        target.symlink_to(definition / "nothing-here.json")
+    elif scenario == "fifo":
+        os.mkfifo(target)
+    else:  # pragma: no cover - a scenario the parametrization does not carry
+        raise AssertionError(scenario)
+
+
+@pytest.mark.parametrize("scenario", [
+    "duplicated", "unparseable", "not utf-8", *_PARSER_REFUSALS, "no direction",
+    "no object", "directory", "dangling symlink", "fifo",
+    "legacy directory", "legacy dangling symlink", "legacy no object",
+])
+def test_connection_type_maps_are_collected_as_a_connector_collects_its_own(tmp_path, scenario):
+    # One directory of maps, one answer: the findings beside a connection are
+    # the ones the published validator reports beside a connector, each rooted
+    # at the file it concerns. A storage connector is the connector side
+    # because it requires no direction, so every finding it reports here is
+    # about the siblings themselves.
+    from analitiq.validator import check_coverage
+    definition = tmp_path / "connections/pg/definition"
+    _plant(definition, scenario)
+    connector = check_coverage({"kind": "file", "transports": {}}, definition / "connector.json")
+    connection: list[dict] = []
+    V._connection_type_map_findings(definition.parent, connection)
+    assert connector, scenario
+    site = "connections/pg/definition/type-map"
+    assert all(f["path"].startswith(site) for f in connection), connection
+    # The rule a finding cites is the scope's: the record binding a connector
+    # package binds no connection.
+    assert not any("rule" in f for f in connection), connection
+    assert [{k: v for k, v in f.items() if k not in ("rule", "path")} for f in connection] == [
+        {k: v for k, v in f.items() if k not in ("rule", "path")} for f in connector]
+    # A finding about a whole file is addressed at the file: the pointer to a
+    # document's root joined onto it would name a key "" inside it.
+    assert not any(f["path"].endswith("/") for f in connection), connection
+    assert [f["path"].split(".json", 1)[1] or "/" for f in connection] == [
+        f["path"] for f in connector]
+
+
 def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
     # a directory under a load-bearing name would validate clean and then fail at
     # the engine's loader — the bundle pass flags it instead
@@ -655,7 +785,7 @@ def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
     (tmp_path / "connections/postgresql/definition/type-map-read.json").mkdir(parents=True)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    assert any(f.get("validator") == "connection-type-map" and "not a readable file" in f["message"]
+    assert any(f.get("message_id") == "type-map-unparseable" and "not a regular file" in f["message"]
                for f in diag["findings"]), diag["findings"]
 
 
@@ -702,8 +832,7 @@ def test_bundle_per_connection_crash_preserves_earlier_findings(tmp_path, monkey
     monkeypatch.setattr(V, "_connection_type_map_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    validators = _ids(diag["findings"])
-    assert "connection-type-map" in validators, diag["findings"]  # postgresql's, decided first
+    assert _legacy_name_reported(diag["findings"]), diag["findings"]  # postgresql's, decided first
     crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"]
     assert len(crash) == 1, diag["findings"]
     assert crash[0]["path"] == "connections/wise"
@@ -791,6 +920,24 @@ def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, m
     assert not crash[0]["message"].endswith(": ")
 
 
+def test_main_contains_a_crash_that_leaves_the_validator_unimportable(monkeypatch, capsys):
+    # main()'s outermost guard builds its envelope literally rather than through
+    # `_diagnostics`: a crash bootstrapping the dependencies can leave
+    # `finding_costs_a_pass` unimportable, so reaching for it to report that
+    # failure would raise a second, uncontained one.
+    def boom(_path):
+        raise RuntimeError("bootstrap failed")
+
+    monkeypatch.setattr(V, "ensure_deps_or_reexec", boom)
+    monkeypatch.setitem(sys.modules, "analitiq.validator", None)  # poisoned: import raises
+
+    rc = V.main(["--entity", "pipeline", "--document", "x.json"])
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert out["passed"] is False
+    assert _ids(out["findings"]) == ["adapter-crash"], out["findings"]
+
+
 def test_endpoint_route_crash_before_validate_document_contained(tmp_path, monkeypatch, capsys):
     # the import and the path normalization ahead of validate_document's own
     # internal guard are not themselves guarded by it — a failure there (e.g.
@@ -843,10 +990,10 @@ def test_type_map_entity_crash_preserves_legacy_finding_and_sibling_direction(tm
 
     original = V._type_map_findings
 
-    def boom(direction, doc_, document_path):
-        if direction == "read":
+    def boom(doc_):
+        if doc_.get("direction") == "read":
             raise TypeError("simulated crash")
-        return original(direction, doc_, document_path)
+        return original(doc_)
 
     monkeypatch.setattr(V, "_type_map_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
@@ -855,59 +1002,71 @@ def test_type_map_entity_crash_preserves_legacy_finding_and_sibling_direction(tm
     crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"
              and f["path"].endswith("type-map-read.json")]
     assert crash, diag["findings"]
-    migration = [f for f in diag["findings"] if f.get("validator") == "connection-type-map"
-                 and "pre-split filename" in f["message"]]
-    assert migration, diag["findings"]  # decided before the crashing entity, still present
+    assert _legacy_name_reported(diag["findings"]), diag["findings"]
     bad_write = [f for f in diag["findings"] if f.get("rule") is None and f.get("kind") == "fail"
                  and f["path"].startswith("connections/postgresql/definition/type-map-write.json")]
     assert bad_write, diag["findings"]  # processed after the crash, still got its turn
 
 
-def test_type_map_read_crash_preserves_legacy_finding_and_sibling_direction(tmp_path, monkeypatch):
-    # the file read itself, not just _type_map_findings, is inside the
-    # per-direction guard — a pathologically deep but syntactically valid
-    # type-map-read.json (RecursionError, say) crashing at the read step must
-    # not discard the legacy-filename finding nor cost type-map-write.json
-    # its own turn in the same loop
+@pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
+def test_type_map_the_parser_refuses_preserves_legacy_finding_and_sibling_direction(
+        tmp_path, text):
+    # A map the parser refuses is an unreadable map like any other: it costs the
+    # legacy-name finding nothing, and the write map beside it is still graded.
     doc = _build_bundle(tmp_path)
     _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
-    _write(tmp_path, "connections/postgresql/definition/type-map-read.json", _tm(TYPE_MAP_READ, "read"))
+    (tmp_path / "connections/postgresql/definition/type-map-read.json").write_text(text)
     _write(tmp_path, "connections/postgresql/definition/type-map-write.json",
            _tm([{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "write"))  # invalid casing
-
-    original = V._read_json
-
-    def boom(path):
-        if path.name == "type-map-read.json":
-            raise TypeError("simulated crash")
-        return original(path)
-
-    monkeypatch.setattr(V, "_read_json", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"
-             and f["path"].endswith("type-map-read.json")]
-    assert crash, diag["findings"]
-    migration = [f for f in diag["findings"] if f.get("validator") == "connection-type-map"
-                 and "pre-split filename" in f["message"]]
-    assert migration, diag["findings"]  # decided before the crashing entity, still present
+    assert not any(f.get("validator") == "adapter-crash" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("message_id") == "type-map-unparseable"
+               and f["path"].startswith("connections/postgresql/definition/type-map-read.json")
+               for f in diag["findings"]), diag["findings"]
+    assert _legacy_name_reported(diag["findings"]), diag["findings"]
     bad_write = [f for f in diag["findings"] if f.get("rule") is None and f.get("kind") == "fail"
                  and f["path"].startswith("connections/postgresql/definition/type-map-write.json")]
-    assert bad_write, diag["findings"]  # processed after the crash, still got its turn
+    assert bad_write, diag["findings"]
+
+
+@pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
+def test_a_document_the_parser_refuses_is_reported_as_unreadable(tmp_path, text):
+    (tmp_path / "connection.json").write_text(text)
+    diag = V.diagnostics_for("connection", tmp_path / "connection.json")
+    assert [(f["validator"], f["message"].split(":")[0]) for f in diag["findings"]] == [
+        ("document", "Cannot read document")], diag["findings"]
+
+
+@pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
+@pytest.mark.parametrize("member", [
+    "pipelines/p/streams/orders.json",
+    "connectors/postgresql/definition/connector.json",
+    "connectors/postgresql/definition/endpoints/orders.json",
+])
+def test_a_bundle_member_the_parser_refuses_costs_no_crash(tmp_path, text, member):
+    # Each is read by the adapter itself, not the validator; a refusal it does
+    # not catch ends the section reading it as an adapter crash. The connector
+    # ships an endpoint so its connector.json is read for the endpoint's owner too.
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, "connectors/postgresql/definition/endpoints/orders.json", {"endpoint_id": "orders"})
+    (tmp_path / member).write_text(text)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert "adapter-crash" not in _ids(diag["findings"]), diag["findings"]
 
 
 def test_bundle_findings_crash_unrelated_to_exclusion_does_not_mislabel_it(tmp_path, monkeypatch):
     # an ordinary, already-reported read error (no guard fired) can exclude a
     # bundle member in the same run a completely unrelated guard elsewhere
-    # (the connection-type-map check) genuinely crashes in. The exclusion and
+    # (grading the type maps beside a connection) genuinely crashes in. The exclusion and
     # the crash are unrelated: `crashed` must reflect only the four
     # bundle-assembly sites that can actually exclude a member, not "any
     # adapter-crash finding anywhere", or the ordinary exclusion gets
     # mislabeled as caused by a containment guard that never touched it
     doc = _build_bundle(tmp_path)
     (tmp_path / "pipelines/p/streams/orphan.json").write_text("{not valid json")  # ordinary error
-    _write(tmp_path, "connections/postgresql/definition/type-map-read.json", TYPE_MAP_READ)
+    _write(tmp_path, "connections/postgresql/definition/type-map-read.json", _tm(TYPE_MAP_READ, "read"))
 
-    def boom(entity, doc_, path):
+    def boom(doc_):
         raise TypeError("simulated crash")
 
     monkeypatch.setattr(V, "_type_map_findings", boom)
@@ -950,7 +1109,7 @@ def test_bundle_endpoint_grading_crash_preserves_endpoint_and_siblings(tmp_path,
     assert not _BUNDLE_ENDPOINT_REF_RULES & set(validators), diag["findings"]
     # the connection's trailing type-map check still ran despite the earlier
     # crash in this same per-connection unit
-    assert "connection-type-map" in validators, diag["findings"]
+    assert _legacy_name_reported(diag["findings"]), diag["findings"]
 
 
 def test_bundle_connector_loop_crash_preserves_other_connector_identity(tmp_path, monkeypatch):
@@ -1121,7 +1280,7 @@ def test_bundle_stream_read_crash_preserves_sibling_stream_and_continues_assembl
     assert crash["path"] == "streams/orders.json"
     # the connections loop, which runs after the crashed streams loop, still
     # ran and decided its own finding
-    assert "connection-type-map" in validators, diag["findings"]
+    assert _legacy_name_reported(diag["findings"]), diag["findings"]
     # PIPELINE.streams still names the crashed stream's id (it was never
     # re-authored to drop the reference) — the bundle is short that very
     # document, so the referential pass that would call this ref unresolved
@@ -1170,7 +1329,7 @@ def test_bundle_type_map_validated_when_connection_json_unreadable(tmp_path):
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
     assert "document" in validators, diag["findings"]  # connection.json itself unreadable
-    assert "connection-type-map" in validators, diag["findings"]  # legacy filename, still checked
+    assert _legacy_name_reported(diag["findings"]), diag["findings"]
 
 
 def test_bundle_unrelated_malformed_stream_skips_referential_pass_without_crash_label(tmp_path):
@@ -1356,11 +1515,11 @@ def test_pipeline_entities_are_a_document_artifact_kind_subset():
 
 
 def test_cli_main_type_map_entities(tmp_path, capsys):
-    # the agents drive the CLI, and diagnostics_for-level routing keys off
-    # TYPE_MAP_FILENAMES — only this pins that PIPELINE_ENTITIES exposes the
-    # new entity plus the --direction split
+    # the agents drive the CLI: only this pins that PIPELINE_ENTITIES exposes
+    # the entity and that the invocation names no direction, the document's own
+    # declaration deciding
     path = _write(tmp_path, "type-map-write.json", _tm(TYPE_MAP_WRITE, "write"))
-    rc = V.main(["--entity", "type-map", "--direction", "write", "--document", str(path)])
+    rc = V.main(["--entity", "type-map", "--document", str(path)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 0 and out["passed"], out
 
@@ -1467,3 +1626,50 @@ def test_bundle_grades_a_connection_scoped_endpoint_document(tmp_path):
     assert any(f.get("severity") == "error"
                and f.get("path") == f"{site}/not_a_declared_field"
                for f in diag["findings"]), diag["findings"]
+
+
+# ---------------------------------------------------------------------------
+# What the scripts borrow from the pinned validator
+
+
+def _validator_imports_in_scripts() -> set[tuple[str, str]]:
+    """(module, name) for every `from analitiq.validator[...] import name` the
+    plugin's scripts execute — read from their syntax so a new borrow is graded
+    without anyone remembering to list it here."""
+    found = set()
+    for script in sorted((ROOT / "scripts").glob("*.py")):
+        for node in ast.walk(ast.parse(script.read_text())):
+            if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("analitiq.validator"):
+                found.update((node.module, a.name) for a in node.names)
+    return found
+
+
+def test_scripts_borrow_published_names_from_the_published_surface():
+    # A name the scripts import from the package root is a dependency on
+    # `analitiq-validator`'s API, and `__all__` is where that package says which
+    # names it owes. One missing from it is a name nothing promised to keep,
+    # importable today because it happens to be bound — so the scripts would
+    # break at every end user's runtime on a release that tidied it away.
+    # Underscore names are the deliberate exception: they are borrowed as private
+    # API, so no `__all__` can promise them, and what stands in for that promise is
+    # `test_scripts_borrow_private_names_that_still_exist` below, grading them
+    # against the source this suite runs on.
+    import analitiq.validator as pkg
+    root = {name for module, name in _validator_imports_in_scripts()
+            if module == "analitiq.validator"}
+    assert root, "no root-level validator imports found — the scan stopped measuring"
+    public = {n for n in root if not n.startswith("_")}
+    assert public <= set(pkg.__all__), sorted(public - set(pkg.__all__))
+    for name in root - public:
+        assert hasattr(pkg, name), name
+
+
+def test_scripts_borrow_private_names_that_still_exist():
+    # The submodule borrows are private by construction, so `__all__` cannot
+    # grade them; what makes them safe is that this suite runs against the source
+    # the pin tracks, so a rename fails here before it reaches a user.
+    import importlib
+    for module, name in sorted(_validator_imports_in_scripts()):
+        assert hasattr(importlib.import_module(module), name), f"{module}.{name}"
+
+

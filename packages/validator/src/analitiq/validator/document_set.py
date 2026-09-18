@@ -141,8 +141,8 @@ def _consistent_entities(document: object) -> frozenset[str]:
         _validate_connector,
         _validate_database_endpoint,
         _validate_kindless_connector,
+        _declared_direction,
         _validate_type_map,
-        _type_map_direction,
     )
 
     entity_by_validator = {
@@ -161,7 +161,7 @@ def _consistent_entities(document: object) -> frozenset[str]:
         if not detector(document):
             continue
         if validator is _validate_type_map:
-            declared = _type_map_direction(document)
+            declared = _declared_direction(document)
             return frozenset(entity for direction, entity in _TYPE_MAP_ENTITY.items()
                              if declared in (None, direction))
         entity = entity_by_validator.get(validator) or entity_by_detector.get(detector)
@@ -175,7 +175,7 @@ def _graded_as(document: object, entity: str) -> list[Finding]:
 
     Every other name selects exactly the registration `validate_document`
     dispatches the document to, so it is graded there. A type-map name also
-    selects the direction, which `validate_document` has to guess for a map
+    selects the direction, which `validate_document` does not have for a map
     declaring none, so a type map is graded against the direction its name
     carries.
     """

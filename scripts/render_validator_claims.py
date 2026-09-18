@@ -220,8 +220,10 @@ def _staged_connector(mutate: Callable[[dict], dict], example_dir: Path,
         return _validate(doc, doc_path=definition / "connector.json")
 
 
-def _staged_type_map(rules: list, filename: str) -> list[dict]:
-    direction = "write" if "write" in filename else "read"
+def _staged_type_map(rules: list, direction: str) -> list[dict]:
+    # Staged under the direction's conventional filename so the probe reads the
+    # way an author's tree does; nothing in the verdict turns on the name.
+    filename = f"type-map-{direction}.json"
     doc = _wrap_type_map(rules, direction)
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / filename
@@ -591,7 +593,7 @@ def _p_param_key_provider_spelling() -> list[dict]:
 def _p_write_map_regex_case() -> list[dict]:
     rules = json.loads((DB_EXAMPLE / "type-map-write.json").read_text())["rules"]
     rules.append({"match": "regex", "arrow_type": "^utf8$", "native_type": "TEXT"})
-    return _staged_type_map(rules, "type-map-write.json")
+    return _staged_type_map(rules, "write")
 
 
 def _p_write_coverage_sample_gap() -> list[dict]:
@@ -600,7 +602,7 @@ def _p_write_coverage_sample_gap() -> list[dict]:
         {"match": "exact", "arrow_type": "Int64", "native_type": "BIGINT"},
         {"match": "exact", "arrow_type": "Boolean", "native_type": "BOOLEAN"},
     ]
-    return _staged_type_map(rules, "type-map-write.json")
+    return _staged_type_map(rules, "write")
 
 
 def _p_type_map_schema_required() -> list[dict]:
@@ -611,6 +613,62 @@ def _p_type_map_schema_required() -> list[dict]:
         path = Path(tmp) / "type-map-read.json"
         path.write_text(json.dumps(doc))
         return _validate(doc, doc_path=path)
+
+
+def _p_type_map_direction_from_document() -> list[dict]:
+    # A self-consistent WRITE document written under the READ slot's filename.
+    # Grading by name would measure it against the read model, which rejects
+    # this document's write `$schema`; both `direction` and `$schema` land on
+    # write. So a clean verdict is the name contributing nothing — which a name
+    # naming no slot at all could not have shown.
+    rules = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
+    doc = _wrap_type_map(rules, "write")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "type-map-read.json"
+        path.write_text(json.dumps(doc))
+        return _validate(doc, doc_path=path)
+
+
+def _p_type_map_coverage_counts_declarations() -> list[dict]:
+    # A database connector package whose maps sit under each other's
+    # conventional filenames. Each direction is covered because each is
+    # declared, so a clean verdict is coverage counting declarations; counting
+    # filenames instead would grade each map as the direction it does not
+    # declare and reject its `$schema` and its `direction`.
+    doc = _example_body(DB_EXAMPLE)
+    with tempfile.TemporaryDirectory() as tmp:
+        definition = Path(tmp) / "definition"
+        definition.mkdir()
+        (definition / "connector.json").write_text(json.dumps(doc))
+        shutil.copy(DB_EXAMPLE / "type-map-read.json", definition / "type-map-write.json")
+        shutil.copy(DB_EXAMPLE / "type-map-write.json", definition / "type-map-read.json")
+        return _validate(doc, doc_path=definition / "connector.json")
+
+
+def _p_type_map_duplicate_direction() -> list[dict]:
+    # The package's read map copied under a second collected name, so a sibling
+    # beyond the authored one declares the read direction. Nothing chooses
+    # between them, so the collision is reported and the read direction is the
+    # map for neither — while the write direction, which one document declares
+    # alone, is covered and graded.
+    doc = _example_body(DB_EXAMPLE)
+    with tempfile.TemporaryDirectory() as tmp:
+        definition = Path(tmp) / "definition"
+        definition.mkdir()
+        (definition / "connector.json").write_text(json.dumps(doc))
+        shutil.copy(DB_EXAMPLE / "type-map-read.json", definition / "type-map-read.json")
+        shutil.copy(DB_EXAMPLE / "type-map-read.json", definition / "type-map-natives.json")
+        shutil.copy(DB_EXAMPLE / "type-map-write.json", definition / "type-map-write.json")
+        return _validate(doc, doc_path=definition / "connector.json")
+
+
+def _p_type_map_direction_not_schema_url() -> list[dict]:
+    # `direction` and `$schema` made to disagree, so only one of them can have
+    # chosen the model. Rejecting the WRITE `$schema` against the read model is
+    # `direction` choosing; rejecting `/direction` would be `$schema` choosing.
+    doc = _wrap_type_map([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")
+    doc["direction"] = "read"
+    return _validate(doc)
 
 
 def _p_pagination_limit_bare_zero() -> list[dict]:
@@ -996,6 +1054,19 @@ PROBES: tuple[Probe, ...] = (
           require_re=r"no rule rendering"),
     Probe("type-map-schema-required", "error", _p_type_map_schema_required,
           message_re=r"Field required"),
+    Probe("type-map-direction-from-document", "clean", _p_type_map_direction_from_document),
+    Probe("type-map-direction-not-schema-url", "error", _p_type_map_direction_not_schema_url,
+          message_re=r"type-map-read"),
+    Probe("type-map-coverage-counts-declarations", "clean",
+          _p_type_map_coverage_counts_declarations),
+    Probe("type-map-duplicate-direction-rejected", "error", _p_type_map_duplicate_direction,
+          message_re=r"both declare direction .*neither of these is its map"),
+    # The collision also fails coverage: the missing-map finding for that
+    # direction fires, and its reason separates a duplicated direction from one
+    # nothing declared.
+    Probe("type-map-duplicate-direction-covers-nothing", "error",
+          _p_type_map_duplicate_direction,
+          message_re=r"more than one sibling declares it, so none of them is it"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
           message_re=r"greater than or equal to 1"),
     Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,
@@ -1103,14 +1174,22 @@ def run_probe(probe: Probe) -> ProbeFailure | None:
     if probe.expect not in ("clean", "error", "silent"):
         raise ValueError(f"probe {probe.id!r}: unknown expectation {probe.expect!r}")
     findings = probe.build()
-    # The validator's own last-resort guard converts a crash into an error
-    # finding whose message embeds the exception text. That text can contain
-    # the same vocabulary as the real rejection message, so a crashed check
-    # could otherwise satisfy an expect="error" probe while every user gets
-    # "validator bug — please report" instead of the rejection the prose
-    # promises. A crash never proves a claim, in either direction.
+    # A guard that contains a crash emits a finding whose message embeds the
+    # exception text. The validator's is `notApplicable`: it hides the findings
+    # the crashed check would have made, so an expect="clean" probe passes, and
+    # its text can satisfy a `require_re`. The pipeline adapter's is
+    # error-severity and can satisfy an expect="error" probe. Either way users
+    # get "validator bug — please report" instead of what the prose promises. A
+    # crash never proves a claim, in either direction.
+    #
+    # Recognised by the id each guard publishes for it — the validator's, and
+    # the pipeline adapter's for its own containment — not by its wording: the
+    # sentence is the guard's to reword, and a probe grader reading the English
+    # would stop detecting crashes the day it changes, with every probe still
+    # reporting green.
     crashed = [f for f in findings
-               if re.search(r"crashed unexpectedly", f.get("message", ""))]
+               if f.get("message_id") == "check-crashed"
+               or f.get("validator") == "adapter-crash"]
     if crashed:
         return ProbeFailure(probe.id, "the validator crashed on the probe document", crashed)
     return _expectation_failure(probe, findings) or _pattern_failure(probe, findings)

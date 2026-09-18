@@ -23,9 +23,11 @@ Usage::
         --map connections/pg/definition/type-map-read.json \
         --map connectors/postgresql/definition/type-map-read.json
 
-Probes are a JSON array of strings on stdin (or --probes-file): provider
-`native_type` labels for ``--direction read``, `arrow_type` strings for
-``--direction write``. Output on stdout::
+``--direction`` names the vocabulary the probes are in: provider `native_type`
+labels for ``read``, `arrow_type` strings for ``write``. Every map is graded as
+that direction, so one declaring the other is refused rather than probed; its
+filename plays no part. Probes are a JSON array of strings on stdin (or
+--probes-file). Output on stdout::
 
     {"direction": "read",
      "resolved": {"citext": null, "vector(3)": null},
@@ -44,7 +46,6 @@ import sys
 from pathlib import Path
 
 from _bootstrap import ensure_deps_or_reexec
-from validate import TYPE_MAP_FILENAMES
 
 
 def _fail(message: str) -> "int":
@@ -67,11 +68,12 @@ def _load_rules(path: Path, direction: str) -> list:
     resolves while something about it is still wrong — an advisory that is most
     often the explanation for a gap reported below it, and dropping it leaves the
     gap looking uncaused."""
+    from analitiq.validator import finding_costs_a_pass, type_map_findings
+    from analitiq.validator._core import _JSON_READ_ERRORS
     try:
         doc = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except _JSON_READ_ERRORS as exc:
         raise ValueError(f"{path}: {exc}") from exc
-    from analitiq.validator import finding_costs_a_pass, type_map_findings
     # The connection scope is the one either kind of map can meet: a connection
     # map covers only the gaps it fills, and a connector map rendering the whole
     # vocabulary clears the weaker bar too.
@@ -128,8 +130,8 @@ def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--direction", required=True, choices=("read", "write"),
-                        help="read: probes are native types, maps are type-map-read files; "
-                             "write: probes are Arrow types, maps are type-map-write files.")
+                        help="The vocabulary the probes are in: native_type labels (read) "
+                             "or arrow_type strings (write). Every --map must declare it.")
     parser.add_argument("--map", action="append", required=True, dest="maps", metavar="PATH",
                         help="A {$schema, direction, rules} type-map document; repeatable, "
                              "in precedence order (connection-scoped map first, connector "
@@ -143,22 +145,11 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         return _fail(str(exc))
 
-    # `_load_rules` grades each map against the model `--direction` names, so a
-    # map whose envelope declares the other direction fails there on the
-    # `direction` Literal. Catch a filename/--direction mismatch first, so the
-    # message names the actual mistake (a swapped --map/--direction) rather
-    # than a generic schema failure. Hold a map named for a direction to it.
-    named_for = {name: d for d, name in TYPE_MAP_FILENAMES.items()}
-    for m in args.maps:
-        implied = named_for.get(Path(m).name)
-        if implied is not None and implied != args.direction:
-            return _fail(f"{m} is named for the {implied} direction but "
-                         f"--direction is {args.direction}")
-
+    from analitiq.validator._core import _JSON_READ_ERRORS
     try:
         raw = Path(args.probes_file).read_text() if args.probes_file else sys.stdin.read()
         probes = json.loads(raw)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except _JSON_READ_ERRORS as exc:
         return _fail(f"cannot read probes: {exc}")
     if not isinstance(probes, list) or not all(isinstance(p, str) for p in probes):
         return _fail("probes must be a JSON array of strings")

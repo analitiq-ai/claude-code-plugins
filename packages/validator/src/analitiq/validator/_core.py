@@ -15,8 +15,9 @@ This module owns the parts that are independent of any particular artifact kind:
   whose validity is its contract model plus the `$schema`-omission check
   registers via `register_model_and_schema_kind()` instead of hand-writing
   that combination;
-- `_bounded()` — the one width every borrowed diagnostic is clipped to, so a
-  finding is bounded the same way whichever route the text arrived by;
+- `_bounded()` — the one width a diagnostic borrowed from another library, or
+  a document value it echoes, is clipped to; messages the contract models write
+  are not clipped;
 - `_run_guarded()` — a crash in one check becomes a single `notApplicable`
   finding so the others survive;
 - `finding_costs_a_pass()` — whether one finding, on its own, keeps a document
@@ -110,6 +111,23 @@ def _bounded(text: str, limit: int = 200) -> str:
     when it holds no whitespace to break on — a provider record is exactly that
     shape."""
     return text if len(text) <= limit else f"{text[:limit]}…"
+
+
+# Pydantic error types whose sentence renders a value taken from the failing
+# document, each keyed to the `ctx` entry holding that value. Only the value is
+# clipped: the rest of the sentence is the constraint that rejected it — for a
+# discriminated union, every tag it accepts — which is the half an author needs
+# entire. Pydantic's other built-in sentences render the constraint and not the
+# input; a `value_error` carries whatever the contract model's validator wrote.
+_INPUT_ECHOING_CTX = {"union_tag_invalid": "tag"}
+
+
+def _model_error_message(err: Any) -> str:
+    key = _INPUT_ECHOING_CTX.get(err["type"])
+    if key is None:
+        return err["msg"]
+    echoed = str(err["ctx"][key])
+    return err["msg"].replace(echoed, _bounded(echoed), 1)
 
 
 def finding(
@@ -228,7 +246,7 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
                     message_id=err["type"],
                     kind="fail",
                     path=base_path,
-                    message=err["msg"],
+                    message=_model_error_message(err),
                 ))
             for v in violations:
                 findings.append(finding(
@@ -343,6 +361,10 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
 #: `RecursionError`, which is a `RuntimeError` and escapes a `ValueError` arm.
 _JSON_TEXT_REFUSALS = (ValueError, RecursionError)
 
+#: What reading a JSON document off disk raises for what the file holds rather
+#: than for this package: the path's own failure, or a refusal of its text.
+_JSON_READ_ERRORS = (OSError, *_JSON_TEXT_REFUSALS)
+
 
 def _unreadable_document_finding(exc: Exception) -> dict:
     """The finding for a document whose text could not be read or parsed at
@@ -364,10 +386,7 @@ def main() -> int:
     document_path = Path(args.document)
     try:
         document = json.loads(document_path.read_text())
-    except (OSError, *_JSON_TEXT_REFUSALS) as exc:
-        # OSError subsumes FileNotFoundError / IsADirectoryError / PermissionError,
-        # so an unreadable document always yields the finding + exit 1, never a
-        # bare traceback.
+    except _JSON_READ_ERRORS as exc:
         print(json.dumps({"passed": False, "findings": [_unreadable_document_finding(exc)]}))
         return 1
 

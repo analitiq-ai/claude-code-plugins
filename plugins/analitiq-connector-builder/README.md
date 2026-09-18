@@ -80,10 +80,18 @@ contract models (`analitiq-contract-models`), the same models the published JSON
 Schemas are generated from — so there is no schema fetch. It runs:
 
 1. **Contract-model validation** — structure, plus the cross-field rules the
-   models themselves apply, keyed by the document's declared `$schema`:
+   models themselves apply.
+   <!-- PROBE: type-map-direction-from-document, type-map-direction-not-schema-url, type-map-coverage-counts-declarations -->
+   Discriminating keys in the document body select the model — a type map by its
+   own `direction`, not by its filename and not by its `$schema`. A connector
+   package's maps are collected by pattern and counted toward the directions
+   they declare (`RULE-PKG-030`), so a name says which siblings are maps and
+   nothing more; the slot name each direction is authored under is a convention,
+   stated per scope in `skills/shared/type-maps.md`. Each kind
+   is graded against the model behind this schema:
    - Connector → `https://schemas.analitiq.ai/connector/latest.json`
-   - Read map (`type-map-read.json`) → `https://schemas.analitiq.ai/type-map-read/latest.json`
-   - Write map (`type-map-write.json`, database only) → `https://schemas.analitiq.ai/type-map-write/latest.json`
+   - Read map (`direction: "read"`) → `https://schemas.analitiq.ai/type-map-read/latest.json`
+   - Write map (`direction: "write"`, for the kinds `RULE-PKG-030` calls for) → `https://schemas.analitiq.ai/type-map-write/latest.json`
    - API endpoint → `https://schemas.analitiq.ai/api-endpoint/latest.json`
    - Database endpoint → `https://schemas.analitiq.ai/database-endpoint/latest.json`
    Every rule an author must satisfy is catalogued by id in

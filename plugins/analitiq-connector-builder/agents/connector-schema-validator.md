@@ -21,12 +21,18 @@ artifact.
 
 ## Inputs
 
-- `document_path` — absolute path to the draft JSON document. The validator
-  detects the document's kind from its own shape. Validate a type map under
-  its on-disk filename (`RULE-PKG-030`), so the connector's sibling walk can
-  find it. This agent validates JSON documents only; a connector's Python
-  package files (`connector.py`, `pyproject.toml`, …) are outside its scope —
-  report them as not validated rather than passing judgment on them.
+- `document_path` — absolute path to the draft JSON document.
+  <!-- PROBE: type-map-direction-from-document, type-map-coverage-counts-declarations -->
+  Validating a type map on its own runs no package-level check under any name —
+  those run when the **connector** is validated, off the maps sitting beside it,
+  each counted toward the direction it declares, and a direction the `kind`
+  requires that no sibling declares surfaces there as a missing map
+  (`RULE-PKG-030`). So validate the connector where it sits in the package, not
+  a copy re-serialized elsewhere: its package-level checks read the maps and
+  endpoints beside it, and what ships is then what was graded. This agent validates
+  JSON documents only; a connector's Python package files (`connector.py`,
+  `pyproject.toml`, …) are outside its scope — report them as not validated
+  rather than passing judgment on them.
 
 ## Running the validator
 

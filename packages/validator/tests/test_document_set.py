@@ -515,9 +515,10 @@ _TYPE_MAP_DECLARATIONS = [
 def test_type_map_is_graded_by_the_model_its_declared_name_selects(validator, declared, via, sent_as):
     """Content that declares a direction is consistent only with that
     direction's name, and is graded exactly as `validate_document` grades it.
-    Content that declares none is consistent with either type-map name, and the
-    caller's name is then what selects the model — never a default the
-    document did not ask for."""
+    Only `direction` declares one: a `$schema` naming a direction declares
+    nothing. Content that declares none is consistent with either type-map
+    name, and the caller's name is then what selects the model — never a
+    default the document did not ask for."""
     document = _type_map_declaring(declared, via)
     result = validator.validate_single_document(_document_request(document, sent_as))
     ids = [f["message_id"] for f in result["findings"]]
@@ -526,7 +527,7 @@ def test_type_map_is_graded_by_the_model_its_declared_name_selects(validator, de
         assert ids == ["entity-mismatch"], result
         return
     sent_direction = sent_as.removeprefix("type-map-")
-    if declared in _GRADED_ONLY_AS:
+    if via == "direction" and declared in _GRADED_ONLY_AS:
         if declared == sent_direction:
             assert result == _expected_envelope(validator, validator.validate_document(document))
             assert _GRADED_ONLY_AS[declared] in ids, result
@@ -537,10 +538,9 @@ def test_type_map_is_graded_by_the_model_its_declared_name_selects(validator, de
     for direction, only_that_model_reports in _GRADED_ONLY_AS.items():
         assert (only_that_model_reports in ids) == (direction == sent_direction), result
     # The path-based route has no name to take a direction from, so it grades
-    # such a map as read.
-    path_route_ids = [f["message_id"] for f in validator.validate_document(document)]
-    assert _GRADED_ONLY_AS["read"] in path_route_ids, path_route_ids
-    assert _GRADED_ONLY_AS["write"] not in path_route_ids, path_route_ids
+    # nothing past the missing one.
+    path_route = [f for f in validator.validate_document(document) if f["kind"] == "fail"]
+    assert path_route and {f["path"] for f in path_route} == {"/direction"}, path_route
 
 
 def test_type_map_entity_names_the_direction_the_document_declares(validator):

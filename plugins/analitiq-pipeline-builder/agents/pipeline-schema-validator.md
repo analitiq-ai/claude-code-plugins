@@ -28,8 +28,6 @@ published contract structurally cannot make (see its module docstring).
   `database-endpoint`, `type-map`. Selects the published contract to validate
   against.
 - `document` (required) — absolute path to the JSON document.
-- `direction` (required with `entity = type-map`, invalid otherwise) — `read`
-  or `write`.
 - `bundle_root` (optional) — project root for cross-document referential
   validation of a stitched pipeline (the adapter walks `connections/`,
   `connectors/`, and the pipeline's own `streams/`). Only meaningful with
@@ -45,7 +43,6 @@ published contract structurally cannot make (see its module docstring).
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validate.py" \
      --entity <entity> \
      --document <document> \
-     [--direction <direction>] \
      [--bundle-root <bundle_root>]
    ```
 

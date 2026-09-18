@@ -131,9 +131,13 @@ either kind.
 ### 4. Validate the domain (barrier)
 
 Invoke `connector-schema-validator` over the connector body and type
-map(s); it detects each document's kind from its own shape. Validate each
-map the connector's `kind` calls for, under the filename that kind requires
-(`RULE-PKG-030`), so the connector's sibling walk can find it.
+map(s); it detects each document's kind from its own shape.
+<!-- PROBE: type-map-direction-from-document, type-map-coverage-counts-declarations -->
+A map is graded as the direction the map itself declares, whether it is
+validated on its own or as a connector's sibling. Ship a map for each direction
+the connector's `kind` calls for (`RULE-PKG-030`), under the conventional
+filename for that direction — the name is what a reader navigates by, and the
+direction the package is counted as covering comes from the document.
 
 Validation covers the JSON documents above; the package files are
 governed by rules of their own (`RULE-PKG-007`, `RULE-PKG-009`,
@@ -270,8 +274,8 @@ paths. The connector root IS the Python package for database connectors:
 `ProviderFacts` + creator logic, so hand edits to a connector are not
 preserved.
 
-Never write a `type-map.json` — the read and write directions ship under
-the filenames `RULE-PKG-030` requires.
+Never write a `type-map.json` — it is the pre-split name, collected as no
+direction's map (`RULE-PKG-030`). Each direction ships as its own document.
 
 Write each endpoint to `endpoints/{endpoint_id}.json` (`RULE-PKG-031`) —
 never renamed, aliased, or nested. The engine resolves an endpoint by id

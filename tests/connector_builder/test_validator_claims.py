@@ -27,6 +27,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+from analitiq.validator._core import _run_guarded
+
 import pytest
 
 from _pins import require_contract_models
@@ -340,8 +342,19 @@ def test_run_probe_branches() -> None:
 
     error = {"severity": "error", "message": "the tail does not resolve"}
     warning = {"severity": "warning", "message": "coverage gap in the write map"}
-    crash = {"severity": "error",
-             "message": "check 'contract-model' crashed unexpectedly (KeyError: 'x')"}
+    # Built through the validator's own guard rather than transcribed: a crash
+    # finding is `notApplicable` and carries no `severity`, and its sentence is
+    # the guard's to reword. A probe grader that recognised it by its wording
+    # would stop recognising it the day that sentence changes, with every probe
+    # still reporting green.
+    def _boom():
+        raise KeyError("x")
+
+    [crash] = _run_guarded(_boom, crash_label="contract-model")
+    # The pipeline adapter contains a crash of its own with an error-severity
+    # finding, which an expect="error" probe would otherwise count as the
+    # rejection it was looking for.
+    adapter_crash = _REGISTRY._pipeline_adapter()._crash_finding("", KeyError("x"))
 
     assert _REGISTRY.run_probe(probe("clean", [warning])) is None
     assert _REGISTRY.run_probe(probe("silent", [])) is None
@@ -359,6 +372,8 @@ def test_run_probe_branches() -> None:
     assert "crashed" in _REGISTRY.run_probe(
         probe("error", [crash], message_re="crashed unexpectedly")).reason
     assert "crashed" in _REGISTRY.run_probe(probe("clean", [crash])).reason
+    assert "crashed" in _REGISTRY.run_probe(
+        probe("error", [adapter_crash], message_re="KeyError")).reason
     assert "forbidden" in _REGISTRY.run_probe(
         probe("clean", [warning], forbid_re="coverage")).reason
     assert "required" in _REGISTRY.run_probe(
