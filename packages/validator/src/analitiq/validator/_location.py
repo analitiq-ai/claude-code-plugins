@@ -9,6 +9,7 @@ every question about what is actually there goes to the tree.
 from __future__ import annotations
 
 import io
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
@@ -46,11 +47,6 @@ class Tree(ABC):
         """The entries anywhere below `key` whose names match `pattern`, in no
         particular order."""
 
-    @abstractmethod
-    def ancestor(self, key: PurePath, levels: int) -> PurePath | None:
-        """The directory `levels` above `key`, or None when that is outside the
-        tree."""
-
 
 class DiskTree(Tree):
     """The filesystem. A key is a `Path`."""
@@ -73,16 +69,6 @@ class DiskTree(Tree):
 
     def rglob(self, key: Path, pattern: str) -> Iterable[Path]:
         return key.rglob(pattern)
-
-    def ancestor(self, key: Path, levels: int) -> Path:
-        # Resolved first: `Path("thing.json").parent.parent` is `.`, so a
-        # relative key would stop short of the directory it names. Resolving
-        # also follows links, so a linked document is anchored where its
-        # target lives, not where it was authored.
-        anchor = key.resolve()
-        for _ in range(levels):
-            anchor = anchor.parent
-        return anchor
 
 
 DISK = DiskTree()
@@ -128,10 +114,6 @@ class MemoryTree(Tree):
     def rglob(self, key: PurePath, pattern: str) -> list[PurePosixPath]:
         return [entry for entry in self._entries()
                 if key in entry.parents and fnmatchcase(entry.name, pattern)]
-
-    def ancestor(self, key: PurePath, levels: int) -> PurePath | None:
-        parents = key.parents
-        return parents[levels - 1] if levels <= len(parents) else None
 
 
 @dataclass(frozen=True)
@@ -179,12 +161,6 @@ class Location:
         return (Location(key, self.tree)
                 for key in self.tree.rglob(self.key, _one_name(pattern)))
 
-    def ancestor(self, levels: int) -> Location | None:
-        if levels < 1:
-            raise ValueError(f"levels must be at least 1, got {levels}")
-        key = self.tree.ancestor(self.key, levels)
-        return None if key is None else Location(key, self.tree)
-
 
 def _one_name(pattern: str) -> str:
     """`pattern`, refused unless it matches within one name.
@@ -199,5 +175,13 @@ def _one_name(pattern: str) -> str:
 
 
 def located(where: Path | Location) -> Location:
-    """`where` as a location: a `Path` names a place on disk."""
-    return where if isinstance(where, Location) else Location(where, DISK)
+    """`where` as a location: a `Path` names a place on disk.
+
+    Absolutised lexically, never resolved: a linked document belongs to the
+    directory holding the link, so its siblings are read there and not where
+    the link's target lives. Absolute, so that `parent` of a relative path
+    names the directory it sits in rather than stopping at `.`.
+    """
+    if isinstance(where, Location):
+        return where
+    return Location(Path(os.path.abspath(where)), DISK)

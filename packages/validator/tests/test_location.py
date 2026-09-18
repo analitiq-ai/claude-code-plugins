@@ -132,8 +132,8 @@ LAYOUTS = {
     "api endpoint, no connector": ("endpoints/thing.json", {
         "endpoints/thing.json": _endpoint("thing", transport_ref="api"),
     }),
-    # Two levels above a root-level key is outside the package, so the
-    # connector beside it is not the one this endpoint's release carries.
+    # Not under `endpoints/`, so there is no package to look for a connector in,
+    # though one sits beside it.
     "api endpoint at the package root": ("thing.json", {
         "connector.json": {**_API, "transports": {"api": {}}},
         "thing.json": _endpoint("thing", transport_ref="api"),
@@ -163,7 +163,7 @@ def test_memory_tree_grades_as_the_same_files_on_disk(validator, tmp_path, entry
 
     # A disk finding naming a sibling by its full path names it under the
     # package root; the same sibling in memory is named by its key.
-    anchored = json.dumps(on_disk).replace(f"{root.resolve()}/", "")
+    anchored = json.dumps(on_disk).replace(f"{root}/", "")
     assert json.loads(anchored) == in_memory
 
 
@@ -191,13 +191,3 @@ def test_a_pattern_crossing_names_is_refused(tmp_path, pattern, walk):
     for root in (Location(tmp_path, DISK), Location(PurePosixPath("."), MemoryTree({"a/z.json": ""}))):
         with pytest.raises(ValueError, match="single name"):
             list(getattr(root, walk)(pattern))
-
-
-@pytest.mark.parametrize("levels", [0, -1])
-def test_an_ancestor_below_one_level_is_refused(tmp_path, levels):
-    """At zero levels the disk tree would answer the key itself and the memory
-    tree the package root."""
-    for location in (Location(tmp_path / "x.json", DISK),
-                     Location(PurePosixPath("endpoints/x.json"), MemoryTree({"endpoints/x.json": ""}))):
-        with pytest.raises(ValueError, match="at least 1"):
-            location.ancestor(levels)

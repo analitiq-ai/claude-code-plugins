@@ -393,7 +393,7 @@ def main() -> int:
         print(json.dumps({"passed": False, "findings": [_unreadable_document_finding(exc)]}))
         return 1
 
-    findings = validate_document(document, doc_path=document_path.resolve())
+    findings = validate_document(document, doc_path=document_path)
     passed = _passed(findings)
     print(json.dumps({"passed": passed, "findings": findings}, indent=2))
     return 0 if passed else 1

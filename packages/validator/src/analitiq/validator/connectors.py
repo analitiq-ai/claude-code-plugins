@@ -1403,6 +1403,7 @@ def _validate_connector(doc: Any, location: Location | None) -> list[dict]:
 def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
     transports: Any = None
     sibling_findings: list[dict] = []
+    addressed = location is not None and is_addressed_endpoint_path(location.key)
     if isinstance(doc, dict):
         # RULE-ENDP-047 is cross-document: it needs the sibling connector.json's
         # `transports`, which only `check_coverage` has. Say so rather than
@@ -1421,9 +1422,9 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
             # blind warning here would fire on every pass of its fix loop and
             # could never be cleared — an alarm that cannot be acted on trains
             # authors to ignore the id. Only warn when the connector genuinely
-            # is not reachable.
-            package = location.ancestor(2) if location is not None else None
-            sibling = package / "connector.json" if package is not None else None
+            # is not reachable. Outside that layout two levels up is no package
+            # at all, and a connector found there is not this endpoint's.
+            sibling = location.parent.parent / "connector.json" if addressed else None
             connector_doc: Any = _UNREAD
             sibling_exists = sibling is not None and sibling.is_file()
             if sibling_exists:
@@ -1494,9 +1495,7 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
     # along so the locating half of those checks reads the same on both routes.
     findings = _api_endpoint_document_findings(
         doc, transports,
-        filename=(location.name
-                  if location is not None and is_addressed_endpoint_path(location.key)
-                  else ""))
+        filename=location.name if addressed else "")
     findings.extend(sibling_findings)
     return findings
 
