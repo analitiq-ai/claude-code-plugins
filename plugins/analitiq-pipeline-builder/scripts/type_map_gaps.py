@@ -19,14 +19,15 @@ map is the fallback.
 Usage::
 
     printf '%s' '["citext", "vector(3)"]' | python3 type_map_gaps.py \
+        --direction read \
         --map connections/pg/definition/type-map-read.json \
         --map connectors/postgresql/definition/type-map-read.json
 
-Each map declares the direction being probed; its filename says nothing about
-it here, as it says nothing anywhere else a map is consumed. Maps declaring
-different directions are a usage error, as is one declaring neither. Probes are
-a JSON array of strings on stdin (or --probes-file): provider `native_type`
-labels when reading, `arrow_type` strings when writing. Output on stdout::
+``--direction`` names the vocabulary the probes are in: provider `native_type`
+labels for ``read``, `arrow_type` strings for ``write``. Every map is graded as
+that direction, so one declaring the other is refused rather than probed; its
+filename plays no part. Probes are a JSON array of strings on stdin (or
+--probes-file). Output on stdout::
 
     {"direction": "read",
      "resolved": {"citext": null, "vector(3)": null},
@@ -50,33 +51,6 @@ from _bootstrap import ensure_deps_or_reexec
 def _fail(message: str) -> "int":
     print(f"type_map_gaps: {message}", file=sys.stderr)
     return 2
-
-
-def _declared_direction(path: Path) -> str:
-    """The direction a type-map document declares. A name says nothing about a
-    map's direction anywhere a map is consumed, so it says nothing here either:
-    probing the direction a filename suggested would report gaps in a vocabulary
-    the document never claimed to hold."""
-    try:
-        doc = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ValueError(f"{path}: {exc}") from exc
-    from analitiq.validator import declared_direction
-    if not isinstance(doc, dict):
-        raise ValueError(
-            f"{path} is not a JSON object, so it declares nothing; a type-map document "
-            "declares 'read' or 'write', and nothing else says which vocabulary to probe")
-    declared = declared_direction(doc)
-    if declared is None:
-        # The rejected value is whatever the document held, so it is clipped to
-        # the width the validator clips every borrowed diagnostic to.
-        from analitiq.validator._core import _bounded
-
-        raise ValueError(
-            f"{path} declares direction {_bounded(repr(doc.get('direction')))}; a type-map "
-            "document declares 'read' or 'write', and nothing else says which vocabulary "
-            "to probe")
-    return declared
 
 
 def _load_rules(path: Path, direction: str) -> list:
@@ -154,10 +128,13 @@ def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--direction", required=True, choices=("read", "write"),
+                        help="The vocabulary the probes are in: native_type labels (read) "
+                             "or arrow_type strings (write). Every --map must declare it.")
     parser.add_argument("--map", action="append", required=True, dest="maps", metavar="PATH",
-                        help="A {$schema, direction, rules} type-map document, which declares "
-                             "the direction it holds; repeatable, in precedence order "
-                             "(connection-scoped map first, connector map after).")
+                        help="A {$schema, direction, rules} type-map document; repeatable, "
+                             "in precedence order (connection-scoped map first, connector "
+                             "map after).")
     parser.add_argument("--probes-file", metavar="PATH",
                         help="JSON array of probe strings; defaults to stdin.")
     args = parser.parse_args(argv)
@@ -166,20 +143,6 @@ def main(argv: list[str] | None = None) -> int:
         ensure_deps_or_reexec(__file__)
     except RuntimeError as exc:
         return _fail(str(exc))
-
-    # Each document declares the direction being probed, and they must agree:
-    # the resolver concatenates their rule arrays into one precedence order, so
-    # a pair holding opposite directions has no single vocabulary to probe.
-    directions: dict[str, str] = {}
-    for m in args.maps:
-        try:
-            directions.setdefault(_declared_direction(Path(m)), m)
-        except ValueError as exc:
-            return _fail(str(exc))
-    if len(directions) > 1:
-        return _fail("every --map must hold the same direction, got "
-                     + ", ".join(f"{m} ({d})" for d, m in sorted(directions.items())))
-    direction = next(iter(directions))
 
     try:
         raw = Path(args.probes_file).read_text() if args.probes_file else sys.stdin.read()
@@ -190,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
         return _fail("probes must be a JSON array of strings")
 
     try:
-        result = resolve(direction, probes, [Path(m) for m in args.maps])
+        result = resolve(args.direction, probes, [Path(m) for m in args.maps])
     except (OSError, ValueError) as exc:
         # _load_rules names the file in a ValueError for every way one can fail
         # — unreadable, unparseable, or graded fatal — which is the only path

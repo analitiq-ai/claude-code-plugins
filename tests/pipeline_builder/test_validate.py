@@ -526,8 +526,9 @@ def test_the_filename_decides_none_of_what_is_reported(tmp_path):
      "/rules/0/exact/arrow_type", "string_pattern_mismatch"),
 ])
 def test_invalid_type_map_content(tmp_path, doc, path, message_id):
-    # the defect each fixture carries, not merely that something failed: a slot
-    # dispute alone would satisfy a `kind == "fail"` assertion without the model
+    # the defect each fixture carries, not merely that something failed: an
+    # envelope finding alone (`/direction` or `/$schema`) would satisfy a
+    # `kind == "fail"` assertion without the model
     # ever reaching the rules
     diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map-read.json", doc))
     assert not diag["passed"]

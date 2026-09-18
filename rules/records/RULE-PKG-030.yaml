@@ -29,7 +29,7 @@ rationale: >
   filename a consumer never reads cannot make a second document for one
   direction unambiguous. The pattern the documents are collected by is the half
   of that reading a stale copy does break: it is stated on both sides and
-  published by neither, so a pattern that widens or narrows on the engine's side
+  pinned by neither, so a pattern that widens or narrows on the engine's side
   leaves this check grading a set of files the engine does not load, and nothing
   here goes red — a map that stops being found where it was authored is the
   signal to re-read it from the engine.

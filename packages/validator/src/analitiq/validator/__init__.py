@@ -18,8 +18,9 @@ other defect the model finds rather than grading the document as what it claims
 to be.
 
 A caller holding a *directory* of maps asks which files are maps and which one
-is the map for each direction: `type_map_sibling_paths(parent)` answers the
-first, `TypeMapDirections` the second. They are published because the answer has
+declared each direction first: `type_map_sibling_paths(parent)` answers the
+first, and `TypeMapDirections` the second, so a caller can report a later
+declaration against the first. They are published because the answer has
 to be the same at every scope — a connector's siblings here, a connection's
 beside the pipeline plugin's adapter — while what each caller reports about a
 document, and where it roots that report, is its own.

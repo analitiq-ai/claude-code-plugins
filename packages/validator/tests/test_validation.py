@@ -1270,8 +1270,9 @@ def test_coverage_reads_a_type_map_under_any_matching_filename(tmp_path, kind, v
 
 @pytest.mark.parametrize("kind", _STORAGE_KINDS)
 def test_a_storage_write_map_is_graded_and_named(tmp_path, kind, validator):
-    # The storage branch walks both directions, and the write half is reached
-    # only by a map declaring it. A branch that graded the read direction alone
+    # The storage branch grades each direction a sibling declares, and the write
+    # direction is reached only by a map declaring it. A branch that graded the
+    # read direction alone
     # would pass this package, and the defect would arrive at the first
     # destination write. The map sits under a name no convention reserves, so
     # the finding has to carry it — a pointer alone roots the defect in
@@ -1351,8 +1352,9 @@ def test_coverage_lets_no_sibling_take_a_direction_from_the_map_that_declared_it
 
 
 def test_coverage_grades_a_sibling_that_parsed_to_no_document(tmp_path, validator):
-    # `null` is the one payload that parses and is not a document. Reading the
-    # loader's answer as "nothing to grade" would let it through: a storage kind
+    # `null` parses to `None`, the value a loader answering `None` for "nothing
+    # was read" also returns. Reading the loader's answer as "nothing to grade"
+    # would let it through: a storage kind
     # requires no map, so a package whose only sibling is that file passes with
     # nothing said about it, and the load stops there for every consumer. What
     # says a sibling was already reported is the finding the loader returned,
@@ -1431,21 +1433,23 @@ def test_coverage_refuses_an_api_write_direction_two_siblings_declare(tmp_path, 
     assert "write-map-not-allowed" in ids, errors
 
 
+def test_an_unparseable_sibling_is_reported_as_unparseable_and_nothing_else(tmp_path, validator):
+    # Nothing was read, so there is no document to grade: a model finding over
+    # it would describe a value the file never held.
+    (tmp_path / "type-map-read.json").write_text("[ not json")
+    (tmp_path / "connector.json").write_text("{}")
+    findings = validator.check_coverage(_min_connector("file"), tmp_path / "connector.json")
+    assert [f["message_id"] for f in findings] == ["type-map-unparseable"], findings
+
+
 def test_coverage_reports_a_collected_sibling_that_is_not_a_regular_file(tmp_path, validator):
     # The pattern collects directory entries, not documents, so what it hands
     # the loader is whatever carries the name. A directory raises on the read
-    # and reports an errno; a FIFO blocks it until something writes, and the
-    # check never returns. The alarm bounds that, so a load reaching the read
-    # fails here instead of hanging the suite.
+    # and reports an errno that says nothing about the package.
     (tmp_path / "type-map-read.json").mkdir()
     (tmp_path / "connector.json").write_text("{}")
-    signal.signal(signal.SIGALRM, _raise_timeout)
-    signal.alarm(10)
-    try:
-        errors = _errors(validator.check_coverage(
-            _min_connector("file"), tmp_path / "connector.json"))
-    finally:
-        signal.alarm(0)
+    errors = _errors(validator.check_coverage(
+        _min_connector("file"), tmp_path / "connector.json"))
     assert any("not a regular file" in e["message"] for e in errors), errors
 
 
@@ -1687,9 +1691,9 @@ def test_an_unusable_direction_is_answered_on_the_discriminator(
 
 def test_the_discriminator_answer_says_what_is_wrong_and_what_went_ungraded(validator):
     # Pydantic's sentence for an absent tag names the field and stops: it never
-    # says the field is missing, and it names neither value that would resolve
-    # it. For a tag present and wrong it names both, so only the absent case is
-    # replaced.
+    # says the field is missing, and it names none of the values that would
+    # resolve it. For a tag present and wrong it names the field and the
+    # accepted values, so only the absent case is replaced.
     #
     # Nothing past the discriminator was measured either way — the tag selects
     # the model the rest is graded against — and a report that does not say so
@@ -1711,6 +1715,22 @@ def test_a_borrowed_diagnostic_does_not_carry_the_document_back_whole(validator)
     [error] = _errors(validator.validate_document(_unusable(oversized)))
     assert oversized not in error["message"], len(error["message"])
     assert len(error["message"]) < 500, len(error["message"])
+    # Only the echoed value is clipped. The accepted values sit after it in the
+    # same sentence, and they are what the author needs to fix it.
+    assert "'read', 'write'" in error["message"], error["message"][-120:]
+
+
+def test_a_short_wrong_tag_comes_back_with_every_accepted_value(validator):
+    # A tag of ordinary length echoes nothing worth bounding, and the sentence
+    # is long only because the union accepts many values: clipping it drops the
+    # ones an author could have picked.
+    doc = _connector_doc()
+    doc["auth"] = {"type": "oauth2"}
+    tag = [e for e in _errors(validator.validate_document(doc))
+           if e["message_id"] == "union_tag_invalid"]
+    assert tag, doc["auth"]
+    assert "…" not in tag[0]["message"], tag[0]["message"]
+    assert "'none'" in tag[0]["message"], tag[0]["message"]
 
 
 def test_a_borrowed_diagnostic_keeps_the_constraint_it_was_rejected_by(validator):
@@ -2227,6 +2247,18 @@ def test_type_map_findings_grades_as_the_direction_the_caller_names(validator):
         "/direction", "/$schema", "/rules/0/exact"}, errors
     assert any(f["message_id"] == "write-exact-malformed-placeholder"
                for f in errors), errors
+
+
+def test_type_map_findings_grades_a_map_declaring_no_direction_as_named(validator):
+    # A document with no `direction` disagrees with nothing, so the caller's
+    # direction is the only one there is. Skipping the advisories with the
+    # disagreeing case would hand back the envelope error alone, and the
+    # author fixing it would meet the vocabulary gap only on the next run.
+    doc = _type_map_doc([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")
+    del doc["direction"]
+    findings = validator.type_map_findings(doc, "write")
+    assert "/direction" in {f["path"] for f in _errors(findings)}, findings
+    assert "RULE-TMAP-017" in {f.get("rule") for f in findings}, findings
 
 
 def test_type_map_findings_scope_decides_the_write_vocabulary_alone(validator):

@@ -1061,9 +1061,9 @@ PROBES: tuple[Probe, ...] = (
           _p_type_map_coverage_counts_declarations),
     Probe("type-map-duplicate-direction-rejected", "error", _p_type_map_duplicate_direction,
           message_re=r"both declare direction .*neither of these is it"),
-    # The collision's consequence, which the message alone does not carry: the
-    # direction the pair declares is covered by neither of them, and the finding
-    # saying so distinguishes that from a direction nothing declared.
+    # The collision also fails coverage: the missing-map finding for that
+    # direction fires, and its reason separates a duplicated direction from one
+    # nothing declared.
     Probe("type-map-duplicate-direction-covers-nothing", "error",
           _p_type_map_duplicate_direction,
           message_re=r"more than one sibling declares it, so none of them is it"),
@@ -1181,11 +1181,14 @@ def run_probe(probe: Probe) -> ProbeFailure | None:
     # "validator bug — please report" instead of the rejection the prose
     # promises. A crash never proves a claim, in either direction.
     #
-    # Recognised by the id the validator publishes for it, not by its wording:
-    # the sentence is the guard's to reword, and a probe grader reading the
-    # English would stop detecting crashes the day it changes, with every probe
-    # still reporting green.
-    crashed = [f for f in findings if f.get("message_id") == "check-crashed"]
+    # Recognised by the id each guard publishes for it — the validator's, and
+    # the pipeline adapter's for its own containment — not by its wording: the
+    # sentence is the guard's to reword, and a probe grader reading the English
+    # would stop detecting crashes the day it changes, with every probe still
+    # reporting green.
+    crashed = [f for f in findings
+               if f.get("message_id") == "check-crashed"
+               or f.get("validator") == "adapter-crash"]
     if crashed:
         return ProbeFailure(probe.id, "the validator crashed on the probe document", crashed)
     return _expectation_failure(probe, findings) or _pattern_failure(probe, findings)

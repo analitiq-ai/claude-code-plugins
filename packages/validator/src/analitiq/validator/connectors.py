@@ -1108,7 +1108,8 @@ def legacy_type_map_present(parent: Path) -> bool:
 
 
 def type_map_sibling_paths(parent: Path) -> list[Path]:
-    """The type-map documents beside `parent`, in the order they are considered.
+    """The entries in `parent` whose names mark them as type-map documents, in
+    the order they are considered.
 
     Which files are type-map documents is one question with one answer, asked
     wherever maps are collected — beside a connector here, beside a connection
@@ -1136,7 +1137,7 @@ def declared_direction(doc: Any) -> str | None:
 
 
 class TypeMapDirections:
-    """Which collected document is the map for each direction, in the order
+    """Which collected document first declared each direction, in the order
     `type_map_sibling_paths` returns them.
 
     Which directions a set of maps covers is a question about the documents,
@@ -1164,8 +1165,8 @@ class TypeMapDirections:
 
         Returns `(direction, held_by)`. `direction` is the direction the
         document declares, or None when it declares none usable. `held_by`
-        names the document already holding that direction, and is None when
-        this one takes it — so a caller reads a claim as `held_by is None`,
+        names the document that declared that direction first, and is None
+        when this one is first — so a caller reads a claim as `held_by is None`,
         and has the direction to name either way.
         """
         declared = declared_direction(doc)
@@ -1287,7 +1288,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
     # withhold every endpoint-anchored check as well, hiding every defect in
     # every endpoint document behind one broken file. What is carried is
     # whatever `doc.get("rules")` holds when `doc` is a dict — `None` when no
-    # document declared the read direction, and whatever value the dict's
+    # sibling holds the read direction (none declares it, or more than one
+    # does), and whatever value the dict's
     # `rules` key holds otherwise, list or not — so the readers below ask
     # whether it is a list rather than whether it is set.
     read_rules: Any = None

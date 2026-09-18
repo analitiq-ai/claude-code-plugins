@@ -44,6 +44,7 @@ maps in precedence order (connection first, when one exists, then connector):
 
 ```bash
 printf '%s' '["citext", "vector(3)"]' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/type_map_gaps.py" \
+  --direction read \
   --map connections/<slug>/definition/type-map-read.json \
   --map connectors/<connector-slug>/definition/type-map-read.json
 ```
@@ -53,9 +54,8 @@ printf '%s' '["citext", "vector(3)"]' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/t
 - **Write probes** — the distinct `arrow_type` strings frozen into the endpoint
   documents, after read-side resolution and judgment are complete.
 
-Every `--map` in one call declares the same direction, and that is the
-direction probed. `resolved` gives the rendered value per covered probe; `gaps`
-lists the uncovered ones. Pass only map files that exist.
+`resolved` gives the rendered value per covered probe; `gaps` lists the
+uncovered ones. Pass only map files that exist.
 
 ## Registered rules for a type map
 

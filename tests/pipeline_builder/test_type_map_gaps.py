@@ -159,7 +159,7 @@ def test_cli_end_to_end(tmp_path, capsys):
     m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
     probes = tmp_path / "probes.json"
     probes.write_text(json.dumps(["citext", "vector(3)"]))
-    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
+    rc = G.main(["--direction", "read", "--map", str(m), "--probes-file", str(probes)])
     assert rc == 0
     out = json.loads(capsys.readouterr().out)
     assert out == {"direction": "read",
@@ -178,7 +178,7 @@ def test_cli_connection_map_beats_connector_map(tmp_path, capsys):
     connector = _map(base_dir, "type-map-read.json", CONNECTOR_READ)
     probes = tmp_path / "probes.json"
     probes.write_text('["citext"]')
-    rc = G.main(["--map", str(connection), "--map", str(connector),
+    rc = G.main(["--direction", "read", "--map", str(connection), "--map", str(connector),
                  "--probes-file", str(probes)])
     assert rc == 0
     assert json.loads(capsys.readouterr().out)["resolved"] == {"citext": "LargeUtf8"}
@@ -189,7 +189,7 @@ def test_cli_rejects_bad_probes(tmp_path, capsys, probes_payload):
     m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
     probes = tmp_path / "probes.json"
     probes.write_text(probes_payload)
-    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
+    rc = G.main(["--direction", "read", "--map", str(m), "--probes-file", str(probes)])
     assert rc == 2
     assert json.loads(capsys.readouterr().out or "null") is None  # nothing on stdout
 
@@ -200,7 +200,7 @@ def test_cli_missing_map_names_the_file(tmp_path, capsys):
     missing = tmp_path / "type-map-read.json"
     probes = tmp_path / "probes.json"
     probes.write_text('["citext"]')
-    rc = G.main(["--map", str(missing), "--probes-file", str(probes)])
+    rc = G.main(["--direction", "read", "--map", str(missing), "--probes-file", str(probes)])
     assert rc == 2
     err = capsys.readouterr()
     assert not err.out
@@ -247,7 +247,7 @@ def test_a_non_fatal_finding_reaches_stderr_beside_the_gap_it_explains(tmp_path,
     probes = tmp_path / "probes.json"
     probes.write_text('["vector(3)"]')
 
-    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
+    rc = G.main(["--direction", "read", "--map", str(m), "--probes-file", str(probes)])
 
     captured = capsys.readouterr()
     assert rc == 0
@@ -283,132 +283,68 @@ def test_map_direction_must_match_model(tmp_path):
 
 
 def test_cli_probes_a_map_under_any_filename(tmp_path, capsys):
-    # The name says nothing about direction anywhere a map is consumed, so it
-    # says nothing here: the document's own declaration is what is probed.
-    m = _map(tmp_path, "my-types.json", CONNECTOR_READ)
-    probes = tmp_path / "probes.json"
-    probes.write_text('["citext"]')
-    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
-    assert rc == 0
-    assert json.loads(capsys.readouterr().out)["direction"] == "read"
-
-
-def test_cli_probes_the_direction_the_envelope_declares(tmp_path, capsys):
-    # A write map under the read direction's conventional name is probed as the
-    # write map it declares. Probing it as read would not simply fail: each
-    # direction keys on the member the other renders, so it would match the
-    # wrong things and every verdict would be computed from rules that mean
-    # something else.
+    # A write map under the read direction's conventional name is probed as
+    # write: the name says nothing about direction anywhere a map is consumed.
     m = _map(tmp_path, "type-map-read.json", CONNECTOR_WRITE, "write")
     probes = tmp_path / "probes.json"
     probes.write_text('["Utf8"]')
-    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
+    rc = G.main(["--direction", "write", "--map", str(m), "--probes-file", str(probes)])
     assert rc == 0
-    assert json.loads(capsys.readouterr().out)["direction"] == "write"
+    assert json.loads(capsys.readouterr().out)["resolved"] == {"Utf8": "TEXT"}
+
+
+def test_cli_refuses_a_map_declaring_the_other_direction_than_probed(tmp_path, capsys):
+    # The probes are in one vocabulary and the caller is the one holding them.
+    # A read map keys on native types, so Arrow probes run through it would not
+    # fail: each would come back resolved or a gap by rules that mean something
+    # else, and the run would exit clean.
+    m = _map(tmp_path, "my-types.json", CONNECTOR_READ)
+    probes = tmp_path / "probes.json"
+    probes.write_text('["Utf8", "Int64"]')
+    rc = G.main(["--direction", "write", "--map", str(m), "--probes-file", str(probes)])
+    assert rc == 2
+    err = capsys.readouterr()
+    assert not err.out
+    assert str(m) in err.err and "/direction" in err.err, err.err
 
 
 def test_cli_rejects_a_map_declaring_no_usable_direction(tmp_path, capsys):
-    # Nothing else says which vocabulary to probe, so probing cannot begin —
-    # picking one would report gaps in a vocabulary the document never claimed.
     m = tmp_path / "type-map-read.json"
     m.write_text(json.dumps({**_tm_doc(CONNECTOR_READ, "read"), "direction": "sideways"}))
     probes = tmp_path / "probes.json"
     probes.write_text('["citext"]')
-    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
+    rc = G.main(["--direction", "read", "--map", str(m), "--probes-file", str(probes)])
     assert rc == 2
     err = capsys.readouterr()
     assert not err.out
-    assert "declares direction 'sideways'" in err.err
+    assert str(m) in err.err and "/direction" in err.err, err.err
 
 
-def test_cli_bounds_the_direction_it_echoes(tmp_path, capsys):
-    # The rejected value is whatever the document held, so echoing it whole puts
-    # an attacker-sized string on the operator's terminal. Clipped to the one
-    # width every borrowed diagnostic in the validator is clipped to.
-    from analitiq.validator._core import _bounded
-
-    oversized = "s" * 5000
-    m = tmp_path / "type-map-read.json"
-    m.write_text(json.dumps({**_tm_doc(CONNECTOR_READ, "read"), "direction": oversized}))
-    probes = tmp_path / "probes.json"
-    probes.write_text('["citext"]')
-    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
-    assert rc == 2
-    err = capsys.readouterr().err
-    assert oversized not in err, len(err)
-    assert _bounded(repr(oversized)) in err, err
-
-
-def test_cli_rejects_maps_holding_different_directions(tmp_path, capsys):
+def test_cli_holds_every_map_to_the_direction_probed(tmp_path, capsys):
+    # A fallback map is concatenated into the same rule list as the primary, so
+    # one declaring the other direction is refused as surely as a lone one.
     r = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
     (tmp_path / "w").mkdir()
     w = _map(tmp_path / "w", "type-map-write.json", CONNECTOR_WRITE, "write")
     probes = tmp_path / "probes.json"
     probes.write_text('["citext"]')
-    rc = G.main(["--map", str(r), "--map", str(w), "--probes-file", str(probes)])
+    rc = G.main(["--direction", "read", "--map", str(r), "--map", str(w),
+                 "--probes-file", str(probes)])
     assert rc == 2
     err = capsys.readouterr()
     assert not err.out
-    assert "same direction" in err.err
-    # The message names one map per direction, and which one is the first to
-    # declare it: a later map naming the same direction changes nothing about
-    # which document the author is pointed at.
-    assert str(r) in err.err and str(w) in err.err, err.err
+    assert str(w) in err.err, err.err
 
 
 @pytest.mark.parametrize("payload", ["null", "[]", '"read"'])
-def test_cli_says_a_map_that_is_no_object_is_no_object(tmp_path, capsys, payload):
-    # A payload that is not a JSON object holds no fields at all, so reporting
-    # it as declaring direction None sends the author looking for a key the
-    # document cannot carry. The sibling scopes answer this case on the shape,
-    # and this one says the same thing.
+def test_cli_refuses_a_map_that_is_no_object(tmp_path, capsys, payload):
     m = tmp_path / "type-map-read.json"
     m.write_text(payload)
     probes = tmp_path / "probes.json"
     probes.write_text('["citext"]')
-    rc = G.main(["--map", str(m), "--probes-file", str(probes)])
+    rc = G.main(["--direction", "read", "--map", str(m), "--probes-file", str(probes)])
     assert rc == 2
-    err = capsys.readouterr().err
-    assert str(m) in err, err
-    assert "declares direction" not in err, err
-
-
-def test_cli_parse_failure_is_reported_as_a_parse_failure(tmp_path, capsys):
-    # The direction of an unparseable map is not "whatever the others said": a
-    # run that swallowed the read failure here would reach the agreement check
-    # with one map missing and report a direction disagreement that does not
-    # exist, sending the operator to fix the wrong thing.
-    bad = tmp_path / "type-map-read.json"
-    bad.write_text("[ not json")
-    (tmp_path / "w").mkdir()
-    good = _map(tmp_path / "w", "type-map-write.json", CONNECTOR_WRITE, "write")
-    probes = tmp_path / "probes.json"
-    probes.write_text('["citext"]')
-    rc = G.main(["--map", str(bad), "--map", str(good), "--probes-file", str(probes)])
-    assert rc == 2
-    err = capsys.readouterr().err
-    assert str(bad) in err, err
-    assert "same direction" not in err, err
-
-
-def test_cli_names_the_first_map_that_declared_a_direction(tmp_path, capsys):
-    # Precedence order is the argument order, so the map an author is pointed at
-    # for a direction is the one that claimed it first. A later map declaring the
-    # same direction is the fallback, not the document whose declaration created
-    # the conflict, and naming it would send the author to the wrong file.
-    primary = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
-    (tmp_path / "fallback").mkdir()
-    fallback = _map(tmp_path / "fallback", "type-map-read.json", CONNECTOR_READ)
-    (tmp_path / "w").mkdir()
-    w = _map(tmp_path / "w", "type-map-write.json", CONNECTOR_WRITE, "write")
-    probes = tmp_path / "probes.json"
-    probes.write_text('["citext"]')
-    rc = G.main(["--map", str(primary), "--map", str(fallback), "--map", str(w),
-                 "--probes-file", str(probes)])
-    assert rc == 2
-    err = capsys.readouterr().err
-    assert str(primary) in err, err
-    assert str(fallback) not in err, err
+    assert str(m) in capsys.readouterr().err
 
 
 def test_cli_parse_error_names_the_file(tmp_path, capsys):
@@ -416,7 +352,7 @@ def test_cli_parse_error_names_the_file(tmp_path, capsys):
     bad.write_text("[ not json")
     probes = tmp_path / "probes.json"
     probes.write_text('["citext"]')
-    rc = G.main(["--map", str(bad), "--probes-file", str(probes)])
+    rc = G.main(["--direction", "read", "--map", str(bad), "--probes-file", str(probes)])
     assert rc == 2
     assert str(bad) in capsys.readouterr().err
 
@@ -426,6 +362,6 @@ def test_cli_reads_probes_from_stdin(tmp_path, capsys, monkeypatch):
     import io
     m = _map(tmp_path, "type-map-read.json", CONNECTOR_READ)
     monkeypatch.setattr("sys.stdin", io.StringIO('["citext"]'))
-    rc = G.main(["--map", str(m)])
+    rc = G.main(["--direction", "read", "--map", str(m)])
     assert rc == 0
     assert json.loads(capsys.readouterr().out)["resolved"] == {"citext": "Utf8"}
