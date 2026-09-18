@@ -408,6 +408,8 @@ def test_schemaless_container_must_not_collapse_to_scalar():
     (r"^ARRAY\Q<INT>", True),
     (r"^ARRAY\x{3C}INT\x3E$", True),
     (r"^ARRAY\74INT\076$", True),
+    # An octal escape reads at most three digits; a fourth is a literal.
+    (r"^ARRAY\0741INT\0760$", True),
     # A range may end at `[`; what follows the class is literal again.
     (r"^ARRAY<[+-[:]>:]X]$", True),
     (r"^ARRAY<[+-[:]>:]$", True),
@@ -438,11 +440,11 @@ def test_the_tokenizer_reads_every_escape_re2_compiles():
         compile_matcher(pattern)
 
 
-def test_an_atom_dead_in_every_case_is_no_case_finding():
-    # No normalized native contains a tab or a newline in any case, so the
-    # atom is dead for a reason its case does not explain.
-    assert case_dead_atoms(r"^A\tB$") == ()
-    assert case_dead_atoms(r"^A\nB$") == ()
+@pytest.mark.parametrize("control", ["a", "f", "n", "r", "t", "v"])
+def test_a_control_escape_is_no_case_finding(control):
+    # A control character has no case, so folding case adds no match and the
+    # atom is never dead by case, whether or not a normalized native holds it.
+    assert case_dead_atoms(rf"^A\{control}B$") == ()
 
 
 def test_a_tokenizer_failure_on_a_matcher_re2_accepts_is_raised_not_refused(monkeypatch):
@@ -652,6 +654,10 @@ def test_a_position_with_no_probe_alphabet_stands():
     (r"^X(?<t>[]A)]+)$", "t", "[]A)]+"),
     # The inline flags in force at the opener travel with the source.
     (r"(?i)X(?<t>ab)", "t", "(?i:ab)"),
+    # An unnamed group takes a number too, so the names after it are read at
+    # the numbers RE2 binds them to.
+    (r"^(X)?(?<p>A)(?<q>B)$", "p", "A"),
+    (r"^(X)?(?<p>A)(?<q>B)$", "q", "B"),
 ])
 def test_named_group_source_extraction(native, name, expected):
     from analitiq.contracts.type_map import _named_group_source

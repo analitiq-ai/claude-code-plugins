@@ -1977,6 +1977,7 @@ def test_duplicate_exact_read_rule_warns_across_case_and_whitespace(validator):
     (r"^\141AR$", "warns", "aAR"),
     (r"^\Qvar", "warns", "var"),
     (r"^A[+-[:]b:]]$", "warns", "A+b:]]"),
+    (r"^\x{10428}$", "warns", "\U00010428"),
     # Refused by the contract, so there is no pattern for the warning to read.
     (r"^(?P<x>\d)X$", "refused", None),
     (r"^A(?<t>[0-9])B\k<t>$", "refused", None),
