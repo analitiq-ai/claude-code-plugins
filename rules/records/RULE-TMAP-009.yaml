@@ -15,10 +15,10 @@ rationale: >
   `native_type` — an author carrying a read rule's habits across writes the right
   syntax in the wrong key. The engine compiles that matcher with RE2 when it
   loads the connector, so a pattern that does not compile is not a narrower
-  match, it is a rule the engine cannot load at the moment it needs to render
-  DDL. RE2 also takes Python's `(?P<name>…)` spelling; this contract takes only
-  `(?<name>…)`, the same spelling a read rule takes, which makes it the
-  contract's choice rather than the dialect's. This states the engine as it
+  match: the whole map is refused at load, before any DDL is rendered and on
+  runs that would never render any. RE2 also takes Python's `(?P<name>…)`
+  spelling; this contract takes only `(?<name>…)`, the same spelling a read
+  rule takes, which makes it the contract's choice rather than the dialect's. This states the engine as it
   stands, and the gate is only as close to it as the dialect the gate compiles
   with: a matcher the gate admits and RE2 cannot parse passes here and is
   refused at load, while one the gate refuses and RE2 would take is a usable map

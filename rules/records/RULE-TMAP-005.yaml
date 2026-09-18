@@ -16,8 +16,8 @@ rationale: >
   are not RE2 syntax and read as ordinary regex on the page, so only compiling
   under the dialect that will match it tells the author which one they wrote.
   RE2 also takes Python's `(?P<name>…)` spelling; this contract takes only
-  `(?<name>…)`, which makes the single spelling the contract's choice rather
-  than the dialect's. This states the engine as it stands, and the gate is only
+  `(?<name>…)`, which makes the spelling the contract's choice rather than the
+  dialect's. This states the engine as it stands, and the gate is only
   as close to it as the dialect the gate compiles with: a matcher the gate
   admits and RE2 cannot parse passes here and is refused at load, while one the
   gate refuses and RE2 would take is a usable map rejected. Each mismatch is
