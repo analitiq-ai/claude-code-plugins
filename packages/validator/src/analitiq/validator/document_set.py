@@ -157,7 +157,7 @@ def _consistent_entities(document: object) -> frozenset[str]:
         is_pipeline_doc: "pipeline",
     }
 
-    for detector, validator in _core._KIND_REGISTRY:
+    for detector, validator in _core._KIND_REGISTRY:  # skipcq: PYL-W0212 — same-package read of the live kind registry
         if not detector(document):
             continue
         if validator is _validate_type_map:
