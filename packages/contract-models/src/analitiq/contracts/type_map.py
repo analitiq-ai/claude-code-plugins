@@ -15,8 +15,8 @@ which key is the *matcher* and which is *rendered*:
 Source of truth for both the published `type-map-read` / `type-map-write` JSON
 Schemas and the connector validator (which validates via `model_validate`).
 Only *error*-level rules live here — things that make a document invalid.
-Advisory quality checks that the contract tolerates (duplicate rules, dead
-uppercase-only patterns, write-vocabulary coverage gaps) are not contract
+Advisory quality checks that the contract tolerates (duplicate rules, read
+patterns spelling a case no native uses, write-vocabulary coverage gaps) are not contract
 violations and stay in the validator as warnings.
 """
 from __future__ import annotations
@@ -134,9 +134,8 @@ _OCTAL_DIGITS = "01234567"
 _CONTROL_ESCAPES = {"a": "\a", "f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v"}
 _CHARACTER_SET_ESCAPES = frozenset("dDsSwWCpP")
 _ZERO_WIDTH_ESCAPES = frozenset("bBAz")
-# RE2 reads a repetition count in ASCII digits only; `{` followed by anything
-# else is a literal.
-_REPETITION = re.compile(r"\{[0-9]+(?:,[0-9]*)?\}")
+# Locates a span that may be a repetition; `_is_repetition` decides.
+_REPETITION_CANDIDATE = re.compile(r"\{[0-9]+(?:,[0-9]*)?\}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,8 +144,8 @@ class _Atom:
 
     `text` is the atom as the matcher spells it. `pattern` is a pattern of its
     own matching the characters the atom matches where it sits, less the inline
-    `flags` in force there. `literal` is the character itself when the atom
-    stands for exactly one."""
+    `flags` in force there. `literal` is the character the atom spells, before
+    `flags` apply, when it spells exactly one."""
 
     text: str
     pattern: str
@@ -283,6 +282,15 @@ def _escape_end(pattern: str, start: int) -> int:
     return start + 2
 
 
+def _is_repetition(span: str) -> bool:
+    """Whether RE2 reads the braced `span` as a repetition count.
+
+    RE2 reads some digit spans (a leading zero, an overlong count) as literal
+    text. A repetition of `a` matches only `a`s, so `a` + span matching its own
+    spelling is RE2 reading the braces as literals."""
+    return _re2_compile("a" + span).fullmatch("a" + span) is None
+
+
 def _class_end(pattern: str, start: int) -> int:
     """Where the character class opening at `pattern[start]` (a `[`) ends: after
     the first `]` closing a class RE2 compiles on its own.
@@ -364,8 +372,12 @@ def _tokenize(pattern: str) -> tuple[_Token, ...]:
             group, flags = open_groups.pop()
             tokens.append(_GroupClose(group, i))
             i += 1
-        elif char == "{" and (repetition := _REPETITION.match(pattern, i)):
-            i = repetition.end()
+        elif (
+            char == "{"
+            and (candidate := _REPETITION_CANDIDATE.match(pattern, i))
+            and _is_repetition(candidate.group())
+        ):
+            i = candidate.end()
         elif char in "*+?^$|":
             i += 1
         elif char == ".":
@@ -440,8 +452,8 @@ def case_dead_atoms(matcher: str) -> tuple[str, ...]:
 
     An atom is case-dead when, under the inline flags in force where it sits, it
     matches no character a normalized native contains, while its
-    case-insensitive form matches one. ValueError when the matcher does not
-    compile."""
+    case-insensitive form matches one. ValueError when the contract refuses
+    the matcher."""
     characters = _normalized_native_characters()
 
     def matches_one(pattern: str) -> bool:
