@@ -637,11 +637,11 @@ def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> l
     return findings
 
 
-def _validate_pipeline_bundle(doc: Any, doc_path: Any = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature; a bundle has no filesystem anchor
+def _validate_pipeline_bundle(doc: Any, location: Any = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature; a bundle reads nothing beside itself
     """Kind entry point: dispatch a bundle document to the referential validator.
 
-    A bundle carries no filesystem anchor, so `doc_path` (the registry's
-    per-kind signature) is unused here.
+    A bundle carries every document it references, so it reads nothing
+    beside its `location` (the registry's per-kind signature), unused here.
     """
     return validate_pipeline_bundle(doc)
 

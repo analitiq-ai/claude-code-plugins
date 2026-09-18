@@ -3,10 +3,12 @@ transport the sibling connector.json declares.
 
 The connector model's `_transport_refs_resolvable` already gates every
 connector-INTERNAL ref site, but an endpoint is a separate document: no
-single-document validator can see both sides, so the rule is only checkable from
-the connector-anchored walk in `check_coverage`. These tests drive it exactly
-that way — through `validate_document(connector, doc_path=...)` over a real
-on-disk connector package.
+single-document validator can see both sides, so the rule is checkable only
+where both documents are in hand: the connector-anchored walk in
+`check_coverage`, and the standalone endpoint route's lookup of its sibling
+`connector.json`. Most tests here drive the first, through
+`validate_document(connector, doc_path=...)` over a real on-disk connector
+package; `TestStandaloneEndpointValidation` drives the second.
 """
 import json
 from pathlib import Path
@@ -386,6 +388,7 @@ class TestStandaloneEndpointValidation:
         }
 
     def _run(self, tmp_path, connector_body):
+        from analitiq.validator._location import located
         from analitiq.validator.connectors import _validate_api_endpoint
 
         pkg = tmp_path / "pkg"
@@ -395,7 +398,7 @@ class TestStandaloneEndpointValidation:
         doc_path = pkg / "endpoints" / "thing.json"
         doc = self._endpoint()
         doc_path.write_text(json.dumps(doc))
-        return _validate_api_endpoint(doc, doc_path)
+        return _validate_api_endpoint(doc, located(doc_path))
 
     def _ids(self, findings):
         return {(f.get("rule"), f.get("severity")) for f in findings}
@@ -472,10 +475,11 @@ class TestStandaloneEndpointValidation:
     def test_a_non_absolute_document_path_still_finds_the_sibling(
         self, tmp_path, monkeypatch, shape
     ):
-        """`Path("thing.json").parent.parent` is `.`, so a relative `--document`
-        run from inside `endpoints/` missed the connector entirely and downgraded
-        a genuinely broken `transport_ref` to a warning — a silent pass on the
-        one check this adds."""
+        """`Path("thing.json").parent.parent` is `.`, so a lookup that did not
+        anchor a relative path would miss the connector and report a broken
+        `transport_ref` as notApplicable rather than a fail. A path through
+        `..` must find it too."""
+        from analitiq.validator._location import located
         from analitiq.validator.connectors import _validate_api_endpoint
 
         pkg = tmp_path / "pkg"
@@ -489,7 +493,7 @@ class TestStandaloneEndpointValidation:
             Path("thing.json") if shape == "relative"
             else Path("..") / "endpoints" / "thing.json"
         )
-        findings = _validate_api_endpoint(doc, doc_path)
+        findings = _validate_api_endpoint(doc, located(doc_path))
         assert ("RULE-ENDP-047", "error") in self._ids(findings), (
             "the undeclared transport_ref was downgraded to a warning because "
             "the sibling lookup missed"

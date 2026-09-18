@@ -42,6 +42,8 @@ from typing import Any, Callable, Iterator
 
 from pydantic import TypeAdapter, ValidationError
 
+from ._location import Location, located
+
 # `analitiq.contracts.shared.rules` (`rule_by_id`, `RuleViolation`) is
 # imported lazily, inside the functions below that need it, never at this
 # module's own top level: `connectors`/`pipelines` import THIS module before
@@ -57,9 +59,9 @@ _KINDS = ("fail", "notApplicable", "informational")
 
 # The kind registry: ordered `(detector, validator_fn)` pairs. `_dispatch` runs
 # each detector in registration order and hands the document to the first
-# validator whose detector matches. A validator takes `(doc, doc_path)` and
+# validator whose detector matches. A validator takes `(doc, location)` and
 # returns a list of findings.
-_Validator = Callable[[Any, "Path | None"], list[dict]]
+_Validator = Callable[[Any, "Location | None"], list[dict]]
 _KIND_REGISTRY: list[tuple[Callable[[Any], bool], _Validator]] = []
 
 
@@ -286,11 +288,11 @@ def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: Typ
 
     A kind with no further cross-file or referential checks needs only
     `_model_findings(doc, adapter) + _missing_schema_url_findings(doc)` under the
-    per-kind `(doc, doc_path)` signature. Packaging that here lets such a
+    per-kind `(doc, location)` signature. Packaging that here lets such a
     module supply just its detector and adapter, so the combination is
     defined once rather than reimplemented per kind.
     """
-    def _validate(doc: Any, doc_path: Path | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+    def _validate(doc: Any, location: Location | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
         return _model_findings(doc, adapter) + _missing_schema_url_findings(doc)
     register_kind(detector, _validate)
 
@@ -299,15 +301,16 @@ def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: Typ
 # Dispatch
 # ---------------------------------------------------------------------------
 
-def validate_document(doc: Any, doc_path: Path | None = None) -> list[dict]:
+def validate_document(doc: Any, doc_path: Path | Location | None = None) -> list[dict]:
     """Detect the document kind, validate via its model, add cross-file checks."""
-    return _run_guarded(_dispatch, doc, doc_path, crash_label="document validation")
+    location = None if doc_path is None else located(doc_path)
+    return _run_guarded(_dispatch, doc, location, crash_label="document validation")
 
 
-def _dispatch(doc: Any, doc_path: Path | None) -> list[dict]:
+def _dispatch(doc: Any, location: Location | None) -> list[dict]:
     for detector, validator in _KIND_REGISTRY:
         if detector(doc):
-            return validator(doc, doc_path)
+            return validator(doc, location)
     # Anything no registered kind claims is a document we were asked to validate
     # but cannot identify — that is a validation failure, not a pass.
     return [finding(
