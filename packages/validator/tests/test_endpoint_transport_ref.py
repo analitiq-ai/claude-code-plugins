@@ -476,8 +476,9 @@ class TestStandaloneEndpointValidation:
         self, tmp_path, monkeypatch, shape
     ):
         """`Path("thing.json").parent.parent` is `.`, so a lookup that did not
-        anchor a relative or `..` path would miss the connector and report a
-        broken `transport_ref` as notApplicable rather than a fail."""
+        anchor a relative path would miss the connector and report a broken
+        `transport_ref` as notApplicable rather than a fail. A path through
+        `..` must find it too."""
         from analitiq.validator._location import located
         from analitiq.validator.connectors import _validate_api_endpoint
 
