@@ -46,11 +46,11 @@ than edited.
 | RULE-SHRD-010 | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. | `any` | error | validator | — |
 | RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
 | RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
-| RULE-TMAP-005 | A `regex` read rule's native_type pattern MUST compile under the ECMA-262 regex dialect. | `type-map` | error | validator | — |
+| RULE-TMAP-005 | A `regex` read rule's native_type pattern MUST compile under the RE2 regex dialect, and a named capture in it MUST be spelled `(?<name>…)`. | `type-map` | error | validator | — |
 | RULE-TMAP-006 | A `regex` read rule's arrow_type MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions. | `type-map` | error | validator | — |
 | RULE-TMAP-007 | A `${` opening a placeholder in an arrow_type render MUST be closed around a non-empty name. | `type-map` | error | validator | — |
 | RULE-TMAP-008 | A write `exact` rule's arrow_type MUST hold against the cross-parameter bounds its Arrow family declares, and the native_type DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | validator | — |
-| RULE-TMAP-009 | A write `regex` rule's arrow_type matcher MUST compile under the ECMA-262 regex dialect, and the native_type DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | validator | — |
+| RULE-TMAP-009 | A write `regex` rule's arrow_type matcher MUST compile under the RE2 regex dialect with any named capture spelled `(?<name>…)`, and the native_type DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | validator | — |
 | RULE-TMAP-011 | A type map MUST NOT carry a catch-all rule standing in for whatever the map's earlier-resolving rules leave uncovered. | `type-map` | error | — | — |
 | RULE-TMAP-017 | A connector's write map MUST render every Arrow type a source can hand its system, including the bare container markers an API source emits as literal Arrow types. | `type-map` | warning | validator | — |
 

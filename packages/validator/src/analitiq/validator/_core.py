@@ -25,7 +25,8 @@ This module owns the parts that are independent of any particular artifact kind:
   own verdict (the pipeline plugin's adapter, say) reduces over them the same
   way `_passed()` does, rather than a second predicate that can drift from it;
 - `_passed()` — `not any(finding_costs_a_pass(f) for f in findings)`, so
-  `main()` and a future caller answer "did this document pass" identically;
+  `main()` and `analitiq.validator.document_set` answer "did this document
+  pass" identically;
 - the `main()` CLI: read the document, validate, print `{"passed", "findings"}`,
   exit 0 iff `_passed()` says so (1 on a failing document / unreadable document;
   2 on CLI usage errors).
@@ -110,13 +111,6 @@ def _bounded(text: str, limit: int = 200) -> str:
     when it holds no whitespace to break on — a provider record is exactly that
     shape."""
     return text if len(text) <= limit else f"{text[:limit]}…"
-
-
-# Every way reading a JSON document off disk fails on what the file holds
-# rather than on this package. OSError is the path; ValueError is text that is
-# not UTF-8, not JSON, or JSON with an integer past the parser's digit limit;
-# RecursionError is JSON nested deeper than the parser descends.
-_JSON_READ_ERRORS = (OSError, ValueError, RecursionError)
 
 
 # Pydantic error types whose sentence renders a value taken from the failing
@@ -358,6 +352,29 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
 
 
 # ---------------------------------------------------------------------------
+# Document text
+# ---------------------------------------------------------------------------
+
+#: What `json.loads` raises for text it will not parse. `JSONDecodeError`, an
+#: integer past the interpreter's digit limit and a `UnicodeDecodeError` on the
+#: read are all `ValueError`; nesting past the recursion limit is a
+#: `RecursionError`, which is a `RuntimeError` and escapes a `ValueError` arm.
+_JSON_TEXT_REFUSALS = (ValueError, RecursionError)
+
+#: What reading a JSON document off disk raises for what the file holds rather
+#: than for this package: the path's own failure, or a refusal of its text.
+_JSON_READ_ERRORS = (OSError, *_JSON_TEXT_REFUSALS)
+
+
+def _unreadable_document_finding(exc: Exception) -> dict:
+    """The finding for a document whose text could not be read or parsed at
+    all, before any kind was even identified."""
+    return finding(
+        message_id="unreadable-document", kind="fail", path="",
+        message=f"Cannot read document: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -370,9 +387,7 @@ def main() -> int:
     try:
         document = json.loads(document_path.read_text())
     except _JSON_READ_ERRORS as exc:
-        print(json.dumps({"passed": False, "findings": [finding(
-            message_id="unreadable-document", kind="fail", path="",
-            message=f"Cannot read document: {exc}")]}))
+        print(json.dumps({"passed": False, "findings": [_unreadable_document_finding(exc)]}))
         return 1
 
     findings = validate_document(document, doc_path=document_path.resolve())

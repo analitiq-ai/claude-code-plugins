@@ -92,3 +92,19 @@ def validator_cli(tmp_path):
         return run("--document", str(path), timeout=timeout)
 
     return SimpleNamespace(run=run, on_document=on_document)
+
+
+#: Text the JSON parser refuses with something other than `JSONDecodeError`:
+#: nesting past the interpreter's recursion limit raises `RecursionError`, and an
+#: integer longer than the default `sys.get_int_max_str_digits()` a plain
+#: `ValueError`. Every route that parses a document has to catch both.
+_TEXT_REFUSED_OUTSIDE_JSONDECODEERROR = {
+    "too-deep": "[" * 20_000 + "]" * 20_000,
+    "oversized-integer": "1" * 5_000,
+}
+
+
+@pytest.fixture(params=list(_TEXT_REFUSED_OUTSIDE_JSONDECODEERROR.values()),
+                ids=list(_TEXT_REFUSED_OUTSIDE_JSONDECODEERROR))
+def text_refused_outside_jsondecodeerror(request):
+    return request.param

@@ -1,12 +1,10 @@
 """Fixture corpus for the path-free document-set API (`analitiq.validator
-.document_set`) — every case exercising one of its entry points is
-`xfail(strict=True)`, because each of those functions currently raises
-`NotImplementedError`. An implementation turns such a case from `xfail` to
-passing by replacing the stub body it exercises and removing that case's
-marker; `strict=True` means a case that starts passing while its marker is
-still on it fails the suite, so a marker can never survive its own fix by
-accident. The cases that grade a type-contract fact settled now — the
-signature pin and the `Finding` shape pin — carry no marker and pass today.
+.document_set`). A case exercising an entry point that raises
+`NotImplementedError` is `xfail(strict=True)`; every other case carries no
+marker. An implementation turns such a case from `xfail` to passing by
+replacing the stub body it exercises and removing that case's marker;
+`strict=True` means a case that starts passing while its marker is still on it
+fails the suite, so a marker can never survive its own fix by accident.
 
 Two corpora already committed for the path-based routes are reused here
 rather than re-authored: `packages/validator/tests/corpus/` (a connector
@@ -22,10 +20,9 @@ call. Nothing here covers a malformed argument — a bad key, a value that is
 not text, a key that is also a directory, an `entity` outside the vocabulary.
 Those are refused by the request models at construction and belong to the
 contract package's own model tests; a case asserting one of them produces a
-*finding* would contradict the gate. `bytes` and `bytearray` are what that gate
-does not refuse — pydantic decodes them in lax mode, byte-order mark included —
-so they reach these entry points as unreadable content, and pinning that
-coercion belongs to the model tests too.
+*finding* would contradict the gate. `bytes` and `bytearray` holding UTF-8 pass
+that gate — pydantic decodes them in lax mode, byte-order mark included — and
+pinning that coercion belongs to the model tests too.
 """
 from __future__ import annotations
 
@@ -53,7 +50,7 @@ if str(_PLUGIN_SCRIPTS) not in sys.path:
 def _xfail(fn_name: str):
     return pytest.mark.xfail(
         strict=True, raises=NotImplementedError,
-        reason=f"{fn_name} is not yet implemented (analitiq.validator.document_set)")
+        reason=f"{fn_name} raises NotImplementedError (analitiq.validator.document_set)")
 
 
 def _package_request(documents: dict) -> ValidatePackageRequest:
@@ -79,7 +76,7 @@ def _document_request(document, entity: str) -> ValidateSingleDocumentRequest:
 
 # ---------------------------------------------------------------------------
 # Finding — drift guard against the keys `analitiq.validator.finding` actually
-# produces (not xfail: a type-contract fact settled now). `finding()`'s own
+# produces (no marker: a type-contract fact). `finding()`'s own
 # docstring is the source: `rule` only when given, `severity` only for a
 # `fail` kind, everything else unconditional.
 # ---------------------------------------------------------------------------
@@ -137,7 +134,7 @@ def test_finding_matches_the_keys_finding_builder_produces(validator):
 
 # ---------------------------------------------------------------------------
 # The entry-point signatures — the surface this module exists to declare (not
-# xfail: a type-contract fact settled now). The request models are imported
+# marker: a type-contract fact). The request models are imported
 # under `TYPE_CHECKING` and no type checker runs over this repo, so without
 # this case a misspelled model name, a deferred import of a module that does
 # not exist, or an annotation naming the other request model reaches a release
@@ -455,17 +452,19 @@ def _write_package(root: Path, documents: dict) -> None:
 # checked against detection rather than trusted.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_single_document")
 def test_single_document_wraps_the_path_based_route(validator):
-    """A document whose declared `entity` matches what detection finds reports
-    exactly the path-based route's findings, wrapped in one envelope."""
+    """A document consistent with its declared `entity` reports exactly what
+    `validate_document` reports for it with no path, wrapped in one envelope.
+    With no path there are no siblings to read, so a connector's coverage check
+    is skipped, and the skip costs the pass."""
     document = json.loads((CORPUS / "valid_connector.json").read_text())
     expected_findings = validator.validate_document(document)
     result = validator.validate_single_document(_document_request(document, "connector"))
     assert json.dumps(result) == json.dumps(_expected_envelope(validator, expected_findings))
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["coverage-check-skipped-no-path"]
 
 
-@_xfail("validate_single_document")
 def test_declared_entity_that_disagrees_with_the_document_is_a_finding(validator):
     """The caller's declaration is checked, not trusted: a stream document sent
     as a connector is reported, not silently validated as whatever it looks
@@ -481,7 +480,69 @@ def test_declared_entity_that_disagrees_with_the_document_is_a_finding(validator
     assert not any(f["kind"] == "fail" for f in matched["findings"]), matched
 
 
-@_xfail("validate_single_document")
+# A type map is the one document a single registration claims under more than
+# one published name, so which model grades it turns on how the document
+# declares its direction and which name the caller sent. Every combination is a
+# row below. Each of the map's rules is valid in one direction only — a regex
+# `arrow_type` a read map may not render, an exact `native_type` placeholder a
+# write map may not leave unclosed — so each model reports a rule the other
+# never does.
+_RULES_VALID_IN_ONE_DIRECTION = [
+    {"match": "regex", "native_type": "TEXT", "arrow_type": ".*"},
+    {"match": "exact", "native_type": "VARCHAR(${", "arrow_type": "Utf8"},
+]
+_GRADED_ONLY_AS = {"read": "read-regex-arrow-type-invalid", "write": "write-exact-malformed-placeholder"}
+
+
+def _type_map_declaring(direction: str | None, via: str) -> dict:
+    document = {"rules": _RULES_VALID_IN_ONE_DIRECTION}
+    if via == "direction":
+        document["direction"] = direction
+    elif via == "$schema":
+        document["$schema"] = f"{_H}/type-map-{direction}/latest.json"
+    return document
+
+
+_TYPE_MAP_DECLARATIONS = [
+    ("read", "direction"), ("write", "direction"),
+    ("read", "$schema"), ("write", "$schema"),
+    (None, "nothing"), ("sideways", "direction"),
+]
+
+
+@pytest.mark.parametrize("sent_as", ["type-map-read", "type-map-write", "connector"])
+@pytest.mark.parametrize("declared,via", _TYPE_MAP_DECLARATIONS)
+def test_type_map_is_graded_by_the_model_its_declared_name_selects(validator, declared, via, sent_as):
+    """Content that declares a direction is consistent only with that
+    direction's name, and is graded exactly as `validate_document` grades it.
+    Only `direction` declares one: a `$schema` naming a direction declares
+    nothing. Content that declares none is consistent with either type-map
+    name, and the caller's name is then what selects the model — never a
+    default the document did not ask for."""
+    document = _type_map_declaring(declared, via)
+    result = validator.validate_single_document(_document_request(document, sent_as))
+    ids = [f["message_id"] for f in result["findings"]]
+
+    if not sent_as.startswith("type-map-"):
+        assert ids == ["entity-mismatch"], result
+        return
+    sent_direction = sent_as.removeprefix("type-map-")
+    if via == "direction" and declared in _GRADED_ONLY_AS:
+        if declared == sent_direction:
+            assert result == _expected_envelope(validator, validator.validate_document(document))
+            assert _GRADED_ONLY_AS[declared] in ids, result
+        else:
+            assert ids == ["entity-mismatch"], result
+        return
+    assert "/direction" in [f["path"] for f in result["findings"] if f["kind"] == "fail"], result
+    for direction, only_that_model_reports in _GRADED_ONLY_AS.items():
+        assert (only_that_model_reports in ids) == (direction == sent_direction), result
+    # The path-based route has no name to take a direction from, so it grades
+    # nothing past the missing one.
+    path_route = [f for f in validator.validate_document(document) if f["kind"] == "fail"]
+    assert path_route and {f["path"] for f in path_route} == {"/direction"}, path_route
+
+
 def test_type_map_entity_names_the_direction_the_document_declares(validator):
     """`entity`'s vocabulary separates the read direction from the write one
     while the core registry's detector claims a type map by shape alone, so the
@@ -498,7 +559,6 @@ def test_type_map_entity_names_the_direction_the_document_declares(validator):
     assert not any(f["kind"] == "fail" for f in sent_as_read["findings"]), sent_as_read
 
 
-@_xfail("validate_single_document")
 def test_unparseable_document_text_is_a_finding_not_a_raise(validator):
     """Document *content* is what this API judges, so text the JSON parser
     cannot read comes back as a finding under `unreadable-document`, the
@@ -509,6 +569,68 @@ def test_unparseable_document_text_is_a_finding_not_a_raise(validator):
     result = validator.validate_single_document(request)
     assert result["passed"] is False
     assert any(f["message_id"] == "unreadable-document" for f in result["findings"]), result
+
+
+def test_text_refused_outside_jsondecodeerror_is_a_finding_not_a_raise(
+        validator, text_refused_outside_jsondecodeerror):
+    """The parser refuses some text with an exception that is not a
+    `JSONDecodeError`. That text is still content a caller sent, so it is
+    reported like any other unreadable document rather than raised as though it
+    were a defect in this package."""
+    result = validator.validate_single_document(ValidateSingleDocumentRequest(
+        document=text_refused_outside_jsondecodeerror, entity="connector"))
+    assert [f["message_id"] for f in result["findings"]] == ["unreadable-document"], result
+
+
+# ---------------------------------------------------------------------------
+# `_consistent_entities`'s tables restate a vocabulary the contract package
+# generates, and nothing else in the validator package reads that owner. Per
+# `.claude/rules/no-drift-surfaces.md` a copy is pinned by a test that reads the
+# owner, or it is a defect — so the pin below reads `DOCUMENT_SCHEMA_NAMES`
+# itself. A kind registering with no name there cannot be declared as an
+# `entity` at all, so the vocabulary is what the tables have to track.
+# ---------------------------------------------------------------------------
+
+#: A document for every registration a published document-schema name resolves
+#: from, built from the fixtures above — a connector missing its `kind` is
+#: claimed by a registration of its own. The names are asserted against
+#: `DOCUMENT_SCHEMA_NAMES` itself, so a name added or renamed there fails here
+#: rather than silently going undetected.
+_DOCUMENT_FOR_ENTITY = (
+    ("connector", _CONNECTOR_WISE),
+    ("connector", {k: v for k, v in _CONNECTOR_WISE.items() if k != "kind"}),
+    ("connection", _CONN_WISE),
+    ("pipeline", _PIPELINE),
+    ("stream", _STREAM),
+    ("api-endpoint", _WISE_TRANSFERS_ENDPOINT),
+    ("database-endpoint", _DB_ENDPOINT),
+    ("type-map-read", _CONNECTOR_PG_TYPE_MAP_READ),
+    ("type-map-write", _CONNECTOR_PG_TYPE_MAP_WRITE),
+)
+
+
+def test_every_published_document_schema_name_is_detected(validator):
+    """Each name the contract publishes resolves from a document of that kind,
+    and only that name does. A name the contract adds or renames lands here as a
+    missing entry, rather than as every document of that kind drawing a spurious
+    `entity-mismatch`."""
+    from analitiq.contracts.validation_requests import DOCUMENT_SCHEMA_NAMES
+    from analitiq.validator.document_set import _consistent_entities
+
+    assert {entity for entity, _ in _DOCUMENT_FOR_ENTITY} == set(DOCUMENT_SCHEMA_NAMES)
+    for entity, document in _DOCUMENT_FOR_ENTITY:
+        assert _consistent_entities(document) == {entity}, (entity, document)
+
+
+def test_an_assembled_bundle_resolves_to_no_published_name(validator):
+    """A bundle is not a single document and no published schema names one, so
+    it is deliberately absent from `_consistent_entities`'s tables. Sent to this
+    entry point it is reported as matching no published schema — never
+    validated as the `pipeline` its core carries."""
+    bundle = {"pipeline": _PIPELINE, "streams": [_STREAM], "connections": {_SRC: _CONN_WISE}}
+    result = validator.validate_single_document(_document_request(bundle, "pipeline"))
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"] if f["kind"] == "fail"] == ["entity-mismatch"]
 
 
 # ---------------------------------------------------------------------------
