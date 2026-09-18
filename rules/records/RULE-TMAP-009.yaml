@@ -18,10 +18,13 @@ rationale: >
   match: the whole map is refused at load, before any DDL is rendered and on
   runs that would never render any. RE2 also takes Python's `(?P<name>…)`
   spelling; this contract takes only `(?<name>…)`, the same spelling a read
-  rule takes, which makes it the contract's choice rather than the dialect's. This states the engine as it
-  stands, and the gate is only as close to it as the dialect the gate compiles
-  with: a matcher the gate admits and RE2 cannot parse passes here and is
-  refused at load, while one the gate refuses and RE2 would take is a usable map
-  rejected. Each mismatch is live.
+  rule takes, which makes it the contract's choice rather than the dialect's. This states the engine as it stands: it first validates the map
+  against the contract-model release it pins, which runs this same gate, and
+  then compiles the matcher with RE2. The gate is only as close to RE2 as the
+  dialect it compiles with. A matcher the gate admits and RE2 cannot parse
+  passes authoring and is refused at load. One the gate refuses and RE2 would
+  take is refused at load too, by the engine's own copy of the gate, and becomes
+  a usable map rejected only when this gate and the release the engine pins
+  compile with different dialects.
 status: active
 superseded_by: null
