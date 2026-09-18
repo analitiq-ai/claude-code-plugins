@@ -8,6 +8,7 @@ every question about what is actually there goes to the tree.
 """
 from __future__ import annotations
 
+import io
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
@@ -97,7 +98,11 @@ class MemoryTree(Tree):
     """
 
     def __init__(self, texts: Mapping[str, str]) -> None:
-        self._texts = {PurePosixPath(key): text for key, text in texts.items()}
+        # Read as a text-mode file is: `\r\n` and a lone `\r` become `\n`.
+        # A parse error quotes offsets into what it was handed, so a document
+        # read any other way is reported differently from the same file on disk.
+        self._texts = {PurePosixPath(key): io.StringIO(text, newline=None).read()
+                       for key, text in texts.items()}
         self._dirs = {parent for key in self._texts for parent in key.parents}
 
     def _entries(self) -> Iterator[PurePosixPath]:

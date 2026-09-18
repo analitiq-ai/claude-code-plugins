@@ -87,6 +87,12 @@ LAYOUTS = {
         "connector.json": _API, "endpoints/v1__records.json": _endpoint("v1__records")}),
     "api package, read map unparseable": ("connector.json", {
         **_API_PACKAGE, "type-map-read.json": "{not json"}),
+    # Text-mode reads turn `\r\n` and a lone `\r` into `\n`, and a parse error
+    # quotes offsets into the text it was handed.
+    "api package, read map unparseable with CRLF endings": ("connector.json", {
+        **_API_PACKAGE, "type-map-read.json": '{\r\n  "direction": "read",\r\n  "rules": [,]\r\n}'}),
+    "api package, read map unparseable with lone CR endings": ("connector.json", {
+        **_API_PACKAGE, "type-map-read.json": '{\r  "direction": "read",\r  "rules": [,]\r}'}),
     "api package, write map beside the read map": ("connector.json", {
         **_API_PACKAGE, "type-map-write.json": _map("write")}),
     "api package, legacy type-map name": ("connector.json", {
