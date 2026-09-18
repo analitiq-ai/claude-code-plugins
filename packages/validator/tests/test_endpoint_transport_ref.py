@@ -386,6 +386,7 @@ class TestStandaloneEndpointValidation:
         }
 
     def _run(self, tmp_path, connector_body):
+        from analitiq.validator._location import located
         from analitiq.validator.connectors import _validate_api_endpoint
 
         pkg = tmp_path / "pkg"
@@ -395,7 +396,7 @@ class TestStandaloneEndpointValidation:
         doc_path = pkg / "endpoints" / "thing.json"
         doc = self._endpoint()
         doc_path.write_text(json.dumps(doc))
-        return _validate_api_endpoint(doc, doc_path)
+        return _validate_api_endpoint(doc, located(doc_path))
 
     def _ids(self, findings):
         return {(f.get("rule"), f.get("severity")) for f in findings}
@@ -476,6 +477,7 @@ class TestStandaloneEndpointValidation:
         run from inside `endpoints/` missed the connector entirely and downgraded
         a genuinely broken `transport_ref` to a warning — a silent pass on the
         one check this adds."""
+        from analitiq.validator._location import located
         from analitiq.validator.connectors import _validate_api_endpoint
 
         pkg = tmp_path / "pkg"
@@ -489,7 +491,7 @@ class TestStandaloneEndpointValidation:
             Path("thing.json") if shape == "relative"
             else Path("..") / "endpoints" / "thing.json"
         )
-        findings = _validate_api_endpoint(doc, doc_path)
+        findings = _validate_api_endpoint(doc, located(doc_path))
         assert ("RULE-ENDP-047", "error") in self._ids(findings), (
             "the undeclared transport_ref was downgraded to a warning because "
             "the sibling lookup missed"

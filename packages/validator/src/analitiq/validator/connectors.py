@@ -46,8 +46,8 @@ import re
 import reprlib
 import sys
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Annotated, Any, Callable, Iterator, Literal
+from pathlib import Path, PurePath
+from typing import Annotated, Any, Callable, Iterator, Literal, TypeVar
 
 from ._core import (
     _JSON_READ_ERRORS,
@@ -59,6 +59,7 @@ from ._core import (
     _model_findings,
     _run_guarded,
 )
+from ._location import Location, located
 from ._sample_budget import BudgetedGrader
 
 # The contract models resolve from the `analitiq-contract-models` dependency —
@@ -935,7 +936,7 @@ def _api_endpoint_document_findings(
     return findings
 
 
-def is_stem_addressed_endpoint_path(doc_path: Path) -> bool:
+def is_stem_addressed_endpoint_path(doc_path: PurePath) -> bool:
     """True iff `doc_path` is an authored connection-scoped endpoint file the engine
     locates by its filename stem — `.../definition/endpoints/{endpoint_id}.json`.
 
@@ -949,7 +950,7 @@ def is_stem_addressed_endpoint_path(doc_path: Path) -> bool:
     return parent.name == "endpoints" and parent.parent.name == "definition"
 
 
-def is_addressed_endpoint_path(doc_path: Path) -> bool:
+def is_addressed_endpoint_path(doc_path: PurePath) -> bool:
     """True iff `doc_path` is an endpoint file sitting at the home the engine
     resolves it from — an `endpoints/` directory, whatever carries that
     directory: a connector release for an api endpoint, a connection's
@@ -973,7 +974,7 @@ _UNREAD = object()
 
 
 def _load_json_sibling(
-    path: Path, *, rule: str | None, message_id: str,
+    path: Location, *, rule: str | None, message_id: str,
 ) -> tuple[Any, list[dict]]:
     """Read a sibling JSON document, reporting a read/parse failure — carrying,
     when the caller names one, the rule that sibling's content would otherwise
@@ -1082,18 +1083,20 @@ def _read_from(name: str, findings: list[dict]) -> list[dict]:
     return [{**f, "message": f"{name}: {f['message']}"} for f in findings]
 
 
-def _legacy_type_map_present(parent: Path) -> bool:
+def _legacy_type_map_present(parent: Location) -> bool:
     """Whether `parent` carries the dead pre-split type-map name.
 
     The name is what is refused, so a directory or a broken link carrying it
     counts: answering only for a regular file would let an author keep the name
     by making it something else.
     """
-    dead = parent / _LEGACY_MAP_FILENAME
-    return dead.exists() or dead.is_symlink()
+    return (parent / _LEGACY_MAP_FILENAME).occupied()
 
 
-def _type_map_sibling_paths(parent: Path) -> list[Path]:
+_Directory = TypeVar("_Directory", Path, Location)
+
+
+def _type_map_sibling_paths(parent: _Directory) -> list[_Directory]:
     """The entries in `parent` whose names mark them as type-map documents.
 
     Sorted because directory order is the filesystem's, and "the document that
@@ -1138,7 +1141,7 @@ class TypeMapSiblings:
     findings: list[tuple[str, dict]]
 
 
-def collect_type_maps(parent: Path, *, rule: str | None) -> TypeMapSiblings:
+def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSiblings:
     """Collect the type-map documents in `parent` by the direction each declares.
 
     Published because a connector's maps and a connection's are collected by
@@ -1153,6 +1156,7 @@ def collect_type_maps(parent: Path, *, rule: str | None) -> TypeMapSiblings:
     neither: filename order is not an answer to which map a consumer takes, so
     grading either would report on a document no consumer can choose.
     """
+    parent = located(parent)
     findings: list[tuple[str, dict]] = []
     if _legacy_type_map_present(parent):
         findings.append((_LEGACY_MAP_FILENAME, finding(
@@ -1189,7 +1193,7 @@ def collect_type_maps(parent: Path, *, rule: str | None) -> TypeMapSiblings:
     return TypeMapSiblings(maps, declared_by, findings)
 
 
-def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
+def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     """Connector ↔ sibling type-map coverage (the irreducibly cross-file check)."""
     if not isinstance(doc, dict) or not any(k in doc for k in _CONNECTOR_SENTINELS):
         return []
@@ -1212,7 +1216,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                 f"type-map coverage skipped: connector 'kind'={kind!r} is not in the "
                 "closed enum (the model enforces this)."))]
 
-    collection = collect_type_maps(doc_path.parent, rule="RULE-PKG-030")
+    package = located(doc_path).parent
+    collection = collect_type_maps(package, rule="RULE-PKG-030")
     findings = [f for _, f in collection.findings]
     documents, declared_by = collection.maps, collection.declared_by
 
@@ -1281,7 +1286,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                 "sibling holds the read direction, or the one that does has a "
                 "`rules` that is not a list. Endpoint native_type/arrow_type "
                 "agreement is unverified until it is fixed.")))
-    endpoint_dir = doc_path.parent / "endpoints"
+    endpoint_dir = package / "endpoints"
     if not endpoint_dir.is_dir():
         findings.append(finding(
             rule="RULE-PKG-035",
@@ -1306,7 +1311,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
     # directly so a duplicate is reported as a duplicate.
     seen_ids: dict[str, str] = {}
     for ep_path in endpoint_files:
-        rel = ep_path.relative_to(endpoint_dir).as_posix()
+        rel = ep_path.key.relative_to(endpoint_dir.key).as_posix()
         if "/" in rel:
             findings.append(finding(
                 rule="RULE-PKG-031",
@@ -1387,14 +1392,14 @@ _TYPE_MAP_ADAPTER = TypeAdapter(
 # Per-kind validators + registration
 # ---------------------------------------------------------------------------
 
-def _validate_connector(doc: Any, doc_path: Path | None) -> list[dict]:
+def _validate_connector(doc: Any, location: Location | None) -> list[dict]:
     findings = _model_findings(doc, _CONNECTOR_ADAPTER)
     findings += _missing_schema_url_findings(doc)
-    findings += check_coverage(doc, doc_path)
+    findings += check_coverage(doc, location)
     return findings
 
 
-def _validate_api_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
+def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
     transports: Any = None
     sibling_findings: list[dict] = []
     if isinstance(doc, dict):
@@ -1416,16 +1421,8 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
             # could never be cleared — an alarm that cannot be acted on trains
             # authors to ignore the id. Only warn when the connector genuinely
             # is not reachable.
-            # `.resolve()` first: `Path("things.json").parent.parent` is `.`, so
-            # validating with a relative `--document` from inside `endpoints/`
-            # missed the sibling and downgraded a genuinely broken ref to a
-            # warning — a silent pass on the one check this adds. `..` in the
-            # path failed the same way.
-            sibling = (
-                doc_path.resolve().parent.parent / "connector.json"
-                if doc_path
-                else None
-            )
+            package = location.ancestor(2) if location is not None else None
+            sibling = package / "connector.json" if package is not None else None
             connector_doc: Any = _UNREAD
             sibling_exists = sibling is not None and sibling.is_file()
             if sibling_exists:
@@ -1496,14 +1493,14 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
     # along so the locating half of those checks reads the same on both routes.
     findings = _api_endpoint_document_findings(
         doc, transports,
-        filename=(doc_path.name
-                  if doc_path is not None and is_addressed_endpoint_path(doc_path)
+        filename=(location.name
+                  if location is not None and is_addressed_endpoint_path(location.key)
                   else ""))
     findings.extend(sibling_findings)
     return findings
 
 
-def _validate_database_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
+def _validate_database_endpoint(doc: Any, location: Location | None) -> list[dict]:
     # The filename↔id gate applies only to the authored connection-scoped file the
     # engine locates by stem (`.../definition/endpoints/{endpoint_id}.json`), not to
     # the hash-addressed materialized snapshot (`.../endpoints/{endpoint_id}/schemas/
@@ -1514,12 +1511,12 @@ def _validate_database_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
     # gated against database_object regardless of location.
     findings = _model_findings(doc, _DATABASE_ENDPOINT_ADAPTER)
     findings += _database_endpoint_locator_findings(doc)
-    if doc_path is not None and is_stem_addressed_endpoint_path(doc_path):
-        findings += endpoint_filename_findings(doc, doc_path.name)
+    if location is not None and is_stem_addressed_endpoint_path(location.key):
+        findings += endpoint_filename_findings(doc, location.name)
     return findings
 
 
-def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+def _validate_type_map(doc: Any, location: Location | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
     # A document handed here stands alone: no filename located it, so the
     # direction it declares is the only one it has.
     return type_map_findings_as_declared(doc)
@@ -1573,7 +1570,7 @@ def _type_map_discriminator_findings(doc: Any) -> list[dict]:
     return findings
 
 
-def _validate_kindless_connector(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
+def _validate_kindless_connector(doc: Any, location: Location | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
     # A dict carrying connector sentinels but no `kind` is a connector missing
     # its discriminator — hand it to the model so the missing `kind` is reported
     # (rather than silently passing as "unrecognized"). `$schema` is optional on
