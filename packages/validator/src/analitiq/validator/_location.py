@@ -184,6 +184,10 @@ def located(where: Path | Location) -> Location:
     directory holding the link, not where its target lives. Absolute, so that
     `parent` of a relative path names the directory it sits in rather than
     stopping at `.`.
+
+    Raises the kernel's `OSError` where it cannot look up a `Path` up to its
+    last `..`, and `ValueError` where that lookup lands elsewhere than the
+    names spell: such a path has no location to grade.
     """
     if isinstance(where, Location):
         return where

@@ -1156,6 +1156,8 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
     direction to report through. A direction two documents declare is held by
     neither: filename order is not an answer to which map a consumer takes, so
     grading either would report on a document no consumer can choose.
+
+    A `parent` that `located` refuses raises its refusal.
     """
     parent = located(parent)
     findings: list[tuple[str, dict]] = []
@@ -1195,7 +1197,10 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
 
 
 def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
-    """Connector ↔ sibling type-map coverage (the irreducibly cross-file check)."""
+    """Connector ↔ sibling type-map coverage (the irreducibly cross-file check).
+
+    A connector's `doc_path` that `located` refuses raises its refusal.
+    """
     if not isinstance(doc, dict) or not any(k in doc for k in _CONNECTOR_SENTINELS):
         return []
     if doc_path is None:

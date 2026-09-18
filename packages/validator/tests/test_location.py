@@ -274,13 +274,28 @@ def test_a_dotdot_out_of_a_link_to_elsewhere_is_refused(tmp_path, validator_cli,
     assert _split(validator_cli, tmp_path / given) == ["unreadable-document"]
 
 
-def test_type_maps_are_not_collected_through_a_dotdot_out_of_a_link_to_elsewhere(tmp_path, validator):
-    _write(tmp_path / "real", {"type-map-read.json": _map("read"), "endpoints/README.md": ""})
-    _write(tmp_path / "spelled", {"type-map-read.json": _map("read")})
+_ENTRIES = {
+    "validate_document": lambda v, where: v.validate_document(_API, doc_path=where / "connector.json"),
+    "check_coverage": lambda v, where: v.check_coverage(_API, where / "connector.json"),
+    "collect_type_maps": lambda v, where: v.collect_type_maps(where, rule=None),
+}
+
+
+@pytest.mark.parametrize("given, refusal", [
+    ("spelled/link/..", ValueError), ("spelled/typo/..", FileNotFoundError),
+], ids=["out of a link to elsewhere", "out of a missing name"])
+@pytest.mark.parametrize("entry", _ENTRIES.values(), ids=_ENTRIES.keys())
+def test_a_path_located_refuses_is_raised_by_every_entry_taking_one(
+        tmp_path, validator, entry, given, refusal):
+    """A refused path has no location to grade, so no finding can stand for
+    it; and a finding would be the crash guard's, which reports a validator
+    bug."""
+    _write(tmp_path / "real", _API_PACKAGE)
+    _write(tmp_path / "spelled", _API_PACKAGE)
     (tmp_path / "spelled/link").symlink_to("../real/endpoints")
 
-    with pytest.raises(ValueError):
-        validator.collect_type_maps(tmp_path / "spelled/link/..", rule=None)
+    with pytest.raises(refusal):
+        entry(validator, tmp_path / given)
 
 
 def test_a_dotdot_is_stepped_up_before_the_layout_is_read(tmp_path, validator):
@@ -298,17 +313,29 @@ def test_a_dotdot_is_stepped_up_before_the_layout_is_read(tmp_path, validator):
     assert ("fail", "transport-ref-undeclared") in _endpoint_047(findings), findings
 
 
-def test_an_endpoint_outside_an_endpoints_directory_reads_no_connector(tmp_path, validator):
+@pytest.mark.parametrize("given, remedy", [
+    (None, "no path was given, so there is no directory to read the connector from. "
+           "Validate it at its path, `endpoints/{endpoint_id}.json` beside its connector"),
+    ("pkg/endpoints/thing.json", "there is no connector.json file beside the `endpoints/` "
+                                 "directory holding this document. Place the connector there and re-run"),
+    ("pkg/thing.json", "the document is not directly inside an `endpoints/` directory, so no "
+                       "connector is read for it. Place it at `endpoints/{endpoint_id}.json` "
+                       "beside its connector"),
+], ids=["no path", "no connector beside endpoints", "outside an endpoints directory"])
+def test_an_endpoint_with_no_connector_read_is_told_why(tmp_path, validator, given, remedy):
     """The connector lookup is for `endpoints/{id}.json` one level below its
     connector. From anywhere else, a connector two levels up is not this
-    endpoint's."""
+    endpoint's, and the author is told to move the endpoint, not the
+    connector."""
     doc = _endpoint("thing", transport_ref="api")
-    _write(tmp_path, {"connector.json": _UNDECLARED, "pkg/thing.json": doc})
+    _write(tmp_path, {"connector.json": _UNDECLARED})
 
-    findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/thing.json")
+    findings = validator.validate_document(doc, doc_path=given and tmp_path / given)
 
-    assert _endpoint_047(findings) == [
-        ("notApplicable", "transport-ref-check-skipped-no-sibling")], findings
+    assert [(f["kind"], f["message_id"], f["message"]) for f in findings
+            if f.get("rule") == "RULE-ENDP-047"] == [
+        ("notApplicable", "transport-ref-check-skipped-no-sibling",
+         f"transport_ref ['api'] not checked: {remedy}.")], findings
 
 
 def test_a_dotdot_out_of_a_link_landing_where_its_names_spell_is_collapsed(tmp_path, validator):

@@ -302,7 +302,11 @@ def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: Typ
 # ---------------------------------------------------------------------------
 
 def validate_document(doc: Any, doc_path: Path | Location | None = None) -> list[dict]:
-    """Detect the document kind, validate via its model, add cross-file checks."""
+    """Detect the document kind, validate via its model, add cross-file checks.
+
+    A `doc_path` that `located` refuses raises its refusal: a finding would
+    come from the crash guard, which reports a validator bug.
+    """
     location = None if doc_path is None else located(doc_path)
     return _run_guarded(_dispatch, doc, location, crash_label="document validation")
 
@@ -365,7 +369,8 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
 _JSON_TEXT_REFUSALS = (ValueError, RecursionError)
 
 #: What reading a JSON document off disk raises for what the file holds rather
-#: than for this package: the path's own failure, or a refusal of its text.
+#: than for this package: the path's own failure, a refusal of its text, or
+#: `located`'s refusal of the path.
 _JSON_READ_ERRORS = (OSError, *_JSON_TEXT_REFUSALS)
 
 
