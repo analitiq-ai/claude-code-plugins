@@ -1481,7 +1481,7 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                     elif addressed:
                         reason = ("there is no connector.json file beside the "
                                   "`endpoints/` directory holding this document. "
-                                  "Validate the connector to resolve it")
+                                  "Place the connector there and re-run")
                     else:
                         reason = ("the document is not directly inside an "
                                   "`endpoints/` directory, so no connector is read "

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import errno
 import json
+import os
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -311,31 +312,76 @@ def test_a_dotdot_out_of_a_link_leaves_the_links_above_it_standing(tmp_path, val
     assert ("fail", "transport-ref-undeclared") in _endpoint_047(findings), findings
 
 
-def test_a_link_loop_before_a_dotdot_is_unreadable(tmp_path, validator_cli):
-    """Followed without a bound, a loop would never be stepped out of."""
-    _write(tmp_path / "pkg", _API_PACKAGE)
-    (tmp_path / "pkg/loop").symlink_to("loop")
-    (tmp_path / "pkg/via").symlink_to("loop/..")
-
-    given = tmp_path / "pkg/via/../connector.json"
-    result = validator_cli.run("--document", str(given))
-
-    assert [f["message_id"] for f in json.loads(result.stdout)["findings"]] == [
-        "unreadable-document"], result.stdout
+def _refusals(cli, given: Path) -> tuple[list[str], int]:
+    """What the CLI reports on `given`, and the errno `located` raises on it."""
+    result = cli.run("--document", str(given))
     with pytest.raises(OSError) as refused:
         located(given)
-    assert (refused.value.errno, refused.value.filename) == (errno.ELOOP, str(given))
+    return [f["message_id"] for f in json.loads(result.stdout)["findings"]], refused.value.errno
 
 
-@pytest.mark.parametrize("left", ["typo", "connector.json", "dangling", "filelink"])
-def test_a_dotdot_after_what_is_no_directory_is_unreadable(tmp_path, validator_cli, left):
-    """The kernel refuses to step up out of a name that is missing or is no
-    directory, so there is no file there to grade."""
+def _chain(where: Path, stem: str, hops: int, target: str) -> None:
+    """`stem0` -> `stem1` -> ... -> `target`, `hops` links in all."""
+    for i in range(hops):
+        (where / f"{stem}{i}").symlink_to(f"{stem}{i + 1}" if i + 1 < hops else target)
+
+
+@pytest.mark.parametrize("links, given", [
+    ({"loop": "loop", "via": "loop/.."}, "via/../connector.json"),
+    ({"a": "b/..", "b": "a/.."}, "a/../connector.json"),
+], ids=["a loop behind a link", "links stepping out of each other"])
+def test_a_link_loop_before_a_dotdot_is_unreadable(tmp_path, validator_cli, links, given):
+    """Followed without a bound, a loop would never be stepped out of."""
+    _write(tmp_path / "pkg", _API_PACKAGE)
+    for name, target in links.items():
+        (tmp_path / "pkg" / name).symlink_to(target)
+
+    assert _refusals(validator_cli, tmp_path / "pkg" / given) == (
+        ["unreadable-document"], errno.ELOOP)
+
+
+@pytest.mark.parametrize("left, code", [
+    ("typo", errno.ENOENT), ("connector.json", errno.ENOTDIR), ("dangling", errno.ENOENT),
+    ("filelink", errno.ENOTDIR), ("connector.json/x", errno.ENOTDIR), ("loop/x", errno.ELOOP),
+    ("endpoints/../typo", errno.ENOENT),
+])
+def test_a_dotdot_the_kernel_cannot_take_is_refused_as_the_kernel_refuses_it(
+        tmp_path, validator_cli, left, code):
+    """Stepping up out of a name needs every name up to it to lead to a
+    directory, so there is no file there to grade, and why is the kernel's to
+    say."""
     _write(tmp_path / "pkg", _API_PACKAGE)
     (tmp_path / "pkg/dangling").symlink_to("gone")
     (tmp_path / "pkg/filelink").symlink_to("type-map-read.json")
+    (tmp_path / "pkg/loop").symlink_to("loop")
 
-    result = validator_cli.run("--document", str(tmp_path / f"pkg/{left}/../connector.json"))
+    assert _refusals(validator_cli, tmp_path / f"pkg/{left}/../connector.json") == (
+        ["unreadable-document"], code)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root searches any directory")
+def test_a_dotdot_out_of_a_directory_that_cannot_be_searched_is_refused(tmp_path, validator_cli):
+    _write(tmp_path / "pkg", _API_PACKAGE)
+    (tmp_path / "pkg/sealed").mkdir(mode=0o600)
+
+    assert _refusals(validator_cli, tmp_path / "pkg/sealed/../connector.json") == (
+        ["unreadable-document"], errno.EACCES)
+
+
+@pytest.mark.parametrize("chains, given", [
+    ({"c": (30, "pkg"), "pkg/a": (15, "sub")}, "c0/a0/../connector.json"),
+    ({"h": (25, "pkg"), "c": (25, "pkg")}, "h0/../c0/connector.json"),
+], ids=["all stepped out of", "some after the dotdot"])
+def test_more_links_than_one_lookup_follows_are_unreadable(tmp_path, validator_cli, chains, given):
+    """The kernel bounds every link one lookup follows, whether a `..` steps
+    out of it or not."""
+    _write(tmp_path / "pkg", _API_PACKAGE)
+    (tmp_path / "pkg/sub").mkdir()
+    for where, (hops, target) in chains.items():
+        stem = Path(where)
+        _chain(tmp_path / stem.parent, stem.name, hops, target)
+
+    result = validator_cli.run("--document", str(tmp_path / given))
 
     assert [f["message_id"] for f in json.loads(result.stdout)["findings"]] == [
         "unreadable-document"], result.stdout
@@ -364,8 +410,8 @@ def test_a_link_to_its_own_parent_steps_up_from_that_parent(tmp_path, validator_
 
 
 def test_a_linked_directory_under_endpoints_is_not_walked(tmp_path, validator):
-    """A loop of links would be walked without end, and a link can hand the
-    walk any directory on the host running the check."""
+    """Through a loop of links, every file below it would be reported again at
+    each turn."""
     _write(tmp_path / "pkg", _API_PACKAGE)
     _write(tmp_path / "elsewhere", {"z.json": _endpoint("z")})
     (tmp_path / "pkg/endpoints/sub").symlink_to("../../elsewhere")

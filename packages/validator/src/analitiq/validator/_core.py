@@ -387,10 +387,10 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        # Read through the location it is graded at, so the document and its
-        # siblings come from one place whatever the platform makes of `..`.
+        # Read as given, so a path the kernel refuses is refused for the
+        # kernel's own reason; the location names the file that read opened.
+        document = json.loads(Path(args.document).read_text())
         location = located(Path(args.document))
-        document = json.loads(location.read_text())
     except _JSON_READ_ERRORS as exc:
         print(json.dumps({"passed": False, "findings": [_unreadable_document_finding(exc)]}))
         return 1

@@ -8,7 +8,6 @@ every question a check asks about what is actually there goes to the tree.
 """
 from __future__ import annotations
 
-import errno
 import io
 import os
 from abc import ABC, abstractmethod
@@ -46,7 +45,7 @@ class Tree(ABC):
     @abstractmethod
     def rglob(self, key: PurePath, pattern: str) -> Iterable[PurePath]:
         """The entries anywhere below `key` whose names match `pattern`, never
-        from inside a linked directory, in no particular order."""
+        from inside a linked directory below it, in no particular order."""
 
 
 class DiskTree(Tree):
@@ -69,9 +68,9 @@ class DiskTree(Tree):
         return key.glob(pattern)
 
     def rglob(self, key: Path, pattern: str) -> Iterable[Path]:
-        # Never descends through a linked directory, and must not: a loop of
-        # links would be walked without end, and a link can hand the walk any
-        # directory on the host running the check.
+        # Never descends into a linked directory below `key` (a linked `key` is
+        # walked), and must not: through a loop of links, every file below it
+        # would be reported again at each turn.
         return key.rglob(pattern)
 
 
@@ -183,48 +182,39 @@ def located(where: Path | Location) -> Location:
 
     A link is followed only where a `..` steps out of it: otherwise a linked
     document belongs to the directory holding the link, so its siblings are
-    read there and not where the link's target lives. Absolute, so that `parent` of a relative path names the directory it
-    sits in rather than stopping at `.`.
+    read there and not where the link's target lives. Absolute, so that
+    `parent` of a relative path names the directory it sits in rather than
+    stopping at `.`.
     """
     if isinstance(where, Location):
         return where
     return Location(_stepped_up(Path(where).absolute()), DISK)
 
 
-#: Links followed while stepping up out of them, past which the path is refused
-#: as a loop. Linux's own bound on the links one lookup follows.
-_LINK_HOPS = 40
-
-
 def _stepped_up(path: Path) -> Path:
     """`path` without its `..`, naming the file a read of it opens.
 
     POSIX steps up from where a link leads, so only the link a `..` leaves is
-    followed, and refuses to step up out of a name that is missing or is no
-    directory. Win32 collapses `..` against the names written before it opens
+    followed. Whether a `..` can be taken at all is the kernel's to say, so the
+    path up to the last one is looked up first and its refusal raised as it
+    stands; every link followed below is then one that lookup followed, so the
+    steps end. Win32 collapses `..` against the names written before it opens
     anything.
     """
     if os.name == "nt":
         return Path(os.path.normpath(path))
-    followed = 0
-
-    def refused(code: int) -> OSError:
-        return OSError(code, os.strerror(code), str(path))
+    if ".." in path.parts:
+        last = len(path.parts) - path.parts[::-1].index("..")
+        os.stat(Path(*path.parts[:last]))
 
     def step(spelled: Path) -> Path:
-        nonlocal followed
         walked = Path(spelled.anchor)
         for name in spelled.parts[1:]:
             if name != "..":
                 walked /= name
                 continue
             while walked.is_symlink():
-                followed += 1
-                if followed > _LINK_HOPS:
-                    raise refused(errno.ELOOP)
                 walked = step(walked.parent / os.readlink(walked))
-            if not walked.is_dir():
-                raise refused(errno.ENOTDIR if walked.exists() else errno.ENOENT)
             walked = walked.parent
         return walked
 
