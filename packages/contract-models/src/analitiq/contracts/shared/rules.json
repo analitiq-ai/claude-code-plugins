@@ -5679,7 +5679,7 @@
   },
   {
    "id": "RULE-PKG-030",
-   "statement": "A connector whose `kind` resolves types MUST ship a sibling `type-map.json` carrying a rule list for each direction that kind renders and none for a direction it does not; no connector ships any other `type-map-*.json` beside it.\n",
+   "statement": "A connector whose `kind` resolves types MUST ship a sibling `type-map.json` carrying a rule list for each direction its `kind` calls for and none for a direction it does not; no connector ships any other `type-map-*.json` beside it.\n",
    "tier": "reference",
    "severity": "error",
    "artifact_kinds": [
@@ -7766,7 +7766,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A map carrying neither section maps no type in either direction, so the file reads as coverage it does not provide. Omitting the direction a map has no rules for is the intended authoring — the rule only refuses omitting both. The obligation is a presence requirement on one document, mirrored into the published schema.\n",
+   "rationale": "A map carrying no section maps no type in any direction, so the file reads as coverage it does not provide. Omitting the direction a map has no rules for is the intended authoring — the rule only refuses omitting every section. The obligation is a presence requirement on one document, mirrored into the published schema.\n",
    "status": "active",
    "superseded_by": null
   }

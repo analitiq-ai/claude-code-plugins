@@ -42,8 +42,8 @@ The map is a **standalone** sibling of `connector.json`:
 ```
 
 It validates against `https://schemas.analitiq.ai/type-map/latest.json`. The
-write map shares the read map's rule shape but inverts the direction
-(`arrow_type` matches, `native_type` renders). Neither is ever embedded inside
+`write` section shares the `read` section's rule shape but inverts the direction
+(`arrow_type` matches, `native_type` renders). The map is never embedded inside
 `connector.json` or any endpoint document, and no other `type-map-*.json` name
 is authored beside it (`RULE-PKG-030`).
 

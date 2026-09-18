@@ -25,7 +25,7 @@ Where a stream reads or writes through a connection that ships its own map,
 the engine composes the connection map
 as **primary** over the connector map as **fallback** — the two rule lists are
 concatenated, connection rules first, into one first-match-wins list
-(`RULE-TMAP-013`). This holds in **both directions**: native → Arrow (read) and
+(`RULE-TMAP-013`). This holds in **each direction**: native → Arrow (read) and
 Arrow → native DDL (write). With no connection map present, the connector map
 resolves alone.
 

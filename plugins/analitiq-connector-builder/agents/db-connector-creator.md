@@ -40,8 +40,8 @@ When the orchestrator re-dispatches you with a `Diagnostics.findings`
 array (the validate→fix loop), you also receive the connector document,
 `type_map`, and package files you produced on the prior pass. Triage each finding — you own the spec:
 
-- **Real defect** → correct the affected artifact (connector body, read
-  map, write map, or a package file) and return a fresh `CreatorOutput`.
+- **Real defect** → correct the affected artifact (connector body, type
+  map, or a package file) and return a fresh `CreatorOutput`.
 - **Validator false positive** → leave the artifact unchanged and record
   your reasoning in `notes`.
 

@@ -1,6 +1,6 @@
 ---
 name: api-connector-creator
-description: Author an API connector JSON document (kind=api) plus its sibling `type-map.json` from ProviderFacts and enum classifications. Loads the connector-spec-api skill. Knows nothing about DSN/TLS or database transports. Use when the connector-builder orchestrator has classified a provider as kind=api. Output is a CreatorOutput JSON object containing the connector body and the type-map document (`read` section only) — does not write to disk. API connectors carry no write map and no package files.
+description: Author an API connector JSON document (kind=api) plus its sibling `type-map.json` from ProviderFacts and enum classifications. Loads the connector-spec-api skill. Knows nothing about DSN/TLS or database transports. Use when the connector-builder orchestrator has classified a provider as kind=api. Output is a CreatorOutput JSON object containing the connector body and the type-map document (`read` section only) — does not write to disk. An API connector's type map carries no `write` section, and it ships no package files.
 tools: Read, Glob, Grep
 skills:
   - connector-spec-api
@@ -39,7 +39,7 @@ array (the validate→fix loop), you also receive the connector document
 and `type_map` you produced on the prior pass. Triage each finding
 — you own the spec:
 
-- **Real defect** → correct the connector body / read map and return a
+- **Real defect** → correct the connector body / type map and return a
   fresh `CreatorOutput`.
 - **Validator false positive** → leave the artifact unchanged and record
   your reasoning in `notes`.

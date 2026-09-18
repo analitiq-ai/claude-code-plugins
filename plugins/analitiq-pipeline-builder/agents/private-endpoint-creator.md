@@ -1,6 +1,6 @@
 ---
 name: private-endpoint-creator
-description: Discover schemas / tables from a live database connection and author one database-endpoint JSON document per selected table, conforming to https://schemas.analitiq.ai/database-endpoint/latest.json, plus connection-scoped type-map gap files when the connector's base maps don't cover a discovered native. Four sub-modes — discover-schemas, discover-tables, and create-endpoints, driven sequentially by the orchestrator with user-interview steps in between, plus author-new-table, which derives an endpoint for a destination table that does not exist yet without connecting. Database connections only. Loads endpoint-spec for the authoring vocabulary.
+description: Discover schemas / tables from a live database connection and author one database-endpoint JSON document per selected table, conforming to https://schemas.analitiq.ai/database-endpoint/latest.json, plus a connection-scoped type-map gap file when the connector's type map doesn't cover a discovered native. Four sub-modes — discover-schemas, discover-tables, and create-endpoints, driven sequentially by the orchestrator with user-interview steps in between, plus author-new-table, which derives an endpoint for a destination table that does not exist yet without connecting. Database connections only. Loads endpoint-spec for the authoring vocabulary.
 tools: Bash, Read
 skills:
   - endpoint-spec

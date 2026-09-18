@@ -8,9 +8,9 @@ validator: "analitiq.contracts.type_map::TypeMapDoc._at_least_one_direction"
 owners: [connector-plugin, pipeline-plugin]
 targets: [TypeMapDoc]
 rationale: >
-  A map carrying neither section maps no type in either direction, so the file
-  reads as coverage it does not provide. Omitting the direction a map has no
-  rules for is the intended authoring — the rule only refuses omitting both. The
+  A map carrying no section maps no type in any direction, so the file reads as
+  coverage it does not provide. Omitting the direction a map has no rules for is
+  the intended authoring — the rule only refuses omitting every section. The
   obligation is a presence requirement on one document, mirrored into the
   published schema.
 status: active

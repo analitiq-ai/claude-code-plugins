@@ -1350,7 +1350,7 @@ def test_coverage_holds_a_connector_write_map_to_the_whole_vocabulary(tmp_path, 
 @pytest.mark.parametrize("kind", _STORAGE_KINDS)
 def test_a_storage_map_is_graded_in_every_section_it_carries(tmp_path, kind, validator):
     # A storage kind requires no section, and one it ships anyway is still read
-    # by whoever resolves types through it — so a defect in either section is
+    # by whoever resolves types through it — so a defect in any section is
     # reported, not waved through with the requirement.
     (tmp_path / TYPE_MAP_FILENAME).write_text(json.dumps(_type_map_doc(
         read=_read_rules(),

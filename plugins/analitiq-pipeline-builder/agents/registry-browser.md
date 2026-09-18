@@ -32,7 +32,7 @@ rules for every document" — where `RULE-CTOR-045` resolves.
 2. **Download the connector as a unit, and verify it before trusting it.**
    The registry hosts each connector as its own repository under the
    `analitiq-dip-registry` GitHub org, named after the connector slug
-   (`RULE-CTOR-045`). A connector's endpoints (and its type-maps / manifest)
+   (`RULE-CTOR-045`). A connector's endpoints (and its type map / manifest)
    are published **alongside** `connector.json` under `definition/`, so
    download that directory **wholesale** — do not enumerate endpoints from
    a manifest and do not walk the repo file-by-file. Fetch the repo's
@@ -103,7 +103,7 @@ rules for every document" — where `RULE-CTOR-045` resolves.
        ├── connector.json
        ├── endpoints/                # api connectors
        │   └── <endpoint_id>.json
-       └── …                         # type-maps / manifest, if the connector ships them
+       └── …                         # type map / manifest, if the connector ships them
    ```
 
 5. **Do not validate.** The downloaded connector is a trusted, read-only

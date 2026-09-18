@@ -2,7 +2,7 @@
   "id": "connector-database-package",
   "plugin": "analitiq-connector-builder",
   "network": true,
-  "why": "The connector-package obligations are the largest block the registry leaves to nothing: the validator grades JSON documents and says so, and a package file is not one. Entry points registered in one direction, a driver that cannot serve the transport the connector declares, a write map left out — each of those ships a connector that installs and then fails at run time. MySQL rather than Postgres on purpose: the worked example under the skill is Postgres, so a run that merely copies the archetype produces the wrong driver and the wrong type map.",
+  "why": "The connector-package obligations are the largest block the registry leaves to nothing: the validator grades JSON documents and says so, and a package file is not one. Entry points registered in one direction, a driver that cannot serve the transport the connector declares — each of those ships a connector that installs and then fails at run time. MySQL rather than Postgres on purpose: the worked example under the skill is Postgres, so a run that merely copies the archetype produces the wrong driver and the wrong type map.",
   "seed": [],
   "prompt": "Build a database connector with connector_id mysql for MySQL 8. Author the full connector package. Do not ask me questions; make a reasonable choice where something is not stated, and prefer the MySQL server documentation as your source.",
   "expect": "build",

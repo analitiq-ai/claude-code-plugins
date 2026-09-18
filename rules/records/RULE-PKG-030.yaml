@@ -1,7 +1,7 @@
 id: RULE-PKG-030
 statement: >
   A connector whose `kind` resolves types MUST ship a sibling `type-map.json`
-  carrying a rule list for each direction that kind renders and none for a
+  carrying a rule list for each direction its `kind` calls for and none for a
   direction it does not; no connector ships any other `type-map-*.json` beside
   it.
 tier: reference
