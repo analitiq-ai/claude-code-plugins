@@ -447,7 +447,7 @@ TYPE_MAP_READ = [
 ]
 # Deliberately section-ASYMMETRIC: the regex rule's canonical is a matcher
 # pattern, a contract-model error under the `read` section. A fixture valid
-# under either section passes whichever one graded it, so only an asymmetric
+# under every section passes whichever one graded it, so only an asymmetric
 # one shows which section the grading came from.
 TYPE_MAP_WRITE = [
     {"match": "exact", "arrow_type": "Json", "native_type": "JSONB"},
@@ -456,7 +456,7 @@ TYPE_MAP_WRITE = [
 ]
 PG_DEFINITION = "connections/postgresql/definition"
 PG_MAP = f"{PG_DEFINITION}/{TYPE_MAP_FILENAME}"
-# A lowercase canonical fails the Arrow pattern in either section.
+# A lowercase canonical fails the Arrow pattern in every section.
 LOWERCASE_RULE = {"match": "exact", "native_type": "citext", "arrow_type": "utf8"}
 
 

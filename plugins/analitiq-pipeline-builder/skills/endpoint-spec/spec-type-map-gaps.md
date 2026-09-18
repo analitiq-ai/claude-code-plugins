@@ -53,7 +53,8 @@ printf '%s' '["citext", "vector(3)"]' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/t
 
 `--direction` names the probes' vocabulary — `read` for native types, `write`
 for `arrow_type` strings — and each `--map` contributes its section for that
-direction.
+direction. A run where no `--map` carries that section is refused as an input
+error (exit 2).
 `resolved` gives the rendered value per covered probe; `gaps` lists the
 uncovered ones. Pass only map files that exist.
 
@@ -95,7 +96,7 @@ connect or run time.
   leaves unrendered may be one its dialect renders in code (`RULE-TMAP-019`);
   no map rule is consulted for such a family, so a connection rule for it is
   dead weight. If the connector's package files show that override, record the
-  gap in `type_maps.notes` instead of authoring a rule.
+  gap in `type_map.notes` instead of authoring a rule.
 
 ## What a clean result does not prove
 

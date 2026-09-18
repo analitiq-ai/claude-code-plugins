@@ -136,7 +136,7 @@ def test_prose_type_map_rules_validate(tmp_path: Path) -> None:
     by_direction = {direction for _, _, direction, _ in rules}
     assert by_direction >= {"read", "write"}, (
         f"the prose extractor found {sorted(by_direction)} rules under "
-        f"{SKILLS_ROOT} — a spec teaching both directions should yield both; "
+        f"{SKILLS_ROOT} — a spec teaching every direction should yield a rule in each; "
         "the inline `native:`/`canonical:` shape it keys on has probably moved"
     )
 

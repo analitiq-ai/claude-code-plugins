@@ -1,7 +1,7 @@
 # Type-map resolution at runtime
 
 Where type maps live at the two scopes, and how the engine resolves a column
-type through them. The file layout is the contract's (`RULE-PKG-030`); the
+type through them. A connector's map is laid out by `RULE-PKG-030`; the
 resolution sections read the engine as it resolves directions — referenced from
 `connector-spec-db/spec-type-maps.md` and `spec-resource-discovery.md`, which
 own the *authoring* of connector-scoped maps. Connection-scoped maps are
@@ -57,9 +57,9 @@ connector's rendering for every stream on that connection (`RULE-TMAP-018`).
 
 ## File-presence semantics
 
-- **Absent file or absent section** — no rules for that direction at that
-  scope; resolution falls through (a connection without a map uses the
-  connector map alone).
+- **Absent file or absent section** — contributes no rules for that direction
+  at that scope (a connection without a map leaves the connector map to
+  resolve alone).
 - **An empty rule list** — never ship one at either scope; the contract
   requires at least one rule in a present section, so an empty one is a
   rejected document rather than the fallthrough an absent section gives you.

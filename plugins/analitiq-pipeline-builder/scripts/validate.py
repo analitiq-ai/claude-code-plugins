@@ -379,10 +379,10 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                 crashed = True
             if outcome.crashed or conn is None:
                 complete = False
-            # Connection-scoped type maps are files the engine loads beside the
-            # connection, invisible to the assembled-document bundle, and depend
+            # A connection-scoped type map is a file beside the connection,
+            # invisible to the assembled-document bundle, and depends
             # only on conn_json.parent — never on whether connection.json itself
-            # parsed — so they are checked unconditionally, and a crash inside
+            # parsed — so it is checked unconditionally, and a crash inside
             # never costs the bundle's completeness (which would otherwise
             # misreport a live connection as unresolved).
             with _contained(findings, f"connections/{conn_json.parent.name}"):

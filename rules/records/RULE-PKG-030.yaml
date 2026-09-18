@@ -18,10 +18,11 @@ rationale: >
   connector never renders reads as a capability, and the rules in it are graded
   by nobody and trusted by the next author.
 
-  A direction is the key its rules sit under, so one document holds every
-  direction and nothing counts or disambiguates files. A second name that reads
-  as a type map is refused rather than ignored: its rules are graded by nothing
-  here, beside a package that looks as though it ships them. The names are facts
+  A direction is the key its rules sit under, so one document holds the rules
+  for every direction the connector covers and nothing counts or disambiguates
+  files. A second name that reads as a type map is refused rather than ignored:
+  its rules are graded by nothing here, beside a package that looks as though it
+  ships them. The names are facts
   about the package rather than about the document, so they are graded here,
   where the package is in hand, and a map handed to the validator on its own is
   graded on its sections alone.

@@ -129,7 +129,7 @@ One invocation runs exactly one mode.
      against the write maps (connection first if present, then connector); for
      every write gap, a write rule rendering the discovered native that
      produced the `arrow_type`. When several distinct `native_type`s share one
-     uncovered `arrow_type`, do **not** pick — report it in `type_maps.ambiguities` and
+     uncovered `arrow_type`, do **not** pick — report it in `type_map.ambiguities` and
      author no write rules, unless the orchestrator supplied the choice
      in `write_render_choices` (an `{arrow_type: native_type}` map from the user
      interview; honor it verbatim).
@@ -152,7 +152,7 @@ One invocation runs exactly one mode.
          "notes": []
        }
      ],
-     "type_maps": {
+     "type_map": {
        "document": { /* full type-map.json document per spec-type-map-gaps.md#Files, or null */ },
        "ambiguities": [ {"arrow_type": "…", "candidates": ["<native>", "<native>"]} ],
        "notes": []
@@ -162,7 +162,8 @@ One invocation runs exactly one mode.
 
    `directory_slug` equals the endpoint's derived `endpoint_id` and becomes the
    filename stem (`connections/<connection-slug>/definition/endpoints/<endpoint_id>.json`).
-   `type_maps.document` is the complete `{$schema, read, write}` document
+   `type_map.document` is the complete `{$schema, read, write}` document,
+   carrying only the sections it has rules for
    (`skills/endpoint-spec/spec-type-map-gaps.md#Files` names the `$schema`
    value) the orchestrator writes to
    `connections/<connection-slug>/definition/type-map.json` — `null` means no
@@ -190,17 +191,17 @@ document's columns. Derivation rules: `skills/endpoint-spec/spec-new-table.md`.
    then the connector's): a rendered native becomes the column's
    `native_type`; an uncovered `arrow_type` follows `spec-new-table.md` —
    dialect override → the fallback label the `native_type` field declares
-   (`RULE-DBEP-012`) plus a `type_maps.notes` entry; otherwise
+   (`RULE-DBEP-012`) plus a `type_map.notes` entry; otherwise
    a `write_gaps` entry, or the `write_render_choices` value plus its
    connection-scoped write rule.
 4. Derive `endpoint_id` / `database_object` with `endpoint_id.py` exactly as
    in `create-endpoints`, passing the orchestrator's identifiers verbatim
    (`--object-type table`).
 5. Return the `create-endpoints` shape with `"mode": "author-new-table"`
-   (one `CreatorOutput`, the same `type_maps` object) plus one addition:
+   (one `CreatorOutput`, the same `type_map` object) plus one addition:
 
    ```text
-   "type_maps": { /* document / notes */, "ambiguities": [], "write_gaps": ["<arrow_type>"] }
+   "type_map": { /* document / notes */, "ambiguities": [], "write_gaps": ["<arrow_type>"] }
    ```
 
    With nothing discovered, this mode adds no read rules and `ambiguities` is

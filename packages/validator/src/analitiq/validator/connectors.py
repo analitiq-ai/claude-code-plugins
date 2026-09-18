@@ -83,12 +83,12 @@ try:
             walk_structural_positions,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
-        from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL, TypeMapDoc
+        from analitiq.contracts.type_map import TYPE_MAP_DIRECTIONS, TYPE_MAP_SCHEMA_URL, TypeMapDoc
         # Reuse the contract's regex primitives (ECMA named-group + `${name}`
         # placeholder syntax) from the model so the validator's rule-rendering can't
         # drift from the model's rule-validation.
         from analitiq.contracts.type_map import (
-            _ECMA_NAMED_BACKREF, _ECMA_NAMED_GROUP, _PLACEHOLDER_RE, _to_python_regex,
+            _ECMA_NAMED_BACKREF, _ECMA_NAMED_GROUP, _PLACEHOLDER_RE, _compile_ecma,
         )
         # The executable Arrow vocabulary — the write-coverage probe set is
         # derived from it rather than sampled by hand.
@@ -176,8 +176,8 @@ def _first_match_render(value: str, rules: list, matcher_key: str, render_key: s
                 return render_value
         elif rule.get("match") == "regex":
             try:
-                m = re.fullmatch(_to_python_regex(matcher_value), probe)
-            except re.error:
+                m = _compile_ecma(matcher_value).fullmatch(probe)
+            except ValueError:
                 continue
             if not m:
                 continue
@@ -1033,7 +1033,7 @@ def _type_map_document_findings(doc: Any, renders_write_vocabulary: bool) -> lis
     findings = _model_findings(doc, _TYPE_MAP_ADAPTER)
     if not isinstance(doc, dict):
         return findings
-    for direction in ("read", "write"):
+    for direction in TYPE_MAP_DIRECTIONS:
         findings.extend(_type_map_rule_warnings(doc.get(direction), direction))
     write = doc.get("write")
     if renders_write_vocabulary and isinstance(write, list):
@@ -1065,8 +1065,13 @@ class TypeMapLoad:
     """The type map one `definition/` directory holds.
 
     `document` is what its `type-map.json` held — `None` when that file held
-    JSON `null` — and `loaded` says whether anything was read at all. Absence
-    is no finding: whether a directory must hold a map is its caller's to say.
+    JSON `null` — and `loaded` says whether anything was read at all. Asking for
+    the document when nothing was read raises `LookupError`: there is no stand-in
+    that grades as a file that is not there. Absence is no finding: whether a
+    directory must hold a map is its caller's to say. `sections` is the
+    directions the document carries a section for — present and not `null`,
+    whether or not what is there is a valid rule list: a malformed section is
+    the model's to report, never a section the directory lacks.
 
     `findings` pairs each finding with the name of the entry it concerns, so a
     caller holding the directory at a different site can root it at that file.
@@ -1074,12 +1079,24 @@ class TypeMapLoad:
     the file still reports which one to open.
     """
 
-    document: Any
+    _document: Any
     findings: list[tuple[str, dict]]
 
     @property
     def loaded(self) -> bool:
-        return self.document is not _UNREAD
+        return self._document is not _UNREAD
+
+    @property
+    def document(self) -> Any:
+        if not self.loaded:
+            raise LookupError(f"no {TYPE_MAP_FILENAME} was read")
+        return self._document
+
+    @property
+    def sections(self) -> frozenset[str]:
+        if not isinstance(self._document, dict):
+            return frozenset()
+        return frozenset(d for d in TYPE_MAP_DIRECTIONS if self._document.get(d) is not None)
 
 
 def load_type_map(parent: Path | Location, *, rule: str | None) -> TypeMapLoad:
@@ -1125,15 +1142,6 @@ def _missing_section(kind: str, direction: str, what: str, load: TypeMapLoad) ->
                  f"{direction!r} rule list ({what}); {reason}."))
 
 
-def _declared_sections(document: Any) -> set[str]:
-    """The directions a map carries a section for — present and not `null`,
-    whether or not what is there is a valid rule list: a malformed section is
-    the model's to report, never a section the package lacks."""
-    if not isinstance(document, dict):
-        return set()
-    return {d for d in ("read", "write") if document.get(d) is not None}
-
-
 def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     """Connector ↔ sibling type-map coverage (the irreducibly cross-file check)."""
     if not isinstance(doc, dict) or not any(k in doc for k in _CONNECTOR_SENTINELS):
@@ -1168,7 +1176,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     if kind in _STORAGE_KINDS:
         return findings
 
-    sections = _declared_sections(load.document)
+    sections = load.sections
     if "read" not in sections:
         findings.append(_missing_section(kind, "read", "native → Arrow", load))
     if kind in _DATABASE_KINDS:
@@ -1188,7 +1196,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     # returned on: returning here would withhold every endpoint-anchored check
     # too, hiding every defect in every endpoint document behind one broken
     # file. What is carried need not be a list, so the readers below ask that.
-    read_rules = load.document.get("read") if isinstance(load.document, dict) else None
+    read_rules = load.document["read"] if "read" in sections else None
     if not isinstance(read_rules, list):
         # notApplicable, not fail: the check knows exactly which rule it would
         # be grading (RULE-PKG-033) — the read rules themselves are missing,
@@ -1443,7 +1451,7 @@ def is_type_map_doc(doc: Any) -> bool:
         return False
     if doc.get("$schema") == TYPE_MAP_SCHEMA_URL:
         return True
-    return bool(doc.keys() & {"read", "write"}) and doc.keys() <= _TYPE_MAP_KEYS
+    return bool(doc.keys() & set(TYPE_MAP_DIRECTIONS)) and doc.keys() <= _TYPE_MAP_KEYS
 
 
 def _validate_kindless_connector(doc: Any, location: Location | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature

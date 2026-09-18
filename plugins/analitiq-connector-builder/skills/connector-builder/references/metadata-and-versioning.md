@@ -21,7 +21,8 @@ carry only what that statement does not say.
 | `sql_capabilities` | A `database` connector declares it (`RULE-CTOR-040`); authoring: `connector-spec-db/spec-sql-write-path.md`. |
 
 Note: the connector's type map is **not** a top-level field. It ships as one
-sibling artifact, `type-map.json`, with a section per direction — authoring:
+sibling artifact, `type-map.json`, with a section for each direction its
+`kind` calls for (`RULE-PKG-030`) — authoring:
 `connector-spec-db/spec-type-maps.md`; on-disk path: `pipeline.md` §7.
 
 ## Authoring `connector_id`

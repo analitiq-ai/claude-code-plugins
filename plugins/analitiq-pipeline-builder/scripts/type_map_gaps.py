@@ -25,8 +25,9 @@ Usage::
 
 ``--direction`` names the vocabulary the probes are in: provider `native_type`
 labels for ``read``, `arrow_type` strings for ``write``. Each map contributes
-its section for that direction; a map carrying none contributes no rules. Probes are a JSON array of strings on stdin (or
---probes-file). Output on stdout::
+its section for that direction; a map carrying none contributes no rules, and a
+run where no map carries it is refused as an input error. Probes are a JSON
+array of strings on stdin (or --probes-file). Output on stdout::
 
     {"direction": "read",
      "resolved": {"citext": null, "vector(3)": null},
@@ -45,6 +46,11 @@ import sys
 from pathlib import Path
 
 from _bootstrap import ensure_deps_or_reexec
+
+
+#: The type-map directions, one per section key. A copy of the contract's,
+#: because arguments are parsed before the pinned validator is installed.
+DIRECTIONS = ("read", "write")
 
 
 def _fail(message: str) -> "int":
@@ -137,7 +143,7 @@ def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--direction", required=True, choices=("read", "write"),
+    parser.add_argument("--direction", required=True, choices=DIRECTIONS,
                         help="The vocabulary the probes are in: native_type labels (read) "
                              "or arrow_type strings (write); each --map contributes its "
                              "section for it.")

@@ -147,7 +147,7 @@ For each successfully built connector:
 {connector_id}/
 ├── definition/
 │   ├── connector.json              # the connector body
-│   ├── type-map.json               # `read`: native → Arrow; `write`: Arrow → native DDL (database only)
+│   ├── type-map.json               # `read`: native → Arrow; `write`: Arrow → native DDL (which kinds carry which: RULE-PKG-030)
 │   └── endpoints/                  # api connectors only
 │       └── {endpoint_id}.json      # filename matches the document's endpoint_id
 ├── __init__.py                     # database only

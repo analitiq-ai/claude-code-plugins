@@ -94,7 +94,7 @@ that document must satisfy — nothing in the other files applies to it, and eve
 - `references/rules/stream.md` — a stream document
 - `references/rules/connection.md` — a connection document
 - `references/rules/database-endpoint.md` — a database endpoint document
-- `references/rules/type-map.md` — a read or write type map
+- `references/rules/type-map.md` — a type map
 - `references/rules/shared.md` — the artifact kinds too small for a file of
   their own
 
@@ -311,25 +311,25 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
      this branch only after that document exists: after the source
      connection's `create-endpoints` for a database source, after
      phase 2's connector download for an API source.
-   - If the return carries `type_maps.write_gaps`, ask the user one
+   - If the return carries `type_map.write_gaps`, ask the user one
      question per `arrow_type` — what native type this destination
      should render it to — then re-invoke `author-new-table` with
      `write_render_choices`. The re-run must return no `write_gaps`.
-   - `type_maps` file writes and validation are identical to
+   - Writing and validating `type_map.document` is identical to
      `create-endpoints`; an `author-new-table` return never carries
      read rules or ambiguities. Record in the final summary that the
      table is pending creation by the engine's first run.
 
-   **Connection-scoped type maps.** The `create-endpoints` return carries a
-   `type_maps` object alongside `outputs` — connection-scoped gap rules for
+   **Connection-scoped type map.** The `create-endpoints` return carries a
+   `type_map` object alongside `outputs` — connection-scoped gap rules for
    discovered natives the connector's map doesn't cover (authored per
    `endpoint-spec/spec-type-map-gaps.md`):
-   - If `type_maps.ambiguities` is non-empty, ask the user one question per
+   - If `type_map.ambiguities` is non-empty, ask the user one question per
      entry — which of the candidate natives this connection should render the
      `arrow_type` to — then re-invoke `create-endpoints` for the same tables with
      `write_render_choices` (`{arrow_type: native_type}`). The re-run must return no
      ambiguities.
-   - Write a non-null `type_maps.document` to
+   - Write a non-null `type_map.document` to
      `connections/<connection-slug>/definition/type-map.json` and validate it
      (entity `type-map`) through the same fix-and-revalidate loop as other
      artifacts.

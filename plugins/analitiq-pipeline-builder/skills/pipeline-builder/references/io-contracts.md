@@ -103,7 +103,7 @@ cross-references. Endpoint creators carry the slug identity in
 `document.endpoint_id`.
 
 `private-endpoint-creator`'s sub-modes wrap their `CreatorOutput[]` in a
-mode-level envelope (`{"mode", "outputs", …}`, plus `type_maps` in
+mode-level envelope (`{"mode", "outputs", …}`, plus `type_map` in
 `create-endpoints` / `author-new-table`) — that envelope is defined in the
 agent file itself, not here.
 

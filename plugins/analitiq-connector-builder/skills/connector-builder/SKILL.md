@@ -65,7 +65,7 @@ that document must satisfy — nothing in the other files applies to it, and eve
 - `references/rules/database-endpoint.md` — a database endpoint document, such
   as the ones `resource_discovery` produces
 - `references/rules/connector-package.md` — the repository the connector ships as
-- `references/rules/type-map.md` — a read or write type map
+- `references/rules/type-map.md` — a type map
 - `references/rules/shared.md` — the artifact kinds too small for a file of
   their own
 

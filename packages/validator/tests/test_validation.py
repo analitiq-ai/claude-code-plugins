@@ -1224,7 +1224,7 @@ _SECTION_VERDICTS = [
 def test_a_kind_is_held_to_the_sections_its_map_carries(tmp_path, validator, kind, sections, expected):
     # A storage kind moves bytes and resolves no type, so it requires no
     # section; an api connector has no write direction; a database-family one
-    # renders DDL, so it needs both.
+    # renders DDL, so it needs a `read` and a `write` section.
     _plant_map(tmp_path, sections)
     (tmp_path / "endpoints").mkdir()
     findings = validator.check_coverage(_min_connector(kind), tmp_path / "connector.json")
@@ -1550,7 +1550,8 @@ def test_a_document_with_no_path_is_graded_the_same_way(validator, tmp_path):
     {"read": _read_rules()},
     {"write": _write_rules()},
     {"$schema": TYPE_MAP_SCHEMA_URL, "write": "not-a-list"},
-], ids=["no-section", "no-schema", "write-only-no-schema", "malformed-section"])
+    {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"), "read": _read_rules()},
+], ids=["no-section", "no-schema", "write-only-no-schema", "malformed-section", "stale-schema"])
 def test_a_map_missing_its_parts_is_graded_as_a_map(validator, doc):
     # Either the type-map `$schema` or a direction's section identifies the
     # document, so a map missing the other half is told what it lacks rather
@@ -1579,7 +1580,8 @@ def test_a_stray_section_key_does_not_claim_another_kind(validator, doc, stray, 
     {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"),
      "direction": "read",
      "rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]},
-], ids=["bare-array", "split-shape"])
+    {},
+], ids=["bare-array", "split-shape", "empty"])
 def test_a_rule_list_in_no_type_map_shape_is_not_recognized(validator, tmp_path, doc):
     # A bare rule array has no `$schema` to claim it, and a split-shape
     # document names a `$schema` no detector registers; each fails loud as an
@@ -1938,6 +1940,19 @@ def test_clean_tree_emits_no_coverage_finding(tmp_path, connector_base, validato
     assert [f for f in findings if f.get("rule") in _COVERAGE_RULE_IDS] == [], findings
 
 
+def test_a_matcher_too_large_to_compile_is_skipped_by_coverage(tmp_path, connector_base, validator):
+    # The model refuses the matcher; resolving an endpoint's native through the
+    # same map must pass that rule by as it passes any matcher that does not
+    # compile, not crash the check and take the coverage verdict with it.
+    _write_tree(tmp_path, connector_base,
+                [{"match": "regex", "native_type": "^A{99999999999}$", "arrow_type": "Utf8"},
+                 {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+                {"widgets.json": _endpoint("STRING", "Utf8")})
+    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    assert "check-crashed" not in {f["message_id"] for f in findings}, findings
+    assert [f for f in findings if f.get("rule") == "RULE-PKG-033"] == [], findings
+
+
 def test_rendered_coverage_reports_only_the_uncovered_native(tmp_path, connector_base, validator):
     # A readable map renders, so the uncovered native is the only thing coverage
     # has to say — no warning about a rendering that did happen.
@@ -2146,6 +2161,11 @@ def test_load_type_map_reports_nothing_for_a_directory_without_one(validator, tm
     # requires one for most kinds, a connection never does.
     load = validator.load_type_map(tmp_path, rule="RULE-PKG-030")
     assert not load.loaded and load.findings == []
+    # Nothing was read, so there is no document to hand over: asking for one
+    # is the caller's defect, and grading a stand-in would report a file that
+    # is not there.
+    with pytest.raises(LookupError):
+        load.document
 
 
 def test_load_type_map_attributes_every_finding_to_the_rule_given(validator, tmp_path):

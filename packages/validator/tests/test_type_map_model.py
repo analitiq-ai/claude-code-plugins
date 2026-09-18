@@ -11,6 +11,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from analitiq.contracts.type_map import (
+    TYPE_MAP_DIRECTIONS,
     TYPE_MAP_SCHEMA_URL,
     TypeMapDoc,
     normalize_native_type,
@@ -277,6 +278,22 @@ def test_regex_ecma_named_backreference_accepted():
 
 def test_regex_must_compile():
     _rejects(READ, [{"match": "regex", "native_type": "([", "arrow_type": "Utf8"}])
+
+
+@pytest.mark.parametrize("direction,rule", [
+    (READ, {"match": "regex", "native_type": "^A{99999999999}$", "arrow_type": "Utf8"}),
+    (WRITE, {"match": "regex", "arrow_type": "^Utf8{99999999999}$", "native_type": "TEXT"}),
+], ids=["read", "write"])
+def test_a_matcher_too_large_to_compile_is_refused(direction, rule):
+    # `re.compile` refuses an oversized repeat count with `OverflowError`, which
+    # is not a `re.error`: it has to reach the author as a finding like any
+    # other matcher that does not compile.
+    _rejects(direction, [rule])
+
+
+def test_the_directions_are_the_sections_the_model_declares():
+    sections = {f.alias or name for name, f in TypeMapDoc.model_fields.items()} - {"$schema"}
+    assert set(TYPE_MAP_DIRECTIONS) == sections
 
 
 def test_placeholder_needs_matching_capture():

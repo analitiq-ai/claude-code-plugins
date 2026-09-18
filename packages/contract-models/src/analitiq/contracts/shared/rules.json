@@ -1353,7 +1353,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "An API connector runs on the engine's generic class for its kind, so package files beside it are not a lighter version of a database connector's — they are files nothing loads, and their presence almost always means the system was reclassified as an API after being authored as a database, leaving a dialect that describes a transport this connector no longer has. The absence of a file is a property of the release directory rather than of any document: the validator checks which type maps a connector ships but never looks for package files, so an `api` connector carrying a dialect passes every check here.\n",
+   "rationale": "An API connector runs on the engine's generic class for its kind, so package files beside it are not a lighter version of a database connector's — they are files nothing loads, and their presence almost always means the system was reclassified as an API after being authored as a database, leaving a dialect that describes a transport this connector no longer has. The absence of a file is a property of the release directory rather than of any document: the validator checks the type map a connector ships but never looks for package files, so an `api` connector carrying a dialect passes every check here.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5605,7 +5605,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Every transport renders column types through that one hook, whose default is the write map, so a rendering table transcribed into Python quietly takes over the direction the map is validated for — the map's coverage warnings then grade a document nothing reads, and the two drift apart from the first new type onward. Code feels like the natural home for parameterised rendering, which is why the map has substitution rules at all. Nothing here can tell a delegating override from a full table: the map is a document this repo validates and the override is Python it never sees, and the conformance kit audits the override surface, not what a hook computes.\n",
+   "rationale": "Every transport renders column types through that one hook, whose default is the write map, so a rendering table transcribed into Python quietly takes over the direction the map is validated for — the map's coverage warnings then grade a `write` section nothing reads, and the two drift apart from the first new type onward. Code feels like the natural home for parameterised rendering, which is why the map has substitution rules at all. Nothing here can tell a delegating override from a full table: the map is a document this repo validates and the override is Python it never sees, and the conformance kit audits the override surface, not what a hook computes.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5696,7 +5696,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The map is a separate document from `connector.json`, so nothing about the connector document is wrong when a direction is missing — the connector simply has no type vocabulary for that direction, and the failure arrives at the first stream that resolves a column instead of at authoring. Carrying a spare direction is the same defect wearing the opposite sign: a direction the connector never renders reads as a capability, and the rules in it are graded by nobody and trusted by the next author.\nA direction is the key its rules sit under, so one document holds every direction and nothing counts or disambiguates files. A second name that reads as a type map is refused rather than ignored: its rules are graded by nothing here, beside a package that looks as though it ships them. The names are facts about the package rather than about the document, so they are graded here, where the package is in hand, and a map handed to the validator on its own is graded on its sections alone.\n",
+   "rationale": "The map is a separate document from `connector.json`, so nothing about the connector document is wrong when a direction is missing — the connector simply has no type vocabulary for that direction, and the failure arrives at the first stream that resolves a column instead of at authoring. Carrying a spare direction is the same defect wearing the opposite sign: a direction the connector never renders reads as a capability, and the rules in it are graded by nobody and trusted by the next author.\nA direction is the key its rules sit under, so one document holds the rules for every direction the connector covers and nothing counts or disambiguates files. A second name that reads as a type map is refused rather than ignored: its rules are graded by nothing here, beside a package that looks as though it ships them. The names are facts about the package rather than about the document, so they are graded here, where the package is in hand, and a map handed to the validator on its own is graded on its sections alone.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7540,7 +7540,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Resolution stops at the first matching rule in both directions, and for a connection-scoped endpoint the two scopes' rule lists are concatenated into one such list, so a rule placed under a broader sibling does not merely fail to fire — the broader rule renders its arrow_type instead, for exactly the columns the narrow rule was written for. Order carries no visible weight in the document, so an author grouping rules by family rather than by breadth produces a map that validates and resolves wrongly. Every permutation of the same rules is an equally valid document, so nothing here can see the shadowing.\n",
+   "rationale": "Resolution stops at the first matching rule in every direction, and for a connection-scoped endpoint the two scopes' rule lists are concatenated into one such list, so a rule placed under a broader sibling does not merely fail to fire — the broader rule renders its arrow_type instead, for exactly the columns the narrow rule was written for. Order carries no visible weight in the document, so an author grouping rules by family rather than by breadth produces a map that validates and resolves wrongly. Every permutation of the same rules is an equally valid document, so nothing here can see the shadowing.\n",
    "status": "active",
    "superseded_by": null
   },

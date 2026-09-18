@@ -26,7 +26,7 @@ artifact.
   Validating a type map on its own runs no package-level check — those run when
   the **connector** is validated, off the `type-map.json` beside it, and a
   direction the `kind` requires that the map carries no section for surfaces
-  there as a missing map (`RULE-PKG-030`). So validate the connector where it
+  there as a missing section (`RULE-PKG-030`). So validate the connector where it
   sits in the package, not a copy re-serialized elsewhere: its package-level
   checks read the map and endpoints beside it, and what ships is then what was graded. This agent validates
   JSON documents only; a connector's Python package files (`connector.py`,

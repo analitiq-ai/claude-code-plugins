@@ -14,7 +14,7 @@ rationale: >
   Every transport renders column types through that one hook, whose default
   is the write map, so a rendering table transcribed into Python quietly
   takes over the direction the map is validated for — the map's coverage
-  warnings then grade a document nothing reads, and the two drift apart
+  warnings then grade a `write` section nothing reads, and the two drift apart
   from the first new type onward. Code feels like the natural home for
   parameterised rendering, which is why the map has substitution rules at
   all. Nothing here can tell a delegating override from a full table: the

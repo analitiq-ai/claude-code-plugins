@@ -2,7 +2,8 @@
 
 How to author the standalone `type-map.json` that ships alongside every
 connector. A type map connects provider-native type labels and Apache
-Arrow canonical types, with one section per direction:
+Arrow canonical types, with a section for each direction the connector's
+`kind` calls for (`RULE-PKG-030`):
 
 - **Read map** (the `read` section) — native → Arrow. For databases it
   maps native column types (`BIGINT`, `NUMERIC(10,2)`); for API connectors

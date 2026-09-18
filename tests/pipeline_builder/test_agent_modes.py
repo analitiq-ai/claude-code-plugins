@@ -50,7 +50,7 @@ def test_orchestrator_references_every_mode():
 
 def _names_in_backticks(text: str, token: str) -> bool:
     # Match the token inside any backticked span, so dotted forms like
-    # `type_maps.write_gaps` count as naming `write_gaps`.
+    # `type_map.write_gaps` count as naming `write_gaps`.
     return re.search(rf"`[^`]*{re.escape(token)}[^`]*`", text) is not None
 
 

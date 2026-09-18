@@ -186,8 +186,8 @@ def _capture_language(
     if source is None:
         return None
     try:
-        compiled = re.compile(_to_python_regex(source))
-    except re.error:
+        compiled = _compile_ecma(source)
+    except ValueError:
         return None
     return frozenset(probe for probe in probes if compiled.fullmatch(probe))
 
@@ -232,6 +232,16 @@ def _validate_render_placeholders(render: str) -> None:
         raise ValueError(f"render value {render!r} has an unclosed '${{' (missing '}}')")
 
 
+def _compile_ecma(pattern: str) -> "re.Pattern[str]":
+    """Compile an ECMA-262 pattern through its Python spelling, raising
+    `ValueError` for every pattern `re` refuses."""
+    try:
+        return re.compile(_to_python_regex(pattern))
+    # An oversized repeat count is refused with `OverflowError`, not `re.error`.
+    except (re.error, OverflowError) as exc:
+        raise ValueError(f"matcher is not a valid regex ({exc})") from exc
+
+
 def _compile_ecma_matcher(matcher: str) -> "re.Pattern[str]":
     """Compile an ECMA-262 matcher, rejecting Python-only `(?P…)` regex syntax."""
     if _PYTHON_REGEX_FEATURE.search(matcher):
@@ -239,10 +249,7 @@ def _compile_ecma_matcher(matcher: str) -> "re.Pattern[str]":
             "matcher uses Python-only '(?P…)' regex syntax; the contract "
             "requires ECMA-262 (use '(?<name>…)' for named groups)"
         )
-    try:
-        return re.compile(_to_python_regex(matcher))
-    except re.error as exc:
-        raise ValueError(f"matcher is not a valid regex ({exc})") from exc
+    return _compile_ecma(matcher)
 
 
 def _guard_container_not_collapsed(native_type: str, match: str, arrow_type: str) -> None:
@@ -406,7 +413,7 @@ class TypeMapWriteRegexRule(_TypeMapRuleBase):
 
 # `match`-discriminated unions: the exact branch carries the Arrow `pattern` on
 # `arrow_type` (published into the JSON Schema); the regex branch keeps its
-# runtime-only render/capture checks. Both directions render a `oneOf` with a
+# runtime-only render/capture checks. Each direction renders a `oneOf` with a
 # `match` discriminator, so external validators reject exactly what the model does.
 TypeMapReadRule = Annotated[
     TypeMapReadExactRule | TypeMapReadRegexRule,
@@ -418,7 +425,7 @@ TypeMapWriteRule = Annotated[
 ]
 
 
-_DIRECTIONS = ("read", "write")
+TYPE_MAP_DIRECTIONS = ("read", "write")
 
 
 class TypeMapDoc(StrictModel):
@@ -431,7 +438,7 @@ class TypeMapDoc(StrictModel):
     # `_at_least_one_direction` refuses.
     model_config = ConfigDict(json_schema_extra={"anyOf": [
         {"required": [d], "properties": {d: {"not": {"type": "null"}}}}
-        for d in _DIRECTIONS
+        for d in TYPE_MAP_DIRECTIONS
     ]})
 
     schema_url: Literal[TYPE_MAP_SCHEMA_URL] = Field(
@@ -450,7 +457,7 @@ class TypeMapDoc(StrictModel):
 
     @model_validator(mode="after")
     def _at_least_one_direction(self) -> "TypeMapDoc":
-        if self.read is None and self.write is None:
+        if all(getattr(self, d) is None for d in TYPE_MAP_DIRECTIONS):
             raise violation(
                 "RULE-TMAP-023", "type-map-no-section",
                 "a type map declares a rule list under at least one of `read` or `write`")

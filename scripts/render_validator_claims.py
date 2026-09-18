@@ -614,8 +614,8 @@ def _p_type_map_schema_required() -> list[dict]:
 def _p_type_map_rule_graded_by_section() -> list[dict]:
     # A write rule placed under `read`. It is a valid write rule, so rejecting
     # it is the key it sits under choosing the rule model — nothing else in the
-    # document names a direction. A regex rule, because an exact one reads the
-    # same keys in both directions and would pass either model.
+    # document names a direction. A regex rule, because an exact one is valid
+    # under whichever section holds it, so it would pass every section's model.
     return _staged_type_map(read=[{
         "match": "regex", "arrow_type": "^Decimal128\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$",
         "native_type": "NUMERIC(${p}, ${s})"}])

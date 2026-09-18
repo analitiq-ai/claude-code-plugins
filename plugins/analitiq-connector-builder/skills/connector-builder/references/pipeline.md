@@ -148,7 +148,7 @@ validation — a connector release ships no database endpoint documents
 (`RULE-DBEP-006`), so phase 5 is skipped.
 
 In `validate` mode, run the validator once over **every** on-disk document
-— the connector, every type map present, and all
+— the connector, `type-map.json`, and all
 `definition/endpoints/*.json` — report the resulting `Diagnostics`, and
 stop. There is no fix loop and no creator re-dispatch (phases 1–3 and 5
 were skipped, so there is no `CreatorOutput` to revise). The fix loop

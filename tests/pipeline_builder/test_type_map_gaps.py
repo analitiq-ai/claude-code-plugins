@@ -22,7 +22,7 @@ import type_map_gaps as G  # noqa: E402
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
-from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL  # noqa: E402
+from analitiq.contracts.type_map import TYPE_MAP_DIRECTIONS, TYPE_MAP_SCHEMA_URL  # noqa: E402
 from analitiq.validator import (  # noqa: E402
     finding_costs_a_pass, type_map_findings,
 )
@@ -315,8 +315,14 @@ def test_cli_probes_a_map_under_any_filename(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out)["resolved"] == {"Utf8": "TEXT"}
 
 
+def test_the_direction_choices_are_the_contract_directions():
+    # The script parses its arguments before the pinned validator is installed,
+    # so it cannot import the contract's directions; this holds its copy to them.
+    assert G.DIRECTIONS == TYPE_MAP_DIRECTIONS
+
+
 def test_a_map_without_the_probed_section_contributes_no_rules(tmp_path, capsys):
-    # A connection map is gap-only and may carry either direction alone. One
+    # A connection map is gap-only and may carry a single direction's section. One
     # carrying only read rules must neither refuse a write probe nor lend it
     # rules keyed on native types: the connector map behind it answers alone.
     conn_dir, base_dir = tmp_path / "connection", tmp_path / "connector"
