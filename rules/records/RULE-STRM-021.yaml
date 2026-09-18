@@ -28,8 +28,9 @@ rationale: >
   pyarrow's `match_substring_regex`), and answering it with stdlib `re`
   answers a different question in both directions — `\p{L}+` is an ordinary
   RE2 pattern `re` refuses, `(a)\1` a backreference `re` accepts and RE2
-  cannot compile. That verdict belongs where `google-re2` is a dependency. A payload that is the right kind but constrains
-  nothing — a negative `min_length`, an empty pattern, a range with neither
+  cannot compile. This rule does not ask RE2 either, so a pattern RE2 refuses
+  passes here and, as the engine stands, fails its stream at run time. A
+  payload that is the right kind but constrains nothing — a negative `min_length`, an empty pattern, a range with neither
   bound — fails no row and is reported nowhere, which reads exactly like a
   rule that passed; one that admits nothing — a negative `max_length`, a
   range whose `min` sits above its `max`, an empty admitted-value list —
