@@ -309,8 +309,6 @@ def test_regex_only_re2_accepts_is_accepted(adapter):
 def test_named_group_compiles_as_written():
     # No `(?<name>` → `(?P<name>` rewrite stands between the author and RE2: the
     # compiled matcher carries the capture under the name the rule spells.
-    from analitiq.contracts.type_map import compile_matcher
-
     assert compile_matcher(r"(?<p>\d+)X").regex.groupindex == {"p": 1}
 
 
