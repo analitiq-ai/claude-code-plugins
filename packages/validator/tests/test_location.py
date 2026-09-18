@@ -324,9 +324,9 @@ def test_a_dotdot_is_stepped_up_before_the_layout_is_read(tmp_path, validator):
 ], ids=["no path", "no connector beside endpoints", "outside an endpoints directory"])
 def test_an_endpoint_with_no_connector_read_is_told_why(tmp_path, validator, given, remedy):
     """The connector lookup is for `endpoints/{id}.json` one level below its
-    connector. From anywhere else, a connector two levels up is not this
-    endpoint's, and the author is told to move the endpoint, not the
-    connector."""
+    connector, so a connector two levels up from anywhere else is not this
+    endpoint's. Each reason no connector is read has its own remedy, and a
+    swapped one sends the author to the wrong fix."""
     doc = _endpoint("thing", transport_ref="api")
     _write(tmp_path, {"connector.json": _UNDECLARED})
 
