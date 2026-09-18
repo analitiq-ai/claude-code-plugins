@@ -19,9 +19,10 @@ rationale: >
   `(?<name>…)`, which makes the spelling the contract's choice rather than the
   dialect's. This states the engine as it stands: it validates the map
   against the contract models and then compiles the matcher with RE2. The gate
-  compiles with a dialect other than RE2, so the two disagree in both
-  directions: a matcher the gate admits and RE2 cannot parse passes authoring
-  and is refused at load, and one the gate refuses and RE2 would take is
-  rejected here although RE2 compiles it.
+  compiles with RE2 as well, so the two agree while their RE2 releases parse
+  the same syntax. Where the engine's release accepts a construct the gate's
+  refuses, the gate is stricter than the run and rejects a matcher that would
+  load; where it refuses one the gate's accepts, the matcher passes authoring
+  and is refused at load.
 status: active
 superseded_by: null
