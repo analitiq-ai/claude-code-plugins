@@ -180,7 +180,7 @@ def _first_match_render(value: str, rules: list, matcher_key: str, render_key: s
             except ValueError:
                 # The model reports a matcher the contract refuses; it renders nothing.
                 continue
-            m = compiled.regex.fullmatch(probe)
+            m = compiled.fullmatch(probe)
             if not m:
                 continue
             groups = m.groupdict()

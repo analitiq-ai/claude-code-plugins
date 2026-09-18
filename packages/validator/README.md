@@ -28,8 +28,8 @@ kind and emits the same uniform `{passed, findings[]}`.
   for its kind, and an API connector's read map covers every
   `(native_type, arrow_type)` its endpoint files declare;
 - **filename ↔ id** — an endpoint file is named `{endpoint_id}.json`;
-- **advisory warnings** the contract tolerates — duplicate type-map rules, dead
-  uppercase-only read patterns, write-map vocabulary gaps.
+- **advisory warnings** the contract tolerates — duplicate type-map rules, read
+  patterns spelling a case no native uses, write-map vocabulary gaps.
 
 **Pipeline-bundle referential integrity** (`validate_pipeline_bundle(bundle)`) —
 a bundle is a mapping of already-parsed `{pipeline, streams, connections,
