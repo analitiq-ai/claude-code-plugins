@@ -16,6 +16,7 @@ below, where a `Path` becomes a location.
 """
 from __future__ import annotations
 
+import errno
 import json
 from pathlib import Path, PurePosixPath
 
@@ -23,7 +24,7 @@ import pytest
 
 from analitiq.contracts.endpoint_identity import build_database_object, derive_db_endpoint_id
 from analitiq.validator._core import _passed
-from analitiq.validator._location import DISK, Location, MemoryTree
+from analitiq.validator._location import DISK, Location, MemoryTree, located
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 _H = "https://schemas.analitiq.ai"
@@ -225,7 +226,7 @@ def test_a_linked_endpoint_is_graded_against_the_connector_beside_the_link(tmp_p
     _write(tmp_path, {"pkg/connector.json": _UNDECLARED, "shared/endpoints/thing.json": doc,
                       "shared/connector.json": _API})
     (tmp_path / "pkg/endpoints").mkdir()
-    (tmp_path / "pkg/endpoints/thing.json").symlink_to(tmp_path / "shared/endpoints/thing.json")
+    (tmp_path / "pkg/endpoints/thing.json").symlink_to("../../shared/endpoints/thing.json")
 
     findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/endpoints/thing.json")
 
@@ -236,19 +237,22 @@ def test_the_cli_grades_a_linked_connector_with_the_package_beside_the_link(tmp_
     _write(tmp_path / "regular", _API_PACKAGE)
     _write(tmp_path / "linked", {k: v for k, v in _API_PACKAGE.items() if k != "connector.json"})
     _write(tmp_path / "shared", {"connector.json": _API})
-    (tmp_path / "linked/connector.json").symlink_to(tmp_path / "shared/connector.json")
+    (tmp_path / "linked/connector.json").symlink_to("../shared/connector.json")
 
     _assert_cli_agrees(validator_cli, tmp_path / "regular/connector.json",
                        tmp_path / "linked/connector.json")
 
 
-def test_a_dotdot_after_a_link_is_graded_where_the_kernel_lands(tmp_path, validator_cli):
+@pytest.mark.parametrize("chain", [["../real/endpoints"], ["hop", "../real/endpoints"]],
+                         ids=["one link", "a link to a link"])
+def test_a_dotdot_after_a_link_is_graded_where_the_kernel_lands(tmp_path, validator_cli, chain):
     """`link/..` is the parent of where the link leads. Collapsed against the
     names written instead, the document the kernel reads would be graded
     against another package's siblings."""
     _write(tmp_path / "real", _API_PACKAGE)
     _write(tmp_path / "spelled", {"connector.json": _UNDECLARED})
-    (tmp_path / "spelled/link").symlink_to("../real/endpoints")
+    for name, target in zip(["link", *chain], chain):
+        (tmp_path / "spelled" / name).symlink_to(target)
 
     _assert_cli_agrees(validator_cli, tmp_path / "real/connector.json",
                        tmp_path / "spelled/link/../connector.json")
@@ -264,7 +268,7 @@ def test_type_maps_are_collected_where_the_kernel_lands(tmp_path, validator):
     assert (list(collection.maps), collection.findings) == (["read"], [])
 
 
-def test_a_dotdot_is_collapsed_before_the_layout_is_read(tmp_path, validator):
+def test_a_dotdot_is_stepped_up_before_the_layout_is_read(tmp_path, validator):
     """Left in, `sub/..` makes the parent's name `..`, and the endpoint is no
     longer seen at its `endpoints/` home. `sub` is no link, so stepping up out
     of it leaves the linked `endpoints/` above it standing where it is."""
@@ -272,7 +276,7 @@ def test_a_dotdot_is_collapsed_before_the_layout_is_read(tmp_path, validator):
     _write(tmp_path, {"pkg/connector.json": _UNDECLARED, "shared/connector.json": _API,
                       "shared/endpoints/thing.json": doc})
     (tmp_path / "shared/endpoints/sub").mkdir()
-    (tmp_path / "pkg/endpoints").symlink_to(tmp_path / "shared/endpoints")
+    (tmp_path / "pkg/endpoints").symlink_to("../shared/endpoints")
 
     findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/endpoints/sub/../thing.json")
 
@@ -311,16 +315,57 @@ def test_a_link_loop_before_a_dotdot_is_unreadable(tmp_path, validator_cli):
     """Followed without a bound, a loop would never be stepped out of."""
     _write(tmp_path / "pkg", _API_PACKAGE)
     (tmp_path / "pkg/loop").symlink_to("loop")
+    (tmp_path / "pkg/via").symlink_to("loop/..")
 
-    result = validator_cli.run("--document", str(tmp_path / "pkg/loop/../connector.json"))
+    given = tmp_path / "pkg/via/../connector.json"
+    result = validator_cli.run("--document", str(given))
+
+    assert [f["message_id"] for f in json.loads(result.stdout)["findings"]] == [
+        "unreadable-document"], result.stdout
+    with pytest.raises(OSError) as refused:
+        located(given)
+    assert (refused.value.errno, refused.value.filename) == (errno.ELOOP, str(given))
+
+
+@pytest.mark.parametrize("left", ["typo", "connector.json", "dangling", "filelink"])
+def test_a_dotdot_after_what_is_no_directory_is_unreadable(tmp_path, validator_cli, left):
+    """The kernel refuses to step up out of a name that is missing or is no
+    directory, so there is no file there to grade."""
+    _write(tmp_path / "pkg", _API_PACKAGE)
+    (tmp_path / "pkg/dangling").symlink_to("gone")
+    (tmp_path / "pkg/filelink").symlink_to("type-map-read.json")
+
+    result = validator_cli.run("--document", str(tmp_path / f"pkg/{left}/../connector.json"))
 
     assert [f["message_id"] for f in json.loads(result.stdout)["findings"]] == [
         "unreadable-document"], result.stdout
 
 
+def test_a_link_target_steps_up_from_where_the_link_is(tmp_path, validator_cli):
+    """`inner`'s own `..` leaves the linked `endpoints/` it sits in, so it
+    steps up out of `shared/endpoints`, not out of `pkg/endpoints`."""
+    _write(tmp_path / "shared", _API_PACKAGE)
+    (tmp_path / "shared/sibling").mkdir()
+    _write(tmp_path / "pkg", {"connector.json": _API})
+    (tmp_path / "pkg/endpoints").symlink_to("../shared/endpoints")
+    (tmp_path / "shared/endpoints/inner").symlink_to("../sibling")
+
+    _assert_cli_agrees(validator_cli, tmp_path / "shared/connector.json",
+                       tmp_path / "pkg/endpoints/inner/../connector.json")
+
+
+def test_a_link_to_its_own_parent_steps_up_from_that_parent(tmp_path, validator_cli):
+    _write(tmp_path / "real", _API_PACKAGE)
+    (tmp_path / "real/b").mkdir()
+    (tmp_path / "real/b/up").symlink_to("..")
+
+    _assert_cli_agrees(validator_cli, tmp_path / "real/connector.json",
+                       tmp_path / "real/b/up/../real/connector.json")
+
+
 def test_a_linked_directory_under_endpoints_is_not_walked(tmp_path, validator):
-    """A checkout holds the link, not what it leads to, and a link can lead
-    anywhere on the host running the check."""
+    """A loop of links would be walked without end, and a link can hand the
+    walk any directory on the host running the check."""
     _write(tmp_path / "pkg", _API_PACKAGE)
     _write(tmp_path / "elsewhere", {"z.json": _endpoint("z")})
     (tmp_path / "pkg/endpoints/sub").symlink_to("../../elsewhere")
