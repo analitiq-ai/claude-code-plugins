@@ -1,7 +1,6 @@
 {
-  "$schema": "https://schemas.analitiq.ai/type-map-read/latest.json",
-  "direction": "read",
-  "rules": [
+  "$schema": "https://schemas.analitiq.ai/type-map/latest.json",
+  "read": [
     { "match": "exact", "native_type": "STRING", "arrow_type": "Utf8" },
     { "match": "exact", "native_type": "INTEGER", "arrow_type": "Int64" },
     { "match": "exact", "native_type": "NUMBER", "arrow_type": "Float64" },

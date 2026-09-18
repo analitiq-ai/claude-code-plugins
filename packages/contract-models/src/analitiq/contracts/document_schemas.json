@@ -5,8 +5,7 @@
     "connection",
     "api-endpoint",
     "database-endpoint",
-    "type-map-read",
-    "type-map-write",
+    "type-map",
     "pipeline",
     "stream"
   ]

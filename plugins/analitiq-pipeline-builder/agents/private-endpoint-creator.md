@@ -111,7 +111,7 @@ One invocation runs exactly one mode.
    the distinct native types through the type maps with
    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/type_map_gaps.py" --direction read`
    (maps in precedence order: the
-   connection's own `definition/type-map-read.json` if present, then the
+   connection's own `definition/type-map.json` if present, then the
    connector's) and freeze the rendered `arrow_type` for every covered
    `native_type`
    (`RULE-DBEP-004`). Only for the `native_type`s in `gaps` derive the
@@ -130,12 +130,13 @@ One invocation runs exactly one mode.
      every write gap, a write rule rendering the discovered native that
      produced the `arrow_type`. When several distinct `native_type`s share one
      uncovered `arrow_type`, do **not** pick — report it in `type_maps.ambiguities` and
-     leave `type_maps.write` null, unless the orchestrator supplied the choice
+     author no write rules, unless the orchestrator supplied the choice
      in `write_render_choices` (an `{arrow_type: native_type}` map from the user
      interview; honor it verbatim).
-   - No gaps in a direction → that key is `null`. When the connection already
-     ships a map, return the full `{$schema, direction, rules}` document with
-     the new rules appended after its existing ones (`RULE-TMAP-012`).
+   - No gaps in a direction → no new rules in that section. When the connection
+     already ships a map, return the full `{$schema, read, write}` document with
+     the new rules appended after the existing ones in each section
+     (`RULE-TMAP-012`).
 8. Return a `CreatorOutput[]` (one per table) plus the type-map result:
 
    <!-- illustrative -->
@@ -152,8 +153,7 @@ One invocation runs exactly one mode.
        }
      ],
      "type_maps": {
-       "read":  { /* full type-map-read.json document per spec-type-map-gaps.md#Files, or null */ },
-       "write": { /* full type-map-write.json document per spec-type-map-gaps.md#Files, or null */ },
+       "document": { /* full type-map.json document per spec-type-map-gaps.md#Files, or null */ },
        "ambiguities": [ {"arrow_type": "…", "candidates": ["<native>", "<native>"]} ],
        "notes": []
      }
@@ -162,12 +162,12 @@ One invocation runs exactly one mode.
 
    `directory_slug` equals the endpoint's derived `endpoint_id` and becomes the
    filename stem (`connections/<connection-slug>/definition/endpoints/<endpoint_id>.json`).
-   `type_maps.read` / `type_maps.write` are the complete `{$schema, direction,
-   rules}` documents (`skills/endpoint-spec/spec-type-map-gaps.md#Files` names
-   the exact `$schema`/`direction` values) the orchestrator writes to
-   `connections/<connection-slug>/definition/type-map-{read,write}.json` —
-   `null` means write nothing (never emit a document with an empty `rules`
-   array).
+   `type_maps.document` is the complete `{$schema, read, write}` document
+   (`skills/endpoint-spec/spec-type-map-gaps.md#Files` names the `$schema`
+   value) the orchestrator writes to
+   `connections/<connection-slug>/definition/type-map.json` — `null` means no
+   rule was added in any direction and nothing is written (never emit an empty
+   rule list).
 
 ### Mode 4: `author-new-table`
 
@@ -200,11 +200,11 @@ document's columns. Derivation rules: `skills/endpoint-spec/spec-new-table.md`.
    (one `CreatorOutput`, the same `type_maps` object) plus one addition:
 
    ```text
-   "type_maps": { /* write / notes */, "read": null, "ambiguities": [], "write_gaps": ["<arrow_type>"] }
+   "type_maps": { /* document / notes */, "ambiguities": [], "write_gaps": ["<arrow_type>"] }
    ```
 
-   With nothing discovered, `read` is always `null` and `ambiguities` always
-   empty in this mode. `write_gaps` lists the `arrow_type`s no write map covers and
+   With nothing discovered, this mode adds no read rules and `ambiguities` is
+   always empty. `write_gaps` lists the `arrow_type`s no write map covers and
    no dialect override renders — each needs the user's native spelling,
    supplied back via `write_render_choices`; a re-invocation must return no
    `write_gaps`.

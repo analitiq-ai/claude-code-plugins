@@ -183,7 +183,7 @@ def import_guard(dist_dir: Path) -> None:
         "from analitiq.contracts.connector import Connector; "
         "from analitiq.contracts.endpoints import ApiEndpointDoc, DatabaseEndpointDoc, DatabaseObject; "
         "from analitiq.contracts.endpoint_identity import derive_db_endpoint_id; "
-        "from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc; "
+        "from analitiq.contracts.type_map import TypeMapDoc; "
         "from analitiq.contracts.connection import ConnectionInput; "
         "from analitiq.contracts.stream import StreamInput, ConnectionEndpointRef, validate_endpoint_ref; "
         "from analitiq.contracts.pipelines.config import PipelineInput; "

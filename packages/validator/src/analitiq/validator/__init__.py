@@ -11,17 +11,12 @@ also fails closed on an unchecked error-tier rule, not only a `fail` finding
 at `severity: "error"`.
 
 `validate_document` detects a document's kind from its own body, for a caller
-holding an unidentified document. A caller that knows what a document is meant
-to be says so instead: `type_map_findings(doc, direction, scope)` grades a type
-map as the direction named, reporting a disagreeing `direction` alongside every
-other defect the model finds rather than grading the document as what it claims
-to be.
-
-A caller holding a type map it has no direction for grades it with
-`type_map_findings_as_declared(doc, scope)`. A caller holding a *directory* of
-maps calls `collect_type_maps(parent, rule=...)`, which answers which document
-is the map for each direction and what is wrong with the rest; where each
-caller roots those findings is its own.
+holding an unidentified document. A caller holding a type map grades it with
+`type_map_findings(doc, scope)`, where `scope` says whether it is a connector's
+map or a connection's. A caller holding a `definition/` *directory* calls
+`load_type_map(parent, rule=...)`, which reads the directory's
+`TYPE_MAP_FILENAME` and refuses every other type-map name beside it; where each caller roots those
+findings is its own.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which self-registers its detector→validator
@@ -51,17 +46,18 @@ from . import streams  # noqa: F401  — imported for its self-registration side
 # exercises them through the package root (see test_validation.py). Deliberately
 # NOT in __all__ — that would widen the published star-import surface.
 from .connectors import (  # skipcq: PY-W2000
-    TypeMapSiblings,
+    TYPE_MAP_FILENAME,
+    TypeMapLoad,
     check_coverage,
-    collect_type_maps,
     endpoint_filename_findings,
+    load_type_map,
     type_map_findings,
-    type_map_findings_as_declared,
     is_api_endpoint_doc,
     is_connector_doc,
     is_addressed_endpoint_path,
     is_database_endpoint_doc,
     is_stem_addressed_endpoint_path,
+    is_type_map_doc,
     _arrow_type_eq,
     _collect_native_arrow_pairs,
     _database_endpoint_locator_findings,
@@ -86,14 +82,15 @@ __all__ = [
     "check_coverage",
     "endpoint_filename_findings",
     "type_map_findings",
-    "type_map_findings_as_declared",
-    "collect_type_maps",
-    "TypeMapSiblings",
+    "load_type_map",
+    "TypeMapLoad",
+    "TYPE_MAP_FILENAME",
     "is_stem_addressed_endpoint_path",
     "is_addressed_endpoint_path",
     "is_api_endpoint_doc",
     "is_connector_doc",
     "is_database_endpoint_doc",
+    "is_type_map_doc",
     "is_connection_doc",
     "is_stream_doc",
     "is_pipeline_doc",

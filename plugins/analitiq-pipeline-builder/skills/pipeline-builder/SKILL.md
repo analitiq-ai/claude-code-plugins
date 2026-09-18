@@ -322,18 +322,17 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
 
    **Connection-scoped type maps.** The `create-endpoints` return carries a
    `type_maps` object alongside `outputs` — connection-scoped gap rules for
-   discovered natives the connector's maps don't cover (authored per
+   discovered natives the connector's map doesn't cover (authored per
    `endpoint-spec/spec-type-map-gaps.md`):
    - If `type_maps.ambiguities` is non-empty, ask the user one question per
      entry — which of the candidate natives this connection should render the
      `arrow_type` to — then re-invoke `create-endpoints` for the same tables with
      `write_render_choices` (`{arrow_type: native_type}`). The re-run must return no
      ambiguities.
-   - Write a non-null `type_maps.read` / `type_maps.write` to
-     `connections/<connection-slug>/definition/type-map-read.json` /
-     `type-map-write.json` and validate each (entity `type-map`; each document
-     declares its own direction) through the same fix-and-revalidate loop as
-     other artifacts.
+   - Write a non-null `type_maps.document` to
+     `connections/<connection-slug>/definition/type-map.json` and validate it
+     (entity `type-map`) through the same fix-and-revalidate loop as other
+     artifacts.
      `null` means write nothing — never create an empty map file, and never
      delete an existing one. Record authored or extended maps in the final
      summary.
@@ -428,7 +427,7 @@ and leaves everything else — including `.secrets/` — untouched.
    validate its **referenced closure** — every connection the pipeline references
    (public and private), every connection-scoped private endpoint those
    connections own (entities `connection` / `database-endpoint`), and any
-   connection-scoped `type-map-read.json` / `type-map-write.json` beside them
+   connection-scoped `type-map.json` beside them
    (entity `type-map`) — which catches a stale or broken
    referenced artifact; plus the whole bundle with `bundle_root: .`, the pass
    that resolves cross-document references and the on-disk endpoint file names

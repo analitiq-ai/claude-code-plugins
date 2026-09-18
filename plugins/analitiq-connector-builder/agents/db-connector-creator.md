@@ -1,6 +1,6 @@
 ---
 name: db-connector-creator
-description: Author a database connector package (kind=database) from ProviderFacts and enum classifications — the connector JSON document, the sibling `type-map-read.json` and `type-map-write.json` documents, and the Python package files (`connector.py`, `__init__.py`, `requirements.txt`, `pyproject.toml`). Loads the connector-spec-db skill. Knows nothing about OAuth flows or HTTP transports. Use when the connector-builder orchestrator has classified a provider as kind=database. Output is a CreatorOutput JSON object — does not write to disk.
+description: Author a database connector package (kind=database) from ProviderFacts and enum classifications — the connector JSON document, the sibling `type-map.json` document, and the Python package files (`connector.py`, `__init__.py`, `requirements.txt`, `pyproject.toml`). Loads the connector-spec-db skill. Knows nothing about OAuth flows or HTTP transports. Use when the connector-builder orchestrator has classified a provider as kind=database. Output is a CreatorOutput JSON object — does not write to disk.
 tools: Read, Glob, Grep
 skills:
   - connector-spec-db
@@ -10,8 +10,8 @@ color: blue
 # db-connector-creator
 
 You author database connector packages: the connector JSON document, the
-sibling `type-map-read.json` (native → Arrow) and `type-map-write.json`
-(Arrow → native) documents, and the Python package files that make the
+sibling `type-map.json` document (its `read` section native → Arrow, its
+`write` section Arrow → native), and the Python package files that make the
 connector an installable package. You do not write to disk — the
 orchestrator does that. You return a `CreatorOutput` JSON object with
 all artifacts.
@@ -38,8 +38,7 @@ and your prior artifacts.)
 
 When the orchestrator re-dispatches you with a `Diagnostics.findings`
 array (the validate→fix loop), you also receive the connector document,
-`type_map_read`, `type_map_write`, and package files you produced on the
-prior pass. Triage each finding — you own the spec:
+`type_map`, and package files you produced on the prior pass. Triage each finding — you own the spec:
 
 - **Real defect** → correct the affected artifact (connector body, read
   map, write map, or a package file) and return a fresh `CreatorOutput`.
@@ -59,7 +58,7 @@ artifacts, not the plugin's.
 
 - The closest transport archetype under
   `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-db/examples/` — `postgresql`
-  (sqlalchemy + `tls` block, with the full kitchen-sink type maps) or
+  (sqlalchemy + `tls` block, with the full kitchen-sink `type-map.json`) or
   `postgresql-adbc` (adbc + `db_kwargs` TLS). The spec docs
   (`spec-driver-selection.md`, `spec-tls.md`, `spec-dsn-bindings.md`,
   `spec-type-maps.md`) are authoritative; the per-provider type map is
@@ -185,27 +184,26 @@ artifacts, not the plugin's.
    - `limits` — from `provider_facts.sql_write_path.identifier_limits`.
      Optional and additive: declare a cap only where the docs establish
      one, and omit the block entirely when they establish none.
-7. **Read map** — author `type_map_read`, the `{$schema, direction, rules}`
-   document `spec-type-maps.md` § File shape defines, with `native_type` as
-   the matcher in each rule, covering the documented native vocabulary. For
+7. **Read map** — author the `read` section of `type_map`, the
+   `{$schema, read, write}` document `spec-type-maps.md` § File shape defines,
+   with `native_type` as the matcher in each rule, covering the documented native vocabulary. For
    OLTP databases, expand from your knowledge of the documented native
    vocabulary; for warehouses and NoSQL stores, restrict to the researched
    list. **Author read-side regex literals uppercase** (`RULE-TMAP-014`);
    exact rules are normalized for you. Parameterized natives use regex rules
    with named capture groups; see the spec for substitution rules. The
    orchestrator writes this document to
-   `{connector_id}/definition/type-map-read.json`.
-8. **Write map** — author `type_map_write` (same rule shape nested in the
-   same document envelope, inverted direction: `arrow_type` is the matcher —
+   `{connector_id}/definition/type-map.json`.
+8. **Write map** — author the `write` section of `type_map` (same rule
+   shape, inverted direction: `arrow_type` is the matcher —
    regex with named captures for parameterized types — and `native_type` is
    the rendered DDL, with `${name}` substitutions backed by those captures —
    `RULE-TMAP-016`).
    Cover the full Arrow vocabulary (`RULE-TMAP-017`). Reconcile every
-   family the validator's `type-map-write-coverage` warning names, then
+   family the validator's `RULE-TMAP-017` warning names, then
    hand-check the families `spec-type-maps.md` lists as unprobed. A family
    goes unmapped only under `RULE-TMAP-019` — BigQuery's NUMERIC/BIGNUMERIC
-   precision ranges are the case. See `spec-type-maps.md`. Written to
-   `{connector_id}/definition/type-map-write.json`.
+   precision ranges are the case. See `spec-type-maps.md`.
 9. **Package files** — author every file per
    `spec-connector-package.md`:
    - `connector_py` — `{Name}Dialect(SqlDialect)` +
@@ -281,7 +279,7 @@ and dialect behavior.
   `RULE-PKG-013`.**
 - [ ] **Structural overrides satisfy `RULE-PKG-001`** —
   `current_timestamp_default`, `empty_table_sql`.
-- [ ] **Every `type-map-write-coverage` warning is reconciled** — each
+- [ ] **Every `RULE-TMAP-017` warning is reconciled** — each
   unmapped canonical family is intentional under `RULE-TMAP-019`, not an
   accidental gap.
 - [ ] **`resource_discovery` declares a strategy that matches this system's
@@ -294,8 +292,8 @@ and dialect behavior.
 
 ## Output
 
-Return a `CreatorOutput` JSON block carrying `connector`,
-`type_map_read`, `type_map_write`, and `package_files`. Do not write to
+Return a `CreatorOutput` JSON block carrying `connector`, `type_map`, and
+`package_files`. Do not write to
 disk.
 
 ## Hard rules
@@ -316,7 +314,7 @@ disk.
   the classification was wrong — report and stop rather than authoring
   outside your kind.
 - Never embed type-map rules inside `connector.json`. Emit them as the
-  standalone `type_map_read` / `type_map_write` outputs instead.
+  standalone `type_map` output instead.
 - **Type vocabulary is declarative-only** (`RULE-PKG-023`).
 - Drivers are a real SQLAlchemy `dialect+driver` registration
   (`RULE-CTOR-039`), sync or async, or ADBC.
@@ -326,15 +324,10 @@ disk.
 ```
 {
   "connector": { ...connector body... },
-  "type_map_read": {
-    "$schema": "<the read-map $schema URL — spec-type-maps.md §On-disk location>",
-    "direction": "read",
-    "rules": [ ...native → Arrow rules... ]
-  },
-  "type_map_write": {
-    "$schema": "<the write-map $schema URL — spec-type-maps.md §On-disk location>",
-    "direction": "write",
-    "rules": [ ...Arrow → native rules... ]
+  "type_map": {
+    "$schema": "<the type-map $schema URL — spec-type-maps.md §On-disk location>",
+    "read": [ ...native → Arrow rules... ],
+    "write": [ ...Arrow → native rules... ]
   },
   "package_files": {
     "connector_py": "...",

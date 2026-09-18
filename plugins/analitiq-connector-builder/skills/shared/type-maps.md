@@ -1,7 +1,8 @@
 # Type-map resolution at runtime
 
-How the engine resolves a column type through type maps at the two scopes.
-This file documents **shipped engine behavior** — referenced from
+Where type maps live at the two scopes, and how the engine resolves a column
+type through them. The file layout is the contract's (`RULE-PKG-030`); the
+resolution sections read the engine as it resolves directions — referenced from
 `connector-spec-db/spec-type-maps.md` and `spec-resource-discovery.md`, which
 own the *authoring* of connector-scoped maps. Connection-scoped maps are
 authored by the sibling `analitiq-pipeline-builder` plugin at discovery time,
@@ -9,18 +10,18 @@ never by this plugin.
 
 ## The two scopes
 
-| Scope | Files | Authored by |
+| Scope | File | Authored by |
 |---|---|---|
-| Connector | `{connector_id}/definition/type-map-read.json` / `type-map-write.json` | this plugin (`spec-type-maps.md`) |
-| Connection | `connections/<connection-slug>/definition/type-map-read.json` / `type-map-write.json` | `analitiq-pipeline-builder`, for natives the connector maps don't cover on that deployment |
+| Connector | `{connector_id}/definition/type-map.json` | this plugin (`spec-type-maps.md`) |
+| Connection | `connections/<connection-slug>/definition/type-map.json` | `analitiq-pipeline-builder`, for natives the connector map doesn't cover on that deployment |
 
-Both scopes share one rule shape and one published schema pair
-(`https://schemas.analitiq.ai/type-map-read/latest.json` /
-`.../type-map-write/latest.json`).
+Both scopes share one document shape and one published schema
+(`https://schemas.analitiq.ai/type-map/latest.json`): a `read` rule list and a
+`write` rule list, each present only where the map has rules for it.
 
 ## Resolution order
 
-Where a stream reads or writes through a connection that ships its own maps,
+Where a stream reads or writes through a connection that ships its own map,
 the engine composes the connection map
 as **primary** over the connector map as **fallback** — the two rule lists are
 concatenated, connection rules first, into one first-match-wins list
@@ -56,11 +57,12 @@ connector's rendering for every stream on that connection (`RULE-TMAP-018`).
 
 ## File-presence semantics
 
-- **Absent file** — no map at that scope; resolution falls through (a
-  connection without maps uses the connector maps alone).
-- **Present with an empty `rules` array** — never ship one at either scope; the
-  contract requires at least one rule, so a document with no rules is a
-  rejected document rather than the fallthrough an absent file gives you.
-- **The pre-split `type-map.json`** — never ship it; it is no direction's map.
-  A connector ships a map declaring each direction its `kind` calls for
+- **Absent file or absent section** — no rules for that direction at that
+  scope; resolution falls through (a connection without a map uses the
+  connector map alone).
+- **An empty rule list** — never ship one at either scope; the contract
+  requires at least one rule in a present section, so an empty one is a
+  rejected document rather than the fallthrough an absent section gives you.
+- **Any other `type-map-*.json`** — never ship one beside `type-map.json`. A
+  connector's map carries a section for each direction its `kind` calls for
   (`RULE-PKG-030`).

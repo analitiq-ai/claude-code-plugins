@@ -319,8 +319,8 @@ def _dispatch(doc: Any, location: Location | None) -> list[dict]:
             "document does not match any known artifact (connector / api-endpoint / "
             "database-endpoint / type-map / connection / stream / pipeline); a connector "
             "must declare 'kind', an api-endpoint 'operations', a type-map a "
-            "'rules' array (inside the {$schema, direction, rules} object), a "
-            "connection a 'connector_id', a stream 'source' + 'destinations', "
+            "'read' and/or 'write' rule list (inside the {$schema, read, write} "
+            "object), a connection a 'connector_id', a stream 'source' + 'destinations', "
             "a pipeline 'connections'."))]
 
 

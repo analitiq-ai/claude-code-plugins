@@ -5588,7 +5588,7 @@
   },
   {
    "id": "RULE-PKG-023",
-   "statement": "A connector's write direction MUST live in its write type-map document: the package ships no Python type-rendering table, and a `render_column_type` override exists only for logic the map's rules cannot express, delegating every other type back to the map.\n",
+   "statement": "A connector's write direction MUST live in the `write` section of its type map: the package ships no Python type-rendering table, and a `render_column_type` override exists only for logic the map's rules cannot express, delegating every other type back to the map.\n",
    "tier": "shape",
    "severity": "warning",
    "artifact_kinds": [
@@ -5679,7 +5679,7 @@
   },
   {
    "id": "RULE-PKG-030",
-   "statement": "A connector MUST ship a sibling type-map document declaring each direction its `kind` calls for, at most one document per direction, and MUST NOT ship one declaring a direction its kind has no use for.\n",
+   "statement": "A connector whose `kind` resolves types MUST ship a sibling `type-map.json` carrying a rule list for each direction that kind renders and none for a direction it does not; no connector ships any other `type-map-*.json` beside it.\n",
    "tier": "reference",
    "severity": "error",
    "artifact_kinds": [
@@ -5696,7 +5696,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The maps are separate documents from `connector.json`, so nothing about the connector document is wrong when one is missing — the connector simply has no type vocabulary for that direction, and the failure arrives at the first stream that resolves a column instead of at authoring. Shipping a spare map is the same defect wearing the opposite sign: a direction the connector never renders reads as a capability, and the rules in it are graded by nobody and trusted by the next author.\nWhich directions a package covers is counted from what its documents declare, never from what they are named. Read of the engine as it stands: it collects a connector's and a connection's type maps by pattern, keys each one by the `direction` in its body, and never inspects the filename — so a package whose documents declare one direction twice has no unambiguous document for any direction, and loading stops before a column is read. Counting filenames instead would pass that package and fail one the engine loads correctly. The count is right whichever way that reading goes stale: one document per required direction is what a consumer needs however it finds them, and a filename a consumer never reads cannot make a second document for one direction unambiguous. The pattern the documents are collected by is the half of that reading a stale copy does break: it is stated on both sides and pinned by neither, so a pattern that widens or narrows on the engine's side leaves this check grading a set of files the engine does not load, and nothing here goes red — a map that stops being found where it was authored is the signal to re-read it from the engine.\nThe pre-split single-map filename is rejected outright rather than read as a read map. It matches no pattern either side collects by, so there is nothing to count it toward, and a connector that still carries it has a write direction nobody has looked at. That name is a fact about the package rather than about the document under it, so it is graded here, where the package is in hand, and a map handed to the validator on its own is graded on the direction it declares.\n",
+   "rationale": "The map is a separate document from `connector.json`, so nothing about the connector document is wrong when a direction is missing — the connector simply has no type vocabulary for that direction, and the failure arrives at the first stream that resolves a column instead of at authoring. Carrying a spare direction is the same defect wearing the opposite sign: a direction the connector never renders reads as a capability, and the rules in it are graded by nobody and trusted by the next author.\nA direction is the key its rules sit under, so one document holds every direction and nothing counts or disambiguates files. A second name that reads as a type map is refused rather than ignored: its rules are graded by nothing here, beside a package that looks as though it ships them. The names are facts about the package rather than about the document, so they are graded here, where the package is in hand, and a map handed to the validator on its own is graded on its sections alone.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7742,6 +7742,31 @@
    "symbol": null,
    "fixture_model": null,
    "rationale": "Resolution is first-match-wins, so a repeated matcher makes every later copy unreachable — and unreachable is not inert, because the later copy is usually the one somebody added to fix the earlier one. The map then keeps rendering the old answer while carrying the new one in plain sight, which reads on the page as the fix having landed. Read `exact` matchers are compared after the same normalization the reader applies, so two spellings that differ only in case or spacing count as one rule here for the same reason they do at runtime. It warns rather than rejects because a map assembled from concatenated scopes can legitimately arrive with a repeat, which `RULE-TMAP-018` is what settles.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-TMAP-023",
+   "statement": "A type map MUST carry a rule list under at least one of `read` or `write`.\n",
+   "tier": "shape",
+   "severity": "error",
+   "artifact_kinds": [
+    "type-map"
+   ],
+   "validator": "analitiq.contracts.type_map::TypeMapDoc._at_least_one_direction",
+   "enforcement_location": null,
+   "owners": [
+    "connector-plugin",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "TypeMapDoc"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "A map carrying neither section maps no type in either direction, so the file reads as coverage it does not provide. Omitting the direction a map has no rules for is the intended authoring — the rule only refuses omitting both. The obligation is a presence requirement on one document, mirrored into the published schema.\n",
    "status": "active",
    "superseded_by": null
   }

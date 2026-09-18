@@ -164,8 +164,8 @@ Treat both until the pin catches up.
 
 This adapter's `database-endpoint` and `type-map` entities also run the
 document against its contract model, whose own `@model_validator`s can reject
-it citing a rule of their own — every rule bound to `DatabaseEndpointDoc`,
-`TypeMapReadDoc` or `TypeMapWriteDoc` is reachable that way, catalogued in full
+it citing a rule of their own — every rule bound to `DatabaseEndpointDoc` or
+`TypeMapDoc` is reachable that way, catalogued in full
 in `references/rules/database-endpoint.md` and `references/rules/type-map.md`
 rather than restated here.
 
@@ -179,7 +179,7 @@ Pass `--bundle-root` when validating the stitched pipeline; that is what runs
 the cross-document checks (the `RULE-PIPE-*`/`RULE-STRM-*`/`RULE-CONN-011`
 referential rules above) and makes their findings reachable. The same pass
 reads each connection's `definition/` through the published type-map
-collection and forwards its findings, each rooted at the file it concerns and
+loader and forwards its findings, each rooted at the file it concerns and
 naming no rule. See `endpoint-spec/spec-type-map-gaps.md`.
 
 The adapter adds ids of its own, for checks the published bundle validator

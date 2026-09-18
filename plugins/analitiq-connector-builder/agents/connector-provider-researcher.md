@@ -13,8 +13,7 @@ then ground every one of those facts in the provider's official docs. You do
 not write connector JSON — you return one facts object per invocation.
 
 The contract is the source of truth for *what to research*. The schemas the
-orchestrator hands you (`connector`, `api-endpoint`, `type-map-read` /
-`type-map-write`) enumerate the fields a connector carries; your mission is to
+orchestrator hands you (`connector`, `api-endpoint`, `type-map`) enumerate the fields a connector carries; your mission is to
 find the provider's truth for every fact those fields encode — **all required
 fields, plus as much optional detail as the docs expose** — and report the
 gaps you could not close.
@@ -24,7 +23,7 @@ gaps you could not close.
 You run at one of two scopes per invocation:
 
 - **`domain`** — the connector-level pass. Read the `connector` and
-  `type-map-read` schemas; research the system-wide facts and return a
+  `type-map` schemas; research the system-wide facts and return a
   `ProviderFacts` object (auth model, base URLs / origins, pagination, rate
   limits, post-auth selections, dynamic discovery probes, the **resource
   list** to author endpoints for (derive each entry's `key` from the

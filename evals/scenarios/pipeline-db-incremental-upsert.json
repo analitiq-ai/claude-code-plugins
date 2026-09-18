@@ -9,12 +9,8 @@
       "to": "connectors/postgresql-example/definition/connector.json"
     },
     {
-      "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/type-map-read.json",
-      "to": "connectors/postgresql-example/definition/type-map-read.json"
-    },
-    {
-      "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/type-map-write.json",
-      "to": "connectors/postgresql-example/definition/type-map-write.json"
+      "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/type-map.json",
+      "to": "connectors/postgresql-example/definition/type-map.json"
     },
     {
       "from": "plugins/analitiq-pipeline-builder/skills/connection-spec/examples/db.example.json",

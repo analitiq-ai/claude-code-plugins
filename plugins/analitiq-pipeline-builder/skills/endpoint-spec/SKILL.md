@@ -32,7 +32,7 @@ contract (`analitiq.contracts.endpoints.DatabaseEndpointDoc`).
 - `spec-columns.md` — the column shape, provider `native_type` labels and
   the fully-qualified Apache Arrow `arrow_type` vocabulary.
 - `spec-type-map-gaps.md` — connection-scoped type maps for discovered
-  natives the connector's base maps don't cover: gap detection in each
+  natives the connector's base map doesn't cover: gap detection in each
   direction, and the authoring rules.
 - `spec-new-table.md` — deriving a destination endpoint for a table that
   does not exist yet (no introspection; the engine creates it on first run).
@@ -54,9 +54,9 @@ at the foot of this file.
 - The column shape per table/view/collection.
 - Primary keys: every declared name must name a column this document declares
   (`RULE-DBEP-003`).
-- Connection-scoped type maps
-  (`connections/<connection-slug>/definition/type-map-{read,write}.json`),
-  authored only when discovery surfaces natives the connector's maps don't
+- A connection-scoped type map
+  (`connections/<connection-slug>/definition/type-map.json`),
+  authored only when discovery surfaces natives the connector's map doesn't
   cover — see `spec-type-map-gaps.md`.
 - Endpoints for destination tables that do not exist yet, derived from the
   source endpoint instead of introspection — see `spec-new-table.md`.
@@ -113,6 +113,5 @@ Every authored document must:
 | Stream | `pipelines/<slug>/streams/<stream-slug>.json` | `https://schemas.analitiq.ai/stream/latest.json` |
 | Connection | `connections/<slug>/connection.json` | `https://schemas.analitiq.ai/connection/latest.json` |
 | Database endpoint | `connections/<slug>/definition/endpoints/<endpoint_id>.json` | `https://schemas.analitiq.ai/database-endpoint/latest.json` |
-| Connection type map (read) | `connections/<slug>/definition/type-map-read.json` | `https://schemas.analitiq.ai/type-map-read/latest.json` |
-| Connection type map (write) | `connections/<slug>/definition/type-map-write.json` | `https://schemas.analitiq.ai/type-map-write/latest.json` |
+| Connection type map | `connections/<slug>/definition/type-map.json` | `https://schemas.analitiq.ai/type-map/latest.json` |
 <!-- END GENERATED: schema-urls -->

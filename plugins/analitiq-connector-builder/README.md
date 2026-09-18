@@ -14,8 +14,8 @@ documentation URL, the plugin:
 1. Researches the provider's auth model, transports, and endpoints.
 2. Classifies kind, auth type, and transport types.
 3. Dispatches a kind-specific creator agent that authors the connector body,
-   the read/write type maps, and — for database connectors — the Python
-   package files (dialect + connector class, requirements, pyproject).
+   the type map, and — for database connectors — the Python package files
+   (dialect + connector class, requirements, pyproject).
 4. Authors endpoint files alongside (API connectors only — DB endpoints are
    discovered at runtime).
 5. Validates everything against the published contract — offline, via the
@@ -81,17 +81,15 @@ Schemas are generated from — so there is no schema fetch. It runs:
 
 1. **Contract-model validation** — structure, plus the cross-field rules the
    models themselves apply.
-   <!-- PROBE: type-map-direction-from-document, type-map-direction-not-schema-url, type-map-coverage-counts-declarations -->
-   Discriminating keys in the document body select the model — a type map by its
-   own `direction`, not by its filename and not by its `$schema`. A connector
-   package's maps are collected by pattern and counted toward the directions
-   they declare (`RULE-PKG-030`), so a name says which siblings are maps and
-   nothing more; the slot name each direction is authored under is a convention,
-   stated per scope in `skills/shared/type-maps.md`. Each kind
-   is graded against the model behind this schema:
+   <!-- PROBE: type-map-rule-graded-by-section, type-map-stray-name-refused, type-map-section-missing -->
+   Discriminating keys in the document body select the model, and inside a type
+   map the section a rule sits under — `read` or `write` — is its direction. A
+   connector package's map is its one `definition/type-map.json`, which carries
+   the sections its `kind` calls for; any other `type-map-*.json` beside it is
+   refused (`RULE-PKG-030`). Each kind is graded against the model behind this
+   schema:
    - Connector → `https://schemas.analitiq.ai/connector/latest.json`
-   - Read map (`direction: "read"`) → `https://schemas.analitiq.ai/type-map-read/latest.json`
-   - Write map (`direction: "write"`, for the kinds `RULE-PKG-030` calls for) → `https://schemas.analitiq.ai/type-map-write/latest.json`
+   - Type map → `https://schemas.analitiq.ai/type-map/latest.json`
    - API endpoint → `https://schemas.analitiq.ai/api-endpoint/latest.json`
    - Database endpoint → `https://schemas.analitiq.ai/database-endpoint/latest.json`
    Every rule an author must satisfy is catalogued by id in
@@ -149,8 +147,7 @@ For each successfully built connector:
 {connector_id}/
 ├── definition/
 │   ├── connector.json              # the connector body
-│   ├── type-map-read.json          # native → Arrow rules (required, non-empty)
-│   ├── type-map-write.json         # Arrow → native DDL rules (database only)
+│   ├── type-map.json               # `read`: native → Arrow; `write`: Arrow → native DDL (database only)
 │   └── endpoints/                  # api connectors only
 │       └── {endpoint_id}.json      # filename matches the document's endpoint_id
 ├── __init__.py                     # database only

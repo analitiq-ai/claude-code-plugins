@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Covers: every rule this plugin owns that binds a **`type-map`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 13 of the 34 below have no validator, so nothing rejects
+all hold: 13 of the 35 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **15** shape · **8** coherence · **4** reference · **5** process · **2** choice.
+In this file: **16** shape · **8** coherence · **4** reference · **5** process · **2** choice.
 
 ## Contents
 
@@ -53,6 +53,7 @@ than edited.
 | RULE-TMAP-009 | A write `regex` rule's arrow_type matcher MUST compile under the RE2 regex dialect with any named capture spelled `(?<name>…)`, and the native_type DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | validator | — |
 | RULE-TMAP-011 | A type map MUST NOT carry a catch-all rule standing in for whatever the map's earlier-resolving rules leave uncovered. | `type-map` | error | — | — |
 | RULE-TMAP-017 | A connector's write map MUST render every Arrow type a source can hand its system, including the bare container markers an API source emits as literal Arrow types. | `type-map` | warning | validator | — |
+| RULE-TMAP-023 | A type map MUST carry a rule list under at least one of `read` or `write`. | `type-map` | error | validator | — |
 
 ## Coherence
 

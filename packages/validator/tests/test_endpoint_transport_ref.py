@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL
+from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 
@@ -114,10 +114,9 @@ def _write_endpoint(transport_ref=..., endpoint_id="widgets", path="/widgets"):
 def _write_tree(root: Path, connector: dict, endpoints: dict):
     (root / "endpoints").mkdir(parents=True)
     (root / "connector.json").write_text(json.dumps(connector))
-    (root / "type-map-read.json").write_text(json.dumps({
-        "$schema": TYPE_MAP_READ_SCHEMA_URL,
-        "direction": "read",
-        "rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+    (root / "type-map.json").write_text(json.dumps({
+        "$schema": TYPE_MAP_SCHEMA_URL,
+        "read": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
     }))
     for name, ep in endpoints.items():
         (root / "endpoints" / name).write_text(

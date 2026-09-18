@@ -35,7 +35,7 @@ The **authored** contract: the documents you write and Analitiq validates.
 - `analitiq.contracts.connector` — `Connector`
 - `analitiq.contracts.connection` — `ConnectionInput`
 - `analitiq.contracts.endpoints` — `ApiEndpointDoc`, `DatabaseEndpointDoc`, `DatabaseObject`
-- `analitiq.contracts.type_map` — `TypeMapReadDoc`, `TypeMapWriteDoc`
+- `analitiq.contracts.type_map` — `TypeMapDoc`
 - `analitiq.contracts.stream` — `StreamInput` (+ the endpoint refs)
 - `analitiq.contracts.pipelines.config` — `PipelineInput`
 - `analitiq.contracts.credentials_file` — `CredentialsFile`
