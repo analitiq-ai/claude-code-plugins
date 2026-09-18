@@ -28,14 +28,18 @@ rationale: >
   never in stdlib `re`, which answers a different question in both
   directions — `\p{L}+` is an ordinary RE2 pattern `re` refuses, `(a)\1` a
   backreference `re` accepts and RE2 cannot compile. The engine as it stands
-  also embeds the pattern in a group, so this rule compiles it as one too:
-  `\Qabc` compiles alone, and grouped, its quote swallows the closing
-  parenthesis. A pattern RE2 refuses would otherwise pass here and fail its
-  stream at run time. Were the engine to match in another dialect, this check
-  could go stale in either direction, refusing patterns that dialect runs or
-  passing ones it cannot compile; were it to stop grouping the pattern, the
-  grouped compile would be stricter than the run, refusing a pattern such as
-  `\Qabc` that would then match. A payload that is the right kind but
+  embeds the pattern as the group in `^(?:…)`, and this rule compiles it both
+  alone and grouped, since neither compile implies the other. A pattern RE2
+  refuses alone either fails its stream at run time or, like `a)|(b`,
+  compiles only grouped: it closes the engine's group early and adds an
+  unanchored alternative, so the run silently matches something other than
+  what the author wrote. `\Qabc` compiles only alone, since grouped its quote
+  swallows the closing parenthesis, and fails its stream at run time. Were
+  the engine to match in another dialect, this check could go stale in either
+  direction, refusing patterns that dialect runs or passing ones it cannot
+  compile; were it to stop grouping the pattern, the grouped compile would be
+  stricter than the run, refusing a pattern such as `\Qabc` that would then
+  match. A payload that is the right kind but
   constrains nothing — a negative `min_length`, an empty pattern, a range with
   neither bound — fails no row and is reported nowhere, which reads exactly
   like a rule that passed; one that admits nothing — a negative `max_length`,
