@@ -1940,12 +1940,14 @@ def test_clean_tree_emits_no_coverage_finding(tmp_path, connector_base, validato
     assert [f for f in findings if f.get("rule") in _COVERAGE_RULE_IDS] == [], findings
 
 
-def test_a_matcher_too_large_to_compile_is_skipped_by_coverage(tmp_path, connector_base, validator):
+@pytest.mark.parametrize("oversized", ["{99999999999}", "(" * 1000 + "X" + ")" * 1000],
+                         ids=["repeat-count", "nesting"])
+def test_a_matcher_too_large_to_compile_is_skipped_by_coverage(tmp_path, connector_base, validator, oversized):
     # The model refuses the matcher; resolving an endpoint's native through the
     # same map must pass that rule by as it passes any matcher that does not
     # compile, not crash the check and take the coverage verdict with it.
     _write_tree(tmp_path, connector_base,
-                [{"match": "regex", "native_type": "^A{99999999999}$", "arrow_type": "Utf8"},
+                [{"match": "regex", "native_type": f"^A{oversized}$", "arrow_type": "Utf8"},
                  {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("STRING", "Utf8")})
     findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")

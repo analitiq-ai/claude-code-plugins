@@ -237,8 +237,9 @@ def _compile_ecma(pattern: str) -> "re.Pattern[str]":
     `ValueError` for every pattern `re` refuses."""
     try:
         return re.compile(_to_python_regex(pattern))
-    # An oversized repeat count is refused with `OverflowError`, not `re.error`.
-    except (re.error, OverflowError) as exc:
+    # `re` refuses an oversized repeat count with `OverflowError` and groups
+    # nested past the recursion limit with `RecursionError`, not `re.error`.
+    except (re.error, OverflowError, RecursionError) as exc:
         raise ValueError(f"matcher is not a valid regex ({exc})") from exc
 
 

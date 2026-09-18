@@ -580,6 +580,18 @@ def test_bundle_flags_invalid_connection_write_section(tmp_path):
     assert bad and all(f["path"].startswith(f"{PG_MAP}/write") for f in bad), diag["findings"]
 
 
+@pytest.mark.parametrize("content", [None, _tm()], ids=["null", "no-section"])
+def test_bundle_grades_a_connection_type_map_carrying_no_rules(tmp_path, content):
+    # A map that parsed is graded whatever it holds: one carrying no section
+    # is a defect of that file, never a connection without a map.
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, PG_MAP, content)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"]
+    assert any(f["kind"] == "fail" and f["path"].startswith(PG_MAP)
+               for f in diag["findings"]), diag["findings"]
+
+
 def test_bundle_unreadable_connection_type_map(tmp_path):
     doc = _build_bundle(tmp_path)
     p = tmp_path / PG_MAP

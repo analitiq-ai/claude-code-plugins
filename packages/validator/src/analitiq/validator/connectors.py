@@ -1124,7 +1124,7 @@ def load_type_map(parent: Path | Location, *, rule: str | None) -> TypeMapLoad:
             message_id="stray-type-map-document", kind="fail", path="/",
             message=(
                 f"sibling {stray.name} is not read as a type map: one "
-                f"{TYPE_MAP_FILENAME} carries every direction's rules, so nothing "
+                f"{TYPE_MAP_FILENAME} carries the rules for every direction the map covers, so nothing "
                 f"grades what {stray.name} holds."))))
     return TypeMapLoad(document, findings)
 

@@ -280,14 +280,23 @@ def test_regex_must_compile():
     _rejects(READ, [{"match": "regex", "native_type": "([", "arrow_type": "Utf8"}])
 
 
-@pytest.mark.parametrize("direction,rule", [
-    (READ, {"match": "regex", "native_type": "^A{99999999999}$", "arrow_type": "Utf8"}),
-    (WRITE, {"match": "regex", "arrow_type": "^Utf8{99999999999}$", "native_type": "TEXT"}),
-], ids=["read", "write"])
-def test_a_matcher_too_large_to_compile_is_refused(direction, rule):
-    # `re.compile` refuses an oversized repeat count with `OverflowError`, which
-    # is not a `re.error`: it has to reach the author as a finding like any
-    # other matcher that does not compile.
+# Patterns `re.compile` refuses with something other than `re.error`: an
+# oversized repeat count raises `OverflowError`, groups nested past the
+# interpreter's recursion limit raise `RecursionError`.
+_OVERSIZED_MATCHERS = {
+    "repeat-count": "{99999999999}",
+    "nesting": "(" * 1000 + "X" + ")" * 1000,
+}
+
+
+@pytest.mark.parametrize("oversized", _OVERSIZED_MATCHERS.values(), ids=_OVERSIZED_MATCHERS.keys())
+@pytest.mark.parametrize("direction", [READ, WRITE], ids=["read", "write"])
+def test_a_matcher_too_large_to_compile_is_refused(direction, oversized):
+    # It has to reach the author as a finding like any other matcher that does
+    # not compile.
+    rule = ({"match": "regex", "native_type": f"^A{oversized}$", "arrow_type": "Utf8"}
+            if direction == READ else
+            {"match": "regex", "arrow_type": f"^Utf8{oversized}$", "native_type": "TEXT"})
     _rejects(direction, [rule])
 
 

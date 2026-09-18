@@ -315,10 +315,10 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
      question per `arrow_type` — what native type this destination
      should render it to — then re-invoke `author-new-table` with
      `write_render_choices`. The re-run must return no `write_gaps`.
-   - Writing and validating `type_map.document` is identical to
-     `create-endpoints`; an `author-new-table` return never carries
-     read rules or ambiguities. Record in the final summary that the
-     table is pending creation by the engine's first run.
+   - Write and validate `type_map.document` — the whole map, existing
+     sections included — as for `create-endpoints`; this mode adds no read
+     rules and no ambiguities. Record in the final summary that the table
+     is pending creation by the engine's first run.
 
    **Connection-scoped type map.** The `create-endpoints` return carries a
    `type_map` object alongside `outputs` — connection-scoped gap rules for

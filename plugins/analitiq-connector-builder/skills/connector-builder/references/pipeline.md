@@ -270,7 +270,8 @@ paths. The connector root IS the Python package for database connectors:
 `ProviderFacts` + creator logic, so hand edits to a connector are not
 preserved.
 
-Write every direction into the one `type-map.json`; never write another
+Write the creator's type map as the one `type-map.json`, carrying a section
+for each direction the connector's `kind` calls for; never write another
 `type-map-*.json` beside it (`RULE-PKG-030`).
 
 Write each endpoint to `endpoints/{endpoint_id}.json` (`RULE-PKG-031`) —
