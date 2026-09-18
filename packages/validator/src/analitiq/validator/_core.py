@@ -24,7 +24,8 @@ This module owns the parts that are independent of any particular artifact kind:
   own verdict (the pipeline plugin's adapter, say) reduces over them the same
   way `_passed()` does, rather than a second predicate that can drift from it;
 - `_passed()` — `not any(finding_costs_a_pass(f) for f in findings)`, so
-  `main()` and a future caller answer "did this document pass" identically;
+  `main()` and `analitiq.validator.document_set` answer "did this document
+  pass" identically;
 - the `main()` CLI: read the document, validate, print `{"passed", "findings"}`,
   exit 0 iff `_passed()` says so (1 on a failing document / unreadable document;
   2 on CLI usage errors).
@@ -333,18 +334,27 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
 
 
 # ---------------------------------------------------------------------------
-# CLI
+# Document text
 # ---------------------------------------------------------------------------
+
+#: What `json.loads` raises for text it will not parse. `JSONDecodeError`, an
+#: integer past the interpreter's digit limit and a `UnicodeDecodeError` on the
+#: read are all `ValueError`; nesting past the recursion limit is a
+#: `RecursionError`, which is a `RuntimeError` and escapes a `ValueError` arm.
+_JSON_TEXT_REFUSALS = (ValueError, RecursionError)
+
 
 def _unreadable_document_finding(exc: Exception) -> dict:
     """The finding for a document whose text could not be read or parsed at
-    all, before any kind was even identified — shared by the disk-backed CLI
-    below and `analitiq.validator.document_set.validate_single_document`,
-    which parses text it already holds rather than a path."""
+    all, before any kind was even identified."""
     return finding(
         message_id="unreadable-document", kind="fail", path="",
         message=f"Cannot read document: {exc}")
 
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate an Analitiq connector/endpoint/type-map document.")
@@ -354,12 +364,10 @@ def main() -> int:
     document_path = Path(args.document)
     try:
         document = json.loads(document_path.read_text())
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
-        # RecursionError is a RuntimeError, so nesting deep enough to exhaust the
-        # parser's stack escapes the JSONDecodeError arm.
+    except (OSError, *_JSON_TEXT_REFUSALS) as exc:
         # OSError subsumes FileNotFoundError / IsADirectoryError / PermissionError,
-        # so an unreadable document always yields the finding + exit 1 (never a
-        # bare traceback), matching _load_type_map and the documented contract.
+        # so an unreadable document always yields the finding + exit 1, never a
+        # bare traceback.
         print(json.dumps({"passed": False, "findings": [_unreadable_document_finding(exc)]}))
         return 1
 

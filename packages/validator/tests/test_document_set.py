@@ -1,12 +1,10 @@
 """Fixture corpus for the path-free document-set API (`analitiq.validator
-.document_set`) — a case exercising an entry point that still raises
-`NotImplementedError` is `xfail(strict=True)`. An implementation turns such a
-case from `xfail` to passing by replacing the stub body it exercises and
-removing that case's marker; `strict=True` means a case that starts passing
-while its marker is still on it fails the suite, so a marker can never survive
-its own fix by accident. The cases that grade a type-contract fact settled now
-— the signature pin and the `Finding` shape pin — carry no marker and pass
-today.
+.document_set`). A case exercising an entry point that raises
+`NotImplementedError` is `xfail(strict=True)`; every other case carries no
+marker. An implementation turns such a case from `xfail` to passing by
+replacing the stub body it exercises and removing that case's marker;
+`strict=True` means a case that starts passing while its marker is still on it
+fails the suite, so a marker can never survive its own fix by accident.
 
 Two corpora already committed for the path-based routes are reused here
 rather than re-authored: `packages/validator/tests/corpus/` (a connector
@@ -22,10 +20,9 @@ call. Nothing here covers a malformed argument — a bad key, a value that is
 not text, a key that is also a directory, an `entity` outside the vocabulary.
 Those are refused by the request models at construction and belong to the
 contract package's own model tests; a case asserting one of them produces a
-*finding* would contradict the gate. `bytes` and `bytearray` are what that gate
-does not refuse — pydantic decodes them in lax mode, byte-order mark included —
-so they reach these entry points as unreadable content, and pinning that
-coercion belongs to the model tests too.
+*finding* would contradict the gate. `bytes` and `bytearray` holding UTF-8 pass
+that gate — pydantic decodes them in lax mode, byte-order mark included — and
+pinning that coercion belongs to the model tests too.
 """
 from __future__ import annotations
 
@@ -79,7 +76,7 @@ def _document_request(document, entity: str) -> ValidateSingleDocumentRequest:
 
 # ---------------------------------------------------------------------------
 # Finding — drift guard against the keys `analitiq.validator.finding` actually
-# produces (not xfail: a type-contract fact settled now). `finding()`'s own
+# produces (no marker: a type-contract fact). `finding()`'s own
 # docstring is the source: `rule` only when given, `severity` only for a
 # `fail` kind, everything else unconditional.
 # ---------------------------------------------------------------------------
@@ -137,7 +134,7 @@ def test_finding_matches_the_keys_finding_builder_produces(validator):
 
 # ---------------------------------------------------------------------------
 # The entry-point signatures — the surface this module exists to declare (not
-# xfail: a type-contract fact settled now). The request models are imported
+# marker: a type-contract fact). The request models are imported
 # under `TYPE_CHECKING` and no type checker runs over this repo, so without
 # this case a misspelled model name, a deferred import of a module that does
 # not exist, or an annotation naming the other request model reaches a release
@@ -456,12 +453,16 @@ def _write_package(root: Path, documents: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def test_single_document_wraps_the_path_based_route(validator):
-    """A document whose declared `entity` matches what detection finds reports
-    exactly the path-based route's findings, wrapped in one envelope."""
+    """A document consistent with its declared `entity` reports exactly what
+    `validate_document` reports for it with no path, wrapped in one envelope.
+    With no path there are no siblings to read, so a connector's coverage check
+    is skipped, and the skip costs the pass."""
     document = json.loads((CORPUS / "valid_connector.json").read_text())
     expected_findings = validator.validate_document(document)
     result = validator.validate_single_document(_document_request(document, "connector"))
     assert json.dumps(result) == json.dumps(_expected_envelope(validator, expected_findings))
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["coverage-check-skipped-no-path"]
 
 
 def test_declared_entity_that_disagrees_with_the_document_is_a_finding(validator):
@@ -477,6 +478,30 @@ def test_declared_entity_that_disagrees_with_the_document_is_a_finding(validator
 
     matched = validator.validate_single_document(_document_request(_STREAM, "stream"))
     assert not any(f["kind"] == "fail" for f in matched["findings"]), matched
+
+
+@pytest.mark.parametrize("entity", ["type-map-read", "type-map-write"])
+def test_type_map_declaring_no_direction_is_graded_not_mismatched(validator, entity):
+    """A type map carrying neither a valid `direction` nor a `$schema` naming
+    one declares no direction for the declared name to disagree with. Either
+    type-map name is consistent with it, and the document's own missing
+    `direction` is what gets reported."""
+    document = {"rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+    result = validator.validate_single_document(_document_request(document, entity))
+    fails = [f for f in result["findings"] if f["kind"] == "fail"]
+    assert "entity-mismatch" not in [f["message_id"] for f in fails], result
+    assert "/direction" in [f["path"] for f in fails], result
+
+
+@pytest.mark.parametrize("declared,sent_as", [("write", "type-map-read"), ("read", "type-map-write")])
+def test_type_map_direction_named_only_by_its_schema_url_is_checked(validator, declared, sent_as):
+    """With no `direction`, the `$schema` URL is what declares one, so a map
+    identified only by its URL and sent under the other direction's name is
+    reported."""
+    document = {"$schema": f"{_H}/type-map-{declared}/latest.json",
+                "rules": [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]}
+    result = validator.validate_single_document(_document_request(document, sent_as))
+    assert [f["message_id"] for f in result["findings"]] == ["entity-mismatch"], result
 
 
 def test_type_map_entity_names_the_direction_the_document_declares(validator):
@@ -507,20 +532,19 @@ def test_unparseable_document_text_is_a_finding_not_a_raise(validator):
     assert any(f["message_id"] == "unreadable-document" for f in result["findings"]), result
 
 
-def test_nesting_too_deep_to_parse_is_a_finding_not_a_raise(validator):
-    """`RecursionError` is a `RuntimeError`, so it escapes the `JSONDecodeError`
-    arm the parser's other failures land in. It is still content a caller sent,
-    and a consumer wrapping this package as a remote tool would otherwise take
-    the crash for a document it was handed."""
-    document = "[" * 20_000 + "]" * 20_000
-    result = validator.validate_single_document(
-        ValidateSingleDocumentRequest(document=document, entity="connector"))
-    assert result["passed"] is False
-    assert any(f["message_id"] == "unreadable-document" for f in result["findings"]), result
+def test_text_refused_outside_jsondecodeerror_is_a_finding_not_a_raise(
+        validator, text_refused_outside_jsondecodeerror):
+    """The parser refuses some text with an exception that is not a
+    `JSONDecodeError`. That text is still content a caller sent, so it is
+    reported like any other unreadable document rather than raised as though it
+    were a defect in this package."""
+    result = validator.validate_single_document(ValidateSingleDocumentRequest(
+        document=text_refused_outside_jsondecodeerror, entity="connector"))
+    assert [f["message_id"] for f in result["findings"]] == ["unreadable-document"], result
 
 
 # ---------------------------------------------------------------------------
-# `_detected_entity`'s tables restate a vocabulary the contract package
+# `_consistent_entities`'s tables restate a vocabulary the contract package
 # generates, and nothing else in the validator package reads that owner. Per
 # `.claude/rules/no-drift-surfaces.md` a copy is pinned by a test that reads the
 # owner, or it is a defect — so the pin below reads `DOCUMENT_SCHEMA_NAMES`
@@ -528,36 +552,40 @@ def test_nesting_too_deep_to_parse_is_a_finding_not_a_raise(validator):
 # `entity` at all, so the vocabulary is what the tables have to track.
 # ---------------------------------------------------------------------------
 
-#: One document per published document-schema name, built from the fixtures
-#: above. Membership is asserted against `DOCUMENT_SCHEMA_NAMES` itself, so a
-#: name added or renamed there fails here rather than silently going undetected.
-_DOCUMENT_FOR_ENTITY = {
-    "connector": _CONNECTOR_WISE,
-    "connection": _CONN_WISE,
-    "pipeline": _PIPELINE,
-    "stream": _STREAM,
-    "api-endpoint": _WISE_TRANSFERS_ENDPOINT,
-    "database-endpoint": _DB_ENDPOINT,
-    "type-map-read": _CONNECTOR_PG_TYPE_MAP_READ,
-    "type-map-write": _CONNECTOR_PG_TYPE_MAP_WRITE,
-}
+#: A document for every registration a published document-schema name resolves
+#: from, built from the fixtures above — a connector missing its `kind` is
+#: claimed by a registration of its own. The names are asserted against
+#: `DOCUMENT_SCHEMA_NAMES` itself, so a name added or renamed there fails here
+#: rather than silently going undetected.
+_DOCUMENT_FOR_ENTITY = (
+    ("connector", _CONNECTOR_WISE),
+    ("connector", {k: v for k, v in _CONNECTOR_WISE.items() if k != "kind"}),
+    ("connection", _CONN_WISE),
+    ("pipeline", _PIPELINE),
+    ("stream", _STREAM),
+    ("api-endpoint", _WISE_TRANSFERS_ENDPOINT),
+    ("database-endpoint", _DB_ENDPOINT),
+    ("type-map-read", _CONNECTOR_PG_TYPE_MAP_READ),
+    ("type-map-write", _CONNECTOR_PG_TYPE_MAP_WRITE),
+)
 
 
 def test_every_published_document_schema_name_is_detected(validator):
-    """Each name the contract publishes resolves from a document of that kind.
-    A name the contract adds or renames lands here as a missing key, rather than
-    as every document of that kind drawing a spurious `entity-mismatch`."""
+    """Each name the contract publishes resolves from a document of that kind,
+    and only that name does. A name the contract adds or renames lands here as a
+    missing entry, rather than as every document of that kind drawing a spurious
+    `entity-mismatch`."""
     from analitiq.contracts.validation_requests import DOCUMENT_SCHEMA_NAMES
-    from analitiq.validator.document_set import _detected_entity
+    from analitiq.validator.document_set import _consistent_entities
 
-    assert set(_DOCUMENT_FOR_ENTITY) == set(DOCUMENT_SCHEMA_NAMES)
-    for entity, document in _DOCUMENT_FOR_ENTITY.items():
-        assert _detected_entity(document) == entity, (entity, document)
+    assert {entity for entity, _ in _DOCUMENT_FOR_ENTITY} == set(DOCUMENT_SCHEMA_NAMES)
+    for entity, document in _DOCUMENT_FOR_ENTITY:
+        assert _consistent_entities(document) == {entity}, (entity, document)
 
 
 def test_an_assembled_bundle_resolves_to_no_published_name(validator):
     """A bundle is not a single document and no published schema names one, so
-    it is deliberately absent from `_detected_entity`'s tables. Sent to this
+    it is deliberately absent from `_consistent_entities`'s tables. Sent to this
     entry point it is reported as matching no published schema — never
     validated as the `pipeline` its core carries."""
     bundle = {"pipeline": _PIPELINE, "streams": [_STREAM], "connections": {_SRC: _CONN_WISE}}

@@ -52,6 +52,7 @@ from ._core import (
     contract_model_domain,
     finding,
     register_kind,
+    _JSON_TEXT_REFUSALS,
     _bounded,
     _missing_schema_url_findings,
     _model_findings,
@@ -81,7 +82,7 @@ try:
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import (
-            TYPE_MAP_WRITE_SCHEMA_URL, TypeMapReadDoc, TypeMapWriteDoc,
+            TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL, TypeMapReadDoc, TypeMapWriteDoc,
         )
         # Reuse the contract's regex primitives (ECMA named-group + `${name}`
         # placeholder syntax) from the model so the validator's rule-rendering can't
@@ -977,7 +978,7 @@ def _load_json_sibling(
     """
     try:
         return json.loads(path.read_text()), []
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (OSError, *_JSON_TEXT_REFUSALS) as exc:
         return None, [finding(
             rule=rule, message_id=message_id, kind="fail", path="/",
             message=f"sibling {path.name} could not be read or parsed ({exc}).")]
@@ -1379,23 +1380,29 @@ def _validate_database_endpoint(doc: Any, doc_path: Path | None) -> list[dict]:
     return findings
 
 
-def _type_map_direction(doc: Any) -> Literal["read", "write"]:
-    """The `read`/`write` direction a type-map document declares.
+def _type_map_direction(doc: Any) -> Literal["read", "write"] | None:
+    """The direction a type-map document declares, or `None` when it declares
+    none.
 
-    The engine keys a type map by the document's own `direction`, so the
-    filename never grades it. `$schema` names the direction too and stands in
-    when `direction` is missing or invalid, so the rest of the document is
-    graded against the model its author meant; with neither, the read model
-    reports the missing `direction` itself.
+    The document's own `direction` declares it, so the filename never does.
+    `$schema` names the direction too and stands in when `direction` is missing
+    or invalid.
     """
     direction = doc.get("direction")
-    if direction not in ("read", "write"):
-        direction = "write" if doc.get("$schema") == TYPE_MAP_WRITE_SCHEMA_URL else "read"
-    return direction
+    if direction in ("read", "write"):
+        return direction
+    schema = doc.get("$schema")
+    if schema == TYPE_MAP_READ_SCHEMA_URL:
+        return "read"
+    if schema == TYPE_MAP_WRITE_SCHEMA_URL:
+        return "write"
+    return None
 
 
 def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    return type_map_findings(doc, _type_map_direction(doc))
+    # Graded against the model its author meant; declaring no direction at all,
+    # the read model reports the missing `direction` itself.
+    return type_map_findings(doc, _type_map_direction(doc) or "read")
 
 
 def _validate_kindless_connector(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature

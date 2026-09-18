@@ -24,12 +24,12 @@ grammar, a value that is not text, a key that is also a directory of another,
 a package past the document ceiling, an `entity` outside the published document
 schema names — each is a `pydantic.ValidationError` raised at construction, for
 an in-process caller and a remote one alike, so there is one gate rather than
-one per transport. `bytes` and `bytearray` are what the model does not refuse:
-pydantic decodes them to `str` in lax mode, byte-order mark included, so a
-caller that read its files as bytes has that document reported as unreadable
-*content* rather than as a malformed argument. Nothing below re-checks an
-argument the model already refuses, and a malformed argument never becomes a
-finding.
+one per transport. `bytes` and `bytearray` holding UTF-8 pass that gate:
+pydantic decodes them to `str` in lax mode, so a caller that read its files as
+bytes is validated as though it had sent the text — except that a byte-order
+mark survives the decoding, and a document starting with one is reported as
+unreadable *content*. Nothing below re-checks an argument the model already
+refuses, and a malformed argument never becomes a finding.
 Document *content* is the opposite and is what this module exists to judge:
 unparseable text, a wrong shape, a contract-model failure or a cross-file
 inconsistency is a finding rather than a raised error.
@@ -37,14 +37,14 @@ inconsistency is a finding rather than a raised error.
 An exception raised by this module's own assembly or scoping is a defect in
 this package: it propagates. Turning one into a finding would fail an author's
 document for a bug the author cannot fix. `_run_guarded` in
-`analitiq.validator._core` is a separate, older mechanism and is untouched: it
-contains a crash inside a check bound to one rule, and inside whole-document
+`analitiq.validator._core` is a separate mechanism: it contains a crash inside
+a check bound to one rule, and inside whole-document
 dispatch where `validate_document` applies it, as a `check-crashed`
 `notApplicable` finding — so a crash inside the path-based route this module
 delegates a single document to still comes back as a finding.
 
-The package entry points below still raise `NotImplementedError`; the
-behaviour each must satisfy is fixed by
+Each entry point taking a `ValidatePackageRequest` raises
+`NotImplementedError`; the behaviour it must satisfy is fixed by
 `packages/validator/tests/test_document_set.py`.
 """
 from __future__ import annotations
@@ -97,9 +97,8 @@ class ValidationEnvelope(TypedDict):
     """The result of every entry point below: flat, not a nested per-document
     breakdown — a finding carries the `path` the check that produced it
     reports, so a document validated this way and the same document validated
-    through the path-based single-document route report through one shape. The
-    one `path` this module decides itself is an embedded connector subtree's,
-    scoped under that subtree's key prefix. `passed` is `False` exactly when
+    through the path-based single-document route report through one shape.
+    `passed` is `False` exactly when
     `findings` holds one that `finding_costs_a_pass` accepts, which is not the
     same as "a finding at `severity: error`": an unchecked error-tier rule
     costs a pass too."""
@@ -116,25 +115,22 @@ def _envelope(findings: list[Finding]) -> ValidationEnvelope:
     return {"passed": _passed(findings), "findings": findings}
 
 
-def _detected_entity(document: object) -> str | None:
-    """The published document-schema name the core registry's own detection
-    would assign `document`, or `None` when no registered kind claims it — the
-    same outcome `_core._dispatch` reports as `unrecognized-document`.
+def _consistent_entities(document: object) -> frozenset[str]:
+    """The published document-schema names `document`'s own content is
+    consistent with — empty when no registered kind claims it, or when the kind
+    that does has no published name (an assembled pipeline bundle, say).
 
-    Walks the live `_KIND_REGISTRY` in its real registration order rather than
-    a separately hand-copied precedence list, so the order detectors are tried
-    is always read from the registry, never duplicated. `_KIND_REGISTRY`'s own
-    entries carry no name for either half of the pair; each registration
-    idiom keeps a name on a different half — a `register_kind` call site
-    passes a named validator, while `register_model_and_schema_kind` builds an
-    anonymous validator closure per call and only ever names its detector —
-    so the two tables below key off whichever half is actually a stable,
-    importable name for that registration.
+    The core registry claims a type map by shape and leaves its direction to
+    the document, while the name vocabulary separates the directions. A type
+    map is consistent with the name for the direction it declares, and with
+    either name when it declares none, so validation reports the missing
+    `direction` rather than a mismatch hiding it.
 
-    `_validate_pipeline_bundle`'s registration is deliberately absent from
-    both tables: no published document-schema name denotes an assembled
-    bundle, so a document happening to match its detector falls through to
-    `None` the same as one no detector recognises at all.
+    Walks the live `_KIND_REGISTRY` in registration order, so which kind claims
+    a document is always the registry's own answer. A `register_kind` call
+    names its validator, while `register_model_and_schema_kind` builds an
+    anonymous validator closure and names only its detector, so each
+    registration is looked up by whichever half is a stable importable name.
     """
     from analitiq.validator import _core, is_connection_doc, is_pipeline_doc, is_stream_doc
     from analitiq.validator.connectors import (
@@ -162,11 +158,12 @@ def _detected_entity(document: object) -> str | None:
         if not detector(document):
             continue
         if validator is _validate_type_map:
-            return f"type-map-{_type_map_direction(document)}"
-        if validator in entity_by_validator:
-            return entity_by_validator[validator]
-        return entity_by_detector.get(detector)
-    return None
+            declared = _type_map_direction(document)
+            return frozenset(f"type-map-{direction}" for direction in ("read", "write")
+                             if declared in (None, direction))
+        entity = entity_by_validator.get(validator) or entity_by_detector.get(detector)
+        return frozenset({entity}) if entity else frozenset()
+    return frozenset()
 
 
 def validate_single_document(
@@ -174,42 +171,35 @@ def validate_single_document(
     """Validate one document supplied as its file text.
 
     `request.entity` names the published document schema the caller says the
-    text is written against. It is checked, not trusted: the core registry's
-    own detection still runs, and a document whose detected schema is not the
-    declared one is reported as a finding rather than validated as whatever it
-    resembles. Text the JSON parser cannot read is a finding on the document,
-    not a raised error.
+    text is written against. It is checked, not trusted: a document whose own
+    content is inconsistent with the declared name is reported as an
+    `entity-mismatch` finding rather than validated as whatever it resembles.
+    Text the JSON parser cannot read is a finding on the document, not a
+    raised error.
 
-    Resolving a detected schema name for a type map means reading the
-    document's own `direction` the way `analitiq.validator.connectors`
-    already does — the core registry detects a type map by shape and does not
-    itself separate the read direction from the write one, while `entity`'s
-    vocabulary names them separately. It is that resolution being reused, not a
-    second direction rule.
-
-    Wraps the path-based route's bare findings list in a `ValidationEnvelope`,
-    so every entry point in this module answers in one shape.
+    A consistent document gets the verdict `validate_document` gives it with no
+    path to anchor on: a connector's cross-file coverage check has no siblings
+    to read, so it reports `coverage-check-skipped-no-path`, which costs the
+    pass. A connector's siblings are validated by `validate_connector_package`.
     """
-    from analitiq.validator._core import _unreadable_document_finding, finding, validate_document
+    from analitiq.validator._core import (
+        _JSON_TEXT_REFUSALS, _unreadable_document_finding, finding, validate_document,
+    )
 
     try:
         document = json.loads(request.document)
-    except (json.JSONDecodeError, RecursionError) as exc:
-        # RecursionError is a RuntimeError, so nesting deep enough to exhaust the
-        # parser's stack escapes the JSONDecodeError arm — and it is still content
-        # a caller sent, not a defect in this package.
+    except _JSON_TEXT_REFUSALS as exc:
         return _envelope([_unreadable_document_finding(exc)])
 
-    detected = _detected_entity(document)
-    if detected != request.entity:
-        if detected is None:
-            message = (
-                f"declared entity {request.entity!r}, but this document's own "
-                "content matches no published document schema.")
+    consistent = _consistent_entities(document)
+    if request.entity not in consistent:
+        if consistent:
+            detected = " or ".join(repr(entity) for entity in sorted(consistent))
+            message = (f"declared entity {request.entity!r}, but this document's "
+                       f"content is detected as {detected}.")
         else:
-            message = (
-                f"declared entity {request.entity!r} does not match "
-                f"{detected!r}, what this document's own content declares.")
+            message = (f"declared entity {request.entity!r}, but this document's "
+                       "content matches no published document schema.")
         return _envelope([finding(
             message_id="entity-mismatch", kind="fail", path="/", message=message)])
 
