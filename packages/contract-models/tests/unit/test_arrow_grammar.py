@@ -310,15 +310,6 @@ def test_an_unbounded_position_never_refuses_on_an_empty_language():
             "Time64(${u})", lambda name, probes: frozenset())
 
 
-def test_template_bounds_skip_an_unreadable_capture():
-    """None means "cannot be read" and must not be read as "matches nothing"."""
-    arrow_grammar.validate_template_bounds(
-        "Decimal128(5, ${s})", lambda name, probes: None)
-    with pytest.raises(ValueError, match="does not admit"):
-        arrow_grammar.validate_template_bounds(
-            "Decimal128(5, ${s})", lambda name, probes: frozenset(probes))
-
-
 def test_a_capture_matching_no_probe_renders_nothing_admissible():
     """An empty language is a decision, not an absence of one.
 

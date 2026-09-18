@@ -26,7 +26,7 @@ classifiers = [
 # checks `zoneinfo.available_timezones()`, which is empty on hosts without a
 # system tzdb (Windows / minimal containers) — so a valid `timezone: "UTC"` would
 # fail offline. Bundling tzdata makes validation self-contained everywhere.
-dependencies = ["pydantic>=2.12,<3", "tzdata"]
+dependencies = ["pydantic>=2.12,<3", "tzdata", "google-re2>=1.1.20251105"]
 
 [project.urls]
 Homepage = "https://analitiq.ai"

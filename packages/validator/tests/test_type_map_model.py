@@ -243,14 +243,69 @@ def test_regex_write_native_render_placeholders_validated():
     assert "RULE-TMAP-009" in str(exc.value)
 
 
+def _refusal(adapter, rule) -> str:
+    """The model's refusal of a one-rule document, as the text an author reads."""
+    with pytest.raises(ValidationError) as exc:
+        adapter.validate_python(_wrap(adapter, [rule]))
+    return str(exc.value)
+
+
+def _regex_rule(adapter, matcher):
+    """A regex rule whose matcher is `matcher`, with a render the model accepts."""
+    if adapter is READ:
+        return {"match": "regex", "native_type": matcher, "arrow_type": "Utf8"}
+    return {"match": "regex", "arrow_type": matcher, "native_type": "TEXT"}
+
+
 def test_regex_rejects_python_named_group():
-    _rejects(READ, [{"match": "regex", "native_type": "(?P<p>.*)", "arrow_type": "Utf8"}])
+    for adapter, rule_id in ((READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")):
+        refusal = _refusal(adapter, _regex_rule(adapter, r"(?P<p>\d+)"))
+        assert rule_id in refusal, refusal
+        assert "(?<name>…)" in refusal, refusal
 
 
-def test_regex_ecma_named_backreference_accepted():
-    # An ECMA named backreference `\k<name>` is valid contract syntax; it must be
-    # translated to Python's `(?P=name)` (not rejected as uncompilable) — Codex r4.
-    _accepts(READ, [{"match": "regex", "native_type": r"(?<x>\w+)_\k<x>", "arrow_type": "Utf8"}])
+def test_python_named_group_spelling_inside_a_quote_is_a_literal():
+    # `\Q…\E` quotes its contents, so the spelling there opens no group. The
+    # quoted `<…>` is literal container syntax, so the read rule renders `Json`.
+    _accepts(READ, [{"match": "regex", "native_type": r"^\Q(?P<x>\E$", "arrow_type": "Json"}])
+    _accepts(WRITE, [_regex_rule(WRITE, r"^\Q(?P<x>\E$")])
+
+
+def test_regex_named_backreference_rejected():
+    # RE2 has no backreferences, so `\k<name>` is refused where the engine
+    # would refuse it, with the parse error RE2 gives.
+    refusal = _refusal(READ, _regex_rule(READ, r"(?<x>\w+)_\k<x>"))
+    assert "RULE-TMAP-005" in refusal, refusal
+    assert r"invalid escape sequence: \k" in refusal, refusal
+
+
+@pytest.mark.parametrize("matcher,re2_error", [
+    (r"(?<t>VARCHAR)_\k<t>", r"invalid escape sequence: \k"),
+    (r"VARCHAR(?=\()\(\d+\)", "invalid perl operator: (?="),
+    (r"(A)\1", r"invalid escape sequence: \1"),
+    (r"(?<=X)A", "invalid perl operator: (?<="),
+    (r"(?>A+)B", "invalid perl operator: (?>"),
+    (r"A{1001}", "invalid repetition size: {1001}"),
+])
+@pytest.mark.parametrize("adapter,rule_id", [(READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")],
+                         ids=["read", "write"])
+def test_regex_outside_re2_is_rejected_with_re2s_own_error(adapter, rule_id, matcher, re2_error):
+    refusal = _refusal(adapter, _regex_rule(adapter, matcher))
+    assert rule_id in refusal, refusal
+    assert re2_error in refusal, refusal
+
+
+@pytest.mark.parametrize("adapter", [READ, WRITE], ids=["read", "write"])
+def test_regex_only_re2_accepts_is_accepted(adapter):
+    _accepts(adapter, [_regex_rule(adapter, r"\p{L}+")])
+
+
+def test_named_group_compiles_as_written():
+    # No `(?<name>` → `(?P<name>` rewrite stands between the author and RE2: the
+    # compiled matcher carries the capture under the name the rule spells.
+    from analitiq.contracts.type_map import compile_matcher
+
+    assert compile_matcher(r"(?<p>\d+)X").regex.groupindex == {"p": 1}
 
 
 def test_regex_must_compile():
@@ -303,6 +358,14 @@ def test_schemaless_container_must_not_collapse_to_scalar():
     _accepts(READ, [{"match": "exact", "native_type": "array<int>", "arrow_type": "Json"}])
     _rejects(READ, [{"match": "exact", "native_type": "integer[]", "arrow_type": "Utf8"}])
     _accepts(READ, [{"match": "exact", "native_type": "JSONB", "arrow_type": "Utf8"}])  # bare name: not flagged
+
+
+def test_container_syntax_is_read_from_a_regex_rules_literals_only():
+    # `<` and `>` inside a class are members of a set, not a parameterization.
+    _accepts(READ, [{"match": "regex", "native_type": r"^A[<>]B$", "arrow_type": "Utf8"}])
+    refusal = _refusal(READ, {"match": "regex", "native_type": r"^ARRAY<(?<t>[A-Z]+)>$",
+                              "arrow_type": "Utf8"})
+    assert "RULE-TMAP-002" in refusal, refusal
 
 
 def test_schemaless_native_maps_to_container_canonicals_only():
@@ -420,14 +483,32 @@ def test_a_placeholder_parameter_position_must_carry_nothing_else():
                      "arrow_type": "Decimal128(1${p}, 0)"}])
 
 
-def test_unreadable_capture_proves_nothing():
-    """A capture the check cannot read must not be reported as refusable."""
-    # A backreference to a group declared OUTSIDE the capture does not compile
-    # on its own; the rule stays accepted rather than being refused on a
-    # failure to analyse it.
-    _accepts(READ, [{"match": "regex",
-                     "native_type": r"(?<a>[0-3])N\((?<p>[1-9]\k<a>)\)",
+def test_backreference_into_a_capture_is_refused_before_the_bound_check():
+    """RE2 has no backreferences, so the rule fails to compile before any
+    capture of it is interrogated."""
+    refusal = _refusal(READ, {"match": "regex",
+                              "native_type": r"(?<a>[0-3])N\((?<p>[1-9]\k<a>)\)",
+                              "arrow_type": "Decimal128(${p}, 0)"})
+    assert "RULE-TMAP-005" in refusal, refusal
+    assert "RULE-TMAP-010" not in refusal, refusal
+
+
+def test_capture_whose_class_opens_with_a_bracket_is_read_whole():
+    # A `]` first in a class is a member, not the class's end, so the `)`
+    # after it is a member too and the capture runs on to its real closer.
+    refusal = _refusal(READ, {"match": "regex", "native_type": r"^N\((?<p>[])0-9]+)\)$",
+                              "arrow_type": "Decimal128(${p}, 0)"})
+    assert "RULE-TMAP-010" in refusal, refusal
+    _accepts(READ, [{"match": "regex", "native_type": r"^N\((?<p>[])1-9])\)$",
                      "arrow_type": "Decimal128(${p}, 0)"}])
+
+
+def test_capture_is_read_under_the_inline_flags_in_force():
+    # The probe is uppercased; a lowercase capture under `(?i)` matches it, so
+    # the capture's language is taken case-insensitively too.
+    _accepts(READ, [{"match": "regex",
+                     "native_type": rf"(?i)^ts\((?<u>{_units('Timestamp').lower()})\)$",
+                     "arrow_type": "Timestamp(${u})"}])
 
 
 def test_families_without_a_cross_bound_are_capture_checked_too():
@@ -464,10 +545,20 @@ def test_a_position_with_no_probe_alphabet_stands():
     (r"^N(?<p>\d+\))$", "p", r"\d+\)"),
     # Nested groups are consumed whole.
     (r"^N(?<p>(?:1|2)(?<q>\d))$", "p", r"(?:1|2)(?<q>\d)"),
-    (r"^N\((?<p>\d+)\)$", "absent", None),
-    (r"^N\((?<p>\d+$", "p", None),  # never closes
+    # A quoted `)` is a literal, and so is a `]` opening a class.
+    (r"^X(?<t>\Q)\E|A)$", "t", r"\Q)\E|A"),
+    (r"^X(?<t>[]A)]+)$", "t", "[]A)]+"),
+    # The inline flags in force at the opener travel with the source.
+    (r"(?i)X(?<t>ab)", "t", "(?i:ab)"),
 ])
 def test_named_group_source_extraction(native, name, expected):
     from analitiq.contracts.type_map import _named_group_source
 
     assert _named_group_source(native, name) == expected
+
+
+def test_named_group_source_of_an_absent_group_raises():
+    from analitiq.contracts.type_map import _named_group_source
+
+    with pytest.raises(KeyError):
+        _named_group_source(r"^N\((?<p>\d+)\)$", "absent")

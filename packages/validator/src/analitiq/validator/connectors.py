@@ -83,11 +83,11 @@ try:
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
-        # Reuse the contract's regex primitives (ECMA named-group + `${name}`
-        # placeholder syntax) from the model so the validator's rule-rendering can't
-        # drift from the model's rule-validation.
+        # Reuse the contract's matcher compilation and `${name}` placeholder
+        # syntax from the model so the validator's rule-rendering can't drift
+        # from the model's rule-validation.
         from analitiq.contracts.type_map import (
-            _ECMA_NAMED_BACKREF, _ECMA_NAMED_GROUP, _PLACEHOLDER_RE, _to_python_regex,
+            _PLACEHOLDER_RE, case_dead_atoms, compile_matcher,
         )
         # The executable Arrow vocabulary — the write-coverage probe set is
         # derived from it rather than sampled by hand.
@@ -176,9 +176,11 @@ def _first_match_render(value: str, rules: list, matcher_key: str, render_key: s
                 return render_value
         elif rule.get("match") == "regex":
             try:
-                m = re.fullmatch(_to_python_regex(matcher_value), probe)
-            except re.error:
+                compiled = compile_matcher(matcher_value)
+            except ValueError:
+                # The model reports an uncompilable matcher; it renders nothing.
                 continue
+            m = compiled.regex.fullmatch(probe)
             if not m:
                 continue
             groups = m.groupdict()
@@ -618,27 +620,20 @@ def _type_map_rule_warnings(rules: list, direction: str) -> list[dict]:
             # warning pass only; the model already rejects the malformed rule.
             pass
         if direction == "read" and match == "regex" and isinstance(matcher, str):
-            # Strip named groups, named BACKREFERENCES, class/anchor escapes,
-            # AND `[...]` character-class contents ([A-Za-z] is a set, not a
-            # lowercase literal) before looking for a lowercase literal that can
-            # never match an UPPERCASED native. The backref strip must drop
-            # `\k<name>` whole: unescaping it leaves the literal `k<name>`, which
-            # reads as authored lowercase and warns about a rule that matches
-            # perfectly well. Both strips are needed and neither substitutes for
-            # the other — dropping backrefs while keeping class contents warns on
-            # `^FOO(?<x>[A-Za-z]+)$` instead.
-            stripped = _ECMA_NAMED_GROUP.sub("(", matcher)
-            stripped = _ECMA_NAMED_BACKREF.sub("", stripped)
-            stripped = re.sub(r"\[[^\]]*\]", "", stripped)
-            stripped = re.sub(r"\\[dDsSwWbBAZfnrtvux0]", "", stripped)
-            if re.search(r"[a-z]", re.sub(r"\\(.)", r"\1", stripped)):
+            try:
+                dead = case_dead_atoms(matcher)
+            except ValueError:
+                # The model reports an uncompilable matcher.
+                dead = ()
+            if dead:
                 findings.append(finding(
                     rule="RULE-TMAP-014",
                     message_id="regex-native-case-mismatch", kind="fail",
                     path=f"/rules/{i}/{matcher_key}",
                     message=(
                         f"regex {matcher_key} is matched against UPPERCASED natives; "
-                        f"lowercase literals in {matcher!r} can never match."),
+                        f"{', '.join(map(repr, dead))} in {matcher!r} can never match "
+                        "a normalized native character."),
                 ))
     return findings
 

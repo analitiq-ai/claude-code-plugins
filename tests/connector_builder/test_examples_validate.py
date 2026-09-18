@@ -227,6 +227,12 @@ def test_example_type_maps_validate(example_dir: Path, tmp_path: Path) -> None:
         assert not errors, f"{map_path.name}\n" + "\n".join(
             f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors
         )
+        # An example teaching a rule no normalized native can reach teaches a
+        # dead rule; the finding is a warning, so the error check above misses it.
+        case_dead = [f for f in findings if f.get("rule") == "RULE-TMAP-014"]
+        assert not case_dead, f"{map_path.name}\n" + "\n".join(
+            f"{f['path']}: {f['message']}" for f in case_dead
+        )
 
 
 def _write_map(example_dir: Path) -> Path | None:

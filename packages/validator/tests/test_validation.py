@@ -10,6 +10,7 @@ import json
 import os
 import re
 import signal
+import time
 from pathlib import Path
 
 import pytest
@@ -771,6 +772,48 @@ def test_coverage_exact_match_normalizes_both_sides(validator):
     assert validator._render_arrow_type("character varying", [{"match": "exact", "native_type": "CHARACTER  VARYING", "arrow_type": "Utf8"}]) == "Utf8"
     # A genuinely different native is still uncovered.
     assert validator._render_arrow_type("STRING", [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}]) is None
+
+
+def test_coverage_matches_a_regex_rule_with_re2_semantics(validator):
+    # RE2's `\d` is ASCII, so a non-ASCII digit is not covered by a rule the
+    # engine would not resolve it with either.
+    rules = [{"match": "regex", "native_type": r"^N\d$", "arrow_type": "Int8"}]
+    assert validator._render_arrow_type("N3", rules) == "Int8"
+    assert validator._render_arrow_type("N٣", rules) is None
+
+
+def _within(seconds, call):
+    """`call()`, failed rather than stalled when it has not returned in time."""
+    def _stalled(_signum, _frame):
+        raise AssertionError(f"did not return within {seconds}s")
+
+    previous = signal.signal(signal.SIGALRM, _stalled)
+    signal.alarm(seconds)
+    try:
+        return call()
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+_NEAR_MATCH = "A" * 10_000 + "B"
+
+
+def test_write_render_returns_promptly_on_a_nested_quantifier():
+    from analitiq.validator.connectors import _first_match_render
+
+    rules = [{"match": "regex", "arrow_type": r"(A+)+$", "native_type": "TEXT"}]
+    assert _within(5, lambda: _first_match_render(
+        _NEAR_MATCH, rules, "arrow_type", "native_type")) is None
+
+
+def test_read_coverage_returns_promptly_on_a_nested_quantifier(tmp_path, connector_base, validator):
+    _write_tree(tmp_path, connector_base,
+                [{"match": "regex", "native_type": r"(A+)+$", "arrow_type": "Utf8"}],
+                {"widgets.json": _endpoint(_NEAR_MATCH, "Utf8")})
+    findings = _within(5, lambda: validator.check_coverage(
+        connector_base, tmp_path / "connector.json"))
+    assert any(f.get("rule") == "RULE-PKG-033" for f in _errors(findings)), findings
 
 
 def test_normalize_native_is_the_canonical(validator):
@@ -1896,28 +1939,70 @@ def test_duplicate_exact_read_rule_warns_across_case_and_whitespace(validator):
     assert any("duplicate" in w["message"] for w in warns)
 
 
-@pytest.mark.parametrize("native,warns", [
-    # A named BACKREFERENCE contributes no literal text: `\\k<t>` must be
-    # dropped whole, not unescaped into the literal `k<t>`.
-    (r"^A(?<t>[0-9])B\k<t>$", False),
-    # A character CLASS is a set, not a lowercase literal — its contents are
-    # dropped too, which is why the backref strip is added to the class strip
-    # rather than swapped for a strip that keeps class contents.
-    (r"^FOO(?<x>[A-Za-z]+)$", False),
-    # A genuine lowercase literal outside any class or capture: dead against
-    # uppercased natives, and the whole reason the check exists.
-    (r"^varchar\((?<n>\d+)\)$", True),
-    # The blind spot both strips share, recorded rather than fixed: a
-    # lowercase-ONLY class really is dead, and the class strip hides it.
-    (r"^[a-z]+$", False),
+# Each row names a witness the expectation is graded against, so the table is
+# checked by RE2 itself and not only by the check under test: a silent row's
+# witness is a native whose normalized form the pattern matches, and a warning
+# row's witness is a spelling the pattern matches only before normalization.
+@pytest.mark.parametrize("native,verdict,witness", [
+    (r"^varchar$", "warns", "varchar"),
+    (r"(?i)^varchar$", "silent", "varchar"),
+    (r"^VAR(?i:char)$", "silent", "VARCHAR"),
+    (r"(?i:var)CHAR", "silent", "VARCHAR"),
+    (r"^A(?i)b|c$", "silent", "c"),
+    (r"^(?s)VAR.$", "silent", "VARX"),
+    (r"^\p{Lu}+$", "silent", "VARCHAR"),
+    (r"^\pL+$", "silent", "VARCHAR"),
+    (r"^\P{Ll}+$", "silent", "VARCHAR"),
+    (r"^VAR\z", "silent", "VAR"),
+    (r"^[a-z]+$", "warns", "abc"),
+    (r"^\Qvar\E$", "warns", "var"),
+    (r"(A(?i)b)c", "warns", "Abc"),
+    (r"^(?i)(?-i:a)$", "warns", "a"),
+    (r"^\x6aAR$", "warns", "jAR"),
+    (r"^[ß]$", "warns", "ß"),
+    (r"^[\p{Ll}]$", "silent", "ĸ"),
+    (r"^A[]a]B$", "silent", "A]B"),
+    (r"^FOO(?<x>[A-Za-z]+)$", "silent", "FOOX"),
+    (r"^varchar\((?<n>\d+)\)$", "warns", "varchar(1)"),
+    # Refused by the contract, so there is no pattern for the warning to read.
+    (r"^(?P<x>\d)X$", "refused", None),
+    (r"^A(?<t>[0-9])B\k<t>$", "refused", None),
 ])
-def test_regex_lowercase_literal_warning_truth_table(validator, tmp_path, native, warns):
+def test_regex_case_dead_atom_warning_truth_table(validator, tmp_path, native, verdict, witness):
+    import re2
+
+    from analitiq.contracts.type_map import normalize_native_type
+
+    if verdict == "silent":
+        assert re2.fullmatch(native, normalize_native_type(witness)), witness
+    elif verdict == "warns":
+        assert re2.fullmatch(native, witness), witness
+        assert not re2.fullmatch(native, normalize_native_type(witness)), witness
     findings = validator.validate_document(
         _type_map_doc([{"match": "regex", "native_type": native, "arrow_type": "Utf8"}], "read"),
         doc_path=tmp_path / "type-map-read.json")
     dead = [w for w in _warnings(findings)
             if w.get("rule") == "RULE-TMAP-014" and "can never match" in w["message"]]
-    assert bool(dead) is warns, findings
+    assert bool(dead) is (verdict == "warns"), findings
+    refused = [e for e in _errors(findings) if e.get("rule") == "RULE-TMAP-005"]
+    assert bool(refused) is (verdict == "refused"), findings
+
+
+def test_regex_case_check_stays_cheap_across_a_whole_map(validator, tmp_path):
+    # The character table is built once per process, so it is dropped first:
+    # the bound has to hold for the map that pays for it.
+    from analitiq.contracts import type_map
+
+    type_map._normalized_native_characters.cache_clear()
+    rules = [{"match": "regex",
+              "native_type": rf"^T{i}(?i:x)?\((?<n>[1-9]\d*)\)[a-z]*\p{{Lu}}?$",
+              "arrow_type": "Utf8"} for i in range(50)]
+    started = time.perf_counter()
+    findings = validator.validate_document(
+        _type_map_doc(rules, "read"), doc_path=tmp_path / "type-map-read.json")
+    elapsed = time.perf_counter() - started
+    assert sum(w.get("rule") == "RULE-TMAP-014" for w in _warnings(findings)) == 50, findings
+    assert elapsed < 1.0, elapsed
 
 
 def test_write_vocabulary_gap_warns(validator, tmp_path):
