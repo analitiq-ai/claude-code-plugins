@@ -536,6 +536,11 @@ def test_type_map_is_graded_by_the_model_its_declared_name_selects(validator, de
     assert "/direction" in [f["path"] for f in result["findings"] if f["kind"] == "fail"], result
     for direction, only_that_model_reports in _GRADED_ONLY_AS.items():
         assert (only_that_model_reports in ids) == (direction == sent_direction), result
+    # The path-based route has no name to take a direction from, so it grades
+    # such a map as read.
+    path_route_ids = [f["message_id"] for f in validator.validate_document(document)]
+    assert _GRADED_ONLY_AS["read"] in path_route_ids, path_route_ids
+    assert _GRADED_ONLY_AS["write"] not in path_route_ids, path_route_ids
 
 
 def test_type_map_entity_names_the_direction_the_document_declares(validator):
