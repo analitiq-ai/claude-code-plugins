@@ -1400,8 +1400,9 @@ def _type_map_direction(doc: Any) -> Literal["read", "write"] | None:
 
 
 def _validate_type_map(doc: Any, doc_path: Path | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    # Graded against the model its author meant; declaring no direction at all,
-    # the read model reports the missing `direction` itself.
+    # Graded against the model its author meant. A path gives no other source
+    # for a direction, so a map declaring none it can use is graded as read,
+    # whose model reports that `direction`.
     return type_map_findings(doc, _type_map_direction(doc) or "read")
 
 

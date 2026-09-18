@@ -50,7 +50,7 @@ if str(_PLUGIN_SCRIPTS) not in sys.path:
 def _xfail(fn_name: str):
     return pytest.mark.xfail(
         strict=True, raises=NotImplementedError,
-        reason=f"{fn_name} is not yet implemented (analitiq.validator.document_set)")
+        reason=f"{fn_name} raises NotImplementedError (analitiq.validator.document_set)")
 
 
 def _package_request(documents: dict) -> ValidatePackageRequest:
@@ -480,28 +480,62 @@ def test_declared_entity_that_disagrees_with_the_document_is_a_finding(validator
     assert not any(f["kind"] == "fail" for f in matched["findings"]), matched
 
 
-@pytest.mark.parametrize("entity", ["type-map-read", "type-map-write"])
-def test_type_map_declaring_no_direction_is_graded_not_mismatched(validator, entity):
-    """A type map carrying neither a valid `direction` nor a `$schema` naming
-    one declares no direction for the declared name to disagree with. Either
-    type-map name is consistent with it, and the document's own missing
-    `direction` is what gets reported."""
-    document = {"rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
-    result = validator.validate_single_document(_document_request(document, entity))
-    fails = [f for f in result["findings"] if f["kind"] == "fail"]
-    assert "entity-mismatch" not in [f["message_id"] for f in fails], result
-    assert "/direction" in [f["path"] for f in fails], result
+# A type map is the one document a single registration claims under more than
+# one published name, so which model grades it turns on how the document
+# declares its direction and which name the caller sent. Every combination is a
+# row below. Each of the map's rules is valid in one direction only — a regex
+# `arrow_type` a read map may not render, an exact `native_type` placeholder a
+# write map may not leave unclosed — so each model reports a rule the other
+# never does.
+_RULES_VALID_IN_ONE_DIRECTION = [
+    {"match": "regex", "native_type": "TEXT", "arrow_type": ".*"},
+    {"match": "exact", "native_type": "VARCHAR(${", "arrow_type": "Utf8"},
+]
+_GRADED_ONLY_AS = {"read": "read-regex-arrow-type-invalid", "write": "write-exact-malformed-placeholder"}
 
 
-@pytest.mark.parametrize("declared,sent_as", [("write", "type-map-read"), ("read", "type-map-write")])
-def test_type_map_direction_named_only_by_its_schema_url_is_checked(validator, declared, sent_as):
-    """With no `direction`, the `$schema` URL is what declares one, so a map
-    identified only by its URL and sent under the other direction's name is
-    reported."""
-    document = {"$schema": f"{_H}/type-map-{declared}/latest.json",
-                "rules": [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]}
+def _type_map_declaring(direction: str | None, via: str) -> dict:
+    document = {"rules": _RULES_VALID_IN_ONE_DIRECTION}
+    if via == "direction":
+        document["direction"] = direction
+    elif via == "$schema":
+        document["$schema"] = f"{_H}/type-map-{direction}/latest.json"
+    return document
+
+
+_TYPE_MAP_DECLARATIONS = [
+    ("read", "direction"), ("write", "direction"),
+    ("read", "$schema"), ("write", "$schema"),
+    (None, "nothing"), ("sideways", "direction"),
+]
+
+
+@pytest.mark.parametrize("sent_as", ["type-map-read", "type-map-write", "connector"])
+@pytest.mark.parametrize("declared,via", _TYPE_MAP_DECLARATIONS)
+def test_type_map_is_graded_by_the_model_its_declared_name_selects(validator, declared, via, sent_as):
+    """Content that declares a direction is consistent only with that
+    direction's name, and is graded exactly as `validate_document` grades it.
+    Content that declares none is consistent with either type-map name, and the
+    caller's name is then what selects the model — never a default the
+    document did not ask for."""
+    document = _type_map_declaring(declared, via)
     result = validator.validate_single_document(_document_request(document, sent_as))
-    assert [f["message_id"] for f in result["findings"]] == ["entity-mismatch"], result
+    ids = [f["message_id"] for f in result["findings"]]
+
+    if not sent_as.startswith("type-map-"):
+        assert ids == ["entity-mismatch"], result
+        return
+    sent_direction = sent_as.removeprefix("type-map-")
+    if declared in _GRADED_ONLY_AS:
+        if declared == sent_direction:
+            assert result == _expected_envelope(validator, validator.validate_document(document))
+            assert _GRADED_ONLY_AS[declared] in ids, result
+        else:
+            assert ids == ["entity-mismatch"], result
+        return
+    assert "/direction" in [f["path"] for f in result["findings"] if f["kind"] == "fail"], result
+    for direction, only_that_model_reports in _GRADED_ONLY_AS.items():
+        assert (only_that_model_reports in ids) == (direction == sent_direction), result
 
 
 def test_type_map_entity_names_the_direction_the_document_declares(validator):

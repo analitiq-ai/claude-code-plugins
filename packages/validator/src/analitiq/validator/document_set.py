@@ -38,10 +38,9 @@ An exception raised by this module's own assembly or scoping is a defect in
 this package: it propagates. Turning one into a finding would fail an author's
 document for a bug the author cannot fix. `_run_guarded` in
 `analitiq.validator._core` is a separate mechanism: it contains a crash inside
-a check bound to one rule, and inside whole-document
-dispatch where `validate_document` applies it, as a `check-crashed`
-`notApplicable` finding — so a crash inside the path-based route this module
-delegates a single document to still comes back as a finding.
+a check bound to one rule, and inside the grading of a whole document, as a
+`check-crashed` `notApplicable` finding — so a crash while grading a single
+document still comes back as a finding.
 
 Each entry point taking a `ValidatePackageRequest` raises
 `NotImplementedError`; the behaviour it must satisfy is fixed by
@@ -97,9 +96,11 @@ class ValidationEnvelope(TypedDict):
     """The result of every entry point below: flat, not a nested per-document
     breakdown — a finding carries the `path` the check that produced it
     reports, so a document validated this way and the same document validated
-    through the path-based single-document route report through one shape.
-    `passed` is `False` exactly when
-    `findings` holds one that `finding_costs_a_pass` accepts, which is not the
+    through the path-based single-document route report through one shape. The
+    exception is an embedded connector subtree's finding, whose `path`
+    `validate_pipeline_package` scopes under that subtree's key prefix.
+    `passed` is `False` exactly when `findings` holds one that
+    `finding_costs_a_pass` accepts, which is not the
     same as "a finding at `severity: error`": an unchecked error-tier rule
     costs a pass too."""
 
@@ -115,16 +116,18 @@ def _envelope(findings: list[Finding]) -> ValidationEnvelope:
     return {"passed": _passed(findings), "findings": findings}
 
 
+#: The published name for each type-map direction. A type map is the one
+#: document a single registration claims under more than one name.
+_TYPE_MAP_ENTITY = {"read": "type-map-read", "write": "type-map-write"}
+
+
 def _consistent_entities(document: object) -> frozenset[str]:
     """The published document-schema names `document`'s own content is
     consistent with — empty when no registered kind claims it, or when the kind
     that does has no published name (an assembled pipeline bundle, say).
 
-    The core registry claims a type map by shape and leaves its direction to
-    the document, while the name vocabulary separates the directions. A type
-    map is consistent with the name for the direction it declares, and with
-    either name when it declares none, so validation reports the missing
-    `direction` rather than a mismatch hiding it.
+    A type map is consistent with the name for the direction it declares, and
+    with either type-map name when it declares none it can use.
 
     Walks the live `_KIND_REGISTRY` in registration order, so which kind claims
     a document is always the registry's own answer. A `register_kind` call
@@ -159,11 +162,30 @@ def _consistent_entities(document: object) -> frozenset[str]:
             continue
         if validator is _validate_type_map:
             declared = _type_map_direction(document)
-            return frozenset(f"type-map-{direction}" for direction in ("read", "write")
+            return frozenset(entity for direction, entity in _TYPE_MAP_ENTITY.items()
                              if declared in (None, direction))
         entity = entity_by_validator.get(validator) or entity_by_detector.get(detector)
         return frozenset({entity}) if entity else frozenset()
     return frozenset()
+
+
+def _graded_as(document: object, entity: str) -> list[Finding]:
+    """`document`'s findings under the model `entity` selects, for a document
+    whose content is consistent with `entity`.
+
+    Every other name selects exactly the registration `validate_document`
+    dispatches the document to, so it is graded there. A type-map name also
+    selects the direction, which `validate_document` has to guess for a map
+    declaring none, so a type map is graded against the direction its name
+    carries.
+    """
+    from analitiq.validator._core import validate_document
+    from analitiq.validator.connectors import type_map_findings
+
+    direction = {name: direction for direction, name in _TYPE_MAP_ENTITY.items()}.get(entity)
+    if direction is None:
+        return validate_document(document)
+    return type_map_findings(document, direction)
 
 
 def validate_single_document(
@@ -174,17 +196,16 @@ def validate_single_document(
     text is written against. It is checked, not trusted: a document whose own
     content is inconsistent with the declared name is reported as an
     `entity-mismatch` finding rather than validated as whatever it resembles.
-    Text the JSON parser cannot read is a finding on the document, not a
-    raised error.
+    A consistent document is graded against the model the declared name
+    selects. Text the JSON parser cannot read is a finding on the document, not
+    a raised error.
 
-    A consistent document gets the verdict `validate_document` gives it with no
-    path to anchor on: a connector's cross-file coverage check has no siblings
-    to read, so it reports `coverage-check-skipped-no-path`, which costs the
-    pass. A connector's siblings are validated by `validate_connector_package`.
+    Nothing anchors the document to a path, so a connector declaring its
+    `kind` has no siblings for its cross-file coverage check to read: that
+    check reports `coverage-check-skipped-no-path`, which costs the pass. The
+    siblings belong in a `validate_connector_package` request.
     """
-    from analitiq.validator._core import (
-        _JSON_TEXT_REFUSALS, _unreadable_document_finding, finding, validate_document,
-    )
+    from analitiq.validator._core import _JSON_TEXT_REFUSALS, _unreadable_document_finding, finding
 
     try:
         document = json.loads(request.document)
@@ -203,7 +224,7 @@ def validate_single_document(
         return _envelope([finding(
             message_id="entity-mismatch", kind="fail", path="/", message=message)])
 
-    return _envelope(validate_document(document))
+    return _envelope(_graded_as(document, request.entity))
 
 
 def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnvelope:
@@ -212,11 +233,11 @@ def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnv
     api connector — its `endpoints/*.json` files, cross-checked the way
     `analitiq.validator.check_coverage` already does from a filesystem path.
 
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
+    Raises `NotImplementedError`. Signature and behaviour are fixed by
+    `packages/validator/tests/test_document_set.py`.
     """
     raise NotImplementedError(
-        "validate_connector_package is not yet implemented — see "
+        "validate_connector_package is not implemented — see "
         "packages/validator/tests/test_document_set.py for the fixed contract.")
 
 
@@ -232,14 +253,14 @@ def validate_pipeline_package(request: ValidatePackageRequest) -> ValidationEnve
     `validate_connector_package` on it and scoping the returned findings'
     `path` under the subtree's key prefix, so an embedded connector reports its
     own coverage findings — native-type coverage, `transport_ref` resolution,
-    duplicate endpoint ids. Today's plugin never reports those at all:
-    `_assemble_bundle` reads such a subtree's `connector.json` only for its
+    duplicate endpoint ids. The plugin's `_assemble_bundle` reports none of
+    those: it reads such a subtree's `connector.json` only for its
     `connector_id`, and `_connector_endpoint_sets` reads the subtree's endpoint
     ids only for stream-ref resolution.
 
-    Not yet implemented — raises `NotImplementedError`. Signature and
-    behaviour are fixed by `packages/validator/tests/test_document_set.py`.
+    Raises `NotImplementedError`. Signature and behaviour are fixed by
+    `packages/validator/tests/test_document_set.py`.
     """
     raise NotImplementedError(
-        "validate_pipeline_package is not yet implemented — see "
+        "validate_pipeline_package is not implemented — see "
         "packages/validator/tests/test_document_set.py for the fixed contract.")
