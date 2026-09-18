@@ -15,34 +15,37 @@ targets: [ValidationRule]
 fixture_model: ValidationRule
 rationale: >
   The value field is deliberately typed open so each rule type can carry its
-  own payload — a bound, a regex, a range object, a list of admitted values
-  — and that openness is what leaves the shape unchecked by the annotation:
-  a rule whose payload is the wrong kind validates against the field, and
-  what happens when the rule runs against a record, mid-transfer, depends on
-  which kind it is. A `range` payload of the wrong shape raises there,
-  reliably; the others do not: a wrong-shaped `pattern` payload can still
-  interpolate into a syntactically valid, silently-wrong regex, and a
-  wrong-shaped `in_list` payload can iterate into a value set with no error
-  rather than raising. This rule compiles a pattern in RE2, the dialect the
-  engine applies a `pattern` rule in (through pyarrow's `match_substring_regex`),
+  own payload — a bound, a regex, a range object, a list of admitted values —
+  and that openness is what leaves the shape unchecked by the annotation: a
+  rule whose payload is the wrong kind validates against the field, and what
+  happens when the rule runs against a record, mid-transfer, depends on which
+  kind it is. A `range` payload of the wrong shape raises there, reliably; the
+  others do not: a wrong-shaped `pattern` payload can still interpolate into a
+  syntactically valid, silently-wrong regex, and a wrong-shaped `in_list`
+  payload can iterate into a value set with no error rather than raising.
+  This rule compiles a pattern in RE2, the dialect the engine as it stands
+  applies a `pattern` rule in (through pyarrow's `match_substring_regex`),
   never in stdlib `re`, which answers a different question in both
   directions — `\p{L}+` is an ordinary RE2 pattern `re` refuses, `(a)\1` a
-  backreference `re` accepts and RE2 cannot compile. A pattern is a
-  subexpression, so it must compile as a group too: `\Qabc` compiles alone,
-  and grouped, its quote swallows the closing parenthesis. A pattern RE2 refuses
-  would otherwise pass here and, as the engine stands, fail its stream at run
-  time. Were the engine to match in another dialect, this check could go
-  stale in either direction, refusing patterns that dialect runs or passing
-  ones it cannot compile. A
-  payload that is the right kind but constrains nothing — a negative `min_length`, an empty pattern, a range with neither
-  bound — fails no row and is reported nowhere, which reads exactly like a
-  rule that passed; one that admits nothing — a negative `max_length`, a
-  range whose `min` sits above its `max`, an empty admitted-value list —
+  backreference `re` accepts and RE2 cannot compile. The engine as it stands
+  also embeds the pattern in a group, so this rule compiles it as one too:
+  `\Qabc` compiles alone, and grouped, its quote swallows the closing
+  parenthesis. A pattern RE2 refuses would otherwise pass here and fail its
+  stream at run time. Were the engine to match in another dialect, this check
+  could go stale in either direction, refusing patterns that dialect runs or
+  passing ones it cannot compile; were it to stop grouping the pattern, the
+  grouped compile would be stricter than the run, refusing a pattern such as
+  `\Qabc` that would then match. A payload that is the right kind but
+  constrains nothing — a negative `min_length`, an empty pattern, a range with
+  neither bound — fails no row and is reported nowhere, which reads exactly
+  like a rule that passed; one that admits nothing — a negative `max_length`,
+  a range whose `min` sits above its `max`, an empty admitted-value list —
   fails every row instead. Both are rules the author cannot have meant, and
   the two are refused together for the reason the same shape is refused on a
   param's bounds: which side of the bound the payload is wrong on does not
-  change that it grades nothing. The presence check RULE-STRM-009 settles only whether a
-  payload is present, so this rule is what settles whether the one present
-  can be applied, on the document, where the author is still holding it.
+  change that it grades nothing. The presence check RULE-STRM-009 settles only
+  whether a payload is present, so this rule is what settles whether the one
+  present can be applied, on the document, where the author is still holding
+  it.
 status: active
 superseded_by: null
