@@ -9,8 +9,7 @@
   "files": [
     "*/definition/connector.json",
     "**/connector.json",
-    "**/type-map-read.json",
-    "**/type-map-write.json",
+    "**/type-map*.json",
     "**/connector.py"
   ],
   "also_covers": [

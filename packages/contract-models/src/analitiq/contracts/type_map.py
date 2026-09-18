@@ -1,30 +1,30 @@
-"""Type-map contract models — the on-disk `type-map-read.json` /
-`type-map-write.json` files a connector ships under its `definition/`.
+"""Type-map contract model — the on-disk `type-map.json` a connector or a
+connection ships under its `definition/`.
 
-Each file is a top-level JSON object `{$schema, direction, rules}`: `direction`
-is the fixed literal naming which file this is (`"read"` / `"write"`), and
-`rules` is an ordered, non-empty array of `{match, native_type, arrow_type}`
-rules (first match wins). The two directions share the rule shape but invert
-which key is the *matcher* and which is *rendered*:
+The file is a top-level JSON object `{$schema, read, write}`: each direction's
+rules sit under the key naming it, as an ordered, non-empty array of
+`{match, native_type, arrow_type}` rules (first match wins). A map carries the
+directions it covers and omits the rest. The directions share the rule
+shape but invert which key is the *matcher* and which is *rendered*:
 
 - **read**  (`native_type → arrow_type`): match on `native_type`, render
   `arrow_type` (the rendered side is the Apache Arrow vocabulary).
 - **write** (`arrow_type → native_type`): match on `arrow_type`, render
   `native_type` (the rendered side is free-form dialect DDL).
 
-Source of truth for both the published `type-map-read` / `type-map-write` JSON
-Schemas and the connector validator (which validates via `model_validate`).
-Only *error*-level rules live here — things that make a document invalid.
-Advisory quality checks that the contract tolerates (duplicate rules, dead
-uppercase-only patterns, write-vocabulary coverage gaps) are not contract
-violations and stay in the validator as warnings.
+Source of truth for the published `type-map` JSON Schema and the connector
+validator (which validates via `model_validate`). Only *error*-level rules live
+here — things that make a document invalid. Advisory quality checks that the
+contract tolerates (duplicate rules, dead uppercase-only patterns,
+write-vocabulary coverage gaps) are not contract violations and stay in the
+validator as warnings.
 """
 from __future__ import annotations
 
 import re
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from analitiq.contracts.arrow_grammar import (
     CONTAINER_CANONICAL_HEADS as _CONTAINER_CANONICAL_HEADS,
@@ -36,12 +36,10 @@ from analitiq.contracts.endpoints import ARROW_TYPE_PATTERN
 from analitiq.contracts.shared.common import StrictModel, schema_url_for
 from analitiq.contracts.shared.rules import violation
 
-#: Per-direction schema URLs declared by every `type-map-read.json` /
-#: `type-map-write.json` document — always a standalone file (never an
-#: embedded API payload), so the field is required, unlike the optional
-#: `$schema` on dual-use models such as `ConnectionAuthored`.
-TYPE_MAP_READ_SCHEMA_URL = schema_url_for("type-map-read")
-TYPE_MAP_WRITE_SCHEMA_URL = schema_url_for("type-map-write")
+#: Schema URL declared by every `type-map.json` document — always a
+#: standalone file (never an embedded API payload), so the field is required,
+#: unlike the optional `$schema` on dual-use models such as `ConnectionAuthored`.
+TYPE_MAP_SCHEMA_URL = schema_url_for("type-map")
 
 # A literal `arrow_type` uses the SAME strict Arrow vocabulary the endpoint
 # `arrow_type` does (`ARROW_TYPE_PATTERN`, incl. the `Json`/`Object`/`List`
@@ -188,8 +186,8 @@ def _capture_language(
     if source is None:
         return None
     try:
-        compiled = re.compile(_to_python_regex(source))
-    except re.error:
+        compiled = _compile_ecma(source)
+    except ValueError:
         return None
     return frozenset(probe for probe in probes if compiled.fullmatch(probe))
 
@@ -234,6 +232,17 @@ def _validate_render_placeholders(render: str) -> None:
         raise ValueError(f"render value {render!r} has an unclosed '${{' (missing '}}')")
 
 
+def _compile_ecma(pattern: str) -> "re.Pattern[str]":
+    """Compile an ECMA-262 pattern through its Python spelling, raising
+    `ValueError` for every pattern `re` refuses."""
+    try:
+        return re.compile(_to_python_regex(pattern))
+    # `re` refuses an oversized repeat count with `OverflowError` and groups
+    # nested past the recursion limit with `RecursionError`, not `re.error`.
+    except (re.error, OverflowError, RecursionError) as exc:
+        raise ValueError(f"matcher is not a valid regex ({exc})") from exc
+
+
 def _compile_ecma_matcher(matcher: str) -> "re.Pattern[str]":
     """Compile an ECMA-262 matcher, rejecting Python-only `(?P…)` regex syntax."""
     if _PYTHON_REGEX_FEATURE.search(matcher):
@@ -241,10 +250,7 @@ def _compile_ecma_matcher(matcher: str) -> "re.Pattern[str]":
             "matcher uses Python-only '(?P…)' regex syntax; the contract "
             "requires ECMA-262 (use '(?<name>…)' for named groups)"
         )
-    try:
-        return re.compile(_to_python_regex(matcher))
-    except re.error as exc:
-        raise ValueError(f"matcher is not a valid regex ({exc})") from exc
+    return _compile_ecma(matcher)
 
 
 def _guard_container_not_collapsed(native_type: str, match: str, arrow_type: str) -> None:
@@ -408,7 +414,7 @@ class TypeMapWriteRegexRule(_TypeMapRuleBase):
 
 # `match`-discriminated unions: the exact branch carries the Arrow `pattern` on
 # `arrow_type` (published into the JSON Schema); the regex branch keeps its
-# runtime-only render/capture checks. Both directions render a `oneOf` with a
+# runtime-only render/capture checks. Each direction renders a `oneOf` with a
 # `match` discriminator, so external validators reject exactly what the model does.
 TypeMapReadRule = Annotated[
     TypeMapReadExactRule | TypeMapReadRegexRule,
@@ -420,31 +426,40 @@ TypeMapWriteRule = Annotated[
 ]
 
 
-class TypeMapReadDoc(StrictModel):
-    """`type-map-read.json`: the read direction's `$schema` + `direction` +
-    ordered, non-empty `rules` array."""
+TYPE_MAP_DIRECTIONS = ("read", "write")
 
-    schema_url: Literal[TYPE_MAP_READ_SCHEMA_URL] = Field(
+
+class TypeMapDoc(StrictModel):
+    """`type-map.json`: a `$schema` and, keyed by direction, the ordered rule
+    list for each direction the map covers. At least one direction is
+    present."""
+
+    # A branch per direction, each requiring its section present AND non-null,
+    # so the published schema refuses exactly the documents
+    # `_at_least_one_direction` refuses.
+    model_config = ConfigDict(json_schema_extra={"anyOf": [
+        {"required": [d], "properties": {d: {"not": {"type": "null"}}}}
+        for d in TYPE_MAP_DIRECTIONS
+    ]})
+
+    schema_url: Literal[TYPE_MAP_SCHEMA_URL] = Field(
         ...,
         alias="$schema",
-        description="Schema URL declared by every `type-map-read.json` document.",
+        description="Schema URL declared by every `type-map.json` document.",
     )
-    direction: Literal["read"] = Field(
-        ..., description="Fixed direction discriminator for this file."
+    read: Annotated[list[TypeMapReadRule], Field(min_length=1)] | None = Field(
+        default=None,
+        description="Read rules: each matches a `native_type` and renders an `arrow_type`.",
     )
-    rules: Annotated[list[TypeMapReadRule], Field(min_length=1)]
+    write: Annotated[list[TypeMapWriteRule], Field(min_length=1)] | None = Field(
+        default=None,
+        description="Write rules: each matches an `arrow_type` and renders a `native_type`.",
+    )
 
-
-class TypeMapWriteDoc(StrictModel):
-    """`type-map-write.json`: the write direction's `$schema` + `direction` +
-    ordered, non-empty `rules` array."""
-
-    schema_url: Literal[TYPE_MAP_WRITE_SCHEMA_URL] = Field(
-        ...,
-        alias="$schema",
-        description="Schema URL declared by every `type-map-write.json` document.",
-    )
-    direction: Literal["write"] = Field(
-        ..., description="Fixed direction discriminator for this file."
-    )
-    rules: Annotated[list[TypeMapWriteRule], Field(min_length=1)]
+    @model_validator(mode="after")
+    def _at_least_one_direction(self) -> "TypeMapDoc":
+        if all(getattr(self, d) is None for d in TYPE_MAP_DIRECTIONS):
+            raise violation(
+                "RULE-TMAP-023", "type-map-no-section",
+                "a type map declares a rule list under at least one of `read` or `write`")
+        return self

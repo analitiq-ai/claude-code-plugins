@@ -51,7 +51,7 @@ Database connectors author no endpoints and skip the fan-out entirely.
 | `connector-builder` (skill) | Orchestration: classify kind, dispatch the creator, run the validator loop, run drift classification, write files. |
 | `connector-provider-researcher` | Fact extraction from the provider's official docs, never authoring. Two scopes: `domain` → `ProviderFacts`, `endpoint` → `EndpointFacts` for one resource. Prefers a user-supplied docs URL; otherwise locates official docs via `WebSearch`. First-party pages only. |
 | `api-connector-creator` | `kind: "api"` connector bodies. |
-| `db-connector-creator` | `kind: "database"` packages: connector body, both type maps, and the Python package files. |
+| `db-connector-creator` | `kind: "database"` packages: connector body, the type map (`read` and `write` sections), and the Python package files. |
 | `storage-connector-creator` | Stub — structured refusal (see above). |
 | `endpoint-creator` | One API endpoint document per invocation. |
 | `connector-schema-validator` | Structural + semantic validation of JSON documents only; package files are registry CI's job. |
@@ -128,7 +128,7 @@ is a drift surface (root `CLAUDE.md` → drift policy).
 |---|---|
 | Orchestration, endpoint identity, I/O contracts, lifecycle phases, value expressions, connection contract, metadata + versioning | `skills/connector-builder/` and its `references/` |
 | Auth flows, HTTP transports, pagination, replication | `skills/connector-spec-api/` |
-| Driver selection, DSN bindings, TLS, resource discovery, read/write type maps, the SQL write path (`sql_capabilities` + the dialect renderers), connector package files | `skills/connector-spec-db/` |
+| Driver selection, DSN bindings, TLS, resource discovery, the read/write type map, the SQL write path (`sql_capabilities` + the dialect renderers), connector package files | `skills/connector-spec-db/` |
 | Storage-kind stub | `skills/connector-spec-storage/` |
 
 The published schema is the authority over all of it. Enum lists appearing in

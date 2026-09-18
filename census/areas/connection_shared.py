@@ -222,43 +222,26 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         rule_ids=("RULE-TMAP-009",),
     ),
     ProseObligation(
-        model="TypeMapReadDoc", descriptive=True,
-        prose_hash="88169896781a",
+        model="TypeMapDoc",
+        prose_hash="580e61a27c08",
+        rule_ids=("RULE-TMAP-023",),
+        structural="`read` and `write` are each optional fields",
     ),
     ProseObligation(
-        model="TypeMapReadDoc", field="direction",
-        prose_hash="729fcf876fa1",
+        model="TypeMapDoc", field="schema_url",
+        prose_hash="6a9628b62d4b",
         structural=(
-            "required field typed `Literal[\"read\"]`; any other value fails"
-        ),
-    ),
-    ProseObligation(
-        model="TypeMapReadDoc", field="schema_url",
-        prose_hash="27c9313dce02",
-        structural=(
-            "required field typed `Literal[TYPE_MAP_READ_SCHEMA_URL]`; a "
+            "required field typed `Literal[TYPE_MAP_SCHEMA_URL]`; a "
             "type-map file is always standalone, never an embedded API "
             "payload, so the field carries no optional/absent case to waive"
         ),
     ),
     ProseObligation(
-        model="TypeMapWriteDoc", descriptive=True,
-        prose_hash="c899a236ec99",
+        model="TypeMapDoc", field="read", descriptive=True,
+        prose_hash="0818c1d905e1",
     ),
     ProseObligation(
-        model="TypeMapWriteDoc", field="direction",
-        prose_hash="729fcf876fa1",
-        structural=(
-            "required field typed `Literal[\"write\"]`; any other value fails"
-        ),
-    ),
-    ProseObligation(
-        model="TypeMapWriteDoc", field="schema_url",
-        prose_hash="2df0cf08a16f",
-        structural=(
-            "required field typed `Literal[TYPE_MAP_WRITE_SCHEMA_URL]`; a "
-            "type-map file is always standalone, never an embedded API "
-            "payload, so the field carries no optional/absent case to waive"
-        ),
+        model="TypeMapDoc", field="write", descriptive=True,
+        prose_hash="c5273bedc326",
     ),
 )

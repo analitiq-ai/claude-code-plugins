@@ -102,7 +102,7 @@ from analitiq.contracts.shared.json_schema import (  # noqa: E402
     JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
     JSON_SCHEMA_SUBSCHEMA_KEYS,
 )
-from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc  # noqa: E402
+from analitiq.contracts.type_map import TypeMapDoc  # noqa: E402
 from analitiq.contracts.pipelines.config import PipelineInput  # noqa: E402
 from analitiq.contracts.pipelines.data_sync import (  # noqa: E402
     PipelineRunAcceptedResponse,
@@ -916,40 +916,22 @@ RESOURCES: tuple[Resource, ...] = (
         source_paths=(f"{_CONTRACTS_PREFIX}/endpoints.py",),
     ),
     Resource(
-        name="type-map-read",
-        title="Analitiq Type Map (read)",
+        name="type-map",
+        title="Analitiq Type Map",
         description=(
-            "Public JSON Schema contract for a connector's `type-map-read.json` "
-            "— the read direction (native_type → arrow_type) of its type-map pair, "
-            "a top-level object carrying `direction` (fixed `\"read\"`) and an "
-            "ordered, non-empty `rules` array of `{match, native_type, arrow_type}` "
-            "rules, order significant (first match wins). The full per-rule "
-            "contract (ECMA-262 regex, `${name}` capture correspondence, Arrow "
-            "vocabulary, schemaless-container handling) lives in the model and is "
-            "enforced by the connector validator; this published schema is the "
-            "structural projection. Source of truth: "
-            "analitiq.contracts.type_map.TypeMapReadDoc (Pydantic)."
+            "Public JSON Schema contract for a connector's or connection's "
+            "`type-map.json` — a top-level object carrying, keyed by direction, "
+            "an ordered, non-empty rule list: `read` rules match a `native_type` "
+            "and render an `arrow_type`, `write` rules match an `arrow_type` and "
+            "render a `native_type`; order is significant (first match wins) and "
+            "at least one direction is present. The full per-rule contract "
+            "(matcher dialect, `${name}` capture correspondence, Arrow vocabulary, "
+            "schemaless-container handling) lives in the model and is enforced by "
+            "the connector validator; this published schema is the structural "
+            "projection. Source of truth: "
+            "analitiq.contracts.type_map.TypeMapDoc (Pydantic)."
         ),
-        adapter=TypeAdapter(TypeMapReadDoc),
-        source_paths=(
-            f"{_CONTRACTS_PREFIX}/type_map.py",
-        ),
-    ),
-    Resource(
-        name="type-map-write",
-        title="Analitiq Type Map (write)",
-        description=(
-            "Public JSON Schema contract for a database connector's "
-            "`type-map-write.json` — the write direction (arrow_type → native_type "
-            "DDL) of its type-map pair, a top-level object carrying `direction` "
-            "(fixed `\"write\"`) and an ordered, non-empty `rules` array of "
-            "`{match, native_type, arrow_type}` rules where `arrow_type` matches "
-            "and `native_type` renders. "
-            "The full per-rule contract lives in the model and is enforced by the "
-            "connector validator; this published schema is the structural "
-            "projection. Source of truth: analitiq.contracts.type_map.TypeMapWriteDoc (Pydantic)."
-        ),
-        adapter=TypeAdapter(TypeMapWriteDoc),
+        adapter=TypeAdapter(TypeMapDoc),
         source_paths=(
             f"{_CONTRACTS_PREFIX}/type_map.py",
         ),
@@ -1136,7 +1118,9 @@ def get_resource(name: str) -> Resource:
 # key spelling the contract no longer accepts. Retiring it is a delete on the
 # serving side, which this repo cannot perform and no check here can observe;
 # until it happens the stale object stays reachable. Renaming this document
-# again inherits the same debt.
+# again inherits the same debt. The `type-map-read` and `type-map-write`
+# resources, which `type-map` replaces, carry it too: their pinned objects and
+# pointers stay served.
 
 from analitiq.contracts import arrow_grammar  # noqa: E402
 
@@ -2324,7 +2308,7 @@ def cmd_bump_check(args: argparse.Namespace) -> int:
     base_version = previous.get("version")
     if not base_version:
         # The base copy predates versioned publishing — a hand-authored schema
-        # being adopted into the generator (e.g. type-map-read/write). Treat it
+        # being adopted into the generator. Treat it
         # as the 0.0.0 baseline rather than skipping the gate: the floor +
         # rollback checks below then still run against the head version, so a
         # corrupt/blanked base `version` can't silently disable them.

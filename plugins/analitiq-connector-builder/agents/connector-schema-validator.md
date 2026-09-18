@@ -22,14 +22,13 @@ artifact.
 ## Inputs
 
 - `document_path` — absolute path to the draft JSON document.
-  <!-- PROBE: type-map-direction-from-document, type-map-coverage-counts-declarations -->
-  Validating a type map on its own runs no package-level check under any name —
-  those run when the **connector** is validated, off the maps sitting beside it,
-  each counted toward the direction it declares, and a direction the `kind`
-  requires that no sibling declares surfaces there as a missing map
-  (`RULE-PKG-030`). So validate the connector where it sits in the package, not
-  a copy re-serialized elsewhere: its package-level checks read the maps and
-  endpoints beside it, and what ships is then what was graded. This agent validates
+  <!-- PROBE: type-map-standalone-no-package-check, type-map-section-missing -->
+  Validating a type map on its own runs no package-level check — those run when
+  the **connector** is validated, off the `type-map.json` beside it, and a
+  direction the `kind` requires that the map carries no section for surfaces
+  there as a missing section (`RULE-PKG-030`). So validate the connector where it
+  sits in the package, not a copy re-serialized elsewhere: its package-level
+  checks read the map and endpoints beside it, and what ships is then what was graded. This agent validates
   JSON documents only; a connector's Python package files (`connector.py`,
   `pyproject.toml`, …) are outside its scope — report them as not validated
   rather than passing judgment on them.

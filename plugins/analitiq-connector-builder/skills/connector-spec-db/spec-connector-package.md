@@ -7,8 +7,9 @@ class, `connector_id` selects the connector package's own class via
 Python entry points.
 
 An `api` connector ships the definition (`connector.json`,
-`type-map-read.json`, `endpoints/`) and a README (`RULE-PKG-025`) — no Python
-package files (`RULE-CTOR-043`) and no write map (`RULE-PKG-030`).
+`type-map.json`, `endpoints/`) and a README (`RULE-PKG-025`) — no Python
+package files (`RULE-CTOR-043`) and no `write` section in its map
+(`RULE-PKG-030`).
 
 ## Contents
 
@@ -27,8 +28,7 @@ The connector root IS the Python package (`RULE-PKG-002`):
 {connector_id}/
   definition/
     connector.json                   # connector_id; transports; sql_capabilities
-    type-map-read.json               # native → Arrow; see spec-type-maps.md
-    type-map-write.json              # Arrow → native; RULE-PKG-030
+    type-map.json                    # `read`: native → Arrow; `write`: Arrow → native; see spec-type-maps.md
   __init__.py                        # RULE-PKG-009
   connector.py                       # {Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector)
   requirements.txt                   # THIS connector's driver(s) only

@@ -1,0 +1,17 @@
+id: RULE-TMAP-023
+statement: >
+  A type map MUST carry a rule list under at least one of `read` or `write`.
+tier: shape
+severity: error
+artifact_kinds: [type-map]
+validator: "analitiq.contracts.type_map::TypeMapDoc._at_least_one_direction"
+owners: [connector-plugin, pipeline-plugin]
+targets: [TypeMapDoc]
+rationale: >
+  A map carrying no section maps no type in any direction, so the file reads as
+  coverage it does not provide. Omitting the direction a map has no rules for is
+  the intended authoring — the rule only refuses omitting every section. The
+  obligation is a presence requirement on one document, mirrored into the
+  published schema.
+status: active
+superseded_by: null

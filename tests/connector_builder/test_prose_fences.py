@@ -89,7 +89,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures" / "prose-hosts"
 #: gate cannot validate fails loudly rather than being skipped. The validator
 #: detects each document's kind from its own shape, so nothing here routes by
 #: schema URL; only membership is asked.
-KNOWN_ENTITIES = {"connector", "api-endpoint", "type-map-read", "type-map-write"}
+KNOWN_ENTITIES = {"connector", "api-endpoint", "type-map"}
 
 
 # ---------------------------------------------------------------------------
@@ -484,8 +484,7 @@ HOSTS = {
     ("skills/connector-spec-api/spec-request-binding.md",
      "api-endpoint#/operations/write/upsert/request"):
         "tests/connector_builder/fixtures/prose-hosts/contact.json",
-    ("skills/connector-spec-db/spec-type-maps.md", "type-map-write"): STANDALONE,
-    ("skills/connector-spec-db/spec-type-maps.md", "type-map-read"): STANDALONE,
+    ("skills/connector-spec-db/spec-type-maps.md", "type-map"): STANDALONE,
 }
 
 
@@ -603,8 +602,7 @@ def _grading_entity(marker: Marker, label: str) -> str:
     assert entity in KNOWN_ENTITIES, (
         f"{label}: grades as {entity!r}, which this gate cannot validate as a "
         f"document. Known resources: {sorted(KNOWN_ENTITIES)} — a rule scope "
-        "that names no single published document (a type map's direction, a "
-        "connector package) needs a 'validate:' marker pointing at the "
+        "that names no single published document (a connector package) needs a 'validate:' marker pointing at the "
         "document that carries the shape instead.")
     return entity
 
@@ -615,10 +613,9 @@ def _findings(entity: str, document: Any, tmp_path: Path,
 
     Path and filename are inputs to the contract, not bookkeeping: a connector
     is validated from `definition/connector.json` so the sibling walk reaches
-    its endpoints and type maps, and an endpoint is named by the id it derives.
-    A type map is the exception: its `direction` travels in the envelope and is
-    what decides the grading, so the `{entity}.json` it is written under is
-    layout rather than an input to the verdict.
+    its endpoints and type map, and an endpoint is named by the id it derives.
+    A type map is graded on its body alone, so the `{entity}.json` it is
+    written under is layout rather than an input to the verdict.
     """
     if entity == "connector":
         assert host is not None, "a connector is graded inside its staged package"
@@ -751,8 +748,7 @@ def test_block_upholds_its_marker(key, marker, tmp_path):
 # (EXPECTED_DISPOSITIONS pins that), so the machinery is proven here.
 # ---------------------------------------------------------------------------
 
-_TYPE_MAP_HOST = HOSTS[("skills/connector-spec-db/spec-type-maps.md",
-                        "type-map-write")]
+_TYPE_MAP_HOST = HOSTS[("skills/connector-spec-db/spec-type-maps.md", "type-map")]
 _ENDPOINT_HOST = HOSTS[("skills/connector-spec-api/spec-request-binding.md",
                         "api-endpoint#/operations/read")]
 
@@ -760,10 +756,12 @@ _ENDPOINT_HOST = HOSTS[("skills/connector-spec-api/spec-request-binding.md",
 def test_validate_disposition_catches_a_shape_the_contract_refuses(tmp_path):
     """The property the whole gate rests on: a block the contract rejects
     fails, and the failure names the prose block."""
-    with pytest.raises(AssertionError, match="does not validate as type-map-write"):
+    from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
+    with pytest.raises(AssertionError, match="does not validate as type-map"):
         _assert_block_upholds_marker(
-            _parse_marker("<!-- validate: type-map-write -->"),  # no `native_type`
-            '[{"match": "exact", "arrow_type": "Object"}]',
+            _parse_marker("<!-- validate: type-map -->"),
+            json.dumps({"$schema": TYPE_MAP_SCHEMA_URL,  # a write rule with no `native_type`
+                        "write": [{"match": "exact", "arrow_type": "Object"}]}),
             "synthetic", _TYPE_MAP_HOST, tmp_path)
 
 
@@ -804,9 +802,8 @@ def test_invalid_disposition_rejects_a_dangling_rule_id(tmp_path):
 
 
 def test_invalid_disposition_rejects_a_resource_with_no_document():
-    """A rule scope naming no single published document (a connector package,
-    a type map whose direction the id does not state) must fail on the
-    resource, not deeper — a KeyError in the splice would misdirect."""
+    """A rule scope naming no single published document (a connector package)
+    must fail on the resource, not deeper — a KeyError in the splice would misdirect."""
     from analitiq.contracts.shared.rules import all_rules
     rule = next(
         (r for r in all_rules()

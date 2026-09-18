@@ -167,5 +167,5 @@ Omit `replication` entirely when:
   (no filter param), there's no incremental sync to declare.
 - `cursor_field` is not a pointer into the page envelope and not a value
   expression.
-- Canonical types are resolved through the standalone `type-map-read.json`
-  shipped alongside the connector, never from anything in `cursor_mappings`.
+- Canonical types are resolved through the read map in the standalone
+  `type-map.json` shipped alongside the connector, never from anything in `cursor_mappings`.

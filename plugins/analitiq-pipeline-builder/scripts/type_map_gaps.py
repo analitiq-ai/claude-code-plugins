@@ -20,14 +20,14 @@ Usage::
 
     printf '%s' '["citext", "vector(3)"]' | python3 type_map_gaps.py \
         --direction read \
-        --map connections/pg/definition/type-map-read.json \
-        --map connectors/postgresql/definition/type-map-read.json
+        --map connections/pg/definition/type-map.json \
+        --map connectors/postgresql/definition/type-map.json
 
 ``--direction`` names the vocabulary the probes are in: provider `native_type`
-labels for ``read``, `arrow_type` strings for ``write``. Every map is graded as
-that direction, so one declaring the other is refused rather than probed; its
-filename plays no part. Probes are a JSON array of strings on stdin (or
---probes-file). Output on stdout::
+labels for ``read``, `arrow_type` strings for ``write``. Each map contributes
+its section for that direction; a map carrying none contributes no rules, and a
+run where no map carries it is refused as an input error. Probes are a JSON
+array of strings on stdin (or --probes-file). Output on stdout::
 
     {"direction": "read",
      "resolved": {"citext": null, "vector(3)": null},
@@ -48,14 +48,20 @@ from pathlib import Path
 from _bootstrap import ensure_deps_or_reexec
 
 
+#: The type-map directions, one per section key. A copy of the contract's,
+#: because arguments are parsed before the pinned validator is installed.
+DIRECTIONS = ("read", "write")
+
+
 def _fail(message: str) -> "int":
     print(f"type_map_gaps: {message}", file=sys.stderr)
     return 2
 
 
-def _load_rules(path: Path, direction: str) -> list:
-    """Read one {$schema, direction, rules} type-map document, grade it as the
-    direction named, and return its `rules` array. Grading here is
+def _load_rules(path: Path, direction: str) -> list | None:
+    """Read one {$schema, read, write} type-map document, grade it, and return
+    the rule list under `direction` — `None` where the map carries no section for
+    it. Grading here is
     load-bearing, not a courtesy. Read of the engine as it stands: a malformed
     rule is *skipped* at resolution rather than failing the run, and the resolver
     mirrors that — so a broken rule would surface here as a false "gap",
@@ -77,7 +83,7 @@ def _load_rules(path: Path, direction: str) -> list:
     # The connection scope is the one either kind of map can meet: a connection
     # map covers only the gaps it fills, and a connector map rendering the whole
     # vocabulary clears the weaker bar too.
-    findings = type_map_findings(doc, direction, scope="connection")
+    findings = type_map_findings(doc, scope="connection")
     fatal, advisory = [], []
     for f in findings:
         (fatal if finding_costs_a_pass(f) else advisory).append(f)
@@ -97,9 +103,9 @@ def _load_rules(path: Path, direction: str) -> list:
         if any(f.get("message_id") == "check-crashed" for f in fatal):
             raise ValueError(f"{path} could not be graded: {detail}")
         raise ValueError(
-            f"{path} is not a valid {direction} type map — fix it (or, for a "
+            f"{path} is not a valid type map — fix it (or, for a "
             f"connector map, raise the defect upstream) before probing: {detail}")
-    return doc["rules"]
+    return doc.get(direction)
 
 
 def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
@@ -111,9 +117,17 @@ def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
     from analitiq.validator import _render_arrow_type
     from analitiq.validator.connectors import _first_match_render
 
-    rules: list = []
-    for path in rule_files:
-        rules.extend(_load_rules(path, direction))
+    sections = [_load_rules(path, direction) for path in rule_files]
+    # One map lacking the section is expected (a connection map is gap-only);
+    # every map lacking it would report every probe as a gap, which reads as a
+    # vocabulary to cover at connection scope rather than the missing section
+    # it is.
+    if all(section is None for section in sections):
+        raise ValueError(
+            f"no map carries a {direction!r} section ({', '.join(map(str, rule_files))}), "
+            f"so no probe could resolve — pass the map that carries it, or the "
+            f"--direction the probes are in")
+    rules = [rule for section in sections if section for rule in section]
 
     probes = list(dict.fromkeys(probes))  # dedupe, order-preserving — one verdict per probe
     if direction == "read":
@@ -129,11 +143,12 @@ def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--direction", required=True, choices=("read", "write"),
+    parser.add_argument("--direction", required=True, choices=DIRECTIONS,
                         help="The vocabulary the probes are in: native_type labels (read) "
-                             "or arrow_type strings (write). Every --map must declare it.")
+                             "or arrow_type strings (write); each --map contributes its "
+                             "section for it.")
     parser.add_argument("--map", action="append", required=True, dest="maps", metavar="PATH",
-                        help="A {$schema, direction, rules} type-map document; repeatable, "
+                        help="A {$schema, read, write} type-map document; repeatable, "
                              "in precedence order (connection-scoped map first, connector "
                              "map after).")
     parser.add_argument("--probes-file", metavar="PATH",

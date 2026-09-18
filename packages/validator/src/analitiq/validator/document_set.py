@@ -2,7 +2,7 @@
 
 `analitiq.validator._core.validate_document` and `analitiq.validator.connectors
 .check_coverage` both read real files off disk: `check_coverage` walks a
-connector's sibling type-maps and endpoints via `doc_path.parent`, and the
+connector's sibling type map and endpoints via `doc_path.parent`, and the
 pipeline-builder plugin's own `_assemble_bundle` (`plugins/
 analitiq-pipeline-builder/scripts/validate.py`) globs an entire pipeline
 directory the same way. A consumer that never has those files on a local
@@ -116,18 +116,10 @@ def _envelope(findings: list[Finding]) -> ValidationEnvelope:
     return {"passed": _passed(findings), "findings": findings}
 
 
-#: The published name for each type-map direction. A type map is the one
-#: document a single registration claims under more than one name.
-_TYPE_MAP_ENTITY = {"read": "type-map-read", "write": "type-map-write"}
-
-
 def _consistent_entities(document: object) -> frozenset[str]:
     """The published document-schema names `document`'s own content is
     consistent with — empty when no registered kind claims it, or when the kind
     that does has no published name (an assembled pipeline bundle, say).
-
-    A type map is consistent with the name for the direction it declares, and
-    with either type-map name when it declares none it can use.
 
     Walks the live `_KIND_REGISTRY` in registration order, so which kind claims
     a document is always the registry's own answer. A `register_kind` call
@@ -141,7 +133,6 @@ def _consistent_entities(document: object) -> frozenset[str]:
         _validate_connector,
         _validate_database_endpoint,
         _validate_kindless_connector,
-        _declared_direction,
         _validate_type_map,
     )
 
@@ -149,6 +140,7 @@ def _consistent_entities(document: object) -> frozenset[str]:
         _validate_connector: "connector",
         _validate_api_endpoint: "api-endpoint",
         _validate_database_endpoint: "database-endpoint",
+        _validate_type_map: "type-map",
         _validate_kindless_connector: "connector",
     }
     entity_by_detector = {
@@ -160,32 +152,9 @@ def _consistent_entities(document: object) -> frozenset[str]:
     for detector, validator in _core._KIND_REGISTRY:  # skipcq: PYL-W0212 — same-package read of the live kind registry
         if not detector(document):
             continue
-        if validator is _validate_type_map:
-            declared = _declared_direction(document)
-            return frozenset(entity for direction, entity in _TYPE_MAP_ENTITY.items()
-                             if declared in (None, direction))
         entity = entity_by_validator.get(validator) or entity_by_detector.get(detector)
         return frozenset({entity}) if entity else frozenset()
     return frozenset()
-
-
-def _graded_as(document: object, entity: str) -> list[Finding]:
-    """`document`'s findings under the model `entity` selects, for a document
-    whose content is consistent with `entity`.
-
-    Every other name selects exactly the registration `validate_document`
-    dispatches the document to, so it is graded there. A type-map name also
-    selects the direction, which `validate_document` does not have for a map
-    declaring none, so a type map is graded against the direction its name
-    carries.
-    """
-    from analitiq.validator._core import validate_document
-    from analitiq.validator.connectors import type_map_findings
-
-    direction = {name: direction for direction, name in _TYPE_MAP_ENTITY.items()}.get(entity)
-    if direction is None:
-        return validate_document(document)
-    return type_map_findings(document, direction)
 
 
 def validate_single_document(
@@ -196,16 +165,18 @@ def validate_single_document(
     text is written against. It is checked, not trusted: a document whose own
     content is inconsistent with the declared name is reported as an
     `entity-mismatch` finding rather than validated as whatever it resembles.
-    A consistent document is graded against the model the declared name
-    selects. Text the JSON parser cannot read is a finding on the document, not
-    a raised error.
+    A consistent document is graded exactly as `validate_document` grades it,
+    since the name it declares is the registration that claims it. Text
+    the JSON parser cannot read is a finding on the document, not a raised
+    error.
 
     Nothing anchors the document to a path, so a connector declaring its
     `kind` has no siblings for its cross-file coverage check to read: that
     check reports `coverage-check-skipped-no-path`, which costs the pass. The
     siblings belong in a `validate_connector_package` request.
     """
-    from analitiq.validator._core import _JSON_TEXT_REFUSALS, _unreadable_document_finding, finding
+    from analitiq.validator._core import (
+        _JSON_TEXT_REFUSALS, _unreadable_document_finding, finding, validate_document)
 
     try:
         document = json.loads(request.document)
@@ -224,12 +195,12 @@ def validate_single_document(
         return _envelope([finding(
             message_id="entity-mismatch", kind="fail", path="/", message=message)])
 
-    return _envelope(_graded_as(document, request.entity))
+    return _envelope(validate_document(document))
 
 
 def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnvelope:
     """Validate a connector package supplied as in-memory documents instead of
-    files on disk: the connector document, its sibling type maps, and — for an
+    files on disk: the connector document, its sibling type map, and — for an
     api connector — its `endpoints/*.json` files, cross-checked the way
     `analitiq.validator.check_coverage` already does from a filesystem path.
 
@@ -245,7 +216,7 @@ def validate_pipeline_package(request: ValidatePackageRequest) -> ValidationEnve
     """Validate a pipeline package supplied as in-memory documents instead of
     files on disk: the pipeline document, its sibling `streams/*.json`, and
     every `connections/*/connection.json` (plus their scoped endpoints and type
-    maps) — assembled the way `plugins/analitiq-pipeline-builder/scripts/
+    map) — assembled the way `plugins/analitiq-pipeline-builder/scripts/
     validate.py`'s `_assemble_bundle` already does from a filesystem root, then
     checked for referential integrity.
 

@@ -83,6 +83,8 @@ sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
 # `analitiq.contracts.shared.common` reads os.environ["DOMAIN"] at import.
 os.environ.setdefault("DOMAIN", "analitiq.ai")
 
+from analitiq.validator import TYPE_MAP_FILENAME  # noqa: E402
+
 PLUGINS_ROOT = REPO_ROOT / "plugins"
 CONTRIBUTING_ROOT = REPO_ROOT / "contributing"
 CONNECTOR_PLUGIN = PLUGINS_ROOT / "analitiq-connector-builder"
@@ -181,16 +183,16 @@ def _example_body(example_dir: Path) -> dict:
     return json.loads(body.read_text())
 
 
-def _wrap_type_map(rules: list, direction: str) -> dict:
-    """A bare rule list, as every probe author writes one, wrapped in the
-    published `{$schema, direction, rules}` type-map document shape."""
-    from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL
-    schema_url = TYPE_MAP_READ_SCHEMA_URL if direction == "read" else TYPE_MAP_WRITE_SCHEMA_URL
-    return {
-        "$schema": schema_url,
-        "direction": direction,
-        "rules": rules,
-    }
+def _wrap_type_map(**sections: list) -> dict:
+    """Bare rule lists, as every probe author writes them, keyed by direction
+    into the published `{$schema, read, write}` type-map document shape."""
+    from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
+    return {"$schema": TYPE_MAP_SCHEMA_URL, **sections}
+
+
+def _example_rules(example_dir: Path, direction: str) -> list:
+    """The `direction` rule list of the type map `example_dir` ships."""
+    return json.loads((example_dir / TYPE_MAP_FILENAME).read_text())[direction]
 
 
 def _staged_connector(mutate: Callable[[dict], dict], example_dir: Path,
@@ -198,35 +200,30 @@ def _staged_connector(mutate: Callable[[dict], dict], example_dir: Path,
     """Validate a mutated example connector with its siblings staged on disk.
 
     Staging mirrors `tests/connector_builder/test_examples_validate.py`: the
-    cross-file coverage checks walk a `definition/` directory, so the type maps
+    cross-file coverage checks walk a `definition/` directory, so the type map
     (and endpoints, for the API example) must sit beside the document.
-    `read_map`/`write_map` are bare rule lists; they are wrapped into the
-    type-map document shape before being staged, same as every on-disk example.
+    `read_map`/`write_map` are bare rule lists, each replacing that section of
+    the example's own map before it is staged.
     """
     doc = mutate(_example_body(example_dir))
     with tempfile.TemporaryDirectory() as tmp:
         definition = Path(tmp) / "definition"
         definition.mkdir()
         (definition / "connector.json").write_text(json.dumps(doc))
-        for name, direction, override in (
-            ("type-map-read.json", "read", read_map), ("type-map-write.json", "write", write_map)
-        ):
+        type_map = json.loads((example_dir / TYPE_MAP_FILENAME).read_text())
+        for direction, override in (("read", read_map), ("write", write_map)):
             if override is not None:
-                (definition / name).write_text(json.dumps(_wrap_type_map(override, direction)))
-            elif (example_dir / name).exists():
-                shutil.copy(example_dir / name, definition / name)
+                type_map[direction] = override
+        (definition / TYPE_MAP_FILENAME).write_text(json.dumps(type_map))
         if (example_dir / "endpoints").is_dir():
             shutil.copytree(example_dir / "endpoints", definition / "endpoints")
         return _validate(doc, doc_path=definition / "connector.json")
 
 
-def _staged_type_map(rules: list, direction: str) -> list[dict]:
-    # Staged under the direction's conventional filename so the probe reads the
-    # way an author's tree does; nothing in the verdict turns on the name.
-    filename = f"type-map-{direction}.json"
-    doc = _wrap_type_map(rules, direction)
+def _staged_type_map(**sections: list) -> list[dict]:
+    doc = _wrap_type_map(**sections)
     with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / filename
+        path = Path(tmp) / TYPE_MAP_FILENAME
         path.write_text(json.dumps(doc))
         return _validate(doc, doc_path=path)
 
@@ -519,12 +516,12 @@ def _p_sql_capabilities_pairing_unchecked() -> list[dict]:
 
 
 def _p_read_map_completeness() -> list[dict]:
-    read_map = json.loads((DB_EXAMPLE / "type-map-read.json").read_text())["rules"]
+    read_map = _example_rules(DB_EXAMPLE, "read")
     return _staged_connector(lambda doc: doc, DB_EXAMPLE, read_map=read_map[:1])
 
 
 def _p_read_map_native_semantics() -> list[dict]:
-    read_map = json.loads((DB_EXAMPLE / "type-map-read.json").read_text())["rules"]
+    read_map = _example_rules(DB_EXAMPLE, "read")
     read_map = [r for r in read_map if "JSONB" not in json.dumps(r)]
     read_map.append({"match": "exact", "native_type": "JSONB", "arrow_type": "Utf8"})
     return _staged_connector(lambda doc: doc, DB_EXAMPLE, read_map=read_map)
@@ -542,7 +539,7 @@ def _staged_api_endpoint(endpoint: dict) -> list[dict]:
         definition = Path(tmp) / "definition"
         (definition / "endpoints").mkdir(parents=True)
         (definition / "connector.json").write_text(json.dumps(doc))
-        shutil.copy(API_EXAMPLE / "type-map-read.json", definition / "type-map-read.json")
+        shutil.copy(API_EXAMPLE / TYPE_MAP_FILENAME, definition / TYPE_MAP_FILENAME)
         (definition / "endpoints" / "v1__items.json").write_text(json.dumps(endpoint))
         return _validate(doc, doc_path=definition / "connector.json")
 
@@ -591,9 +588,9 @@ def _p_param_key_provider_spelling() -> list[dict]:
 # --- type-map probes --------------------------------------------------------
 
 def _p_write_map_regex_case() -> list[dict]:
-    rules = json.loads((DB_EXAMPLE / "type-map-write.json").read_text())["rules"]
+    rules = _example_rules(DB_EXAMPLE, "write")
     rules.append({"match": "regex", "arrow_type": "^utf8$", "native_type": "TEXT"})
-    return _staged_type_map(rules, "write")
+    return _staged_type_map(write=rules)
 
 
 def _p_write_coverage_sample_gap() -> list[dict]:
@@ -602,73 +599,57 @@ def _p_write_coverage_sample_gap() -> list[dict]:
         {"match": "exact", "arrow_type": "Int64", "native_type": "BIGINT"},
         {"match": "exact", "arrow_type": "Boolean", "native_type": "BOOLEAN"},
     ]
-    return _staged_type_map(rules, "write")
+    return _staged_type_map(write=rules)
 
 
 def _p_type_map_schema_required() -> list[dict]:
-    rules = [{"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"}]
-    doc = _wrap_type_map(rules, "read")
+    doc = _wrap_type_map(read=[{"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"}])
     del doc["$schema"]
     with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "type-map-read.json"
+        path = Path(tmp) / TYPE_MAP_FILENAME
         path.write_text(json.dumps(doc))
         return _validate(doc, doc_path=path)
 
 
-def _p_type_map_direction_from_document() -> list[dict]:
-    # A self-consistent WRITE document written under the READ slot's filename.
-    # Grading by name would measure it against the read model, which rejects
-    # this document's write `$schema`; both `direction` and `$schema` land on
-    # write. So a clean verdict is the name contributing nothing — which a name
-    # naming no slot at all could not have shown.
-    rules = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
-    doc = _wrap_type_map(rules, "write")
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / "type-map-read.json"
-        path.write_text(json.dumps(doc))
-        return _validate(doc, doc_path=path)
+def _p_type_map_rule_graded_by_section() -> list[dict]:
+    # A write rule placed under `read`. It is a valid write rule, so rejecting
+    # it is the key it sits under choosing the rule model — nothing else in the
+    # document names a direction. A regex rule, because an exact one is valid
+    # under whichever section holds it, so it would pass every section's model.
+    return _staged_type_map(read=[{
+        "match": "regex", "arrow_type": "^Decimal128\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$",
+        "native_type": "NUMERIC(${p}, ${s})"}])
 
 
-def _p_type_map_coverage_counts_declarations() -> list[dict]:
-    # A database connector package whose maps sit under each other's
-    # conventional filenames. Each direction is covered because each is
-    # declared, so a clean verdict is coverage counting declarations; counting
-    # filenames instead would grade each map as the direction it does not
-    # declare and reject its `$schema` and its `direction`.
+def _p_type_map_stray_name() -> list[dict]:
+    # The example package's map staged under its one accepted name, and the same
+    # map again under a second type-map name beside it.
     doc = _example_body(DB_EXAMPLE)
     with tempfile.TemporaryDirectory() as tmp:
         definition = Path(tmp) / "definition"
         definition.mkdir()
         (definition / "connector.json").write_text(json.dumps(doc))
-        shutil.copy(DB_EXAMPLE / "type-map-read.json", definition / "type-map-write.json")
-        shutil.copy(DB_EXAMPLE / "type-map-write.json", definition / "type-map-read.json")
+        shutil.copy(DB_EXAMPLE / TYPE_MAP_FILENAME, definition / TYPE_MAP_FILENAME)
+        shutil.copy(DB_EXAMPLE / TYPE_MAP_FILENAME, definition / "type-map-natives.json")
         return _validate(doc, doc_path=definition / "connector.json")
 
 
-def _p_type_map_duplicate_direction() -> list[dict]:
-    # The package's read map copied under a second collected name, so a sibling
-    # beyond the authored one declares the read direction. Nothing chooses
-    # between them, so the collision is reported and the read direction is the
-    # map for neither — while the write direction, which one document declares
-    # alone, is covered and graded.
+def _p_type_map_section_missing() -> list[dict]:
+    # A database connector whose map carries no `write` section.
     doc = _example_body(DB_EXAMPLE)
     with tempfile.TemporaryDirectory() as tmp:
         definition = Path(tmp) / "definition"
         definition.mkdir()
         (definition / "connector.json").write_text(json.dumps(doc))
-        shutil.copy(DB_EXAMPLE / "type-map-read.json", definition / "type-map-read.json")
-        shutil.copy(DB_EXAMPLE / "type-map-read.json", definition / "type-map-natives.json")
-        shutil.copy(DB_EXAMPLE / "type-map-write.json", definition / "type-map-write.json")
+        (definition / TYPE_MAP_FILENAME).write_text(json.dumps(
+            _wrap_type_map(read=_example_rules(DB_EXAMPLE, "read"))))
         return _validate(doc, doc_path=definition / "connector.json")
 
 
-def _p_type_map_direction_not_schema_url() -> list[dict]:
-    # `direction` and `$schema` made to disagree, so only one of them can have
-    # chosen the model. Rejecting the WRITE `$schema` against the read model is
-    # `direction` choosing; rejecting `/direction` would be `$schema` choosing.
-    doc = _wrap_type_map([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")
-    doc["direction"] = "read"
-    return _validate(doc)
+def _p_type_map_standalone_no_package_check() -> list[dict]:
+    # A map carrying no write section, validated on its own: beside a database
+    # connector the same map fails for the missing section.
+    return _staged_type_map(read=_example_rules(DB_EXAMPLE, "read"))
 
 
 def _p_pagination_limit_bare_zero() -> list[dict]:
@@ -1024,7 +1005,7 @@ PROBES: tuple[Probe, ...] = (
     Probe("tls-coherence-unchecked", "clean", _p_tls_coherence,
           forbid_re=r"(?i)tls|ssl|certificate"),
     Probe("read-map-completeness-unchecked", "clean", _p_read_map_completeness,
-          forbid_re=r"(?i)read.?map|type-map-read|coverage"),
+          forbid_re=r"(?i)read.?map|type-map|coverage"),
     Probe("read-map-native-semantics-unchecked", "clean", _p_read_map_native_semantics),
     Probe("endpoint-pair-unresolved-through-read-map", "error", _p_endpoint_pair_unresolved,
           message_re=r"native_type 'MYSTERY_TYPE'"),
@@ -1035,7 +1016,7 @@ PROBES: tuple[Probe, ...] = (
     # unannotated node is resolved against nothing, and a warning-tier report
     # naming the read map would falsify it without producing an error.
     Probe("write-input-unannotated-uncovered", "clean", _p_write_input_unannotated,
-          forbid_re=r"type-map-read\.json"),
+          forbid_re=r"type-map\.json"),
     # The asymmetry spec-request-binding.md teaches: the placeholder takes the
     # contract's form while the param it binds keeps the provider's spelling.
     # `forbid_re` covers the severity `expect="clean"` does not — a
@@ -1046,7 +1027,7 @@ PROBES: tuple[Probe, ...] = (
     # type maps
     Probe("write-map-regex-arrow-type-case-unchecked", "silent", _p_write_map_regex_case),
     # require_re holds the coverage warning itself in existence: without it,
-    # deleting the whole type-map-write-coverage check would leave this probe
+    # deleting the whole write-coverage check would leave this probe
     # green while spec-type-maps.md keeps instructing authors to reconcile a
     # warning that no longer fires.
     Probe("write-coverage-sample-gap", "clean", _p_write_coverage_sample_gap,
@@ -1054,19 +1035,14 @@ PROBES: tuple[Probe, ...] = (
           require_re=r"no rule rendering"),
     Probe("type-map-schema-required", "error", _p_type_map_schema_required,
           message_re=r"Field required"),
-    Probe("type-map-direction-from-document", "clean", _p_type_map_direction_from_document),
-    Probe("type-map-direction-not-schema-url", "error", _p_type_map_direction_not_schema_url,
-          message_re=r"type-map-read"),
-    Probe("type-map-coverage-counts-declarations", "clean",
-          _p_type_map_coverage_counts_declarations),
-    Probe("type-map-duplicate-direction-rejected", "error", _p_type_map_duplicate_direction,
-          message_re=r"both declare direction .*neither of these is its map"),
-    # The collision also fails coverage: the missing-map finding for that
-    # direction fires, and its reason separates a duplicated direction from one
-    # nothing declared.
-    Probe("type-map-duplicate-direction-covers-nothing", "error",
-          _p_type_map_duplicate_direction,
-          message_re=r"more than one sibling declares it, so none of them is it"),
+    Probe("type-map-rule-graded-by-section", "error", _p_type_map_rule_graded_by_section,
+          message_re=r"read rule's arrow_type"),
+    Probe("type-map-stray-name-refused", "error", _p_type_map_stray_name,
+          message_re=r"type-map-natives\.json is not read as a type map"),
+    Probe("type-map-section-missing", "error", _p_type_map_section_missing,
+          message_re=r"carries no 'write' section"),
+    Probe("type-map-standalone-no-package-check", "clean", _p_type_map_standalone_no_package_check,
+          forbid_re=r"(?i)requires a sibling|carries no '(read|write)' section|coverage"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
           message_re=r"greater than or equal to 1"),
     Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,

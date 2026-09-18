@@ -14,7 +14,7 @@ rationale: >
   always means the system was reclassified as an API after being authored as
   a database, leaving a dialect that describes a transport this connector no
   longer has. The absence of a file is a property of the release directory
-  rather than of any document: the validator checks which type maps a
+  rather than of any document: the validator checks the type map a
   connector ships but never looks for package files, so an `api` connector
   carrying a dialect passes every check here.
 status: active
