@@ -212,8 +212,8 @@ def compile_matcher(pattern: str) -> CompiledMatcher:
     """Compile a type-map matcher in RE2, the dialect the rule is matched in.
 
     ValueError carrying RE2's own parse error when RE2 refuses the pattern, and
-    when a named group is spelled `(?P<name>…)`: RE2 takes that spelling too, so
-    that refusal is the contract's choice of one spelling, not the dialect's.
+    when the pattern holds RE2 syntax the contract refuses: a named group
+    spelled `(?P<name>…)`, or a repetition whose upper count is zero.
     """
     regex = _re2_compile(pattern)
     try:
