@@ -183,6 +183,27 @@ def finding(
     return result
 
 
+def is_bare_pointer(path: str) -> bool:
+    """Whether `path` points into the validated document itself — a JSON
+    Pointer, empty or starting with `/` — rather than naming another document
+    (`rules/SCHEMA.md`, "Findings", `path`)."""
+    return path == "" or path.startswith("/")
+
+
+def qualified(f: dict, reference: str) -> dict:
+    """`f`, reported about the document at `reference` rather than the one
+    validated: its pointer follows the reference, after the one `#` the
+    reference cannot carry.
+
+    Raises `ValueError` for a finding already naming a document: its pointer
+    is into that document, and naming a second one in front of it would point
+    nowhere.
+    """
+    if not is_bare_pointer(f["path"]):
+        raise ValueError(f"finding already names a document: {f['path']!r}")
+    return {**f, "path": f"{reference}#{f['path']}"}
+
+
 def finding_costs_a_pass(f: dict) -> bool:
     """Whether one finding, on its own, keeps `passed` from being `True`
     (`rules/SCHEMA.md`, "Findings"): a `fail` at `severity: error`, or a
@@ -332,9 +353,9 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
     """Run a check; a crash becomes one finding so other checks survive.
 
     `crash_label` is keyword-only and named apart from any parameter a
-    wrapped `fn` might itself take (`_embedded_schema_example_findings`'s own
-    `label`, say) — a same-named keyword here would be consumed by this
-    function instead of reaching `fn`, silently dropping the caller's intent.
+    wrapped `fn` might itself take — a same-named keyword here would be
+    consumed by this function instead of reaching `fn`, silently dropping the
+    caller's intent.
 
     `notApplicable`, not `fail`: the crash means nothing here decided whether
     any rule the check would have graded holds, which is exactly what that

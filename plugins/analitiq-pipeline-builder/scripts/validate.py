@@ -72,7 +72,9 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import posixpath
 from pathlib import Path, PurePosixPath
+from urllib.parse import unquote
 
 from _bootstrap import ensure_deps_or_reexec
 
@@ -217,8 +219,24 @@ def _at_site(site: str, findings: list[dict]) -> list[dict]:
     holds many, so the same pointer names none of them — the reader is told
     what is wrong and not which entry to open. A finding about the whole
     entry (`/`) is addressed at the entry itself."""
-    return [{**f, "path": site if f.get("path", "") in ("", "/") else f"{site}{f['path']}"}
-            for f in findings]
+    return [{**f, "path": _rooted(site, f.get("path", ""))} for f in findings]
+
+
+def _rooted(site: str, path: str) -> str:
+    """`path`, reported by grading the entry at `site`, addressed from the
+    bundle root.
+
+    A bare pointer (empty, or starting with `/`) is into the entry itself. Any
+    other path names another document, as `<reference>#<pointer>` with the
+    percent-encoded reference relative to the entry's directory
+    (`rules/SCHEMA.md`, "Findings")."""
+    if path == "" or path.startswith("/"):
+        target, pointer = site, path
+    else:
+        reference, _, pointer = path.partition("#")
+        target = posixpath.normpath(
+            posixpath.join(posixpath.dirname(site), unquote(reference)))
+    return target if pointer in ("", "/") else f"{target}{pointer}"
 
 
 def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:

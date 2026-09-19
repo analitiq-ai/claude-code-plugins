@@ -1,14 +1,14 @@
 """The path-free document-set API.
 
-`analitiq.validator._core.validate_document` and `analitiq.validator.connectors
-.check_coverage` both read real files off disk: `check_coverage` walks a
-connector's sibling type-maps and endpoints via `doc_path.parent`, and the
-pipeline-builder plugin's own `_assemble_bundle` (`plugins/
-analitiq-pipeline-builder/scripts/validate.py`) globs an entire pipeline
-directory the same way. A consumer that never has those files on a local
+`analitiq.validator._core.validate_document` reads the files beside a
+document from the path it is given: `analitiq.validator.connectors
+.check_coverage` walks a connector's sibling type-maps and endpoints from the
+directory holding it, and the pipeline-builder plugin's own `_assemble_bundle`
+(`plugins/analitiq-pipeline-builder/scripts/validate.py`) globs an entire
+pipeline directory. A consumer that never has those files on a local
 filesystem — a hosted validator wrapping this package as a remote tool,
 registry CI, any caller handed document content directly rather than a
-directory to read it from — cannot use either route.
+directory to read it from — has no path to give either one.
 
 This module fixes the contract such a consumer calls instead. Each entry point
 takes the request model that names the unit being submitted
@@ -42,13 +42,13 @@ a check bound to one rule, and inside the grading of a whole document, as a
 `check-crashed` `notApplicable` finding — so a crash while grading a single
 document still comes back as a finding.
 
-Each entry point taking a `ValidatePackageRequest` raises
-`NotImplementedError`; the behaviour it must satisfy is fixed by
-`packages/validator/tests/test_document_set.py`.
+`validate_pipeline_package` raises `NotImplementedError`; the behaviour it
+must satisfy is fixed by `packages/validator/tests/test_document_set.py`.
 """
 from __future__ import annotations
 
 import json
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Literal, TypedDict
 
 if TYPE_CHECKING:
@@ -94,10 +94,11 @@ class Finding(_FindingRequired, total=False):
 
 class ValidationEnvelope(TypedDict):
     """The result of every entry point below: flat, not a nested per-document
-    breakdown — a finding carries the `path` the check that produced it
-    reports, so a document validated this way and the same document validated
-    through the path-based single-document route report through one shape. The
-    exception is an embedded connector subtree's finding, whose `path`
+    breakdown — each finding's `path` says which document it concerns and
+    where in it (`rules/SCHEMA.md`, "Findings"). A single document's finding
+    names another document only when it is about one; a package's names every
+    document by its key, since a package has no one validated document. An
+    embedded connector subtree's finding is the exception, whose `path`
     `validate_pipeline_package` scopes under that subtree's key prefix.
     `passed` is `False` exactly when `findings` holds one that
     `finding_costs_a_pass` accepts, which is not the
@@ -205,40 +206,85 @@ def validate_single_document(
     check reports `coverage-check-skipped-no-path`, which costs the pass. The
     siblings belong in a `validate_connector_package` request.
     """
-    from analitiq.validator._core import _JSON_TEXT_REFUSALS, _unreadable_document_finding, finding
+    from analitiq.validator._core import _JSON_TEXT_REFUSALS, _unreadable_document_finding
 
     try:
         document = json.loads(request.document)
     except _JSON_TEXT_REFUSALS as exc:
         return _envelope([_unreadable_document_finding(exc)])
 
-    consistent = _consistent_entities(document)
-    if request.entity not in consistent:
-        if consistent:
-            detected = " or ".join(repr(entity) for entity in sorted(consistent))
-            message = (f"declared entity {request.entity!r}, but this document's "
-                       f"content is detected as {detected}.")
-        else:
-            message = (f"declared entity {request.entity!r}, but this document's "
-                       "content matches no published document schema.")
-        return _envelope([finding(
-            message_id="entity-mismatch", kind="fail", path="/", message=message)])
+    mismatch = _entity_mismatch_findings(document, request.entity)
+    return _envelope(mismatch or _graded_as(document, request.entity))
 
-    return _envelope(_graded_as(document, request.entity))
+
+def _entity_mismatch_findings(document: object, entity: str) -> list[Finding]:
+    """The finding refusing `document` as `entity` when its own content is
+    inconsistent with that name, and none when it is consistent."""
+    from analitiq.validator._core import finding
+
+    consistent = _consistent_entities(document)
+    if entity in consistent:
+        return []
+    if consistent:
+        detected = " or ".join(repr(name) for name in sorted(consistent))
+        message = (f"declared entity {entity!r}, but this document's "
+                   f"content is detected as {detected}.")
+    else:
+        message = (f"declared entity {entity!r}, but this document's "
+                   "content matches no published document schema.")
+    return [finding(message_id="entity-mismatch", kind="fail", path="", message=message)]
+
+
+#: The key a connector package's root document sits at. The package root is
+#: the directory holding it, and every other key is read relative to that.
+_CONNECTOR_KEY = "connector.json"
 
 
 def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnvelope:
     """Validate a connector package supplied as in-memory documents instead of
-    files on disk: the connector document, its sibling type maps, and — for an
-    api connector — its `endpoints/*.json` files, cross-checked the way
-    `analitiq.validator.check_coverage` already does from a filesystem path.
+    files on disk: the connector document at `connector.json`, its sibling
+    type maps, and — for an api connector — its `endpoints/*.json` files.
 
-    Raises `NotImplementedError`. Signature and behaviour are fixed by
-    `packages/validator/tests/test_document_set.py`.
+    The connector is graded exactly as it is from a path on disk, by the same
+    checks reading the same siblings, so the two routes cannot disagree about
+    a package. What differs is where a finding says it applies: a package has
+    no one validated document, so every finding names the key of the document
+    it is about. A document the connector's checks never read is not graded.
     """
-    raise NotImplementedError(
-        "validate_connector_package is not implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
+    from analitiq.validator._core import (
+        _JSON_TEXT_REFUSALS,
+        _unreadable_document_finding,
+        finding,
+        qualified,
+        validate_document,
+    )
+    from analitiq.validator._location import Location, MemoryTree
+
+    if _CONNECTOR_KEY not in request.documents.root:
+        return _envelope([qualified(finding(
+            message_id="connector-document-missing", kind="fail", path="",
+            message=(f"a connector package carries its connector document at "
+                     f"{_CONNECTOR_KEY!r}; no document has that key.")), _CONNECTOR_KEY)])
+    tree = MemoryTree(request.documents.root)
+    anchor = Location(PurePosixPath(_CONNECTOR_KEY), tree)
+    try:
+        document = json.loads(anchor.read_text())
+    except _JSON_TEXT_REFUSALS as exc:
+        return _envelope([qualified(_unreadable_document_finding(exc), _CONNECTOR_KEY)])
+    mismatch = _entity_mismatch_findings(document, "connector")
+    if mismatch:
+        return _envelope(_from_package_root(mismatch))
+    return _envelope(_from_package_root(validate_document(document, doc_path=anchor)))
+
+
+def _from_package_root(findings: list[Finding]) -> list[Finding]:
+    """`findings` from grading the connector document, each read from the
+    package root: a pointer into the connector itself gains its key, and a
+    finding about a sibling already names it from the directory both share."""
+    from analitiq.validator._core import is_bare_pointer, qualified
+
+    return [qualified(f, _CONNECTOR_KEY) if is_bare_pointer(f["path"]) else f
+            for f in findings]
 
 
 def validate_pipeline_package(request: ValidatePackageRequest) -> ValidationEnvelope:

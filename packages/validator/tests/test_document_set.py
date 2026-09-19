@@ -637,7 +637,6 @@ def test_an_assembled_bundle_resolves_to_no_published_name(validator):
 # The package entry points — each called directly for the kind it names.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_connector_package")
 def test_validate_connector_package_validates_its_own_root_shape(validator):
     result = validator.validate_connector_package(
         _package_request(_connector_package_documents()))
@@ -646,7 +645,6 @@ def test_validate_connector_package_validates_its_own_root_shape(validator):
     assert result == _expected_envelope(validator, []), result
 
 
-@_xfail("validate_connector_package")
 def test_unparseable_document_in_a_package_is_a_finding_not_a_raise(validator):
     """One document's text being unreadable is package *content*, not a
     malformed argument — the request model accepts any text — so the package
@@ -699,12 +697,52 @@ def test_embedded_connector_subtree_gets_its_own_coverage_findings(validator):
     assert any(f.get("rule") == "RULE-PKG-030" for f in pg_scoped), result["findings"]
 
 
+def test_a_connector_package_finding_names_the_document_it_is_about(validator):
+    documents = {**_connector_package_documents(),
+                 "endpoints/v2__widgets.json": _uncovered_endpoint_document()}
+    documents["connector.json"]["display_name"] = 7
+    result = validator.validate_connector_package(_package_request(documents))
+    assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
+        ("string_type", "connector.json#/api/display_name"),
+        ("native-type-unresolved",
+         "endpoints/v2__widgets.json#/operations/read/response/schema/items/properties/b"),
+    ], result
+
+
+def test_a_connector_package_without_a_connector_document_fails(validator):
+    documents = _connector_package_documents()
+    del documents["connector.json"]
+    result = validator.validate_connector_package(_package_request(documents))
+    assert result["passed"] is False
+    [found] = result["findings"]
+    assert (found["message_id"], found["kind"], found["path"]) == (
+        "connector-document-missing", "fail", "connector.json#"), found
+    assert "rule" not in found, found
+
+
+def test_a_connector_document_that_does_not_parse_is_a_finding(validator):
+    documents = {key: json.dumps(doc) for key, doc in _connector_package_documents().items()}
+    documents["connector.json"] = "{not json"
+    result = validator.validate_connector_package(ValidatePackageRequest(documents=documents))
+    assert result["passed"] is False
+    assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
+        ("unreadable-document", "connector.json#")], result
+
+
+def test_a_connector_document_holding_another_entity_is_a_mismatch(validator):
+    documents = _connector_package_documents()
+    documents["connector.json"] = documents["type-map-read.json"]
+    result = validator.validate_connector_package(_package_request(documents))
+    assert result["passed"] is False
+    assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
+        ("entity-mismatch", "connector.json#")], result
+
+
 # ---------------------------------------------------------------------------
 # Deterministic output: findings do not depend on the order the caller happened
 # to build its mapping in.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_connector_package")
 def test_connector_package_finding_order_is_independent_of_input_order(validator):
     # Two distinct uncovered endpoints, not the clean package: comparing two
     # empty findings lists cannot detect order-sensitivity at all.
@@ -739,7 +777,6 @@ def test_pipeline_package_finding_order_is_independent_of_input_order(validator)
 # produce byte-identical results for the same content, per package kind.
 # ---------------------------------------------------------------------------
 
-@_xfail("validate_connector_package")
 def test_connector_package_equivalence_with_the_path_based_route(validator, tmp_path):
     # Two distinct uncovered endpoints, not just a clean package: a route
     # producing zero findings would make "findings order included" vacuous.
@@ -750,11 +787,16 @@ def test_connector_package_equivalence_with_the_path_based_route(validator, tmp_
         "endpoints/v3__gadgets.json": _uncovered_endpoint_document(
             endpoint_id="v3__gadgets", request_path="/v3/gadgets", native="INTEGER", arrow="Int64"),
     }
+    from analitiq.validator.document_set import _from_package_root
     _write_package(tmp_path, documents)
     path_based = validator.validate_document(documents["connector.json"], doc_path=tmp_path / "connector.json")
     assert len(path_based) >= 2, path_based  # non-vacuous: order genuinely matters below
     package_based = validator.validate_connector_package(_package_request(documents))
-    assert json.dumps(package_based) == json.dumps(_expected_envelope(validator, path_based))
+    # The disk route reads a finding about `connector.json` itself as a bare
+    # pointer: that is the document it validated. A package has no validated
+    # document, so the package route names it, and does nothing else.
+    expected = _from_package_root(path_based)
+    assert json.dumps(package_based) == json.dumps(_expected_envelope(validator, expected))
 
 
 @_xfail("validate_pipeline_package")

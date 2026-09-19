@@ -774,8 +774,32 @@ def test_connection_type_maps_are_collected_as_a_connector_collects_its_own(tmp_
     # A finding about a whole file is addressed at the file: the pointer to a
     # document's root joined onto it would name a key "" inside it.
     assert not any(f["path"].endswith("/") for f in connection), connection
-    assert [f["path"].split(".json", 1)[1] or "/" for f in connection] == [
-        f["path"] for f in connector]
+    # The connector's finding names the file from the directory both share,
+    # so rooting it at the connection's directory is the adapter's whole job.
+    assert [f["path"] for f in connection] == [
+        _rooted_at("connections/pg/definition", f["path"]) for f in connector]
+
+
+def _rooted_at(site: str, path: str) -> str:
+    """A `<reference>#<pointer>` path as the adapter addresses it beside `site`."""
+    reference, _, pointer = path.partition("#")
+    return f"{site}/{reference}{'' if pointer in ('', '/') else pointer}"
+
+
+@pytest.mark.parametrize("path, rooted", [
+    ("", "connections/pg/definition/endpoints/a.json"),
+    ("/", "connections/pg/definition/endpoints/a.json"),
+    ("/endpoint_id", "connections/pg/definition/endpoints/a.json/endpoint_id"),
+    ("../connector.json#", "connections/pg/definition/connector.json"),
+    ("../connector.json#/transports", "connections/pg/definition/connector.json/transports"),
+    ("b%23c.json#/x#y", "connections/pg/definition/endpoints/b#c.json/x#y"),
+])
+def test_a_finding_is_rooted_at_the_document_it_names(path, rooted):
+    # A bare pointer is into the entry graded; a `<reference>#<pointer>` names
+    # another document, relative to the entry's directory.
+    [found] = V._at_site("connections/pg/definition/endpoints/a.json",
+                         [{"message_id": "m", "kind": "fail", "path": path, "message": "x"}])
+    assert found["path"] == rooted
 
 
 def test_a_definition_directory_that_cannot_be_listed_is_reported_at_the_directory(tmp_path, refuse):

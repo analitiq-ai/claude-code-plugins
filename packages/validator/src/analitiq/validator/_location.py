@@ -11,12 +11,14 @@ from __future__ import annotations
 import errno
 import io
 import os
+import posixpath
 import stat
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from fnmatch import fnmatch, fnmatchcase
 from pathlib import Path, PurePath, PurePosixPath
 from typing import Iterable, Iterator, Mapping
+from urllib.parse import quote
 
 
 class Tree(ABC):
@@ -192,6 +194,17 @@ class Location:
     def rglob(self, pattern: str) -> Iterator[Location]:
         return (Location(key, self.tree)
                 for key in self.tree.rglob(self.key, _one_name(pattern)))
+
+
+def reference(target: Location, *, seen_from: Location) -> str:
+    """Where `target` sits, read from the directory holding `seen_from`: a
+    relative reference as RFC 3986 spells one.
+
+    Percent-encoded, so a `#` in a name cannot end the reference early and a
+    `:` in its first segment cannot read as a scheme.
+    """
+    relative = posixpath.relpath(target.key.as_posix(), seen_from.key.parent.as_posix())
+    return quote(relative)
 
 
 def _one_name(pattern: str) -> str:
