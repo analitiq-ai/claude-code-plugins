@@ -69,13 +69,12 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
     carries to the line it sits on.
 
     A call is ruleless when its `rule` keyword is absent or the literal
-    `None` — `_load_json_sibling` and `_run_guarded` each thread `rule`
-    through from THEIR caller, so a call to either passing a literal
-    `rule=None` (or omitting it) is tracked the same way a direct `finding()`
-    call would be, attributed to whichever function made that call. Neither
-    helper's own internal `finding(rule=rule, …)` is itself ruleless by this
-    walk (`rule` there is a variable, not a literal `None`) — their callers
-    are what decide, and are what this counts.
+    `None`. `_run_guarded` threads `rule` through from its caller, and
+    `_load_json_sibling` takes none, so a call to either is tracked the way a
+    direct `finding()` call would be, attributed to whichever function made
+    it. Their own internal `finding()` calls are not counted: `_run_guarded`'s
+    passes `rule` as a variable, and `_load_json_sibling`'s passes
+    `message_id` as one — their callers decide, and are what this counts.
     """
     found: dict[tuple[str, str], int] = {}
 
@@ -165,10 +164,10 @@ def test_every_ruleless_finding_is_a_named_framework_case():
     found = _ruleless_emitters()
     unaccounted = sorted(set(found) - set(RULELESS_SITES))
     assert not unaccounted, (
-        "finding() (or _load_json_sibling/_run_guarded, which thread rule "
-        "through from their caller) emits a ruleless finding RULELESS_SITES "
-        "does not name — add it with the framework case it is, or attribute "
-        "an actual rule instead: "
+        "finding() (or _run_guarded, which threads rule through from its caller, "
+        "or _load_json_sibling, which takes none) emits a ruleless finding "
+        "RULELESS_SITES does not name — add it with the framework case it is, "
+        "or attribute an actual rule instead: "
         + ", ".join(f"{site} (line {found[site]})" for site in unaccounted)
     )
 

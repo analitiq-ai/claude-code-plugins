@@ -979,7 +979,7 @@ class _Operation(Enum):
 
 
 @dataclass(frozen=True)
-class _Refused:
+class _Failed:
     """`operation` failed, which says nothing about what is there: a check
     reading its answer is withheld, never graded as if nothing were. Only a
     refused permission is the author's to grant, so only it names a remedy."""
@@ -999,7 +999,7 @@ class _Refused:
 _Answer = TypeVar("_Answer")
 
 
-def _asked(operation: _Operation, question: Callable[[], _Answer]) -> _Answer | _Refused:
+def _asked(operation: _Operation, question: Callable[[], _Answer]) -> _Answer | _Failed:
     """The tree's answer to `question`, or the failure it raised instead.
 
     Every lookup, listing and read a check makes beside the document goes
@@ -1008,7 +1008,7 @@ def _asked(operation: _Operation, question: Callable[[], _Answer]) -> _Answer | 
     try:
         return question()
     except OSError as error:
-        return _Refused(operation, error)
+        return _Failed(operation, error)
 
 
 @dataclass(frozen=True)
@@ -1033,13 +1033,13 @@ class _NotAFile:
 
 _NOT_A_FILE = _NotAFile()
 
-_Sibling = _Read | _NotAFile | _Refused | _Unparseable
+_Sibling = _Read | _NotAFile | _Failed | _Unparseable
 
 
 def _read_sibling(path: Location) -> _Sibling:
     """What the sibling JSON document at `path` turned out to be."""
     is_file = _asked(_Operation.LOOKUP, path.is_file)
-    if isinstance(is_file, _Refused):
+    if isinstance(is_file, _Failed):
         return is_file
     if not is_file:
         # Only a regular file is read. A directory raises with an errno that
@@ -1048,12 +1048,12 @@ def _read_sibling(path: Location) -> _Sibling:
         return _NOT_A_FILE
     try:
         text = _asked(_Operation.READ, path.read_text)
-        return text if isinstance(text, _Refused) else _Read(json.loads(text))
+        return text if isinstance(text, _Failed) else _Read(json.loads(text))
     except _JSON_TEXT_REFUSALS as error:
         return _Unparseable(error)
 
 
-def _unread(path: Location, sibling: _NotAFile | _Refused | _Unparseable) -> str:
+def _unread(path: Location, sibling: _NotAFile | _Failed | _Unparseable) -> str:
     return f"sibling {path.name} {sibling.why}."
 
 
@@ -1201,8 +1201,8 @@ class TypeMapSiblings:
     the site. Every message names that entry, so a caller that cannot root a
     pointer at it still reports which one to look at.
 
-    `refused` names each entry the kernel would not look up or read, and `.`
-    where it would not list the directory. What those hold is unknown, and any
+    `unread` names each entry whose lookup or read failed, and `.` where the
+    listing of the directory failed. What those hold is unknown, and any
     of them may declare any direction, so while it names one no direction can
     be said to lack a map.
     """
@@ -1210,7 +1210,7 @@ class TypeMapSiblings:
     maps: dict[str, tuple[str, Any]]
     declared_by: dict[str, str]
     findings: list[tuple[str, dict]]
-    refused: list[str]
+    unread: list[str]
 
 
 def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSiblings:
@@ -1233,11 +1233,11 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
     parent = located(parent)
     listed = _asked(_Operation.LISTING, lambda: (
         _type_map_sibling_paths(parent), _legacy_type_map_present(parent)))
-    if isinstance(listed, _Refused):
+    if isinstance(listed, _Failed):
         return TypeMapSiblings({}, {}, [(".", finding(
             rule=rule,
             message_id="type-map-dir-unlisted", kind="notApplicable", path="/",
-            message=f"type maps not collected: the directory {listed.why}."))], refused=["."])
+            message=f"type maps not collected: the directory {listed.why}."))], unread=["."])
     siblings, legacy_present = listed
     findings: list[tuple[str, dict]] = []
     if legacy_present:
@@ -1250,14 +1250,14 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
                 f"as {_READ_MAP_FILENAME} or {_WRITE_MAP_FILENAME}."))))
     maps: dict[str, tuple[str, Any]] = {}
     declared_by: dict[str, str] = {}
-    refused: list[str] = []
+    unread: list[str] = []
     for path in siblings:
         name = path.name
         sibling = _read_sibling(path)
-        if isinstance(sibling, _Refused):
-            refused.append(name)
+        if isinstance(sibling, _Failed):
+            unread.append(name)
             findings.append((name, finding(
-                rule=rule, message_id="type-map-refused", kind="notApplicable", path="/",
+                rule=rule, message_id="type-map-unreadable", kind="notApplicable", path="/",
                 message=_unread(path, sibling))))
             continue
         if not isinstance(sibling, _Read):
@@ -1282,7 +1282,7 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
                     "document declares each direction, so neither of these is its map."))))
             continue
         maps[declared] = (name, doc)
-    return TypeMapSiblings(maps, declared_by, findings, refused)
+    return TypeMapSiblings(maps, declared_by, findings, unread)
 
 
 def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
@@ -1333,7 +1333,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
         read_source, read_doc = documents["read"]
         findings.extend(_read_from(read_source, type_map_findings(read_doc, "read")))
         read_rules = _type_map_rules(read_doc)
-    elif not collection.refused:
+    elif not collection.unread:
         findings.append(finding(
             rule="RULE-PKG-030",
             message_id="read-map-missing", kind="fail", path="/",
@@ -1346,7 +1346,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
         if "write" in documents:
             write_source, write_doc = documents["write"]
             findings.extend(_read_from(write_source, type_map_findings(write_doc, "write")))
-        elif not collection.refused:
+        elif not collection.unread:
             findings.append(finding(
                 rule="RULE-PKG-030",
                 message_id="write-map-missing", kind="fail", path="/",
@@ -1392,9 +1392,9 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     # Scan recursively: every *.json the walk reaches under endpoints/ must sit
     # at exactly `endpoints/{endpoint_id}.json` (flat), so a nested or misplaced
     # file is flagged rather than reported as a false pass.
-    endpoint_files = present if isinstance(present, _Refused) else _asked(
+    endpoint_files = present if isinstance(present, _Failed) else _asked(
         _Operation.WALK, lambda: sorted(endpoint_dir.rglob("*.json")))
-    if isinstance(endpoint_files, _Refused):
+    if isinstance(endpoint_files, _Failed):
         findings.append(finding(
             rule="RULE-PKG-031",
             message_id="endpoints-dir-unlisted", kind="notApplicable", path="/",
@@ -1560,12 +1560,12 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                             "connector.json was read but declares no usable `transports` "
                             "object, so there was nothing to resolve the name against. "
                             "Validate the connector to see why.")))
-                elif isinstance(connector, _Refused):
+                elif isinstance(connector, _Failed):
                     # Neither absent nor unparseable: the connector may be there
                     # and sound, and either remedy would send the author astray.
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
-                        message_id="transport-ref-check-skipped-sibling-refused",
+                        message_id="transport-ref-check-skipped-sibling-unreadable",
                         kind="notApplicable", path="/",
                         message=(
                             f"transport_ref {declared_refs!r} not checked: the sibling "

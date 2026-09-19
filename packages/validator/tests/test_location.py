@@ -403,7 +403,7 @@ def test_an_endpoint_whose_connector_is_refused_is_told_why(tmp_path, validator,
     sibling = _about_the_connector(findings)
     assert [(f["kind"], f.get("rule"), f["message_id"]) for f in sibling] == [
         ("fail", None, "sibling-connector-unreadable"),
-        ("notApplicable", "RULE-ENDP-047", "transport-ref-check-skipped-sibling-refused")], findings
+        ("notApplicable", "RULE-ENDP-047", "transport-ref-check-skipped-sibling-unreadable")], findings
     assert str(tmp_path / "pkg/connector.json") in sibling[1]["message"]
     assert f"{remedy}, then re-run." in sibling[0]["message"]
 
