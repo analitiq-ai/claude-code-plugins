@@ -262,7 +262,7 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     except ValidationError as exc:
         findings: list[dict] = []
         for err in exc.errors():
-            base_path = "/" + "/".join(str(p) for p in err["loc"])
+            base_path = "".join(f"/{p}" for p in err["loc"])
             violations = rule_violations(err)
             if not violations:
                 findings.append(finding(
@@ -339,7 +339,7 @@ def _dispatch(doc: Any, location: Location | None) -> list[dict]:
     # Anything no registered kind claims is a document we were asked to validate
     # but cannot identify — that is a validation failure, not a pass.
     return [finding(
-        message_id="unrecognized-document", kind="fail", path="/",
+        message_id="unrecognized-document", kind="fail", path="",
         message=(
             "document does not match any known artifact (connector / api-endpoint / "
             "database-endpoint / type-map / connection / stream / pipeline); a connector "

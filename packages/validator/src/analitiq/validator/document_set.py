@@ -97,9 +97,9 @@ class ValidationEnvelope(TypedDict):
     breakdown — each finding's `path` says which document it concerns and
     where in it (`rules/SCHEMA.md`, "Findings"). A single document's finding
     names another document only when it is about one; a package's names every
-    document by its key, since a package has no one validated document. An
-    embedded connector subtree's finding is the exception, whose `path`
-    `validate_pipeline_package` scopes under that subtree's key prefix.
+    document by its key, since a package has no one validated document. The
+    key is percent-encoded as that row's reference is, so a consumer decodes
+    it before matching it against a request key.
     `passed` is `False` exactly when `findings` holds one that
     `finding_costs_a_pass` accepts, which is not the
     same as "a finding at `severity: error`": an unchecked error-tier rule
@@ -248,8 +248,8 @@ def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnv
     The connector is graded exactly as it is from a path on disk, by the same
     checks reading the same siblings, so the two routes cannot disagree about
     a package. What differs is where a finding says it applies: a package has
-    no one validated document, so every finding names the key of the document
-    it is about. A document the connector's checks never read is not graded.
+    no one validated document, so every finding names the document it is
+    about by its percent-encoded key. A document the connector's checks never read is not graded.
     """
     from analitiq.validator._core import (
         _JSON_TEXT_REFUSALS,

@@ -632,7 +632,7 @@ def test_type_map_entity_rejects_bare_array(tmp_path):
         _write(tmp_path, "type-map-read.json",
                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]))
     assert not diag["passed"]
-    assert any(f.get("message_id") == "model_attributes_type" and f.get("path") == "/"
+    assert any(f.get("message_id") == "model_attributes_type" and f.get("path") == ""
                for f in diag["findings"]), diag["findings"]
 
 

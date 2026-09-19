@@ -709,6 +709,23 @@ def test_a_connector_package_finding_names_the_document_it_is_about(validator):
     ], result
 
 
+def test_a_connector_package_obligation_is_about_the_whole_connector(validator):
+    documents = _connector_package_documents()
+    del documents["type-map-read.json"]
+    result = validator.validate_connector_package(_package_request(documents))
+    [found] = [f for f in result["findings"] if f["message_id"] == "read-map-missing"]
+    assert found["path"] == "connector.json#", found
+
+
+def test_a_connector_package_key_is_percent_encoded_in_a_finding(validator):
+    documents = {**_connector_package_documents(),
+                 "endpoints/v2 widgets.json": _uncovered_endpoint_document()}
+    result = validator.validate_connector_package(_package_request(documents))
+    [found] = [f for f in result["findings"] if f["message_id"] == "native-type-unresolved"]
+    assert found["path"] == (
+        "endpoints/v2%20widgets.json#/operations/read/response/schema/items/properties/b"), found
+
+
 def test_a_connector_package_without_a_connector_document_fails(validator):
     documents = _connector_package_documents()
     del documents["connector.json"]

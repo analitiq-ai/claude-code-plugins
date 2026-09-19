@@ -1254,7 +1254,7 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
     if isinstance(listed, _Failed):
         return TypeMapSiblings({}, {}, [(".", finding(
             rule=rule,
-            message_id="type-map-dir-unlisted", kind="notApplicable", path="/",
+            message_id="type-map-dir-unlisted", kind="notApplicable", path="",
             message=f"type maps not collected: the directory {listed.why}."))], unread=["."])
     siblings, legacy_present = listed
     findings: list[tuple[str, dict]] = []
@@ -1317,7 +1317,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
         # never asked of it.
         return [finding(
             message_id="coverage-check-skipped-no-path",
-            kind="notApplicable", path="/",
+            kind="notApplicable", path="",
             message="type-map coverage skipped: no filesystem-anchored document path.")]
     kind = doc.get("kind")
     if kind not in ("api", *_DATABASE_KINDS, *_STORAGE_KINDS):
@@ -1358,7 +1358,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     elif not collection.unread:
         findings.append(finding(
             rule="RULE-PKG-030",
-            message_id="read-map-missing", kind="fail", path="/",
+            message_id="read-map-missing", kind="fail", path="",
             message=(
                 "connector requires a sibling type-map document declaring direction "
                 f"'read' (native → Arrow); {_no_map_reason('read', declared_by)}. The "
@@ -1372,7 +1372,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
         elif not collection.unread:
             findings.append(finding(
                 rule="RULE-PKG-030",
-                message_id="write-map-missing", kind="fail", path="/",
+                message_id="write-map-missing", kind="fail", path="",
                 message=(
                     f"{kind} connector requires a sibling type-map document declaring "
                     f"direction 'write'; {_no_map_reason('write', declared_by)}. The "
@@ -1398,7 +1398,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
         # says the coverage question specifically was never answered.
         findings.append(finding(
             rule="RULE-PKG-033",
-            message_id="native-type-coverage-skipped", kind="notApplicable", path="/",
+            message_id="native-type-coverage-skipped", kind="notApplicable", path="",
             message=(
                 "native_type coverage against the read map was not rendered: no "
                 "read map was collected, or the one that was has a `rules` that is "
@@ -1409,7 +1409,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     if present is False:
         findings.append(finding(
             rule="RULE-PKG-035",
-            message_id="endpoints-dir-missing", kind="fail", path="/",
+            message_id="endpoints-dir-missing", kind="fail", path="",
             message="api connector requires a sibling 'endpoints/' directory; missing."))
         return findings
     # Scan recursively: every *.json the walk reaches under endpoints/ must sit
@@ -1420,13 +1420,13 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     if isinstance(endpoint_files, _Failed):
         findings.append(finding(
             rule="RULE-PKG-031",
-            message_id="endpoints-dir-unlisted", kind="notApplicable", path="/",
+            message_id="endpoints-dir-unlisted", kind="notApplicable", path="",
             message=f"endpoint documents not checked: 'endpoints/' {endpoint_files.why}."))
         return findings
     if not endpoint_files:
         findings.append(finding(
             rule="RULE-PKG-035",
-            message_id="endpoints-dir-empty", kind="fail", path="/",
+            message_id="endpoints-dir-empty", kind="fail", path="",
             message="api connector's 'endpoints/' directory has no *.json files."))
         return findings
     # Cross-endpoint identity: `endpoint_id` is unique within the connector
@@ -1578,7 +1578,7 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
                         message_id="transport-ref-check-skipped-no-transports",
-                        kind="notApplicable", path="/",
+                        kind="notApplicable", path="",
                         message=(
                             f"transport_ref {declared_refs!r} not checked: the sibling "
                             "connector.json was read but declares no usable `transports` "
@@ -1590,7 +1590,7 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
                         message_id="transport-ref-check-skipped-sibling-unreadable",
-                        kind="notApplicable", path="/",
+                        kind="notApplicable", path="",
                         message=(
                             f"transport_ref {declared_refs!r} not checked: the sibling "
                             f"connector.json at {sibling} could not be opened, so its "
@@ -1602,7 +1602,7 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
                         message_id="transport-ref-check-skipped-unparseable",
-                        kind="notApplicable", path="/",
+                        kind="notApplicable", path="",
                         message=(
                             f"transport_ref {declared_refs!r} not checked: the sibling "
                             f"connector.json at {sibling} could not be parsed, so its "
@@ -1625,7 +1625,7 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
                         message_id="transport-ref-check-skipped-no-sibling",
-                        kind="notApplicable", path="/",
+                        kind="notApplicable", path="",
                         message=f"transport_ref {declared_refs!r} not checked: {reason}."))
     # Each api-endpoint document goes through the checks shared with
     # `check_coverage`'s sibling-endpoint loop; `transports` is not a dict
@@ -1704,7 +1704,7 @@ def _type_map_discriminator_findings(doc: Any) -> list[dict]:
     for f in findings:
         if f.get("message_id") not in _DISCRIMINATOR_MESSAGE_IDS:
             continue
-        if f.get("path") == "/":
+        if f.get("path") == "":
             f["path"] = "/direction"
         if f["message_id"] == "union_tag_not_found":
             f["message"] = _TAG_NOT_FOUND_MESSAGE

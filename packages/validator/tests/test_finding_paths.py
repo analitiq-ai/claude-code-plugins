@@ -63,7 +63,7 @@ def test_a_type_map_model_finding_is_located_in_the_map(tmp_path, validator):
     _package(tmp_path, read_map={**_read_map(), "rules": "not a list"})
     [found] = _graded(validator, tmp_path, "list_type")
     assert found["path"] == "type-map-read.json#/rules", found
-    # The file is named by `path`; the message no longer repeats it.
+    # The file is named by `path`; the message does not repeat it.
     assert "type-map-read.json" not in found["message"], found
 
 
@@ -136,13 +136,13 @@ def test_a_package_shape_finding_stays_on_the_validated_document(tmp_path, valid
     _package(tmp_path)
     (tmp_path / "type-map-read.json").unlink()
     [found] = _graded(validator, tmp_path, "read-map-missing")
-    assert found["path"] == "/", found
+    assert found["path"] == "", found
 
 
 def test_an_endpoint_finding_names_no_file_in_its_message(tmp_path, validator):
     # An embedded schema that is not Draft 2020-12 (RULE-ENDP-048). `path`
-    # carries the file and the pointer; a message repeating them is a second
-    # copy of the location.
+    # carries the file; a message repeating it is a second copy of the
+    # location.
     endpoint = _endpoint()
     endpoint["operations"]["read"]["response"]["schema"]["type"] = 7
     _package(tmp_path, endpoints={"v1__records.json": endpoint})
@@ -169,7 +169,25 @@ def test_a_standalone_endpoint_locates_its_unreadable_connector(tmp_path, valida
     # The check it could not run is the endpoint's own, so it stays unqualified.
     [skipped] = [f for f in findings
                  if f["message_id"] == "transport-ref-check-skipped-unparseable"]
-    assert skipped["path"] == "/", skipped
+    assert skipped["path"] == "", skipped
+
+
+# ---------------------------------------------------------------------------
+# A finding about a whole document points at it with the empty pointer, the
+# one spelling a reference can carry after its `#`.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("graded,message_id", [
+    (lambda v: v.validate_document(42), "unrecognized-document"),
+    # A model error at the document root: pydantic's `loc` is empty.
+    (lambda v: v.type_map_findings_as_declared(
+        [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
+     "model_attributes_type"),
+    (lambda v: v.validate_pipeline_bundle(["not", "a", "bundle"]), "bundle-not-a-mapping"),
+])
+def test_a_whole_document_finding_has_the_empty_pointer(validator, graded, message_id):
+    [found] = [f for f in graded(validator) if f["message_id"] == message_id]
+    assert found["path"] == "", found
 
 
 # ---------------------------------------------------------------------------
