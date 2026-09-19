@@ -201,6 +201,30 @@ def test_a_pattern_crossing_names_is_refused(tmp_path, pattern, walk):
             list(getattr(root, walk)(pattern))
 
 
+@pytest.mark.parametrize("key", ["missing", "file.json/below", "loop"],
+                         ids=["no entry", "under a file", "a link loop"])
+def test_a_key_carrying_nothing_answers_false(tmp_path, key):
+    (tmp_path / "file.json").write_text("")
+    (tmp_path / "loop").symlink_to(tmp_path / "loop")
+    assert (DISK.is_file(tmp_path / key), DISK.is_dir(tmp_path / key)) == (False, False)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root looks up any entry")
+@pytest.mark.parametrize("ask", ["is_file", "is_dir", "glob", "rglob"])
+def test_a_refused_lookup_raises_rather_than_answering_absent(tmp_path, ask):
+    """Every interpreter the package admits, whatever its pathlib swallows: a
+    caller reads an answer of absent as the entry not being there."""
+    (tmp_path / "shut/inside").mkdir(parents=True)
+    (tmp_path / "shut").chmod(0o000)
+    try:
+        with pytest.raises(PermissionError):
+            answer = getattr(DISK, ask)(*((tmp_path / "shut/inside",) if ask.startswith("is_")
+                                         else (tmp_path / "shut/inside", "*")))
+            list(answer)
+    finally:
+        (tmp_path / "shut").chmod(0o755)
+
+
 @pytest.mark.parametrize("name", ["missing", "file.json"], ids=["no entry", "a file"])
 @pytest.mark.parametrize("walk", ["glob", "rglob"])
 def test_a_key_that_is_no_directory_lists_nothing(tmp_path, name, walk):
@@ -347,17 +371,18 @@ def test_an_endpoint_with_no_connector_read_is_told_why(tmp_path, validator, giv
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root looks up any entry")
-@pytest.mark.parametrize("mode", [0o000, 0o400], ids=["no access", "listable only"])
-def test_an_endpoint_whose_connector_lookup_is_refused_is_told_why(tmp_path, validator, mode):
-    """A refused lookup of the connector is not its absence: the remedy for a
-    missing connector would ask the author to add a file that may be there."""
+@pytest.mark.parametrize("shut,mode", [("pkg", 0o000), ("pkg", 0o400), ("pkg/connector.json", 0o000)],
+                         ids=["no access", "listable only", "connector unreadable"])
+def test_an_endpoint_whose_connector_is_refused_is_told_why(tmp_path, validator, shut, mode):
+    """A refused lookup or read of the connector is not its absence, nor a
+    parse error: either remedy would send the author to the wrong fix."""
     doc = _endpoint("thing", transport_ref="api")
     _write(tmp_path, {"pkg/connector.json": _API})
-    (tmp_path / "pkg").chmod(mode)
+    (tmp_path / shut).chmod(mode)
     try:
         findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/endpoints/thing.json")
     finally:
-        (tmp_path / "pkg").chmod(0o755)
+        (tmp_path / shut).chmod(0o755)
     refused = [f for f in findings if f.get("rule") == "RULE-ENDP-047"]
     assert [(f["kind"], f["message_id"]) for f in refused] == [
         ("notApplicable", "transport-ref-check-skipped-sibling-refused")], findings

@@ -8,8 +8,10 @@ every question a check asks about what is actually there goes to the tree.
 """
 from __future__ import annotations
 
+import errno
 import io
 import os
+import stat
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from fnmatch import fnmatch, fnmatchcase
@@ -22,11 +24,13 @@ class Tree(ABC):
 
     @abstractmethod
     def is_file(self, key: PurePath) -> bool:
-        """Whether a regular file carries `key`."""
+        """Whether a regular file carries `key`. Raises `OSError` where the
+        lookup is refused, which says nothing about what is there."""
 
     @abstractmethod
     def is_dir(self, key: PurePath) -> bool:
-        """Whether a directory carries `key`."""
+        """Whether a directory carries `key`. Raises `OSError` where the
+        lookup is refused, which says nothing about what is there."""
 
     @abstractmethod
     def read_text(self, key: PurePath) -> str:
@@ -49,11 +53,16 @@ class Tree(ABC):
 class DiskTree(Tree):
     """The filesystem. A key is a `Path`."""
 
+    # Not `Path.is_file`/`Path.is_dir`: which errors they answer False for
+    # differs by interpreter, and some answer False for a refused lookup.
+
     def is_file(self, key: Path) -> bool:
-        return key.is_file()
+        mode = _mode(key)
+        return mode is not None and stat.S_ISREG(mode)
 
     def is_dir(self, key: Path) -> bool:
-        return key.is_dir()
+        mode = _mode(key)
+        return mode is not None and stat.S_ISDIR(mode)
 
     def read_text(self, key: Path) -> str:
         return key.read_text()
@@ -63,7 +72,7 @@ class DiskTree(Tree):
     # rule, as they do.
 
     def glob(self, key: Path, pattern: str) -> Iterable[Path]:
-        if not key.is_dir():
+        if not self.is_dir(key):
             return []
         with os.scandir(key) as entries:
             return [key / entry.name for entry in entries if fnmatch(entry.name, pattern)]
@@ -72,7 +81,7 @@ class DiskTree(Tree):
         # Never descends into a linked directory below `key` (a linked `key` is
         # walked), and must not: through a loop of links, every file below it
         # would be reported again at each turn.
-        if not key.is_dir():
+        if not self.is_dir(key):
             return []
         return [Path(parent) / name
                 for parent, dirs, files in os.walk(key, onerror=_refuse)
@@ -81,6 +90,18 @@ class DiskTree(Tree):
 
 def _refuse(error: OSError) -> None:
     raise error
+
+
+def _mode(key: Path) -> int | None:
+    """The mode of what `key` leads to, `None` where it leads to nothing."""
+    try:
+        return os.stat(key).st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            return None
+        raise
 
 
 DISK = DiskTree()

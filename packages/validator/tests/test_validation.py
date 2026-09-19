@@ -1542,7 +1542,7 @@ def test_type_maps_in_a_directory_that_cannot_be_listed_are_unchecked_not_absent
         tmp_path.chmod(0o755)
     assert [(name, f["kind"], f["rule"], f["message_id"]) for name, f in collection.findings] == [
         (".", "notApplicable", "RULE-PKG-030", "type-map-dir-unlisted")], collection.findings
-    assert (collection.maps, collection.listed) == ({}, False)
+    assert (collection.maps, collection.complete) == ({}, False)
 
 
 _UNLISTED = ("notApplicable", "RULE-PKG-030", "type-map-dir-unlisted")
@@ -1557,13 +1557,11 @@ _WRITE_MAP_GRADED = [("fail", None, "too_short"), ("fail", "RULE-TMAP-017", "wri
 @pytest.mark.parametrize("kind,mode,expected", [
     ("api", 0o755, []),
     ("api", 0o300, [_UNLISTED, _COVERAGE_SKIPPED]),
-    ("api", 0o400, [_MAP_UNREAD, ("fail", "RULE-PKG-030", "read-map-missing"),
-                    _COVERAGE_SKIPPED, _ENDPOINTS_UNLISTED]),
+    ("api", 0o400, [_MAP_UNREAD, _COVERAGE_SKIPPED, _ENDPOINTS_UNLISTED]),
     ("api", 0o000, [_UNLISTED, _COVERAGE_SKIPPED, _ENDPOINTS_UNLISTED]),
     ("database", 0o755, _WRITE_MAP_GRADED),
     ("database", 0o300, [_UNLISTED]),
-    ("database", 0o400, [_MAP_UNREAD, _MAP_UNREAD, ("fail", "RULE-PKG-030", "read-map-missing"),
-                         ("fail", "RULE-PKG-030", "write-map-missing")]),
+    ("database", 0o400, [_MAP_UNREAD, _MAP_UNREAD]),
     ("database", 0o000, [_UNLISTED]),
     ("file", 0o755, _WRITE_MAP_GRADED),
     ("file", 0o300, [_UNLISTED]),
@@ -1585,6 +1583,20 @@ def test_a_refused_lookup_in_the_package_withholds_only_what_depends_on_it(
     finally:
         tmp_path.chmod(0o755)
     assert [(f["kind"], f.get("rule"), f["message_id"]) for f in findings] == expected, findings
+
+
+@_UNLISTABLE
+def test_a_map_the_kernel_will_not_read_is_not_reported_missing(tmp_path, validator):
+    # Its direction is unknown, so no direction can be said to lack a map.
+    _write_tree(tmp_path, _min_connector("database"), [], {})
+    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc([], "write")))
+    (tmp_path / "type-map-read.json").chmod(0o000)
+    try:
+        findings = validator.check_coverage(_min_connector("database"), tmp_path / "connector.json")
+    finally:
+        (tmp_path / "type-map-read.json").chmod(0o644)
+    assert [(f["kind"], f.get("rule"), f["message_id"]) for f in findings] == [
+        _MAP_UNREAD, *_WRITE_MAP_GRADED], findings
 
 
 @_UNLISTABLE

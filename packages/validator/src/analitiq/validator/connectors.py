@@ -50,7 +50,7 @@ from pathlib import Path, PurePath
 from typing import Annotated, Any, Callable, Iterator, Literal, TypeVar
 
 from ._core import (
-    _JSON_READ_ERRORS,
+    _JSON_TEXT_REFUSALS,
     contract_model_domain,
     finding,
     register_kind,
@@ -966,11 +966,22 @@ def is_addressed_endpoint_path(doc_path: PurePath) -> bool:
     return doc_path.parent.name == "endpoints"
 
 
-# Sentinel for "nothing was read", distinct from a file that holds a JSON null:
-# `json.loads("null")` is `None`, so a loader answering with `None` leaves its
-# caller unable to tell a file it could not read from one it read a null out of,
-# and the two need opposite handling.
-_UNREAD = object()
+class _Unread:
+    """What a loader answers when nothing was read, distinct from a file that
+    holds a JSON null: `json.loads("null")` is `None`, and the two need opposite
+    handling.
+
+    `refused` separates the kernel refusing the lookup or the read, which says
+    nothing about what the file holds, from a file that is there and is no
+    document.
+    """
+
+    def __init__(self, *, refused: bool) -> None:
+        self.refused = refused
+
+
+_UNREAD = _Unread(refused=False)
+_REFUSED = _Unread(refused=True)
 
 
 def _load_json_sibling(
@@ -980,8 +991,8 @@ def _load_json_sibling(
     when the caller names one, the rule that sibling's content would otherwise
     satisfy.
 
-    Answers `_UNREAD` when nothing was read, never `None`: a document is whatever
-    the file held, and `null` is one of the things it can hold.
+    Answers an `_Unread` when nothing was read, never `None`: a document is
+    whatever the file held, and `null` is one of the things it can hold.
 
     `rule` is a parameter because the callers are different checks, each
     attributing an unreadable sibling to whichever obligation it was reading
@@ -998,7 +1009,11 @@ def _load_json_sibling(
                 rule=rule, message_id=message_id, kind="fail", path="/",
                 message=f"sibling {path.name} is not a regular file; nothing was read from it.")]
         return json.loads(path.read_text()), []
-    except _JSON_READ_ERRORS as exc:
+    except OSError as exc:
+        return _REFUSED, [finding(
+            rule=rule, message_id=message_id, kind="fail", path="/",
+            message=f"sibling {path.name} could not be read ({exc}).")]
+    except _JSON_TEXT_REFUSALS as exc:
         return _UNREAD, [finding(
             rule=rule, message_id=message_id, kind="fail", path="/",
             message=f"sibling {path.name} could not be read or parsed ({exc}).")]
@@ -1138,14 +1153,15 @@ class TypeMapSiblings:
     Every message names that entry, so a caller that cannot root a pointer at
     it still reports which one to look at.
 
-    `listed` is false where the directory could not be listed: the maps are
-    then unknown, not absent, and a caller must not report one missing.
+    `complete` is false where the listing, or the lookup or read of an entry,
+    was refused: an entry nobody read may declare any direction, so a caller
+    must not report a direction missing.
     """
 
     maps: dict[str, tuple[str, Any]]
     declared_by: dict[str, str]
     findings: list[tuple[str, dict]]
-    listed: bool
+    complete: bool
 
 
 def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSiblings:
@@ -1174,7 +1190,7 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
             rule=rule,
             message_id="type-map-dir-unlisted", kind="notApplicable", path="/",
             message=f"type maps not collected: the directory could not be listed ({exc})."))],
-            listed=False)
+            complete=False)
     findings: list[tuple[str, dict]] = []
     if legacy_present:
         findings.append((_LEGACY_MAP_FILENAME, finding(
@@ -1186,11 +1202,13 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
                 f"as {_READ_MAP_FILENAME} or {_WRITE_MAP_FILENAME}."))))
     maps: dict[str, tuple[str, Any]] = {}
     declared_by: dict[str, str] = {}
+    complete = True
     for path in siblings:
         name = path.name
         doc, load = _load_json_sibling(path, rule=rule, message_id="type-map-unparseable")
         findings.extend((name, f) for f in load)
-        if doc is _UNREAD:
+        if isinstance(doc, _Unread):
+            complete = complete and not doc.refused
             continue
         declared = _declared_direction(doc)
         if declared is None:
@@ -1208,7 +1226,7 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
                     "document declares each direction, so neither of these is its map."))))
             continue
         maps[declared] = (name, doc)
-    return TypeMapSiblings(maps, declared_by, findings, listed=True)
+    return TypeMapSiblings(maps, declared_by, findings, complete)
 
 
 def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
@@ -1256,7 +1274,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     read_rules: Any = None
     read_source: str | None = None
     if "read" not in documents:
-        if collection.listed:
+        if collection.complete:
             findings.append(finding(
                 rule="RULE-PKG-030",
                 message_id="read-map-missing", kind="fail", path="/",
@@ -1271,7 +1289,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
 
     if kind in _DATABASE_KINDS:
         if "write" not in documents:
-            if collection.listed:
+            if collection.complete:
                 findings.append(finding(
                     rule="RULE-PKG-030",
                     message_id="write-map-missing", kind="fail", path="/",
@@ -1328,7 +1346,8 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
             message=(
                 f"endpoint documents not checked: the walk of 'endpoints/' was refused "
                 f"({exc}), so not every document there was found. Make the package "
-                "directory and everything under 'endpoints/' listable and re-run.")))
+                "directory and every directory under 'endpoints/' both readable and "
+                "searchable, then re-run.")))
         return findings
     if not endpoint_files:
         findings.append(finding(
@@ -1354,7 +1373,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
             continue
         ep_doc, load = _load_json_sibling(
             ep_path, rule=None, message_id="endpoint-file-unreadable")
-        if ep_doc is _UNREAD:
+        if isinstance(ep_doc, _Unread):
             findings.extend(load)
             continue
         # Each sibling endpoint is a full api-endpoint document — validate it
@@ -1456,11 +1475,11 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
             # read: a connector two levels up is not this endpoint's.
             sibling = location.parent.parent / "connector.json" if addressed else None
             connector_doc: Any = _UNREAD
-            lookup_refused: OSError | None = None
+            refusal: str | None = None
             try:
                 sibling_exists = sibling is not None and sibling.is_file()
             except OSError as exc:
-                sibling_exists, lookup_refused = False, exc
+                sibling_exists, refusal = False, f"could not be looked up ({exc})"
             if sibling_exists:
                 # `rule=None`: a read/parse failure has not evaluated
                 # RULE-ENDP-047 one way or the other, so asserting a `fail`
@@ -1472,13 +1491,15 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                     sibling, rule=None, message_id="sibling-connector-unreadable",
                 )
                 sibling_findings.extend(load_findings)
+                if connector_doc is _REFUSED:
+                    refusal = "could not be read (reported above)"
             transports = connector_doc.get("transports") if isinstance(connector_doc, dict) else None
             # `transports` resolved: RULE-ENDP-047 is graded against it by
             # `_api_endpoint_document_findings` below. What is left to report
             # here is the cases where it could not be resolved, each naming
             # which one happened.
             if not isinstance(transports, dict):
-                if connector_doc is not _UNREAD:
+                if not isinstance(connector_doc, _Unread):
                     # Connector found, but its `transports` is missing or not an
                     # object. `_endpoint_transport_ref_findings` returns [] there —
                     # correct at the CONNECTOR-anchored call site, where the
@@ -1496,6 +1517,17 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                             "connector.json was read but declares no usable `transports` "
                             "object, so there was nothing to resolve the name against. "
                             "Validate the connector to see why.")))
+                elif refusal is not None:
+                    # Neither absent nor unparseable: the connector may be there
+                    # and sound, and either remedy would send the author astray.
+                    sibling_findings.append(finding(
+                        rule="RULE-ENDP-047",
+                        message_id="transport-ref-check-skipped-sibling-refused",
+                        kind="notApplicable", path="/",
+                        message=(
+                            f"transport_ref {declared_refs!r} not checked: the sibling "
+                            f"connector.json at {sibling} {refusal}. Make it readable "
+                            "and re-run.")))
                 elif sibling_exists:
                     # The file IS there and nothing was read out of it. Reporting
                     # it as absent would contradict the read/parse finding
@@ -1510,16 +1542,10 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                             "`transports` could not be read. Fix the error reported "
                             "above and re-run.")))
                 else:
-                    message_id = "transport-ref-check-skipped-no-sibling"
                     if location is None:
                         reason = ("no path was given, so there is no directory to "
                                   "read the connector from. Validate it at its path, "
                                   "`endpoints/{endpoint_id}.json` beside its connector")
-                    elif lookup_refused is not None:
-                        # Refused is not absent: the connector may be there.
-                        message_id = "transport-ref-check-skipped-sibling-refused"
-                        reason = (f"the connector beside `endpoints/` could not be looked "
-                                  f"up ({lookup_refused}). Make it reachable and re-run")
                     elif addressed:
                         reason = ("there is no connector.json file beside the "
                                   "`endpoints/` directory holding this document. "
@@ -1531,7 +1557,7 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                                   "beside its connector")
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
-                        message_id=message_id,
+                        message_id="transport-ref-check-skipped-no-sibling",
                         kind="notApplicable", path="/",
                         message=f"transport_ref {declared_refs!r} not checked: {reason}."))
     # Each api-endpoint document goes through the checks shared with
