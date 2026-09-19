@@ -190,6 +190,13 @@ def test_a_whole_document_finding_has_the_empty_pointer(validator, graded, messa
     assert found["path"] == "", found
 
 
+def test_a_model_error_escapes_the_keys_on_its_pointer(validator):
+    connector = json.loads((CORPUS / "valid_connector.json").read_text())
+    connector["transports"]["api"]["headers"]["A/b~c"] = 7
+    paths = [f["path"] for f in validator.validate_document(connector)]
+    assert any("/headers/A~1b~0c" in p for p in paths), paths
+
+
 # ---------------------------------------------------------------------------
 # The reference: one computation, the same on disk and in memory.
 # ---------------------------------------------------------------------------
