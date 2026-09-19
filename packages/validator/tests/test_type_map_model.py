@@ -286,6 +286,12 @@ def test_python_named_group_spelling_inside_a_quote_is_a_literal():
             _accepts(adapter, [_regex_rule(adapter, matcher)])
 
 
+@pytest.mark.parametrize("matcher", [r"^(?<probe>X)[(?P<y>]$", r"^(?<probe>X)\Q(?P<y>\E$"])
+def test_python_named_group_spelling_is_located_beside_a_group_named_probe(matcher):
+    for adapter in (READ, WRITE):
+        _accepts(adapter, [_regex_rule(adapter, matcher)])
+
+
 def test_regex_named_backreference_rejected():
     # RE2 has no backreferences, so `\k<name>` is refused with the parse error
     # RE2 gives.
@@ -565,6 +571,9 @@ def test_a_position_with_no_probe_alphabet_stands():
     (r"^N[(?<p>]*\((?<p>[1-9])\)$", "p", "[1-9]"),
     (r"^[(?<](?<p>\d+)$", "p", r"\d+"),
     (r"^X\(?<(?<n>\d)>$", "n", r"\d"),
+    # The author's own group named `probe` does not answer for the spelling.
+    (r"^(?<probe>X)\((?<p>[1-9])\)$", "p", "[1-9]"),
+    (r"^(?<probe>X)[(?<p>]*(?<p>[1-9])$", "p", "[1-9]"),
     # Inline flags set outside the group are not carried.
     (r"(?i)X(?<t>ab)", "t", "ab"),
     # An unnamed group takes a number too, so the names after it are read at
