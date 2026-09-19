@@ -47,7 +47,8 @@ class Tree(ABC):
         """The entries anywhere below `key` whose names match `pattern`, never
         from inside a linked directory below it, in no particular order; none
         where `key` is no directory. Raises `OSError` where `key`, or a
-        directory below it, cannot be listed."""
+        directory below it, cannot be listed, or where what an entry below it
+        is cannot be looked up."""
 
 
 class DiskTree(Tree):
@@ -80,16 +81,20 @@ class DiskTree(Tree):
     def rglob(self, key: Path, pattern: str) -> Iterable[Path]:
         # Never descends into a linked directory below `key` (a linked `key` is
         # walked), and must not: through a loop of links, every file below it
-        # would be reported again at each turn.
+        # would be reported again at each turn. Not `os.walk`: an entry it
+        # cannot classify it takes for no directory, and skips what is below.
         if not self.is_dir(key):
             return []
-        return [Path(parent) / name
-                for parent, dirs, files in os.walk(key, onerror=_refuse)
-                for name in dirs + files if fnmatch(name, pattern)]
-
-
-def _refuse(error: OSError) -> None:
-    raise error
+        found: list[Path] = []
+        pending = [key]
+        while pending:
+            with os.scandir(pending.pop()) as entries:
+                for entry in entries:
+                    if fnmatch(entry.name, pattern):
+                        found.append(Path(entry.path))
+                    if entry.is_dir(follow_symlinks=False):
+                        pending.append(Path(entry.path))
+        return found
 
 
 def _mode(key: Path) -> int | None:

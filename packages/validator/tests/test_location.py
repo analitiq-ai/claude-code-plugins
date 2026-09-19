@@ -246,6 +246,50 @@ def test_a_directory_that_cannot_be_listed_raises_rather_than_listing_empty(tmp_
             list(walked("*"))
 
 
+class _UnclassifiedScan:
+    """`os.scandir` on a filesystem that reports no entry types, where telling
+    whether `refused` is a directory is a lookup the kernel refuses."""
+
+    def __init__(self, entries, refused: str) -> None:
+        self._entries, self._refused = entries, refused
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._entries.close()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        entry = next(self._entries)
+        return _Unclassified(entry) if entry.name == self._refused else entry
+
+    def close(self) -> None:
+        self._entries.close()
+
+
+class _Unclassified:
+    def __init__(self, entry) -> None:
+        self._entry = entry
+
+    def __getattr__(self, name):
+        return getattr(self._entry, name)
+
+    def is_dir(self, *, follow_symlinks: bool = True) -> bool:
+        raise PermissionError(errno.EACCES, "Permission denied", self._entry.path)
+
+
+def test_an_entry_the_walk_cannot_classify_raises_rather_than_being_skipped(tmp_path, monkeypatch):
+    (tmp_path / "below").mkdir()
+    (tmp_path / "below/x.json").write_text("{}")
+    scandir = os.scandir
+    monkeypatch.setattr(os, "scandir", lambda path: _UnclassifiedScan(scandir(path), "below"))
+    with pytest.raises(PermissionError):
+        list(Location(tmp_path, DISK).rglob("*"))
+
+
 # ---------------------------------------------------------------------------
 # A `Path` becomes a location in the layout it spells. A link stands where the
 # link is, and a `..` is collapsed against the names written before it, unless
