@@ -247,6 +247,52 @@ def test_connector_validator_agent_states_the_same_pin():
         f"but the runtime pin is {pin_version!r}")
 
 
+_PYTHON3_STUB = """#!/bin/sh
+case "$1" in
+  -c) echo probe >> "$CALLS"; exit "$PROBE_RC" ;;
+  -m) echo install >> "$CALLS"; exit "$INSTALL_RC" ;;
+  -)  cat > /dev/null; echo run >> "$CALLS"; echo '{"passed": true, "findings": []}' ;;
+esac
+"""
+
+
+@pytest.mark.parametrize(("probe_rc", "install_rc", "calls", "runs"), [
+    pytest.param(1, 1, ["probe", "install"], False, id="install fails"),
+    pytest.param(1, 0, ["probe", "install", "run"], True, id="install succeeds"),
+    pytest.param(0, 1, ["probe", "run"], True, id="already installed"),
+])
+def test_connector_validator_runs_only_once_the_pinned_install_succeeded(
+        tmp_path, probe_rc, install_rc, calls, runs):
+    """A failed install must print no Diagnostics JSON: whatever validator is
+    already present would otherwise answer as the pinned one, and only a
+    non-JSON stdout routes the agent to `self-install-failed`."""
+    import os
+    import shutil
+    import subprocess
+
+    agent_md = (REPO_ROOT / "plugins" / "analitiq-connector-builder"
+                / "agents" / "connector-schema-validator.md").read_text()
+    blocks = re.findall(r"^```bash\n(.*?)^```$", agent_md, re.MULTILINE | re.DOTALL)
+    assert len(blocks) == 1, f"expected one bash block, found {len(blocks)}"
+
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    stub = stub_dir / "python3"
+    stub.write_text(_PYTHON3_STUB)
+    stub.chmod(0o755)
+    log = tmp_path / "calls"
+    log.touch()
+    env = {"PATH": f"{stub_dir}{os.pathsep}{os.path.dirname(shutil.which('sh'))}",
+           "CALLS": str(log), "PROBE_RC": str(probe_rc), "INSTALL_RC": str(install_rc)}
+
+    done = subprocess.run([shutil.which("bash"), "-c", blocks[0]], env=env,
+                          capture_output=True, text=True, check=False)
+
+    assert log.read_text().split() == calls
+    assert (done.returncode == 0) is runs, done
+    assert bool(done.stdout) is runs, done.stdout
+
+
 def test_suite_exercises_in_repo_source_not_an_installed_wheel():
     """The suite must exercise this repo's source, not a published release.
 
