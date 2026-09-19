@@ -583,3 +583,26 @@ def test_named_group_source_of_an_absent_group_raises():
 
     with pytest.raises(KeyError):
         _named_group_source(r"^N\((?<p>\d+)\)$", "absent")
+
+
+@pytest.mark.parametrize("fault", ["no opener found", "no closer found"])
+def test_a_capture_locator_fault_is_not_reported_as_the_authors_violation(monkeypatch, fault):
+    """RE2 has compiled the matcher and bound the name, so failing to locate
+    the group is this module's defect, not a RULE-TMAP-010 finding."""
+    from analitiq.contracts import type_map
+
+    if fault == "no opener found":
+        monkeypatch.setattr(type_map, "_group_opened_at", lambda *_: None)
+    else:
+        compile_ = type_map.compile_re2
+
+        def refuse_every_cut(pattern):
+            if pattern.startswith("(?:"):
+                raise ValueError("refused")
+            return compile_(pattern)
+
+        monkeypatch.setattr(type_map, "compile_re2", refuse_every_cut)
+    with pytest.raises(RuntimeError):
+        READ.validate_python(_wrap(READ, [{"match": "regex",
+                                           "native_type": r"^N\((?<p>[1-9])\)$",
+                                           "arrow_type": "Decimal128(${p}, 0)"}]))
