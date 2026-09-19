@@ -1133,14 +1133,18 @@ class TypeMapSiblings:
 
     `findings` pairs each finding with the name of the entry it concerns (`.`
     for the directory itself), so a caller holding the directory at a different
-    site can root it at that file.
+    site can root it at that entry.
     Every message names that entry, so a caller that cannot root a pointer at
-    the file still reports which one to open.
+    it still reports which one to look at.
+
+    `listed` is false where the directory could not be listed: the maps are
+    then unknown, not absent, and a caller must not report one missing.
     """
 
     maps: dict[str, tuple[str, Any]]
     declared_by: dict[str, str]
     findings: list[tuple[str, dict]]
+    listed: bool
 
 
 def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSiblings:
@@ -1161,6 +1165,16 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
     A `parent` that `located` refuses raises its refusal.
     """
     parent = located(parent)
+    try:
+        siblings = _type_map_sibling_paths(parent)
+    except OSError as exc:
+        # Nothing else is looked up: a directory refusing its listing may refuse
+        # every lookup in it too, and what is in it is unknown either way.
+        return TypeMapSiblings({}, {}, [(".", finding(
+            rule=rule,
+            message_id="type-map-dir-unlisted", kind="notApplicable", path="/",
+            message=f"type maps not collected: the directory could not be listed ({exc})."))],
+            listed=False)
     findings: list[tuple[str, dict]] = []
     if _legacy_type_map_present(parent):
         findings.append((_LEGACY_MAP_FILENAME, finding(
@@ -1172,14 +1186,6 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
                 f"as {_READ_MAP_FILENAME} or {_WRITE_MAP_FILENAME}."))))
     maps: dict[str, tuple[str, Any]] = {}
     declared_by: dict[str, str] = {}
-    try:
-        siblings = _type_map_sibling_paths(parent)
-    except OSError as exc:
-        siblings = []
-        findings.append((".", finding(
-            rule=rule,
-            message_id="type-map-dir-unlisted", kind="notApplicable", path="/",
-            message=f"type maps not collected: the directory could not be listed ({exc}).")))
     for path in siblings:
         name = path.name
         doc, load = _load_json_sibling(path, rule=rule, message_id="type-map-unparseable")
@@ -1202,7 +1208,7 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
                     "document declares each direction, so neither of these is its map."))))
             continue
         maps[declared] = (name, doc)
-    return TypeMapSiblings(maps, declared_by, findings)
+    return TypeMapSiblings(maps, declared_by, findings, listed=True)
 
 
 def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
@@ -1234,6 +1240,8 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     package = located(doc_path).parent
     collection = collect_type_maps(package, rule="RULE-PKG-030")
     findings = [f for _, f in collection.findings]
+    if not collection.listed:
+        return findings
     documents, declared_by = collection.maps, collection.declared_by
 
     if kind in _STORAGE_KINDS:

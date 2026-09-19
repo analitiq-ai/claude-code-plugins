@@ -1532,15 +1532,34 @@ def test_coverage_does_not_pass_an_endpoints_directory_it_cannot_list(tmp_path, 
 
 
 @_UNLISTABLE
-def test_type_maps_in_a_directory_that_cannot_be_listed_are_unchecked_not_absent(tmp_path, validator):
+@pytest.mark.parametrize("mode", [0o000, 0o300], ids=["no access", "searchable only"])
+def test_type_maps_in_a_directory_that_cannot_be_listed_are_unchecked_not_absent(tmp_path, validator, mode):
     (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc([], "read")))
-    tmp_path.chmod(0o300)
+    tmp_path.chmod(mode)
     try:
         collection = validator.collect_type_maps(tmp_path, rule="RULE-PKG-030")
     finally:
         tmp_path.chmod(0o755)
     assert [(name, f["kind"], f["rule"], f["message_id"]) for name, f in collection.findings] == [
         (".", "notApplicable", "RULE-PKG-030", "type-map-dir-unlisted")], collection.findings
+    assert (collection.maps, collection.listed) == ({}, False)
+
+
+@_UNLISTABLE
+@pytest.mark.parametrize("mode", [0o000, 0o300], ids=["no access", "searchable only"])
+@pytest.mark.parametrize("kind", ["api", "database", "file"])
+def test_coverage_grades_nothing_in_a_package_directory_it_cannot_list(tmp_path, validator, kind, mode):
+    # Unlisted, the maps below are unknown, not missing: reporting either as
+    # absent would ask the author to add a file already there.
+    _write_tree(tmp_path, _min_connector(kind), [], {"widgets.json": _endpoint("STRING", "Utf8")})
+    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc([], "write")))
+    tmp_path.chmod(mode)
+    try:
+        findings = validator.check_coverage(_min_connector(kind), tmp_path / "connector.json")
+    finally:
+        tmp_path.chmod(0o755)
+    assert [(f["kind"], f["rule"], f["message_id"]) for f in findings] == [
+        ("notApplicable", "RULE-PKG-030", "type-map-dir-unlisted")], findings
 
 
 def _plant_legacy_name(parent: Path, shape: str) -> None:

@@ -186,9 +186,8 @@ class Location:
 def _one_name(pattern: str) -> str:
     """`pattern`, refused unless it matches within one name.
 
-    pathlib reads `/` and `**` as crossing directories and the memory tree
-    matches names alone, so such a pattern would be answered differently by
-    the two trees.
+    Both trees match one entry name at a time, so a pattern written to cross
+    names would match nothing, or `**` would match as `*`.
     """
     if "/" in pattern or "**" in pattern:
         raise ValueError(f"pattern must match a single name, got {pattern!r}")

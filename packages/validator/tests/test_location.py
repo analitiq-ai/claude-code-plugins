@@ -194,8 +194,8 @@ def test_locations_sort_as_paths():
 @pytest.mark.parametrize("pattern", ["a/*.json", "**/*.json", "**"])
 @pytest.mark.parametrize("walk", ["glob", "rglob"])
 def test_a_pattern_crossing_names_is_refused(tmp_path, pattern, walk):
-    """pathlib crosses directories on `/` and `**`, and the memory tree matches
-    names alone, so the two trees would answer such a pattern differently."""
+    """Both trees match one name at a time, so such a pattern would quietly
+    match nothing, or as `*`."""
     for root in (Location(tmp_path, DISK), Location(PurePosixPath("."), MemoryTree({"a/z.json": ""}))):
         with pytest.raises(ValueError, match="single name"):
             list(getattr(root, walk)(pattern))
