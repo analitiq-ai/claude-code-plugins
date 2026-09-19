@@ -35,7 +35,7 @@ module adds only what a single-document model cannot express:
 - **advisory quality warnings** the contract tolerates: duplicate type-map
   rules, read patterns spelling a lowercase literal, regex natives spelling a
   container that renders a scalar, and write-map vocabulary gaps
-  (`RULE-TMAP-014`/`RULE-TMAP-002`/`RULE-TMAP-022`/`RULE-TMAP-017`).
+  (`RULE-TMAP-022`/`RULE-TMAP-014`/`RULE-TMAP-002`/`RULE-TMAP-017`).
 
 At import this module registers its detector→validator pairs with the core
 dispatch registry, so `_core` never hard-codes connector branches.
