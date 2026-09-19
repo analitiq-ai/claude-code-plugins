@@ -44,6 +44,7 @@ from analitiq.contracts.shared.common import (
     validate_display_name,
     validate_tags,
 )
+from analitiq.contracts.shared.re2_dialect import compile_re2
 from analitiq.contracts.shared.types import (
     UUID_PATTERN,
     StrictNonNegativeInt,
@@ -1303,19 +1304,29 @@ def _an_upper_length(value: Any) -> str | None:
 
 
 def _a_regex_source(value: Any) -> str | None:
-    # Shape only: a non-empty string. Whether a source compiles is a question
-    # about a dialect, and the dialect this pattern runs under is RE2 (the
-    # engine applies a `pattern` rule through pyarrow's
-    # `match_substring_regex`). Grading it with stdlib `re` would answer a
-    # different question in both directions: `\p{L}+` is an ordinary RE2
-    # pattern that `re` refuses, and `(a)\1` is a backreference `re` accepts
-    # and RE2 cannot compile. This check does not ask RE2 either, so a pattern
-    # RE2 refuses passes here and, as the engine stands, fails its stream at
-    # run time.
+    # Compiled in RE2, the dialect the engine as it stands matches a `pattern`
+    # rule in (through pyarrow's `match_substring_regex`), never in stdlib
+    # `re`, which answers a different question in both directions: `\p{L}+` is
+    # an ordinary RE2 pattern `re` refuses, and `(a)\1` a backreference `re`
+    # accepts and RE2 cannot compile. The engine as it stands also embeds the
+    # pattern as the group in `^(?:…)`, and neither compile implies the other:
+    # `a)|(b` compiles only grouped, where it escapes the group, and `\Qabc`
+    # only alone, since grouped its quote swallows the closing parenthesis.
     if not isinstance(value, str):
         return "is not a regular expression"
     if not value:
         return "is an empty regular expression, which every row matches"
+    try:
+        compile_re2(value)
+    except ValueError as refusal:
+        return str(refusal)
+    try:
+        compile_re2(f"(?:{value})")
+    except ValueError as refusal:
+        return (
+            "compiles alone but not as a group, `(?:…)`, which is how it is "
+            f"matched (an unclosed `\\Q` quote does this); grouped, it {refusal}"
+        )
     return None
 
 
