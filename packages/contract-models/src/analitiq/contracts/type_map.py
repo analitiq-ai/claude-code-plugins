@@ -195,16 +195,22 @@ def _named_group_source(pattern: str, name: str) -> str:
     nested group, so the source cut there does not compile. Inline flags set
     outside the group are not carried.
 
-    KeyError when the matcher has no group of that name."""
+    KeyError when the matcher has no group of that name. RuntimeError when the
+    group cannot be located in a matcher RE2 compiled: a fault here, never the
+    author's, so it must not surface as the ValueError a rule reports."""
     names = _re2_compile(pattern).groupindex
     number = names[name]
-    opener = next(
+    opener = next((
         spelling for spelling in _NAMED_GROUP_SPELLING.finditer(pattern)
         if spelling["name"] == name and _group_opened_at(pattern, spelling, names) == number
-    )
+    ), None)
+    if opener is None:
+        raise RuntimeError(f"RE2 names group {name!r} but no spelling in {pattern!r} opens it")
     close = opener.end("spelling")
     while True:
-        close = pattern.index(")", close)
+        close = pattern.find(")", close)
+        if close < 0:
+            raise RuntimeError(f"no `)` in {pattern!r} closes group {name!r} as RE2 does")
         source = pattern[opener.end("spelling"):close]
         try:
             _re2_compile(f"(?:{source})")
