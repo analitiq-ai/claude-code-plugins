@@ -1545,21 +1545,75 @@ def test_type_maps_in_a_directory_that_cannot_be_listed_are_unchecked_not_absent
     assert (collection.maps, collection.listed) == ({}, False)
 
 
+_UNLISTED = ("notApplicable", "RULE-PKG-030", "type-map-dir-unlisted")
+_MAP_UNREAD = ("fail", "RULE-PKG-030", "type-map-unparseable")
+_COVERAGE_SKIPPED = ("notApplicable", "RULE-PKG-033", "native-type-coverage-skipped")
+_ENDPOINTS_UNLISTED = ("notApplicable", "RULE-PKG-031", "endpoints-dir-unlisted")
+# What the empty write map is graded to wherever it is read.
+_WRITE_MAP_GRADED = [("fail", None, "too_short"), ("fail", "RULE-TMAP-017", "write-map-missing-family")]
+
+
 @_UNLISTABLE
-@pytest.mark.parametrize("mode", [0o000, 0o300], ids=["no access", "searchable only"])
-@pytest.mark.parametrize("kind", ["api", "database", "file"])
-def test_coverage_grades_nothing_in_a_package_directory_it_cannot_list(tmp_path, validator, kind, mode):
-    # Unlisted, the maps below are unknown, not missing: reporting either as
-    # absent would ask the author to add a file already there.
-    _write_tree(tmp_path, _min_connector(kind), [], {"widgets.json": _endpoint("STRING", "Utf8")})
-    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc([], "write")))
+@pytest.mark.parametrize("kind,mode,expected", [
+    ("api", 0o755, []),
+    ("api", 0o300, [_UNLISTED, _COVERAGE_SKIPPED]),
+    ("api", 0o400, [_MAP_UNREAD, ("fail", "RULE-PKG-030", "read-map-missing"),
+                    _COVERAGE_SKIPPED, _ENDPOINTS_UNLISTED]),
+    ("api", 0o000, [_UNLISTED, _COVERAGE_SKIPPED, _ENDPOINTS_UNLISTED]),
+    ("database", 0o755, _WRITE_MAP_GRADED),
+    ("database", 0o300, [_UNLISTED]),
+    ("database", 0o400, [_MAP_UNREAD, _MAP_UNREAD, ("fail", "RULE-PKG-030", "read-map-missing"),
+                         ("fail", "RULE-PKG-030", "write-map-missing")]),
+    ("database", 0o000, [_UNLISTED]),
+    ("file", 0o755, _WRITE_MAP_GRADED),
+    ("file", 0o300, [_UNLISTED]),
+    ("file", 0o400, [_MAP_UNREAD, _MAP_UNREAD]),
+    ("file", 0o000, [_UNLISTED]),
+], ids=lambda v: f"{v:o}" if isinstance(v, int) else None)
+def test_a_refused_lookup_in_the_package_withholds_only_what_depends_on_it(
+        tmp_path, validator, kind, mode, expected):
+    # 300 refuses the listing only, 400 every lookup by name, 000 both. What a
+    # refusal hides is unknown, not absent; every check not reading it still runs.
+    _write_tree(tmp_path, _min_connector(kind), [{"match": "exact", "native_type": "STRING",
+                                                  "arrow_type": "Utf8"}],
+                {"widgets.json": _endpoint("STRING", "Utf8")} if kind == "api" else {})
+    if kind != "api":
+        (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc([], "write")))
     tmp_path.chmod(mode)
     try:
         findings = validator.check_coverage(_min_connector(kind), tmp_path / "connector.json")
     finally:
         tmp_path.chmod(0o755)
-    assert [(f["kind"], f["rule"], f["message_id"]) for f in findings] == [
-        ("notApplicable", "RULE-PKG-030", "type-map-dir-unlisted")], findings
+    assert [(f["kind"], f.get("rule"), f["message_id"]) for f in findings] == expected, findings
+
+
+@_UNLISTABLE
+def test_an_endpoint_the_kernel_will_not_open_is_reported_unread(tmp_path, validator):
+    # Listable but not searchable: the walk finds each name, and every lookup of it is refused.
+    _write_tree(tmp_path, _min_connector("api"), [{"match": "exact", "native_type": "STRING",
+                                                   "arrow_type": "Utf8"}],
+                {"widgets.json": _endpoint("STRING", "Utf8")})
+    (tmp_path / "endpoints").chmod(0o400)
+    try:
+        findings = validator.check_coverage(_min_connector("api"), tmp_path / "connector.json")
+    finally:
+        (tmp_path / "endpoints").chmod(0o755)
+    assert [(f["kind"], f["message_id"]) for f in findings] == [
+        ("fail", "endpoint-file-unreadable")], findings
+    assert "widgets.json" in findings[0]["message"]
+
+
+@_UNLISTABLE
+@pytest.mark.parametrize("shape", ["regular file", "directory", "dangling symlink"])
+def test_the_legacy_name_is_found_where_the_package_lists_but_cannot_be_searched(tmp_path, validator, shape):
+    _plant_legacy_name(tmp_path, shape)
+    tmp_path.chmod(0o400)
+    try:
+        collection = validator.collect_type_maps(tmp_path, rule="RULE-PKG-030")
+    finally:
+        tmp_path.chmod(0o755)
+    assert [(name, f["message_id"]) for name, f in collection.findings] == [
+        ("type-map.json", "legacy-type-map-filename")], collection.findings
 
 
 def _plant_legacy_name(parent: Path, shape: str) -> None:

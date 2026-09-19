@@ -29,11 +29,6 @@ class Tree(ABC):
         """Whether a directory carries `key`."""
 
     @abstractmethod
-    def occupied(self, key: PurePath) -> bool:
-        """Whether any entry at all carries `key`, including one that cannot be
-        followed to anything."""
-
-    @abstractmethod
     def read_text(self, key: PurePath) -> str:
         """The text of the regular file at `key`."""
 
@@ -59,10 +54,6 @@ class DiskTree(Tree):
 
     def is_dir(self, key: Path) -> bool:
         return key.is_dir()
-
-    def occupied(self, key: Path) -> bool:
-        # `exists()` follows a link, so a dangling one answers False on its own.
-        return key.exists() or key.is_symlink()
 
     def read_text(self, key: Path) -> str:
         return key.read_text()
@@ -122,9 +113,6 @@ class MemoryTree(Tree):
     def is_dir(self, key: PurePath) -> bool:
         return key in self._dirs
 
-    def occupied(self, key: PurePath) -> bool:
-        return self.is_file(key) or self.is_dir(key)
-
     def read_text(self, key: PurePath) -> str:
         return self._texts[key]
 
@@ -167,9 +155,6 @@ class Location:
 
     def is_dir(self) -> bool:
         return self.tree.is_dir(self.key)
-
-    def occupied(self) -> bool:
-        return self.tree.occupied(self.key)
 
     def read_text(self) -> str:
         return self.tree.read_text(self.key)

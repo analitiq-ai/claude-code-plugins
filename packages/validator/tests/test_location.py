@@ -346,6 +346,24 @@ def test_an_endpoint_with_no_connector_read_is_told_why(tmp_path, validator, giv
          f"transport_ref ['api'] not checked: {remedy}.")], findings
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root looks up any entry")
+@pytest.mark.parametrize("mode", [0o000, 0o400], ids=["no access", "listable only"])
+def test_an_endpoint_whose_connector_lookup_is_refused_is_told_why(tmp_path, validator, mode):
+    """A refused lookup of the connector is not its absence: the remedy for a
+    missing connector would ask the author to add a file that may be there."""
+    doc = _endpoint("thing", transport_ref="api")
+    _write(tmp_path, {"pkg/connector.json": _API})
+    (tmp_path / "pkg").chmod(mode)
+    try:
+        findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/endpoints/thing.json")
+    finally:
+        (tmp_path / "pkg").chmod(0o755)
+    refused = [f for f in findings if f.get("rule") == "RULE-ENDP-047"]
+    assert [(f["kind"], f["message_id"]) for f in refused] == [
+        ("notApplicable", "transport-ref-check-skipped-sibling-refused")], findings
+    assert str(tmp_path / "pkg/connector.json") in refused[0]["message"]
+
+
 def test_a_dotdot_out_of_a_link_landing_where_its_names_spell_is_collapsed(tmp_path, validator):
     """`inner/..` lands back in the linked `endpoints/`, so the path is graded
     as spelled. Resolving it instead would carry that `endpoints/` to its

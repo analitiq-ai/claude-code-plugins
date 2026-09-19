@@ -988,15 +988,15 @@ def _load_json_sibling(
     that sibling to satisfy, rather than a shared default that could name the
     wrong one.
     """
-    if not path.is_file():
-        # The pattern collects directory entries, not documents, so the read is
-        # reached by whatever carries a matching name. A directory raises with an
-        # errno that says nothing about the package; a FIFO waits for a writer
-        # that never comes, and the check never returns at all.
-        return _UNREAD, [finding(
-            rule=rule, message_id=message_id, kind="fail", path="/",
-            message=f"sibling {path.name} is not a regular file; nothing was read from it.")]
     try:
+        if not path.is_file():
+            # The pattern collects directory entries, not documents, so the read is
+            # reached by whatever carries a matching name. A directory raises with an
+            # errno that says nothing about the package; a FIFO waits for a writer
+            # that never comes, and the check never returns at all.
+            return _UNREAD, [finding(
+                rule=rule, message_id=message_id, kind="fail", path="/",
+                message=f"sibling {path.name} is not a regular file; nothing was read from it.")]
         return json.loads(path.read_text()), []
     except _JSON_READ_ERRORS as exc:
         return _UNREAD, [finding(
@@ -1088,9 +1088,10 @@ def _legacy_type_map_present(parent: Location) -> bool:
 
     The name is what is refused, so a directory or a broken link carrying it
     counts: answering only for a regular file would let an author keep the name
-    by making it something else.
+    by making it something else. Read off the listing, which names every entry
+    without looking any of them up.
     """
-    return (parent / _LEGACY_MAP_FILENAME).occupied()
+    return any(True for _ in parent.glob(_LEGACY_MAP_FILENAME))
 
 
 _Directory = TypeVar("_Directory", Path, Location)
@@ -1167,16 +1168,15 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
     parent = located(parent)
     try:
         siblings = _type_map_sibling_paths(parent)
+        legacy_present = _legacy_type_map_present(parent)
     except OSError as exc:
-        # Nothing else is looked up: a directory refusing its listing may refuse
-        # every lookup in it too, and what is in it is unknown either way.
         return TypeMapSiblings({}, {}, [(".", finding(
             rule=rule,
             message_id="type-map-dir-unlisted", kind="notApplicable", path="/",
             message=f"type maps not collected: the directory could not be listed ({exc})."))],
             listed=False)
     findings: list[tuple[str, dict]] = []
-    if _legacy_type_map_present(parent):
+    if legacy_present:
         findings.append((_LEGACY_MAP_FILENAME, finding(
             rule=rule,
             message_id="legacy-type-map-filename", kind="fail", path="/",
@@ -1240,8 +1240,6 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     package = located(doc_path).parent
     collection = collect_type_maps(package, rule="RULE-PKG-030")
     findings = [f for _, f in collection.findings]
-    if not collection.listed:
-        return findings
     documents, declared_by = collection.maps, collection.declared_by
 
     if kind in _STORAGE_KINDS:
@@ -1258,13 +1256,14 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     read_rules: Any = None
     read_source: str | None = None
     if "read" not in documents:
-        findings.append(finding(
-            rule="RULE-PKG-030",
-            message_id="read-map-missing", kind="fail", path="/",
-            message=(
-                "connector requires a sibling type-map document declaring direction "
-                f"'read' (native → Arrow); {_no_map_reason('read', declared_by)}. The "
-                f"authored filename is {_READ_MAP_FILENAME}.")))
+        if collection.listed:
+            findings.append(finding(
+                rule="RULE-PKG-030",
+                message_id="read-map-missing", kind="fail", path="/",
+                message=(
+                    "connector requires a sibling type-map document declaring direction "
+                    f"'read' (native → Arrow); {_no_map_reason('read', declared_by)}. The "
+                    f"authored filename is {_READ_MAP_FILENAME}.")))
     else:
         read_source, read_doc = documents["read"]
         findings.extend(_read_from(read_source, type_map_findings(read_doc, "read")))
@@ -1272,13 +1271,14 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
 
     if kind in _DATABASE_KINDS:
         if "write" not in documents:
-            findings.append(finding(
-                rule="RULE-PKG-030",
-                message_id="write-map-missing", kind="fail", path="/",
-                message=(
-                    f"{kind} connector requires a sibling type-map document declaring "
-                    f"direction 'write'; {_no_map_reason('write', declared_by)}. The "
-                    f"authored filename is {_WRITE_MAP_FILENAME}.")))
+            if collection.listed:
+                findings.append(finding(
+                    rule="RULE-PKG-030",
+                    message_id="write-map-missing", kind="fail", path="/",
+                    message=(
+                        f"{kind} connector requires a sibling type-map document declaring "
+                        f"direction 'write'; {_no_map_reason('write', declared_by)}. The "
+                        f"authored filename is {_WRITE_MAP_FILENAME}.")))
             return findings
         write_source, write_doc = documents["write"]
         findings.extend(_read_from(write_source, type_map_findings(write_doc, "write")))
@@ -1306,29 +1306,29 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
             message_id="native-type-coverage-skipped", kind="notApplicable", path="/",
             message=(
                 "native_type coverage against the read map was not rendered: no "
-                "sibling holds the read direction, or the one that does has a "
-                "`rules` that is not a list. Endpoint native_type/arrow_type "
-                "agreement is unverified until it is fixed.")))
+                "read map was collected, or the one that was has a `rules` that is "
+                "not a list. Endpoint native_type/arrow_type agreement is "
+                "unverified until it is fixed.")))
     endpoint_dir = package / "endpoints"
-    if not endpoint_dir.is_dir():
-        findings.append(finding(
-            rule="RULE-PKG-035",
-            message_id="endpoints-dir-missing", kind="fail", path="/",
-            message="api connector requires a sibling 'endpoints/' directory; missing."))
-        return findings
     # Scan recursively: every *.json the walk reaches under endpoints/ must sit
     # at exactly `endpoints/{endpoint_id}.json` (flat), so a nested or misplaced
     # file is flagged rather than reported as a false pass.
     try:
+        if not endpoint_dir.is_dir():
+            findings.append(finding(
+                rule="RULE-PKG-035",
+                message_id="endpoints-dir-missing", kind="fail", path="/",
+                message="api connector requires a sibling 'endpoints/' directory; missing."))
+            return findings
         endpoint_files = sorted(endpoint_dir.rglob("*.json"))
     except OSError as exc:
         findings.append(finding(
             rule="RULE-PKG-031",
             message_id="endpoints-dir-unlisted", kind="notApplicable", path="/",
             message=(
-                f"endpoint documents not checked: 'endpoints/' or a directory below it "
-                f"could not be listed ({exc}), so not every document there was found. "
-                "Make it listable and re-run.")))
+                f"endpoint documents not checked: the walk of 'endpoints/' was refused "
+                f"({exc}), so not every document there was found. Make the package "
+                "directory and everything under 'endpoints/' listable and re-run.")))
         return findings
     if not endpoint_files:
         findings.append(finding(
@@ -1456,7 +1456,11 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
             # read: a connector two levels up is not this endpoint's.
             sibling = location.parent.parent / "connector.json" if addressed else None
             connector_doc: Any = _UNREAD
-            sibling_exists = sibling is not None and sibling.is_file()
+            lookup_refused: OSError | None = None
+            try:
+                sibling_exists = sibling is not None and sibling.is_file()
+            except OSError as exc:
+                sibling_exists, lookup_refused = False, exc
             if sibling_exists:
                 # `rule=None`: a read/parse failure has not evaluated
                 # RULE-ENDP-047 one way or the other, so asserting a `fail`
@@ -1506,10 +1510,16 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                             "`transports` could not be read. Fix the error reported "
                             "above and re-run.")))
                 else:
+                    message_id = "transport-ref-check-skipped-no-sibling"
                     if location is None:
                         reason = ("no path was given, so there is no directory to "
                                   "read the connector from. Validate it at its path, "
                                   "`endpoints/{endpoint_id}.json` beside its connector")
+                    elif lookup_refused is not None:
+                        # Refused is not absent: the connector may be there.
+                        message_id = "transport-ref-check-skipped-sibling-refused"
+                        reason = (f"the connector beside `endpoints/` could not be looked "
+                                  f"up ({lookup_refused}). Make it reachable and re-run")
                     elif addressed:
                         reason = ("there is no connector.json file beside the "
                                   "`endpoints/` directory holding this document. "
@@ -1521,7 +1531,7 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                                   "beside its connector")
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
-                        message_id="transport-ref-check-skipped-no-sibling",
+                        message_id=message_id,
                         kind="notApplicable", path="/",
                         message=f"transport_ref {declared_refs!r} not checked: {reason}."))
     # Each api-endpoint document goes through the checks shared with
