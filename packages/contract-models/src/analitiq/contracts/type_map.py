@@ -26,7 +26,6 @@ import re
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
-import re2
 from pydantic import Field, model_validator
 
 from analitiq.contracts.arrow_grammar import (
@@ -37,6 +36,7 @@ from analitiq.contracts.arrow_grammar import (
 )
 from analitiq.contracts.endpoints import ARROW_TYPE_PATTERN
 from analitiq.contracts.shared.common import StrictModel, schema_url_for
+from analitiq.contracts.shared.re2_dialect import compile_re2
 from analitiq.contracts.shared.rules import violation
 
 #: Per-direction schema URLs declared by every `type-map-read.json` /
@@ -120,10 +120,6 @@ def _validate_type_map_arrow_type(value: str) -> None:
 # Matchers: compiled and matched in RE2, the dialect the contract fixes for them
 # ---------------------------------------------------------------------------
 
-# A refused matcher is reported as a finding; RE2 would also write it to stderr.
-_RE2_OPTIONS = re2.Options()
-_RE2_OPTIONS.log_errors = False
-
 # Locates a spelling that may open a named group; RE2 decides whether it does.
 # A lookahead, so a spelling that opens nothing cannot consume the one after it.
 _NAMED_GROUP_SPELLING = re.compile(r"(?=(?P<spelling>\(\?(?P<python>P?)<(?P<name>[^>]*)>))")
@@ -147,17 +143,6 @@ class CompiledMatcher:
             return None
 
 
-def _re2_compile(pattern: str) -> Any:
-    """ValueError carrying RE2's own parse error when RE2 refuses `pattern`."""
-    try:
-        return re2.compile(pattern, options=_RE2_OPTIONS)
-    except re2.error as exc:
-        detail = exc.args[0] if exc.args else exc
-        if isinstance(detail, bytes):
-            detail = detail.decode("utf-8", "replace")
-        raise ValueError(f"matcher is not valid RE2 ({detail})") from exc
-
-
 def _group_opened_at(pattern: str, spelling: re.Match[str], names: Any) -> int | None:
     """The number of the group RE2 opens at `spelling`, None when the spelling
     opens none (it sits in a class, a quote or after an escape): renaming it
@@ -167,7 +152,7 @@ def _group_opened_at(pattern: str, spelling: re.Match[str], names: Any) -> int |
         probe += "_"
     renamed = f"{pattern[:spelling.start()]}(?<{probe}>{pattern[spelling.end('spelling'):]}"
     try:
-        return _re2_compile(renamed).groupindex.get(probe)
+        return compile_re2(renamed).groupindex.get(probe)
     except ValueError:
         return None
 
@@ -179,7 +164,10 @@ def compile_matcher(pattern: str) -> CompiledMatcher:
     for what RE2 accepts and the contract does not: a named group spelled
     `(?P<name>…)`, and a name given to more than one group, which RE2 binds to
     the first only, so a match through a later one captures nothing under it."""
-    regex = _re2_compile(pattern)
+    try:
+        regex = compile_re2(pattern)
+    except ValueError as refusal:
+        raise ValueError(f"matcher {refusal}") from refusal
     named: set[str] = set()
     for spelling in _NAMED_GROUP_SPELLING.finditer(pattern):
         if not _group_opened_at(pattern, spelling, regex.groupindex):
@@ -205,7 +193,7 @@ def _named_group_source(pattern: str, name: str) -> str:
     KeyError when the matcher has no group of that name. RuntimeError when the
     group cannot be located in a matcher RE2 compiled: a fault here, never the
     author's, so it must not surface as the ValueError a rule reports."""
-    names = _re2_compile(pattern).groupindex
+    names = compile_re2(pattern).groupindex
     number = names[name]
     opener = next((
         spelling for spelling in _NAMED_GROUP_SPELLING.finditer(pattern)
@@ -220,7 +208,7 @@ def _named_group_source(pattern: str, name: str) -> str:
             raise RuntimeError(f"no `)` in {pattern!r} closes group {name!r} as RE2 does")
         source = pattern[opener.end("spelling"):close]
         try:
-            _re2_compile(f"(?:{source})")
+            compile_re2(f"(?:{source})")
         except ValueError:
             close += 1
             continue
@@ -233,7 +221,7 @@ def _capture_language(native: str, name: str, probes: tuple[str, ...]) -> frozen
     The capture is interrogated in isolation: surrounding context that would
     further constrain it is ignored, and inline flags set outside it are
     dropped, which can narrow it."""
-    capture = _re2_compile(f"(?:{_named_group_source(native, name)})")
+    capture = compile_re2(f"(?:{_named_group_source(native, name)})")
     return frozenset(probe for probe in probes if capture.fullmatch(probe))
 
 
