@@ -22,8 +22,11 @@ before that conftest ever runs, the installed distribution lands in
 roots go on the path rather than one package importing the other.
 """
 import os
+import stat
 import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent
 
@@ -55,3 +58,23 @@ for _src in (REPO_ROOT / "packages" / "contract-models" / "src",
 # pytest process mid-run. See `_FROM_SOURCE` in
 # plugins/analitiq-pipeline-builder/scripts/_bootstrap.py.
 os.environ["ANALITIQ_VALIDATOR_FROM_SOURCE"] = "1"
+
+
+@pytest.fixture
+def refuse():
+    """`refuse(path, mode)` sets `path`'s mode for this test and restores it after.
+
+    How a test makes the kernel refuse a lookup, a listing or a read. Root is
+    refused nothing, so a test asking for this skips there.
+    """
+    if os.geteuid() == 0:
+        pytest.skip("root is refused no lookup, listing or read")
+    changed: list[tuple[Path, int]] = []
+
+    def set_mode(path: Path, mode: int) -> None:
+        changed.append((path, stat.S_IMODE(path.lstat().st_mode)))
+        path.chmod(mode)
+
+    yield set_mode
+    for path, mode in reversed(changed):
+        path.chmod(mode)

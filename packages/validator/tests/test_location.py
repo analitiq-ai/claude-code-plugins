@@ -194,11 +194,100 @@ def test_locations_sort_as_paths():
 @pytest.mark.parametrize("pattern", ["a/*.json", "**/*.json", "**"])
 @pytest.mark.parametrize("walk", ["glob", "rglob"])
 def test_a_pattern_crossing_names_is_refused(tmp_path, pattern, walk):
-    """pathlib crosses directories on `/` and `**`, and the memory tree matches
-    names alone, so the two trees would answer such a pattern differently."""
+    """Both trees match one name at a time, so such a pattern would quietly
+    match nothing, or as `*`."""
     for root in (Location(tmp_path, DISK), Location(PurePosixPath("."), MemoryTree({"a/z.json": ""}))):
         with pytest.raises(ValueError, match="single name"):
             list(getattr(root, walk)(pattern))
+
+
+@pytest.mark.parametrize("key", ["missing", "file.json/below", "loop"],
+                         ids=["no entry", "under a file", "a link loop"])
+def test_a_key_carrying_nothing_answers_false(tmp_path, key):
+    (tmp_path / "file.json").write_text("")
+    (tmp_path / "loop").symlink_to(tmp_path / "loop")
+    assert (DISK.is_file(tmp_path / key), DISK.is_dir(tmp_path / key)) == (False, False)
+
+
+@pytest.mark.parametrize("name", ["missing", "file.json"], ids=["no entry", "a file"])
+@pytest.mark.parametrize("walk", ["glob", "rglob"])
+def test_a_key_that_is_no_directory_lists_nothing(tmp_path, name, walk):
+    (tmp_path / "file.json").write_text("")
+    for root in (Location(tmp_path / name, DISK), Location(PurePosixPath(name), MemoryTree({"file.json": ""}))):
+        assert list(getattr(root, walk)("*")) == []
+
+
+@pytest.mark.parametrize("ask", ["is_file", "is_dir", "glob", "rglob"])
+def test_a_refused_lookup_raises_rather_than_answering_absent(tmp_path, monkeypatch, refuse, ask):
+    """A caller reads an answer of absent as the entry not being there. pathlib
+    is made to swallow the refusal, as some interpreters' does, so the answer
+    cannot come from it on any interpreter."""
+    monkeypatch.setattr(Path, "is_file", lambda self, **_: False)
+    monkeypatch.setattr(Path, "is_dir", lambda self, **_: False)
+    (tmp_path / "shut/inside").mkdir(parents=True)
+    refuse(tmp_path / "shut", 0o000)
+    with pytest.raises(PermissionError):
+        answer = getattr(DISK, ask)(*((tmp_path / "shut/inside",) if ask.startswith("is_")
+                                     else (tmp_path / "shut/inside", "*")))
+        list(answer)
+
+
+@pytest.mark.parametrize("walk", ["glob", "rglob"])
+@pytest.mark.parametrize("shut", [".", "below"], ids=["the directory", "a directory below it"])
+def test_a_directory_that_cannot_be_listed_raises_rather_than_listing_empty(tmp_path, refuse, walk, shut):
+    """`glob` lists only the directory itself, so a refusal below it is not its to raise."""
+    (tmp_path / "below").mkdir()
+    refuse(tmp_path / shut, 0o300)
+    walked = getattr(Location(tmp_path, DISK), walk)
+    if walk == "glob" and shut == "below":
+        assert sorted(entry.name for entry in walked("*")) == ["below"]
+    else:
+        with pytest.raises(PermissionError):
+            list(walked("*"))
+
+
+class _UnclassifiedScan:
+    """`os.scandir` on a filesystem that reports no entry types, where telling
+    whether `refused` is a directory is a lookup the kernel refuses."""
+
+    def __init__(self, entries, refused: str) -> None:
+        self._entries, self._refused = entries, refused
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._entries.close()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        entry = next(self._entries)
+        return _Unclassified(entry) if entry.name == self._refused else entry
+
+    def close(self) -> None:
+        self._entries.close()
+
+
+class _Unclassified:
+    def __init__(self, entry) -> None:
+        self._entry = entry
+
+    def __getattr__(self, name):
+        return getattr(self._entry, name)
+
+    def is_dir(self, *, follow_symlinks: bool = True) -> bool:
+        raise PermissionError(errno.EACCES, "Permission denied", self._entry.path)
+
+
+def test_an_entry_the_walk_cannot_classify_raises_rather_than_being_skipped(tmp_path, monkeypatch):
+    (tmp_path / "below").mkdir()
+    (tmp_path / "below/x.json").write_text("{}")
+    scandir = os.scandir
+    monkeypatch.setattr(os, "scandir", lambda path: _UnclassifiedScan(scandir(path), "below"))
+    with pytest.raises(PermissionError):
+        list(Location(tmp_path, DISK).rglob("*"))
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +302,12 @@ _UNDECLARED = {**_API, "transports": {"other": _API["transports"]["api"]}}
 
 def _endpoint_047(findings: list[dict]) -> list[tuple[str, str]]:
     return [(f["kind"], f["message_id"]) for f in findings if f.get("rule") == "RULE-ENDP-047"]
+
+
+def _about_the_connector(findings: list[dict]) -> list[dict]:
+    """What an endpoint's findings say about reading its connector: whether it
+    was read, and what `transport_ref` could be checked against."""
+    return [f for f in findings if f["message_id"].startswith(("sibling-connector", "transport-ref"))]
 
 
 def _assert_cli_agrees(cli, expected: Path, got: Path) -> None:
@@ -332,10 +427,29 @@ def test_an_endpoint_with_no_connector_read_is_told_why(tmp_path, validator, giv
 
     findings = validator.validate_document(doc, doc_path=given and tmp_path / given)
 
-    assert [(f["kind"], f["message_id"], f["message"]) for f in findings
-            if f.get("rule") == "RULE-ENDP-047"] == [
+    assert [(f["kind"], f["message_id"], f["message"]) for f in _about_the_connector(findings)] == [
         ("notApplicable", "transport-ref-check-skipped-no-sibling",
          f"transport_ref ['api'] not checked: {remedy}.")], findings
+
+
+@pytest.mark.parametrize("shut,mode,remedy", [
+    ("pkg", 0o000, "Make every directory on the path to it searchable"),
+    ("pkg", 0o400, "Make every directory on the path to it searchable"),
+    ("pkg/connector.json", 0o000, "Make it readable"),
+], ids=["no access", "listable only", "connector unreadable"])
+def test_an_endpoint_whose_connector_is_refused_is_told_why(tmp_path, validator, refuse, shut, mode, remedy):
+    """A refused lookup or read of the connector is not its absence, nor a
+    parse error: either remedy would send the author to the wrong fix."""
+    doc = _endpoint("thing", transport_ref="api")
+    _write(tmp_path, {"pkg/connector.json": _API})
+    refuse(tmp_path / shut, mode)
+    findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/endpoints/thing.json")
+    sibling = _about_the_connector(findings)
+    assert [(f["kind"], f.get("rule"), f["message_id"]) for f in sibling] == [
+        ("fail", None, "sibling-connector-unreadable"),
+        ("notApplicable", "RULE-ENDP-047", "transport-ref-check-skipped-sibling-unreadable")], findings
+    assert str(tmp_path / "pkg/connector.json") in sibling[1]["message"]
+    assert f"{remedy}, then re-run." in sibling[0]["message"]
 
 
 def test_a_dotdot_out_of_a_link_landing_where_its_names_spell_is_collapsed(tmp_path, validator):

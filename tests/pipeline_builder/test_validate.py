@@ -778,6 +778,38 @@ def test_connection_type_maps_are_collected_as_a_connector_collects_its_own(tmp_
         f["path"] for f in connector]
 
 
+def test_a_definition_directory_that_cannot_be_listed_is_reported_at_the_directory(tmp_path, refuse):
+    # The finding is about the directory, not a file in it, so it is addressed
+    # at the directory; otherwise it is the one a connector's collection reports.
+    from analitiq.validator import check_coverage
+    definition = tmp_path / "connections/pg/definition"
+    _plant(definition, "no direction")
+    refuse(definition, 0o300)
+    connector = check_coverage({"kind": "file", "transports": {}}, definition / "connector.json")
+    connection: list[dict] = []
+    V._connection_type_map_findings(definition.parent, connection)
+    assert [f["message_id"] for f in connector] == ["type-map-dir-unlisted"], connector
+    assert [{k: v for k, v in f.items() if k not in ("rule", "path")} for f in connection] == [
+        {k: v for k, v in f.items() if k not in ("rule", "path")} for f in connector]
+    assert [f["path"] for f in connection] == ["connections/pg/definition"], connection
+
+
+def test_a_map_that_cannot_be_read_is_reported_at_the_map(tmp_path, refuse):
+    from analitiq.validator import check_coverage
+    from analitiq.validator._core import _passed
+    definition = tmp_path / "connections/pg/definition"
+    _plant(definition, "no direction")
+    refuse(definition / "type-map-read.json", 0o000)
+    connector = check_coverage({"kind": "file", "transports": {}}, definition / "connector.json")
+    connection: list[dict] = []
+    V._connection_type_map_findings(definition.parent, connection)
+    assert [f["message_id"] for f in connector] == ["type-map-unreadable"], connector
+    assert [{k: v for k, v in f.items() if k not in ("rule", "path")} for f in connection] == [
+        {k: v for k, v in f.items() if k not in ("rule", "path")} for f in connector]
+    assert [f["path"] for f in connection] == ["connections/pg/definition/type-map-read.json"]
+    assert not _passed(connection), connection
+
+
 def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
     # a directory under a load-bearing name would validate clean and then fail at
     # the engine's loader — the bundle pass flags it instead

@@ -8,11 +8,13 @@ every question a check asks about what is actually there goes to the tree.
 """
 from __future__ import annotations
 
+import errno
 import io
 import os
+import stat
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from fnmatch import fnmatchcase
+from fnmatch import fnmatch, fnmatchcase
 from pathlib import Path, PurePath, PurePosixPath
 from typing import Iterable, Iterator, Mapping
 
@@ -22,16 +24,13 @@ class Tree(ABC):
 
     @abstractmethod
     def is_file(self, key: PurePath) -> bool:
-        """Whether a regular file carries `key`."""
+        """Whether a regular file carries `key`. Raises `OSError` where the
+        lookup is refused, which says nothing about what is there."""
 
     @abstractmethod
     def is_dir(self, key: PurePath) -> bool:
-        """Whether a directory carries `key`."""
-
-    @abstractmethod
-    def occupied(self, key: PurePath) -> bool:
-        """Whether any entry at all carries `key`, including one that cannot be
-        followed to anything."""
+        """Whether a directory carries `key`. Raises `OSError` where the
+        lookup is refused, which says nothing about what is there."""
 
     @abstractmethod
     def read_text(self, key: PurePath) -> str:
@@ -40,38 +39,74 @@ class Tree(ABC):
     @abstractmethod
     def glob(self, key: PurePath, pattern: str) -> Iterable[PurePath]:
         """The entries directly inside `key` whose names match `pattern`, in no
-        particular order."""
+        particular order; none where `key` is no directory. Raises `OSError`
+        where `key` is a directory that cannot be listed."""
 
     @abstractmethod
     def rglob(self, key: PurePath, pattern: str) -> Iterable[PurePath]:
         """The entries anywhere below `key` whose names match `pattern`, never
-        from inside a linked directory below it, in no particular order."""
+        from inside a linked directory below it, in no particular order; none
+        where `key` is no directory. Raises `OSError` where `key`, or a
+        directory below it, cannot be listed, or where what an entry below it
+        is cannot be looked up."""
 
 
 class DiskTree(Tree):
     """The filesystem. A key is a `Path`."""
 
+    # Not `Path.is_file`/`Path.is_dir`: which errors they answer False for
+    # differs by interpreter, and some answer False for a refused lookup.
+
     def is_file(self, key: Path) -> bool:
-        return key.is_file()
+        mode = _mode(key)
+        return mode is not None and stat.S_ISREG(mode)
 
     def is_dir(self, key: Path) -> bool:
-        return key.is_dir()
-
-    def occupied(self, key: Path) -> bool:
-        # `exists()` follows a link, so a dangling one answers False on its own.
-        return key.exists() or key.is_symlink()
+        mode = _mode(key)
+        return mode is not None and stat.S_ISDIR(mode)
 
     def read_text(self, key: Path) -> str:
         return key.read_text()
 
+    # Not `Path.glob`/`Path.rglob`: they drop a directory the kernel will not
+    # list, which reads it as empty. `fnmatch` applies the platform's case
+    # rule, as they do.
+
     def glob(self, key: Path, pattern: str) -> Iterable[Path]:
-        return key.glob(pattern)
+        if not self.is_dir(key):
+            return []
+        with os.scandir(key) as entries:
+            return [key / entry.name for entry in entries if fnmatch(entry.name, pattern)]
 
     def rglob(self, key: Path, pattern: str) -> Iterable[Path]:
         # Never descends into a linked directory below `key` (a linked `key` is
         # walked), and must not: through a loop of links, every file below it
-        # would be reported again at each turn.
-        return key.rglob(pattern)
+        # would be reported again at each turn. Not `os.walk`: an entry it
+        # cannot classify it takes for no directory, and skips what is below.
+        if not self.is_dir(key):
+            return []
+        found: list[Path] = []
+        pending = [key]
+        while pending:
+            with os.scandir(pending.pop()) as entries:
+                for entry in entries:
+                    if fnmatch(entry.name, pattern):
+                        found.append(Path(entry.path))
+                    if entry.is_dir(follow_symlinks=False):
+                        pending.append(Path(entry.path))
+        return found
+
+
+def _mode(key: Path) -> int | None:
+    """The mode of what `key` leads to, `None` where it leads to nothing."""
+    try:
+        return os.stat(key).st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            return None
+        raise
 
 
 DISK = DiskTree()
@@ -103,9 +138,6 @@ class MemoryTree(Tree):
 
     def is_dir(self, key: PurePath) -> bool:
         return key in self._dirs
-
-    def occupied(self, key: PurePath) -> bool:
-        return self.is_file(key) or self.is_dir(key)
 
     def read_text(self, key: PurePath) -> str:
         return self._texts[key]
@@ -150,9 +182,6 @@ class Location:
     def is_dir(self) -> bool:
         return self.tree.is_dir(self.key)
 
-    def occupied(self) -> bool:
-        return self.tree.occupied(self.key)
-
     def read_text(self) -> str:
         return self.tree.read_text(self.key)
 
@@ -168,9 +197,8 @@ class Location:
 def _one_name(pattern: str) -> str:
     """`pattern`, refused unless it matches within one name.
 
-    pathlib reads `/` and `**` as crossing directories and the memory tree
-    matches names alone, so such a pattern would be answered differently by
-    the two trees.
+    Both trees match one entry name at a time, so a pattern written to cross
+    names would match nothing, or `**` would match as `*`.
     """
     if "/" in pattern or "**" in pattern:
         raise ValueError(f"pattern must match a single name, got {pattern!r}")
