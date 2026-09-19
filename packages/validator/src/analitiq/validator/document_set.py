@@ -98,8 +98,8 @@ class ValidationEnvelope(TypedDict):
     where in it (`rules/SCHEMA.md`, "Findings"). A single document's finding
     names another document only when it is about one; a package's names every
     document by its key, since a package has no one validated document. The
-    key is percent-encoded as that row's reference is, so a consumer decodes
-    it before matching it against a request key.
+    key is percent-encoded, so a consumer decodes it before matching it
+    against a request key.
     `passed` is `False` exactly when `findings` holds one that
     `finding_costs_a_pass` accepts, which is not the
     same as "a finding at `severity: error`": an unchecked error-tier rule

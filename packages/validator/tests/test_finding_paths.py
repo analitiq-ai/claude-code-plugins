@@ -173,8 +173,8 @@ def test_a_standalone_endpoint_locates_its_unreadable_connector(tmp_path, valida
 
 
 # ---------------------------------------------------------------------------
-# A finding about a whole document points at it with the empty pointer, the
-# one spelling a reference can carry after its `#`.
+# A finding about a whole document has the empty pointer: `/` would point at
+# a member whose key is the empty string.
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("graded,message_id", [
