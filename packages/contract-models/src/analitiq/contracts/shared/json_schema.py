@@ -273,10 +273,10 @@ def escape_pointer_token(name: str) -> str:
     Not the inverse of :func:`_unescape_pointer_token`, and deliberately so —
     they meet at the §3 layer only. Unescaping percent-decodes first
     because a `$ref` is a URI fragment (§6); escaping percent-encodes nothing
-    because the pointer in a finding's `path` (the whole of a bare path, or
-    what follows a reference's `#`) is a JSON-string pointer (§5) a consumer
-    resolves directly, never a URI. Symmetrising them would either encode a
-    path nothing URI-decodes, or stop decoding refs a stock resolver decodes.
+    because it builds the pointer half of a finding's `path`, a JSON-string
+    pointer (§5) that is never percent-encoded (`rules/SCHEMA.md`, "Findings",
+    `path`). Symmetrising them would either encode a pointer nothing
+    URI-decodes, or stop decoding refs a stock resolver decodes.
 
     Not module-private: `analitiq.validator.connectors` escapes a token
     outside a full :func:`pointer_position` walk too (a single map key, not a
