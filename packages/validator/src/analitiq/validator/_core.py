@@ -255,7 +255,7 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     existing, already-stable vocabulary reused rather than a second one
     invented beside it.
     """
-    from analitiq.contracts.shared.json_schema import escape_pointer_token
+    from analitiq.contracts.shared.json_schema import pointer_position
     from analitiq.contracts.shared.rules import rule_violations
     try:
         adapter.validate_python(doc)
@@ -263,7 +263,7 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     except ValidationError as exc:
         findings: list[dict] = []
         for err in exc.errors():
-            base_path = "".join(f"/{escape_pointer_token(str(p))}" for p in err["loc"])
+            base_path = pointer_position(err["loc"])
             violations = rule_violations(err)
             if not violations:
                 findings.append(finding(

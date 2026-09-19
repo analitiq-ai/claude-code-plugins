@@ -708,7 +708,8 @@ def _api_operation_paths(ep_doc: dict) -> list[tuple[str, str]]:
         for mode, block in write.items():
             if isinstance(block, dict) and isinstance(block.get("request"), dict) \
                     and isinstance(block["request"].get("path"), str):
-                out.append((f"/operations/write/{mode}/request/path", block["request"]["path"]))
+                out.append((f"/operations/write/{escape_pointer_token(mode)}/request/path",
+                            block["request"]["path"]))
     return out
 
 
@@ -738,7 +739,7 @@ def _api_operation_transport_refs(ep_doc: dict) -> list[tuple[str, Any]]:
     write = ops.get("write")
     if isinstance(write, dict):
         for mode, block in write.items():
-            _collect(block, f"/operations/write/{mode}")
+            _collect(block, f"/operations/write/{escape_pointer_token(mode)}")
     return out
 
 

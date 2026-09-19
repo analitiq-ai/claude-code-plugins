@@ -197,6 +197,27 @@ def test_a_model_error_escapes_the_keys_on_its_pointer(validator):
     assert any("/headers/A~1b~0c" in p for p in paths), paths
 
 
+def _write_mode(endpoint, mode, request):
+    endpoint["operations"]["write"] = {mode: {"request": request}}
+    return endpoint
+
+
+def test_an_unresolved_transport_ref_escapes_its_write_mode(tmp_path, validator):
+    endpoint = _write_mode(_endpoint(), "a/b", {"transport_ref": "nope", "path": "/v1/records"})
+    _package(tmp_path, endpoints={"v1__records.json": endpoint})
+    [found] = _graded(validator, tmp_path, "transport-ref-undeclared")
+    assert found["path"] == (
+        "endpoints/v1__records.json#/operations/write/a~1b/request/transport_ref"), found
+
+
+def test_an_unstable_locator_escapes_its_write_mode(validator):
+    endpoint = _write_mode(_endpoint(), "a/b", {"path": "/records.json"})
+    del endpoint["operations"]["read"]
+    [found] = [f for f in validator.validate_document(endpoint)
+               if f["message_id"] == "locator-unstable"]
+    assert found["path"] == "/operations/write/a~1b/request/path", found
+
+
 # ---------------------------------------------------------------------------
 # The reference: one computation, the same on disk and in memory.
 # ---------------------------------------------------------------------------
