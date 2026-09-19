@@ -2011,8 +2011,9 @@ def test_regex_read_rule_container_warning(validator, tmp_path, native, arrow_ty
     findings = validator.validate_document(
         _type_map_doc([{"match": "regex", "native_type": native, "arrow_type": arrow_type}], "read"),
         doc_path=tmp_path / "type-map-read.json")
-    collapsed = [f for f in findings
-                 if f.get("rule") == "RULE-TMAP-002" and f.get("message_id") == "read-regex-container-collapsed"]
+    assert not _errors(findings), findings
+    collapsed = [w for w in _warnings(findings)
+                 if w.get("rule") == "RULE-TMAP-002" and w.get("message_id") == "read-regex-container-collapsed"]
     assert bool(collapsed) is warns, findings
 
 

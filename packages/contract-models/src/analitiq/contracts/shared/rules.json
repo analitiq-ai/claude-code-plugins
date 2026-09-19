@@ -6633,7 +6633,7 @@
   },
   {
    "id": "RULE-STRM-021",
-   "statement": "A validation rule's `value` MUST carry a payload of the shape its `type` reads, and that payload MUST constrain something: a length MUST be a non-negative integer, a pattern a non-empty string, a range an object carrying a `min`, a `max` or both and no other key, with `min` no greater than `max` when both are present, an admitted-value set a non-empty list.\n",
+   "statement": "A validation rule's `value` MUST carry a payload of the shape its `type` reads, and that payload MUST constrain something: a length MUST be a non-negative integer, a pattern a non-empty string RE2 compiles both alone and as a group, a range an object carrying a `min`, a `max` or both and no other key, with `min` no greater than `max` when both are present, an admitted-value set a non-empty list.\n",
    "tier": "coherence",
    "severity": "error",
    "artifact_kinds": [
@@ -6652,7 +6652,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": "ValidationRule",
-   "rationale": "The value field is deliberately typed open so each rule type can carry its own payload — a bound, a regex, a range object, a list of admitted values — and that openness is what leaves the shape unchecked by the annotation: a rule whose payload is the wrong kind validates against the field, and what happens when the rule runs against a record, mid-transfer, depends on which kind it is. A `range` payload of the wrong shape raises there, reliably; the others do not: a wrong-shaped `pattern` payload can still interpolate into a syntactically valid, silently-wrong regex, and a wrong-shaped `in_list` payload can iterate into a value set with no error rather than raising. Whether a pattern COMPILES is not asked here, only whether it is a non-empty string: compilability is a question about a dialect, the dialect is RE2 (the engine applies a `pattern` rule through pyarrow's `match_substring_regex`), and answering it with stdlib `re` answers a different question in both directions — `\\p{L}+` is an ordinary RE2 pattern `re` refuses, `(a)\\1` a backreference `re` accepts and RE2 cannot compile. That verdict belongs where `google-re2` is a dependency. A payload that is the right kind but constrains nothing — a negative `min_length`, an empty pattern, a range with neither bound — fails no row and is reported nowhere, which reads exactly like a rule that passed; one that admits nothing — a negative `max_length`, a range whose `min` sits above its `max`, an empty admitted-value list — fails every row instead. Both are rules the author cannot have meant, and the two are refused together for the reason the same shape is refused on a param's bounds: which side of the bound the payload is wrong on does not change that it grades nothing. The presence check RULE-STRM-009 settles only whether a payload is present, so this rule is what settles whether the one present can be applied, on the document, where the author is still holding it.\n",
+   "rationale": "The value field is deliberately typed open so each rule type can carry its own payload — a bound, a regex, a range object, a list of admitted values — and that openness is what leaves the shape unchecked by the annotation: a rule whose payload is the wrong kind validates against the field, and what happens when the rule runs against a record, mid-transfer, depends on which kind it is. A `range` payload of the wrong shape raises there, reliably; the others do not: a wrong-shaped `pattern` payload can still interpolate into a syntactically valid, silently-wrong regex, and a wrong-shaped `in_list` payload can iterate into a value set with no error rather than raising. This rule compiles a pattern in RE2, the dialect the engine as it stands applies a `pattern` rule in (through pyarrow's `match_substring_regex`), never in stdlib `re`, which answers a different question in both directions — `\\p{L}+` is an ordinary RE2 pattern `re` refuses, `(a)\\1` a backreference `re` accepts and RE2 cannot compile. The engine as it stands embeds the pattern as the group in `^(?:…)`, and this rule compiles it both alone and grouped, since neither compile implies the other. A pattern RE2 refuses alone either fails its stream at run time or compiles only grouped, where it closes the engine's group early and runs only because the engine's own parentheses complete it, and what it then matches can differ from what it reads as: `a)|(b` adds an unanchored alternative, so the run silently matches rows such as `xb` that `a|b` would not. `\\Qabc` compiles only alone, since grouped its quote swallows the closing parenthesis, and fails its stream at run time. Were the engine to match in another dialect, this check could go stale in either direction, refusing patterns that dialect runs or passing ones it cannot compile; were it to stop grouping the pattern, the grouped compile would be stricter than the run, refusing a pattern such as `\\Qabc` that would then match. A payload that is the right kind but constrains nothing — a negative `min_length`, an empty pattern, a range with neither bound — fails no row and is reported nowhere, which reads exactly like a rule that passed; one that admits nothing — a negative `max_length`, a range whose `min` sits above its `max`, an empty admitted-value list — fails every row instead. Both are rules the author cannot have meant, and the two are refused together for the reason the same shape is refused on a param's bounds: which side of the bound the payload is wrong on does not change that it grades nothing. The presence check RULE-STRM-009 settles only whether a payload is present, so this rule is what settles whether the one present can be applied, on the document, where the author is still holding it.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7249,11 +7249,11 @@
    "id": "RULE-TMAP-002",
    "statement": "A `regex` read rule whose native_type pattern spells a schemaless or structured container MUST NOT render a scalar Arrow type.\n",
    "tier": "coherence",
-   "severity": "error",
+   "severity": "warning",
    "artifact_kinds": [
     "type-map"
    ],
-   "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
+   "validator": "analitiq.validator.connectors::_type_map_rule_warnings",
    "enforcement_location": null,
    "owners": [
     "engine",
@@ -7267,7 +7267,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The read side's container obligation follows the rule kind, not the author's intent: a pattern generalising a parameterized container family covers many more columns than the one literal an `exact` rule covers, so collapsing it to a scalar discards the structure of a whole family at once. The check reads the pattern's own container spelling, so a rule that reaches containers only through a vendor label it does not spell out still validates clean.\n",
+   "rationale": "The read side's container obligation follows the rule kind, not the author's intent: a pattern generalising a parameterized container family covers many more columns than the one literal an `exact` rule covers, so collapsing it to a scalar discards the structure of a whole family at once. The check reads the pattern's own container spelling, so a rule that reaches containers only through a vendor label it does not spell out still validates clean. It reads that spelling off a rough estimate of the pattern's literal characters, not off RE2's parse, so it can miss a container or flag a scalar; that is why it warns rather than rejects.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7323,7 +7323,7 @@
   },
   {
    "id": "RULE-TMAP-005",
-   "statement": "A `regex` read rule's native_type pattern MUST compile under the RE2 regex dialect, and a named capture in it MUST be spelled `(?<name>…)`.\n",
+   "statement": "A `regex` read rule's native_type pattern MUST compile under the RE2 regex dialect, and a named capture in it MUST be spelled `(?<name>…)` under a name no other group carries.\n",
    "tier": "shape",
    "severity": "error",
    "artifact_kinds": [
@@ -7342,7 +7342,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine compiles a read rule's matcher with RE2 when it loads the connector and refuses the run on a pattern RE2 cannot parse, so a matcher that compiles only under a richer dialect passes authoring and fails where it ships. The lookaround, atomic groups and backreferences an author reaches for by habit are not RE2 syntax and read as ordinary regex on the page, so only compiling under the dialect that will match it tells the author which one they wrote. RE2 also takes Python's `(?P<name>…)` spelling; this contract takes only `(?<name>…)`, which makes the spelling the contract's choice rather than the dialect's. This states the engine as it stands: it validates the map against the contract models and then compiles the matcher with RE2. The gate compiles with a dialect other than RE2, so the two disagree in both directions: a matcher the gate admits and RE2 cannot parse passes authoring and is refused at load, and one the gate refuses and RE2 would take is rejected here although RE2 compiles it.\n",
+   "rationale": "The engine compiles a read rule's matcher with RE2 when it loads the connector and refuses the run on a pattern RE2 cannot parse, so a matcher that compiles only under a richer dialect passes authoring and fails where it ships. The lookaround, atomic groups and backreferences an author reaches for by habit are not RE2 syntax and read as ordinary regex on the page, so only compiling under the dialect that will match it tells the author which one they wrote. RE2 also takes Python's `(?P<name>…)` spelling; this contract takes only `(?<name>…)`, which makes the spelling the contract's choice rather than the dialect's. RE2 also compiles a name given to more than one group and binds it to the first, so a match through a later group leaves the placeholder with nothing to render. This states the engine as it stands: it validates the map against the contract models and then compiles the matcher with RE2. The gate compiles with RE2 as well, so the two agree while their RE2 releases parse the same syntax. Where the engine's release accepts a construct the gate's refuses, the gate is stricter than the run and rejects a matcher that would load; where it refuses one the gate's accepts, the matcher passes authoring and is refused at load.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7425,7 +7425,7 @@
   },
   {
    "id": "RULE-TMAP-009",
-   "statement": "A write `regex` rule's arrow_type matcher MUST compile under the RE2 regex dialect with any named capture spelled `(?<name>…)`, and the native_type DDL it renders MUST carry only well-formed placeholders.\n",
+   "statement": "A write `regex` rule's arrow_type matcher MUST compile under the RE2 regex dialect with any named capture spelled `(?<name>…)` under a name no other group carries, and the native_type DDL it renders MUST carry only well-formed placeholders.\n",
    "tier": "shape",
    "severity": "error",
    "artifact_kinds": [
@@ -7444,7 +7444,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The write direction inverts which key is the matcher, so the regex dialect obligation moves onto `arrow_type` while the placeholder obligation moves onto `native_type` — an author carrying a read rule's habits across writes the right syntax in the wrong key. The engine compiles that matcher with RE2 when it loads the connector, so a pattern that does not compile is not a narrower match: the whole map is refused at load, before any DDL is rendered and on runs that would never render any. RE2 also takes Python's `(?P<name>…)` spelling; this contract takes only `(?<name>…)`, the same spelling a read rule takes, which makes it the contract's choice rather than the dialect's. This states the engine as it stands: it validates the map against the contract models and then compiles the matcher with RE2. The gate compiles with a dialect other than RE2, so the two disagree in both directions: a matcher the gate admits and RE2 cannot parse passes authoring and is refused at load, and one the gate refuses and RE2 would take is rejected here although RE2 compiles it.\n",
+   "rationale": "The write direction inverts which key is the matcher, so the regex dialect obligation moves onto `arrow_type` while the placeholder obligation moves onto `native_type` — an author carrying a read rule's habits across writes the right syntax in the wrong key. The engine compiles that matcher with RE2 when it loads the connector, so a pattern that does not compile is not a narrower match: the whole map is refused at load, before any DDL is rendered and on runs that would never render any. RE2 also takes Python's `(?P<name>…)` spelling; this contract takes only `(?<name>…)`, the same spelling a read rule takes, which makes it the contract's choice rather than the dialect's. RE2 also compiles a name given to more than one group and binds it to the first, so a match through a later group leaves the placeholder with nothing to render. This states the engine as it stands: it validates the map against the contract models and then compiles the matcher with RE2. The gate compiles with RE2 as well, so the two agree while their RE2 releases parse the same syntax. Where the engine's release accepts a construct the gate's refuses, the gate is stricter than the run and rejects a matcher that would load; where it refuses one the gate's accepts, the matcher passes authoring and is refused at load.\n",
    "status": "active",
    "superseded_by": null
   },
