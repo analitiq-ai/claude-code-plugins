@@ -614,14 +614,14 @@ def test_a_capture_locator_fault_is_not_reported_as_the_authors_violation(monkey
     if fault == "no opener found":
         monkeypatch.setattr(type_map, "_group_opened_at", lambda *_: None)
     else:
-        compile_ = type_map._re2_compile
+        compile_ = type_map.compile_re2
 
         def refuse_every_cut(pattern):
             if pattern.startswith("(?:"):
                 raise ValueError("refused")
             return compile_(pattern)
 
-        monkeypatch.setattr(type_map, "_re2_compile", refuse_every_cut)
+        monkeypatch.setattr(type_map, "compile_re2", refuse_every_cut)
     with pytest.raises(RuntimeError):
         READ.validate_python(_wrap(READ, [{"match": "regex",
                                            "native_type": r"^N\((?<p>[1-9])\)$",
