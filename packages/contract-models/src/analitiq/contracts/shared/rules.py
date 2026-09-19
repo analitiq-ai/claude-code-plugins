@@ -80,9 +80,9 @@ class RuleViolation(ValueError):
     ``rule=None`` framework fallback ``rules/SCHEMA.md`` documents, minted
     directly rather than through :func:`violation`, which requires a
     resolvable id. `path` is `None` unless the enforcer knows a location more
-    precise than pydantic's own ``err["loc"]`` (`rules/SCHEMA.md`'s Findings
-    section names no format for it); a finding's `path` is ``err["loc"]``
-    extended by it.
+    precise than pydantic's own ``err["loc"]``; a finding's `path` is
+    ``err["loc"]`` extended by it, a pointer into the same document
+    (`rules/SCHEMA.md`, "Findings", `path`).
     """
 
     def __init__(
