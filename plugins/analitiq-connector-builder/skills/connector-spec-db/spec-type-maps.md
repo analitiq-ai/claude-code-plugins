@@ -174,7 +174,7 @@ exact spelling against
 [`arrow-types.json`](https://schemas.analitiq.ai/arrow-types.json).
 
 <!-- PROBE: read-map-native-semantics-unchecked -->
-> **Only the syntactic half is enforced** (RULE-TMAP-001/002). The contract
+> **Only the syntactic half is checked** (RULE-TMAP-001/002). The contract
 > flags a native whose *shape* is visibly a container — angle brackets
 > (`array<object>`) or a `[]` suffix (`integer[]`). A bare vendor spelling is
 > deliberately not special-cased, so `{"native_type": "JSONB", "arrow_type": "Utf8"}`
