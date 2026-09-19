@@ -15,15 +15,18 @@ which key is the *matcher* and which is *rendered*:
 Source of truth for both the published `type-map-read` / `type-map-write` JSON
 Schemas and the connector validator (which validates via `model_validate`).
 Only *error*-level rules live here — things that make a document invalid.
-Advisory quality checks that the contract tolerates (duplicate rules, dead
-uppercase-only patterns, write-vocabulary coverage gaps) are not contract
-violations and stay in the validator as warnings.
+Advisory quality checks that the contract tolerates (duplicate rules, read
+patterns spelling a lowercase literal, regex natives spelling a container that
+renders a scalar, write-vocabulary coverage gaps) are not contract violations
+and stay in the validator as warnings.
 """
 from __future__ import annotations
 
 import re
-from typing import Annotated, Literal
+from dataclasses import dataclass
+from typing import Annotated, Any, Literal
 
+import re2
 from pydantic import Field, model_validator
 
 from analitiq.contracts.arrow_grammar import (
@@ -111,117 +114,159 @@ def _validate_type_map_arrow_type(value: str) -> None:
     # a placeholder CAN become is decided against the native matcher instead,
     # by `validate_template_bounds` at the rule level.
     validate_cross_params(value)
-# ECMA-262 named group `(?<name>…)` + named backreference `\k<name>` — the only
-# named forms the contract allows; translated to Python's `(?P<name>…)` / `(?P=name)`
-# spellings only to compile-check.
-_ECMA_NAMED_GROUP = re.compile(r"\(\?<([A-Za-z_][A-Za-z0-9_]*)>")
-_ECMA_NAMED_BACKREF = re.compile(r"\\k<([A-Za-z_][A-Za-z0-9_]*)>")
-# Any non-ECMA `(?P…` extension: Python stdlib `(?P<>)` / `(?P=)`, PyPI regex
-# `(?P>)`. None are valid ECMA-262.
-_PYTHON_REGEX_FEATURE = re.compile(r"\(\?P[<=>]")
-
-# Arrow container heads — the engine's own vocabulary, so reasoning
-# over them is DB-agnostic. A read rule that maps a structured native to a
-# scalar Arrow type (not one of these) silently drops the value's structure.
-# Derived from the vendored engine grammar (imported above): the structural
-# authored-shape markers plus opaque `Json` — the only container Arrow types the
-# executable vocabulary carries.
 
 
-def _to_python_regex(pattern: str) -> str:
-    """ECMA `(?<name>…)`/`\\k<name>` → Python `(?P<name>…)`/`(?P=name)`, for the
-    compile check only. Both the declaration AND the backreference must be
-    translated, or an ECMA rule using `\\k<name>` fails to compile and is rejected."""
-    pattern = _ECMA_NAMED_GROUP.sub(r"(?P<\1>", pattern)
-    return _ECMA_NAMED_BACKREF.sub(r"(?P=\1)", pattern)
+# ---------------------------------------------------------------------------
+# Matchers: compiled and matched in RE2, the dialect the contract fixes for them
+# ---------------------------------------------------------------------------
+
+# A refused matcher is reported as a finding; RE2 would also write it to stderr.
+_RE2_OPTIONS = re2.Options()
+_RE2_OPTIONS.log_errors = False
+
+# Locates a spelling that may open a named group; RE2 decides whether it does.
+# A lookahead, so a spelling that opens nothing cannot consume the one after it.
+_NAMED_GROUP_SPELLING = re.compile(r"(?=(?P<spelling>\(\?(?P<python>P?)<(?P<name>[^>]*)>))")
 
 
-def _named_group_source(pattern: str, name: str) -> str | None:
-    """The sub-pattern inside ECMA named group `(?<name>…)`, by paren balancing.
+@dataclass(frozen=True, slots=True)
+class CompiledMatcher:
+    """A type-map matcher compiled in RE2."""
 
-    Returned unanchored and unwrapped, so the caller decides how to compile it.
-    None when the group is absent or its parentheses never close. Escapes are
-    consumed in pairs and `[...]` runs are skipped whole, so a `\\)` or a `)`
-    inside a character class does not end the group early.
-    """
-    opener = f"(?<{name}>"
-    start = pattern.find(opener)
-    if start < 0:
+    # The binding publishes no type for a compiled pattern.
+    regex: Any
+
+    def fullmatch(self, subject: str) -> Any:
+        """RE2's match of the whole `subject`, or None.
+
+        RE2 reads UTF-8, so a subject with no UTF-8 encoding (a lone surrogate,
+        which JSON can spell) is matched by nothing."""
+        try:
+            return self.regex.fullmatch(subject)
+        except UnicodeEncodeError:
+            return None
+
+
+def _re2_compile(pattern: str) -> Any:
+    """ValueError carrying RE2's own parse error when RE2 refuses `pattern`."""
+    try:
+        return re2.compile(pattern, options=_RE2_OPTIONS)
+    except re2.error as exc:
+        detail = exc.args[0] if exc.args else exc
+        if isinstance(detail, bytes):
+            detail = detail.decode("utf-8", "replace")
+        raise ValueError(f"matcher is not valid RE2 ({detail})") from exc
+
+
+def _group_opened_at(pattern: str, spelling: re.Match[str], names: Any) -> int | None:
+    """The number of the group RE2 opens at `spelling`, None when the spelling
+    opens none (it sits in a class, a quote or after an escape): renaming it
+    renames a group exactly when it opens one."""
+    probe = "probe"
+    while probe in names:
+        probe += "_"
+    renamed = f"{pattern[:spelling.start()]}(?<{probe}>{pattern[spelling.end('spelling'):]}"
+    try:
+        return _re2_compile(renamed).groupindex.get(probe)
+    except ValueError:
         return None
-    i = start + len(opener)
-    depth = 1
-    in_class = False
-    body: list[str] = []
-    while i < len(pattern):
-        char = pattern[i]
-        if char == "\\":
-            body.append(pattern[i:i + 2])
-            i += 2
+
+
+def compile_matcher(pattern: str) -> CompiledMatcher:
+    """Compile a type-map matcher in RE2, the dialect the rule is matched in.
+
+    ValueError carrying RE2's own parse error when RE2 refuses the pattern, and
+    for what RE2 accepts and the contract does not: a named group spelled
+    `(?P<name>…)`, and a name given to more than one group, which RE2 binds to
+    the first only, so a match through a later one captures nothing under it."""
+    regex = _re2_compile(pattern)
+    named: set[str] = set()
+    for spelling in _NAMED_GROUP_SPELLING.finditer(pattern):
+        if not _group_opened_at(pattern, spelling, regex.groupindex):
             continue
-        if in_class:
-            in_class = char != "]"
-        elif char == "[":
-            in_class = True
-        elif char == "(":
-            depth += 1
-        elif char == ")":
-            depth -= 1
-            if depth == 0:
-                return "".join(body)
-        body.append(char)
-        i += 1
-    return None
+        if spelling["python"]:
+            raise ValueError(
+                "matcher spells a named group '(?P<name>…)'; the contract "
+                "takes only '(?<name>…)'"
+            )
+        if spelling["name"] in named:
+            raise ValueError(f"matcher gives the name {spelling['name']!r} to more than one group")
+        named.add(spelling["name"])
+    return CompiledMatcher(regex)
 
 
-def _capture_language(
-    native: str, name: str, probes: tuple[str, ...]
-) -> frozenset[str] | None:
+def _named_group_source(pattern: str, name: str) -> str:
+    """The `(?<name>…)` group's sub-pattern: the source from the opener RE2
+    binds the name to up to the first `)` where the source compiles as a group
+    of its own. A `)` before that sits in a class, a quote, an escape or a
+    nested group, so the source cut there does not compile. Inline flags set
+    outside the group are not carried.
+
+    KeyError when the matcher has no group of that name. RuntimeError when the
+    group cannot be located in a matcher RE2 compiled: a fault here, never the
+    author's, so it must not surface as the ValueError a rule reports."""
+    names = _re2_compile(pattern).groupindex
+    number = names[name]
+    opener = next((
+        spelling for spelling in _NAMED_GROUP_SPELLING.finditer(pattern)
+        if spelling["name"] == name and _group_opened_at(pattern, spelling, names) == number
+    ), None)
+    if opener is None:
+        raise RuntimeError(f"RE2 names group {name!r} but no spelling in {pattern!r} opens it")
+    close = opener.end("spelling")
+    while True:
+        close = pattern.find(")", close)
+        if close < 0:
+            raise RuntimeError(f"no `)` in {pattern!r} closes group {name!r} as RE2 does")
+        source = pattern[opener.end("spelling"):close]
+        try:
+            _re2_compile(f"(?:{source})")
+        except ValueError:
+            close += 1
+            continue
+        return source
+
+
+def _capture_language(native: str, name: str, probes: tuple[str, ...]) -> frozenset[str]:
     """Which of `probes` the native's `(?<name>…)` capture can match.
 
-    An over-approximation on purpose: the capture is interrogated in isolation,
-    so surrounding context that would further constrain it is ignored. None
-    when the group cannot be read or its sub-pattern does not compile on its
-    own (a backreference to a group declared outside it, say) — an unreadable
-    capture proves nothing and must not be reported as proving something.
-    """
-    source = _named_group_source(native, name)
-    if source is None:
-        return None
-    try:
-        compiled = re.compile(_to_python_regex(source))
-    except re.error:
-        return None
-    return frozenset(probe for probe in probes if compiled.fullmatch(probe))
+    The capture is interrogated in isolation: surrounding context that would
+    further constrain it is ignored, and inline flags set outside it are
+    dropped, which can narrow it."""
+    capture = _re2_compile(f"(?:{_named_group_source(native, name)})")
+    return frozenset(probe for probe in probes if capture.fullmatch(probe))
 
 
-def _strip_regex_meta(pattern: str) -> str:
-    """Approximate literal text of a regex: drop named groups + named backrefs +
-    class/anchor escapes, keep other escaped characters as literals. Backrefs
-    (`\\k<name>`) contribute no literal text and MUST be dropped whole — otherwise
-    the trailing `<name>` is mistaken for container `<…>` syntax."""
-    without_groups = _ECMA_NAMED_GROUP.sub("(", pattern)
-    without_backrefs = _ECMA_NAMED_BACKREF.sub("", without_groups)
-    without_class_escapes = re.sub(r"\\[dDsSwWbBAZfnrtvux0]", "", without_backrefs)
-    return re.sub(r"\\(.)", r"\1", without_class_escapes)
+def _native_is_schemaless_container(literal_text: str) -> bool:
+    """Best-effort, DB-agnostic detection of a structured/container native from
+    its SYNTAX — never a vendor type-name list. Container natives are recognised
+    by shape: angle-bracket parameterization (`array<int>`, `struct<...>`,
+    `map<k, v>`) or a SQL array suffix (`integer[]`), read from the native's
+    literal characters. Bare vendor scalars-for-JSON (`JSONB`, `VARIANT`, …) are
+    intentionally not special-cased; if their structure matters the author
+    writes it with `<...>` or `[]`."""
+    return ("<" in literal_text and ">" in literal_text) or literal_text.endswith("[]")
+
+
+def _guard_container_not_collapsed(native_type: str, literal_text: str, arrow_type: str) -> None:
+    """A schemaless/structured native_type must not resolve to a scalar Arrow type
+    (which would silently drop the value's structure). Read direction only.
+    `literal_text` is what container syntax is read from: the native itself for
+    an exact rule, a reading of the matcher's literal characters for a regex one."""
+    if _native_is_schemaless_container(literal_text):
+        head = _arrow_type_head(arrow_type)
+        if head and head not in _CONTAINER_CANONICAL_HEADS:
+            raise ValueError(
+                f"native_type {native_type!r} is a schemaless/structured container but "
+                f"resolves to scalar arrow_type {arrow_type!r}; map it to a container "
+                "Arrow type (`Json`, or `Object`/`List` for endpoint narrowings)"
+            )
 
 
 def _arrow_type_head(arrow_type: str) -> str:
     """Leading PascalCase Arrow type name (empty if it opens with `${…}`)."""
     m = re.match(r"\s*([A-Za-z][A-Za-z0-9]*)", arrow_type)
     return m.group(1) if m else ""
-
-
-def _native_is_schemaless_container(native: str, match: str) -> bool:
-    """Best-effort, DB-agnostic detection of a structured/container native from
-    its SYNTAX — never a vendor type-name list. Container natives are recognised
-    by shape: angle-bracket parameterization (`array<int>`, `struct<...>`,
-    `map<k, v>`) or a SQL array suffix (`integer[]`). Bare vendor scalars-for-
-    JSON (`JSONB`, `VARIANT`, …) are intentionally not special-cased; if their
-    structure matters the author writes it with `<...>` or `[]`."""
-    probe = _strip_regex_meta(native) if match == "regex" else native
-    if "<" in probe and ">" in probe:
-        return True
-    return probe.replace("\\", "").rstrip("$").endswith("[]")
 
 
 def _validate_render_placeholders(render: str) -> None:
@@ -232,32 +277,6 @@ def _validate_render_placeholders(render: str) -> None:
         raise ValueError(f"render value {render!r} contains an empty ${{}} placeholder")
     if "${" in _PLACEHOLDER_RE.sub("", render):
         raise ValueError(f"render value {render!r} has an unclosed '${{' (missing '}}')")
-
-
-def _compile_ecma_matcher(matcher: str) -> "re.Pattern[str]":
-    """Compile an ECMA-262 matcher, rejecting Python-only `(?P…)` regex syntax."""
-    if _PYTHON_REGEX_FEATURE.search(matcher):
-        raise ValueError(
-            "matcher uses Python-only '(?P…)' regex syntax; the contract "
-            "requires ECMA-262 (use '(?<name>…)' for named groups)"
-        )
-    try:
-        return re.compile(_to_python_regex(matcher))
-    except re.error as exc:
-        raise ValueError(f"matcher is not a valid regex ({exc})") from exc
-
-
-def _guard_container_not_collapsed(native_type: str, match: str, arrow_type: str) -> None:
-    """A schemaless/structured native_type must not resolve to a scalar Arrow type
-    (which would silently drop the value's structure). Read direction only."""
-    if _native_is_schemaless_container(native_type, match):
-        head = _arrow_type_head(arrow_type)
-        if head and head not in _CONTAINER_CANONICAL_HEADS:
-            raise ValueError(
-                f"native_type {native_type!r} is a schemaless/structured container but "
-                f"resolves to scalar arrow_type {arrow_type!r}; map it to a container "
-                "Arrow type (`Json`, or `Object`/`List` for endpoint narrowings)"
-            )
 
 
 # An EXACT rule's `arrow_type` is a literal Arrow type. `ARROW_TYPE_PATTERN` both
@@ -290,14 +309,14 @@ class TypeMapReadExactRule(_TypeMapRuleBase):
         # (Decimal scale <= precision).
         validate_cross_params(self.arrow_type)
         try:
-            _guard_container_not_collapsed(self.native_type, "exact", self.arrow_type)
+            _guard_container_not_collapsed(self.native_type, self.native_type, self.arrow_type)
         except ValueError as detail:
             raise violation("RULE-TMAP-001", "read-exact-container-collapsed", str(detail)) from None
         return self
 
 
 class TypeMapReadRegexRule(_TypeMapRuleBase):
-    """Read regex rule: ECMA-262 `native_type` matches, Arrow `arrow_type` render template
+    """Read regex rule: RE2 `native_type` matches, Arrow `arrow_type` render template
     (its `${name}` placeholders draw from the `native_type`'s named captures)."""
 
     match: Literal["regex"]
@@ -310,20 +329,16 @@ class TypeMapReadRegexRule(_TypeMapRuleBase):
         except ValueError as detail:
             raise violation("RULE-TMAP-006", "read-regex-arrow-type-invalid", str(detail)) from None
         try:
-            compiled = _compile_ecma_matcher(self.native_type)
+            compiled = compile_matcher(self.native_type)
         except ValueError as detail:
             raise violation("RULE-TMAP-005", "read-regex-native-type-not-ecma", str(detail)) from None
         try:
             _validate_render_placeholders(self.arrow_type)
         except ValueError as detail:
             raise violation("RULE-TMAP-007", "read-regex-malformed-placeholder", str(detail)) from None
-        try:
-            _guard_container_not_collapsed(self.native_type, "regex", self.arrow_type)
-        except ValueError as detail:
-            raise violation("RULE-TMAP-002", "read-regex-container-collapsed", str(detail)) from None
 
         # Every `${name}` in the `arrow_type` render must name a `native_type` capture.
-        capture_names = set(compiled.groupindex.keys())
+        capture_names = set(compiled.regex.groupindex.keys())
         placeholders = _PLACEHOLDER_RE.findall(self.arrow_type)
         for name in placeholders:
             if name not in capture_names:
@@ -388,7 +403,7 @@ class TypeMapWriteExactRule(_TypeMapRuleBase):
 
 
 class TypeMapWriteRegexRule(_TypeMapRuleBase):
-    """Write regex rule: ECMA-262 `arrow_type` matches, `native_type` DDL render template.
+    """Write regex rule: RE2 `arrow_type` matches, `native_type` DDL render template.
     `arrow_type` is the matcher here, so it is NOT held to the Arrow vocabulary."""
 
     match: Literal["regex"]
@@ -396,7 +411,7 @@ class TypeMapWriteRegexRule(_TypeMapRuleBase):
     @model_validator(mode="after")
     def _check(self) -> "TypeMapWriteRegexRule":
         try:
-            _compile_ecma_matcher(self.arrow_type)
+            compile_matcher(self.arrow_type)
         except ValueError as detail:
             raise violation("RULE-TMAP-009", "write-regex-arrow-type-not-ecma", str(detail)) from None
         try:

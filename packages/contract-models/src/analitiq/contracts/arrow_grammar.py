@@ -602,14 +602,14 @@ def _describe_position(
 
 def validate_template_bounds(
     value: str,
-    capture_language: Callable[[str, tuple[str, ...]], frozenset[str] | None],
+    capture_language: Callable[[str, tuple[str, ...]], frozenset[str]],
 ) -> None:
     """Reject a templated canonical whose captures can render a non-canonical.
 
     A templated position carries no value of its own, so what it renders comes
     from the thing that produces it: the native matcher's named capture.
     `capture_language(name, probes)` answers which of `probes` that capture can
-    match (None when it cannot be read), and three things follow:
+    match, and three things follow:
 
     - a **templated** position must not be able to render a value its own
       position does not admit — a `(?<n>\\d+)` feeding `FixedSizeBinary(${n})`
@@ -669,16 +669,13 @@ def validate_template_bounds(
         (so a diagnostic leads with the plainest witness), optionally narrowed
         to the values that position admits on its own.
 
-        None when nothing can be concluded — an unreadable capture, or a
-        position whose kind carries no probe alphabet to interrogate it with
-        (an empty answer there would read as "matches nothing", which is the
-        opposite of what an empty alphabet means)."""
+        None when the position's kind carries no probe alphabet to interrogate
+        the capture with (an empty answer there would read as "matches
+        nothing", which is the opposite of what an empty alphabet means)."""
         probes = param_probe_values(param)
         if not probes:
             return None
         rendered = capture_language(placeholders[param["name"]], probes)
-        if rendered is None:
-            return None
         ordered = [v for v in probes if v in rendered]
         if not admissible_only:
             return ordered

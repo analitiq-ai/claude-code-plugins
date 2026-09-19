@@ -924,7 +924,7 @@ RESOURCES: tuple[Resource, ...] = (
             "a top-level object carrying `direction` (fixed `\"read\"`) and an "
             "ordered, non-empty `rules` array of `{match, native_type, arrow_type}` "
             "rules, order significant (first match wins). The full per-rule "
-            "contract (ECMA-262 regex, `${name}` capture correspondence, Arrow "
+            "contract (RE2 regex, `${name}` capture correspondence, Arrow "
             "vocabulary, schemaless-container handling) lives in the model and is "
             "enforced by the connector validator; this published schema is the "
             "structural projection. Source of truth: "

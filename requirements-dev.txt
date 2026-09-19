@@ -17,6 +17,7 @@
 # analitiq-contract-models runtime deps
 pydantic>=2.12,<3
 tzdata
+google-re2>=1.1.20251105
 
 # analitiq-validator runtime deps
 jsonschema>=4.18,<5
