@@ -33,8 +33,9 @@ module adds only what a single-document model cannot express:
   and structurally invisible to that model validator — so the cross-file half of
   the rule lives here;
 - **advisory quality warnings** the contract tolerates: duplicate type-map
-  rules, read patterns spelling a case no native uses, and write-map vocabulary gaps
-  (`RULE-TMAP-014`/`RULE-TMAP-022`/`RULE-TMAP-017`).
+  rules, read patterns spelling a lowercase literal, regex natives spelling a
+  container that renders a scalar, and write-map vocabulary gaps
+  (`RULE-TMAP-014`/`RULE-TMAP-002`/`RULE-TMAP-022`/`RULE-TMAP-017`).
 
 At import this module registers its detector→validator pairs with the core
 dispatch registry, so `_core` never hard-codes connector branches.
@@ -83,11 +84,11 @@ try:
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
-        # Reuse the contract's matcher compilation and `${name}` placeholder
-        # syntax from the model so the validator's rule-rendering can't drift
-        # from the model's rule-validation.
+        # Reuse the contract's matcher compilation, `${name}` placeholder
+        # syntax and container test from the model so the validator's
+        # rule-rendering and warnings can't drift from the model's rule-validation.
         from analitiq.contracts.type_map import (
-            _PLACEHOLDER_RE, case_dead_atoms, compile_matcher,
+            _PLACEHOLDER_RE, _guard_container_not_collapsed, compile_matcher,
         )
         # The executable Arrow vocabulary — the write-coverage probe set is
         # derived from it rather than sampled by hand.
@@ -581,10 +582,29 @@ def _write_vocabulary_findings(rules: list) -> list[dict]:
     )]
 
 
+# A rough reading of a regex matcher's literal characters: it drops RE2 syntax
+# loosely and keeps an escaped punctuation character. A construct it does not
+# model reads as literal text, which misplaces only a warning.
+_MATCHER_SYNTAX = re.compile(
+    r"\[\^?\]?(?:\[:[^\]]*:\]|\\.|[^\]\\])*\]"  # a class
+    r"|\(\?P?<[^>]*>|\(\?[A-Za-z-]*[:)]"        # a group or flag opener
+    r"|\\[pPx]\{[^}]*\}|\\[pP]?[A-Za-z0-9]"     # a letter or braced escape, `\Q`/`\E` among them
+    r"|\\(?P<kept>.)"                            # an escaped punctuation character
+    r"|\{\d+(?:,\d*)?\}|[\^$|*+?.()]"            # a count or an operator
+)
+# A flag group turning case-insensitivity on, anywhere in the matcher.
+_CASE_INSENSITIVE_FLAG = re.compile(r"\(\?[A-Za-z]*i")
+
+
+def _matcher_literal_text(matcher: str) -> str:
+    return _MATCHER_SYNTAX.sub(r"\g<kept>", matcher)
+
+
 def _type_map_rule_warnings(rules: list, direction: str) -> list[dict]:
     """Advisory (non-error) type-map checks the contract tolerates: duplicate
-    rules (later ones unreachable) and read-pattern atoms whose case no
-    normalized native uses."""
+    rules (later ones unreachable), and read regex natives whose literal
+    characters hold a lowercase letter or spell a container rendered as a
+    scalar."""
     if not isinstance(rules, list):
         return []
     matcher_key = "native_type" if direction == "read" else "arrow_type"
@@ -621,21 +641,25 @@ def _type_map_rule_warnings(rules: list, direction: str) -> list[dict]:
             # warning pass only; the model already rejects the malformed rule.
             pass
         if direction == "read" and match == "regex" and isinstance(matcher, str):
-            try:
-                dead = case_dead_atoms(matcher)
-            except ValueError:
-                # The model reports a matcher the contract refuses.
-                dead = ()
-            if dead:
+            literal = _matcher_literal_text(matcher)
+            if not _CASE_INSENSITIVE_FLAG.search(matcher) and any(c.islower() for c in literal):
                 findings.append(finding(
                     rule="RULE-TMAP-014",
                     message_id="regex-native-case-mismatch", kind="fail",
                     path=f"/rules/{i}/{matcher_key}",
                     message=(
                         f"regex {matcher_key} is matched against UPPERCASED natives; "
-                        f"{', '.join(map(repr, dead))} in {matcher!r} can never match "
-                        "a normalized native character."),
+                        f"lowercase literals in {matcher!r} can never match."),
                 ))
+            if isinstance(rule.get("arrow_type"), str):
+                try:
+                    _guard_container_not_collapsed(matcher, literal, rule["arrow_type"])
+                except ValueError as detail:
+                    findings.append(finding(
+                        rule="RULE-TMAP-002",
+                        message_id="read-regex-container-collapsed", kind="fail",
+                        path=f"/rules/{i}", message=str(detail),
+                    ))
     return findings
 
 

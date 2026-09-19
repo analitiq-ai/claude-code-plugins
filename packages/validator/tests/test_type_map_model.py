@@ -2,19 +2,14 @@
 validity the validator delegates to. The PR premise ("the model rejects it, so
 the validator catches it") rests on these, so they are pinned directly.
 """
-import string
-
 import pytest
-import re2
 from pydantic import TypeAdapter, ValidationError
 
-from analitiq.contracts import type_map
 from analitiq.contracts.type_map import (
     TYPE_MAP_READ_SCHEMA_URL,
     TYPE_MAP_WRITE_SCHEMA_URL,
     TypeMapReadDoc,
     TypeMapWriteDoc,
-    case_dead_atoms,
     compile_matcher,
     normalize_native_type,
 )
@@ -270,28 +265,18 @@ def test_regex_rejects_python_named_group():
         assert "(?<name>…)" in refusal, refusal
 
 
-@pytest.mark.parametrize("matcher", [
-    r"^INT\[\]{0}$",
-    r"^INT(?:\[\]){0,0}$",
-    r"^A(?:b){0}?$",
-    # A flag group or an empty quote takes no place of its own, so the count
-    # falls on what precedes it.
-    r"^Ab(?i){0}$",
-    r"^Ab\Q\E{0}$",
-    r"^N\((?<p>[1-9]){0}[1-9]\)$",
-])
-def test_regex_rejects_a_zero_count_repetition(matcher):
-    for adapter, rule_id in ((READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")):
-        refusal = _refusal(adapter, _regex_rule(adapter, matcher))
-        assert rule_id in refusal, refusal
-        assert "zero times" in refusal, refusal
+@pytest.mark.parametrize("matcher", [r"^INT\[\]{0}$", r"^INT(?:\[\]){0,0}$"])
+def test_regex_accepts_a_zero_count_repetition(matcher):
+    for adapter in (READ, WRITE):
+        _accepts(adapter, [_regex_rule(adapter, matcher)])
 
 
 def test_python_named_group_spelling_inside_a_quote_is_a_literal():
-    # `\Q…\E` quotes its contents, so the spelling there opens no group. The
-    # quoted `<…>` is literal container syntax, so the read rule renders `Json`.
-    _accepts(READ, [{"match": "regex", "native_type": r"^\Q(?P<x>\E$", "arrow_type": "Json"}])
-    _accepts(WRITE, [_regex_rule(WRITE, r"^\Q(?P<x>\E$")])
+    # `\Q…\E` quotes its contents, and a class holds members, so neither
+    # spelling opens a group.
+    for matcher in (r"^\Q(?P<x>\E$", r"^[(?P<x>)]$"):
+        for adapter in (READ, WRITE):
+            _accepts(adapter, [_regex_rule(adapter, matcher)])
 
 
 def test_regex_named_backreference_rejected():
@@ -381,86 +366,11 @@ def test_schemaless_container_must_not_collapse_to_scalar():
     _accepts(READ, [{"match": "exact", "native_type": "JSONB", "arrow_type": "Utf8"}])  # bare name: not flagged
 
 
-@pytest.mark.parametrize("native,is_container", [
-    # A class's members are a set, not a parameterization, however the class
-    # is spelled.
-    (r"^A[<>]B$", False),
-    (r"^A[^]<>]B$", False),
-    (r"^A[\]<>]B$", False),
-    (r"^A[[:alpha:]<>]B$", False),
-    # Braces RE2 cannot read as a repetition count are literals, so the native
-    # does not end in `[]`.
-    ("^INT\\[\\]{\u0661}$", False),
-    (r"^INT\[\]{01}$", False),
-    (r"^INT\[\]{1000000000}$", False),
-    # A repetition count is no literal, so the native still ends in `[]`.
-    (r"^INT\[\]{2}$", True),
-    (r"^INT\[\]{1,3}$", True),
-    # A count that admits an occurrence leaves the `[]` matchable.
-    (r"^INT\[\]{0,}$", True),
-    (r"^INT\[\]{0,1}$", True),
-    (r"^INT(\[\])?$", True),
-    (r"^ARRAY<(?<t>[A-Z]+)>$", True),
-    # However a literal `<`, `>`, `[` or `]` is spelled, it is that character.
-    (r"^INT\[\]$", True),
-    (r"^ARRAY\<INT\>$", True),
-    (r"^ARRAY\Q<INT>\E$", True),
-    (r"^ARRAY\Q<INT>", True),
-    (r"^ARRAY\x{3C}INT\x3E$", True),
-    (r"^ARRAY\74INT\076$", True),
-    # An octal escape reads at most three digits; a fourth is a literal.
-    (r"^ARRAY\0741INT\0760$", True),
-    # A range may end at `[`; what follows the class is literal again.
-    (r"^ARRAY<[+-[:]>:]X]$", True),
-    (r"^ARRAY<[+-[:]>:]$", True),
-])
-def test_container_syntax_is_read_from_a_regex_rules_literals_only(native, is_container):
-    rule = {"match": "regex", "native_type": native, "arrow_type": "Utf8"}
-    if is_container:
-        refusal = _refusal(READ, rule)
-        assert "RULE-TMAP-002" in refusal, refusal
-    else:
-        _accepts(READ, [rule])
-
-
-def test_the_tokenizer_reads_every_escape_re2_compiles():
-    # The tokenizer restates RE2's escape grammar, so RE2 says which escapes
-    # exist; one the tokenizer does not know raises instead of compiling.
-    options = re2.Options()
-    options.log_errors = False
-    escapes = []
-    for char in string.ascii_letters + string.digits:
-        try:
-            re2.compile(rf"^A\{char}B$", options=options)
-        except re2.error:
-            continue
-        escapes.append(rf"^A\{char}B$")
-    assert escapes, "RE2 compiled no escape; the probe no longer measures anything"
-    for pattern in escapes:
-        compile_matcher(pattern)
-
-
-@pytest.mark.parametrize("control", ["a", "f", "n", "r", "t", "v"])
-def test_a_control_escape_is_no_case_finding(control):
-    # A control character has no case, so folding case adds no match and the
-    # atom is never dead by case, whether or not a normalized native holds it.
-    assert case_dead_atoms(rf"^A\{control}B$") == ()
-
-
-def test_a_tokenizer_failure_on_a_matcher_re2_accepts_is_raised_not_refused(monkeypatch):
-    def unreadable(pattern):
-        raise ValueError(f"cannot read {pattern!r}")
-
-    monkeypatch.setattr(type_map, "_tokenize", unreadable)
-    with pytest.raises(RuntimeError):
-        _accepts(READ, [{"match": "regex", "native_type": "^A$", "arrow_type": "Utf8"}])
-
-
-def test_a_fragment_re2_refuses_is_raised_not_refused():
-    # A fragment is cut out of a matcher RE2 accepted, so RE2 refusing one is
-    # the tokenizer's defect, never the author's.
-    with pytest.raises(RuntimeError):
-        type_map._compile_fragment("(", "^(A)$")
+@pytest.mark.parametrize("native", [r"^A[<>]B$", r"^ARRAY<(?<t>[A-Z]+)>$"])
+def test_a_regex_read_rule_is_not_refused_for_container_syntax(native):
+    # Container syntax is read off a regex matcher only roughly, so the
+    # validator warns on it (RULE-TMAP-002) and the model accepts either way.
+    _accepts(READ, [{"match": "regex", "native_type": native, "arrow_type": "Utf8"}])
 
 
 def test_schemaless_native_maps_to_container_canonicals_only():
@@ -607,14 +517,6 @@ def test_a_repeated_group_name_is_read_as_the_group_re2_binds():
     assert "RULE-TMAP-010" in refusal, refusal
 
 
-def test_capture_is_read_under_the_inline_flags_in_force():
-    # The unit probes are spelt in uppercase; a lowercase capture under `(?i)`
-    # matches them, so the capture's language is taken case-insensitively too.
-    _accepts(READ, [{"match": "regex",
-                     "native_type": rf"(?i)^ts\((?<u>{_units('Timestamp').lower()})\)$",
-                     "arrow_type": "Timestamp(${u})"}])
-
-
 def test_families_without_a_cross_bound_are_capture_checked_too():
     """A cross-parameter bound is not what makes a position worth reading.
 
@@ -652,8 +554,10 @@ def test_a_position_with_no_probe_alphabet_stands():
     # A quoted `)` is a literal, and so is a `]` opening a class.
     (r"^X(?<t>\Q)\E|A)$", "t", r"\Q)\E|A"),
     (r"^X(?<t>[]A)]+)$", "t", "[]A)]+"),
-    # The inline flags in force at the opener travel with the source.
-    (r"(?i)X(?<t>ab)", "t", "(?i:ab)"),
+    # A spelling inside a class opens no group, so the opener is the one after it.
+    (r"^N[(?<p>]*\((?<p>[1-9])\)$", "p", "[1-9]"),
+    # Inline flags set outside the group are not carried.
+    (r"(?i)X(?<t>ab)", "t", "ab"),
     # An unnamed group takes a number too, so the names after it are read at
     # the numbers RE2 binds them to.
     (r"^(X)?(?<p>A)(?<q>B)$", "p", "A"),

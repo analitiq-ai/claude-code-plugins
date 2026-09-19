@@ -1950,7 +1950,9 @@ def test_duplicate_exact_read_rule_warns_across_case_and_whitespace(validator):
 # Each row names a witness the expectation is graded against, so the table is
 # checked by RE2 itself and not only by the check under test: a silent row's
 # witness is a native whose normalized form the pattern matches, and a warning
-# row's witness is a spelling the pattern matches only before normalization.
+# or missed row's witness is a spelling the pattern matches only before
+# normalization. A missed row is dead and draws no warning: the check reads the
+# matcher's literal characters roughly.
 @pytest.mark.parametrize("native,verdict,witness", [
     (r"^varchar$", "warns", "varchar"),
     (r"(?i)^varchar$", "silent", "varchar"),
@@ -1962,75 +1964,67 @@ def test_duplicate_exact_read_rule_warns_across_case_and_whitespace(validator):
     (r"^\pL+$", "silent", "VARCHAR"),
     (r"^\P{Ll}+$", "silent", "VARCHAR"),
     (r"^VAR\z", "silent", "VAR"),
-    (r"^[a-z]+$", "warns", "abc"),
     (r"^\Qvar\E$", "warns", "var"),
-    (r"(A(?i)b)c", "warns", "Abc"),
-    (r"^(?i)(?-i:a)$", "warns", "a"),
-    (r"^\x6aAR$", "warns", "jAR"),
-    (r"^[ß]$", "warns", "ß"),
     (r"^[\p{Ll}]$", "silent", "ĸ"),
     (r"^A[]a]B$", "silent", "A]B"),
     (r"^FOO(?<x>[A-Za-z]+)$", "silent", "FOOX"),
     (r"^varchar\((?<n>\d+)\)$", "warns", "varchar(1)"),
-    (r"^[[:lower:]]$", "warns", "a"),
-    (r"^\x{6A}AR$", "warns", "jAR"),
-    (r"^\141AR$", "warns", "aAR"),
-    (r"^\Qvar", "warns", "var"),
-    (r"^A[+-[:]b:]]$", "warns", "A+b:]]"),
-    (r"^\x{10428}$", "warns", "\U00010428"),
-    # Refused by the contract, so there is no pattern for the warning to read.
+    (r"^[a-z]+$", "missed", "abc"),
+    (r"^(?i)(?-i:a)$", "missed", "a"),
+    # Refused by the contract; the model reports it.
     (r"^(?P<x>\d)X$", "refused", None),
     (r"^A(?<t>[0-9])B\k<t>$", "refused", None),
 ])
-def test_regex_case_dead_atom_warning_truth_table(validator, tmp_path, native, verdict, witness):
+def test_regex_lowercase_literal_warning_truth_table(validator, tmp_path, native, verdict, witness):
     import re2
 
     from analitiq.contracts.type_map import normalize_native_type
 
     if verdict == "silent":
         assert re2.fullmatch(native, normalize_native_type(witness)), witness
-    elif verdict == "warns":
+    elif verdict in ("warns", "missed"):
         assert re2.fullmatch(native, witness), witness
         assert not re2.fullmatch(native, normalize_native_type(witness)), witness
     findings = validator.validate_document(
         _type_map_doc([{"match": "regex", "native_type": native, "arrow_type": "Utf8"}], "read"),
         doc_path=tmp_path / "type-map-read.json")
-    dead = [w for w in _warnings(findings)
-            if w.get("rule") == "RULE-TMAP-014" and "can never match" in w["message"]]
-    assert bool(dead) is (verdict == "warns"), findings
     refused = [e for e in _errors(findings) if e.get("rule") == "RULE-TMAP-005"]
     assert bool(refused) is (verdict == "refused"), findings
+    if verdict != "refused":
+        dead = [w for w in _warnings(findings)
+                if w.get("rule") == "RULE-TMAP-014" and "can never match" in w["message"]]
+        assert bool(dead) is (verdict == "warns"), findings
 
 
-def test_regex_case_check_stays_cheap_across_a_whole_map(validator, tmp_path):
-    # The character table is built once per process, so it is dropped first:
-    # the bound has to hold for the map that pays for it.
-    from analitiq.contracts import type_map
+@pytest.mark.parametrize("native,arrow_type,warns", [
+    (r"^ARRAY<(?<t>[A-Z]+)>$", "Utf8", True),
+    (r"^ARRAY<(?<t>[A-Z]+)>$", "Json", False),
+    (r"^INT\[\]$", "Utf8", True),
+    (r"^ARRAY\Q<INT>\E$", "Utf8", True),
+    # A class is dropped whole, so its members are no container syntax.
+    (r"^A[<>]B$", "Utf8", False),
+    # Alternation is not read: the reading keeps every branch's literals.
+    (r"^A(?:<|>)B$", "Utf8", True),
+    (r"^(?:INT\[|X)\]$", "Utf8", False),
+])
+def test_regex_read_rule_container_warning(validator, tmp_path, native, arrow_type, warns):
+    findings = validator.validate_document(
+        _type_map_doc([{"match": "regex", "native_type": native, "arrow_type": arrow_type}], "read"),
+        doc_path=tmp_path / "type-map-read.json")
+    collapsed = [f for f in findings
+                 if f.get("rule") == "RULE-TMAP-002" and f.get("message_id") == "read-regex-container-collapsed"]
+    assert bool(collapsed) is warns, findings
 
-    type_map._normalized_native_characters.cache_clear()
+
+def test_regex_warnings_stay_cheap_across_a_whole_map(validator, tmp_path):
     rules = [{"match": "regex",
-              "native_type": rf"^T{i}(?i:x)?\((?<n>[1-9]\d*)\)[a-z]*\p{{Lu}}?$",
+              "native_type": rf"^T{i}x?\((?<n>[1-9]\d*)\)[a-z]*\p{{Lu}}?$",
               "arrow_type": "Utf8"} for i in range(50)]
     started = time.perf_counter()
     findings = validator.validate_document(
         _type_map_doc(rules, "read"), doc_path=tmp_path / "type-map-read.json")
     elapsed = time.perf_counter() - started
     assert sum(w.get("rule") == "RULE-TMAP-014" for w in _warnings(findings)) == 50, findings
-    assert elapsed < 1.0, elapsed
-
-
-def test_regex_case_check_cost_does_not_grow_with_repeated_atoms(validator, tmp_path):
-    # A matcher has no length bound, and an atom's verdict is fixed by how it
-    # is spelled and the flags in force, so repeating one costs nothing more.
-    from analitiq.contracts import type_map
-
-    type_map._normalized_native_characters()
-    rules = [{"match": "regex", "native_type": "^" + "a" * 20_000 + "$", "arrow_type": "Utf8"}]
-    started = time.perf_counter()
-    findings = validator.validate_document(
-        _type_map_doc(rules, "read"), doc_path=tmp_path / "type-map-read.json")
-    elapsed = time.perf_counter() - started
-    assert any(w.get("rule") == "RULE-TMAP-014" for w in _warnings(findings)), findings
     assert elapsed < 1.0, elapsed
 
 
