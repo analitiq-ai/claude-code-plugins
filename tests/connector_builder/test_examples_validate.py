@@ -227,12 +227,13 @@ def test_example_type_maps_validate(example_dir: Path, tmp_path: Path) -> None:
         assert not errors, f"{map_path.name}\n" + "\n".join(
             f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors
         )
-        # An example spelling a character in a case no normalized native uses
-        # teaches a pattern that part of can never match; the finding is a
-        # warning, so the error check above misses it.
-        case_dead = [f for f in findings if f.get("rule") == "RULE-TMAP-014"]
-        assert not case_dead, f"{map_path.name}\n" + "\n".join(
-            f"{f['path']}: {f['message']}" for f in case_dead
+        # An example teaching a lowercase literal no normalized native holds, or
+        # a container rendered as a scalar, teaches a defect; those findings can
+        # be warnings, which the error check above misses.
+        taught_defects = [f for f in findings
+                          if f.get("rule") in ("RULE-TMAP-014", "RULE-TMAP-002")]
+        assert not taught_defects, f"{map_path.name}\n" + "\n".join(
+            f"{f.get('rule')} {f['path']}: {f['message']}" for f in taught_defects
         )
 
 

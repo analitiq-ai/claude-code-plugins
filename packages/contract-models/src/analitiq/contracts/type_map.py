@@ -16,15 +16,13 @@ Source of truth for both the published `type-map-read` / `type-map-write` JSON
 Schemas and the connector validator (which validates via `model_validate`).
 Only *error*-level rules live here — things that make a document invalid.
 Advisory quality checks that the contract tolerates (duplicate rules, read
-patterns spelling a case no native uses, write-vocabulary coverage gaps) are not contract
-violations and stay in the validator as warnings.
+patterns spelling a lowercase literal, regex natives spelling a container that
+renders a scalar, write-vocabulary coverage gaps) are not contract violations
+and stay in the validator as warnings.
 """
 from __future__ import annotations
 
-import functools
-import itertools
 import re
-import sys
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
@@ -122,65 +120,17 @@ def _validate_type_map_arrow_type(value: str) -> None:
 # Matchers: compiled and matched in RE2, the dialect the contract fixes for them
 # ---------------------------------------------------------------------------
 
-_FOLD_CASE_FLAG = "i"
-_OCTAL_DIGITS = "01234567"
-# What an escape letter means is RE2's grammar; this tokenizer restates the part
-# of it the compiled program does not expose, and raises on a letter it does
-# not know. The escapes spelling one character are read by `_escaped_character`.
-_CONTROL_ESCAPES = {"a": "\a", "f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v"}
-_CHARACTER_SET_ESCAPES = frozenset("dDsSwWCpP")
-_ZERO_WIDTH_ESCAPES = frozenset("bBAz")
-# Locates a span that may be a repetition; `_is_repetition` decides.
-_REPETITION_CANDIDATE = re.compile(r"\{[0-9]+(?:,[0-9]*)?\}")
-
-
-@dataclass(frozen=True, slots=True)
-class _Atom:
-    """One position of a matcher that consumes exactly one character.
-
-    `text` is the atom as the matcher spells it. `pattern` is a pattern of its
-    own matching the characters the atom matches where it sits, less the inline
-    `flags` in force there. `literal` is the character the atom spells, before
-    `flags` apply, when it spells exactly one."""
-
-    text: str
-    pattern: str
-    literal: str | None
-    flags: frozenset[str]
-
-
-@dataclass(frozen=True, slots=True)
-class _GroupOpen:
-    """A group opener; `flags` are the inline flags in force inside it, and
-    `capture` is the group's number in RE2's numbering, None when it does not
-    capture."""
-
-    opener: str
-    capture: int | None
-    end: int
-    flags: frozenset[str]
-
-
-@dataclass(frozen=True, slots=True)
-class _GroupClose:
-    opened_by: _GroupOpen
-    start: int
-
-
-_Token = _Atom | _GroupOpen | _GroupClose
-
-
-class _RefusedSpelling(ValueError):
-    """A construct RE2 compiles that the contract refuses in a matcher."""
+# Locates a spelling that may open a named group; RE2 decides whether it does.
+# A lookahead, so a spelling that opens nothing cannot consume the one after it.
+_NAMED_GROUP_SPELLING = re.compile(r"(?=(?P<spelling>\(\?(?P<python>P?)<(?P<name>[^>]*)>))")
 
 
 @dataclass(frozen=True, slots=True)
 class CompiledMatcher:
-    """A type-map matcher compiled in RE2, with the tokens it was read into."""
+    """A type-map matcher compiled in RE2."""
 
     # The binding publishes no type for a compiled pattern.
     regex: Any
-    tokens: tuple[_Token, ...]
 
     def fullmatch(self, subject: str) -> Any:
         """RE2's match of the whole `subject`, or None.
@@ -192,298 +142,76 @@ class CompiledMatcher:
         except UnicodeEncodeError:
             return None
 
-    @property
-    def literal_text(self) -> str:
-        """The matcher's literal characters in order, with its syntax dropped."""
-        return "".join(
-            token.literal for token in self.tokens
-            if isinstance(token, _Atom) and token.literal is not None
-        )
+
+def _group_opened_at(pattern: str, spelling: re.Match[str], names: Any) -> int | None:
+    """The number of the group RE2 opens at `spelling`, None when the spelling
+    opens none (it sits in a class, a quote or after an escape): renaming it
+    renames a group exactly when it opens one."""
+    probe = "probe"
+    while probe in names:
+        probe += "_"
+    renamed = f"{pattern[:spelling.start()]}(?<{probe}>{pattern[spelling.end('spelling'):]}"
+    try:
+        return compile_re2(renamed).groupindex.get(probe)
+    except ValueError:
+        return None
 
 
 def compile_matcher(pattern: str) -> CompiledMatcher:
     """Compile a type-map matcher in RE2, the dialect the rule is matched in.
 
     ValueError carrying RE2's own parse error when RE2 refuses the pattern, and
-    when the pattern holds RE2 syntax the contract refuses: a named group
-    spelled `(?P<name>…)`, or a repetition whose upper count is zero.
-    """
+    when a named group is spelled `(?P<name>…)`, which RE2 accepts and the
+    contract does not."""
     try:
         regex = compile_re2(pattern)
     except ValueError as refusal:
         raise ValueError(f"matcher {refusal}") from refusal
-    try:
-        tokens = _tokenize(pattern)
-    except _RefusedSpelling:
-        raise
-    except (ValueError, IndexError) as exc:
-        # RE2 accepted the pattern, so this is the tokenizer's defect and never
-        # the author's: it must not reach the caller as a refused matcher.
-        raise RuntimeError(
-            f"the matcher tokenizer cannot read {pattern!r}, which RE2 accepted"
-        ) from exc
-    return CompiledMatcher(regex, tokens)
-
-
-def _with_flags(pattern: str, flags: frozenset[str]) -> str:
-    return f"(?{''.join(sorted(flags))}:{pattern})" if flags else pattern
-
-
-def _compile_fragment(fragment: str, source: str) -> Any:
-    """Compile a fragment the tokenizer cut out of the compiled matcher `source`.
-
-    Every fragment of a pattern RE2 accepted is itself a pattern RE2 accepts, so
-    a refusal here means the tokenizer cut `source` where RE2 does not, and no
-    verdict read from the fragment could be trusted."""
-    try:
-        return compile_matcher(fragment).regex
-    except ValueError as exc:
-        raise RuntimeError(
-            f"{fragment!r}, read out of the matcher {source!r}, does not compile "
-            "on its own: the matcher tokenizer does not split this pattern the "
-            "way RE2 parses it"
-        ) from exc
-
-
-def _literal(char: str, flags: frozenset[str], text: str | None = None) -> _Atom:
-    return _Atom(text or char, f"\\x{{{ord(char):X}}}", char, flags)
-
-
-def _escaped_character(escape: str) -> str | None:
-    """The one character `escape` spells, or None when it spells a set of
-    characters or a position."""
-    letter = escape[1]
-    if letter.isascii() and not letter.isalnum():
-        return letter
-    if letter == "x":
-        return chr(int(escape[2:].strip("{}"), 16))
-    if letter in _OCTAL_DIGITS:
-        return chr(int(escape[1:], 8))
-    return _CONTROL_ESCAPES.get(letter)
-
-
-def _escape_end(pattern: str, start: int) -> int:
-    """Where the escape opening at `pattern[start]` (a backslash) ends."""
-    letter = pattern[start + 1]
-    if letter in "pPx" and pattern.startswith("{", start + 2):
-        return pattern.index("}", start + 3) + 1
-    if letter in "pP":
-        return start + 3
-    if letter == "x":
-        return start + 4
-    if letter in _OCTAL_DIGITS:
-        end = start + 2
-        while end < min(start + 4, len(pattern)) and pattern[end] in _OCTAL_DIGITS:
-            end += 1
-        return end
-    return start + 2
-
-
-def _is_repetition(span: str) -> bool:
-    """Whether RE2 reads the braced `span` as a repetition count.
-
-    RE2 reads some digit spans (a leading zero, an overlong count) as literal
-    text. A repetition of `a` matches only `a`s, so `a` + span matching its own
-    spelling is RE2 reading the braces as literals."""
-    return compile_re2("a" + span).fullmatch("a" + span) is None
-
-
-def _repeats_zero_times(repetition: str) -> bool:
-    """Whether a span `_is_repetition` accepted admits no occurrence of what it
-    repeats: its upper count is zero, `{0}` or `{n,0}`; a span ending in `,`
-    has no upper count."""
-    return repetition[1:-1].split(",")[-1] == "0"
-
-
-def _class_end(pattern: str, start: int) -> int:
-    """Where the character class opening at `pattern[start]` (a `[`) ends: after
-    the first `]` closing a class RE2 compiles on its own.
-
-    Each `]` before the class's own end is a member, so the class cut there is
-    unterminated and RE2 refuses it. Asking RE2 leaves its class grammar — a
-    `]` first in the class, POSIX classes, a range ending at `[` — to RE2."""
-    end = start + 1
-    while True:
-        end = pattern.index("]", end) + 1
-        try:
-            compile_re2(pattern[start:end])
-        except ValueError:
-            continue
-        return end
-
-
-def _tokenize(pattern: str) -> tuple[_Token, ...]:
-    """Split a pattern RE2 has compiled into its one-character atoms and groups.
-
-    Only called from `compile_matcher`, after RE2 accepted the pattern, so every
-    construct is well formed. Anchors, alternation and repetition are consumed
-    without a token. An inline flag group applies to the rest of the group it
-    sits in, as RE2 scopes it.
-
-    _RefusedSpelling for a construct RE2 compiles and the contract refuses."""
-    tokens: list[_Token] = []
-    flags: frozenset[str] = frozenset()
-    open_groups: list[tuple[_GroupOpen, frozenset[str]]] = []
-    captures = itertools.count(1)
-    i = 0
-    while i < len(pattern):
-        char = pattern[i]
-        if pattern.startswith("\\Q", i):
-            quote_end = pattern.find("\\E", i + 2)
-            if quote_end < 0:
-                quote_end = len(pattern)
-            quoted = pattern[i + 2:quote_end]
-            tokens.extend(_literal(c, flags) for c in quoted)
-            i = quote_end + 2
-        elif char == "\\":
-            end = _escape_end(pattern, i)
-            letter = pattern[i + 1]
-            if (character := _escaped_character(pattern[i:end])) is not None:
-                tokens.append(_literal(character, flags, pattern[i:end]))
-            elif letter in _CHARACTER_SET_ESCAPES:
-                tokens.append(_Atom(pattern[i:end], pattern[i:end], None, flags))
-            elif letter not in _ZERO_WIDTH_ESCAPES:
-                raise RuntimeError(
-                    f"RE2 accepted the escape {pattern[i:end]!r} in {pattern!r}, "
-                    "which the matcher tokenizer does not know"
-                )
-            i = end
-        elif char == "[":
-            end = _class_end(pattern, i)
-            tokens.append(_Atom(pattern[i:end], pattern[i:end], None, flags))
-            i = end
-        elif char == "(":
-            inner = flags
-            capture = None
-            if pattern.startswith("(?P<", i):
-                raise _RefusedSpelling(
-                    "matcher spells a named group '(?P<name>…)'; the contract "
-                    "takes only '(?<name>…)'"
-                )
-            if pattern.startswith("(?<", i):
-                opener = pattern[i:pattern.index(">", i) + 1]
-                capture = next(captures)
-            elif pattern.startswith("(?", i):
-                spec_end = min(k for k in (pattern.find(")", i), pattern.find(":", i)) if k >= 0)
-                on, _, off = pattern[i + 2:spec_end].partition("-")
-                inner = (flags | set(on)) - set(off)
-                if pattern[spec_end] == ")":
-                    flags = inner
-                    i = spec_end + 1
-                    continue
-                opener = pattern[i:spec_end + 1]
-            else:
-                opener = "("
-                capture = next(captures)
-            group = _GroupOpen(opener, capture, i + len(opener), inner)
-            open_groups.append((group, flags))
-            tokens.append(group)
-            flags = inner
-            i = group.end
-        elif char == ")":
-            group, flags = open_groups.pop()
-            tokens.append(_GroupClose(group, i))
-            i += 1
-        elif (
-            char == "{"
-            and (candidate := _REPETITION_CANDIDATE.match(pattern, i))
-            and _is_repetition(candidate.group())
-        ):
-            if _repeats_zero_times(candidate.group()):
-                raise _RefusedSpelling(
-                    f"matcher repeats something zero times ({candidate.group()!r}), "
-                    "so what it repeats is never matched"
-                )
-            i = candidate.end()
-        elif char in "*+?":
-            i += 1
-        elif char in "^$|":
-            i += 1
-        elif char == ".":
-            tokens.append(_Atom(char, char, None, flags))
-            i += 1
-        else:
-            tokens.append(_literal(char, flags))
-            i += 1
-    return tuple(tokens)
+    for spelling in _NAMED_GROUP_SPELLING.finditer(pattern):
+        if spelling["python"] and _group_opened_at(pattern, spelling, regex.groupindex):
+            raise ValueError(
+                "matcher spells a named group '(?P<name>…)'; the contract "
+                "takes only '(?<name>…)'"
+            )
+    return CompiledMatcher(regex)
 
 
 def _named_group_source(pattern: str, name: str) -> str:
-    """The `(?<name>…)` group's sub-pattern, as a pattern of its own: the source
-    between its opener and closer, under the inline flags in force there. A
-    name given to more than one group is read as the group RE2 binds it to.
+    """The `(?<name>…)` group's sub-pattern: the source from the opener RE2
+    binds the name to up to the first `)` where the source compiles as a group
+    of its own. A `)` before that sits in a class, a quote, an escape or a
+    nested group, so the source cut there does not compile. Inline flags set
+    outside the group are not carried.
 
     KeyError when the matcher has no group of that name."""
-    compiled = compile_matcher(pattern)
-    capture = compiled.regex.groupindex[name]
-    for token in compiled.tokens:
-        if isinstance(token, _GroupClose) and token.opened_by.capture == capture:
-            group = token.opened_by
-            return _with_flags(pattern[group.end:token.start], group.flags)
-    raise RuntimeError(
-        f"RE2 numbers the {name!r} group of {pattern!r} {capture}, and the matcher "
-        "tokenizer closes no group it numbers so"
-    )
+    names = compile_re2(pattern).groupindex
+    number = names[name]
+    opener = next((
+        spelling for spelling in _NAMED_GROUP_SPELLING.finditer(pattern)
+        if spelling["name"] == name and _group_opened_at(pattern, spelling, names) == number
+    ), None)
+    if opener is None:
+        raise ValueError(f"RE2 names group {name!r} but no spelling in the matcher opens it")
+    close = opener.end("spelling")
+    while True:
+        close = pattern.index(")", close)
+        source = pattern[opener.end("spelling"):close]
+        try:
+            compile_re2(f"(?:{source})")
+        except ValueError:
+            close += 1
+            continue
+        return source
 
 
 def _capture_language(native: str, name: str, probes: tuple[str, ...]) -> frozenset[str]:
     """Which of `probes` the native's `(?<name>…)` capture can match.
 
-    An over-approximation on purpose: the capture is interrogated in isolation,
-    so surrounding context that would further constrain it is ignored."""
-    capture = _compile_fragment(_named_group_source(native, name), native)
+    The capture is interrogated in isolation: surrounding context that would
+    further constrain it is ignored, and inline flags set outside it are
+    dropped, which can narrow it."""
+    capture = compile_re2(f"(?:{_named_group_source(native, name)})")
     return frozenset(probe for probe in probes if capture.fullmatch(probe))
-
-
-def _kept_by_normalization(chars: str) -> str:
-    """The members of `chars` that `normalize_native_type` leaves as they are.
-
-    Each sits between two `A`s, which normalization keeps, so stripping never
-    reaches one and a whitespace member is a run of its own. A block that comes
-    back unchanged is kept whole, and only a changed one is split."""
-    probe = "A" + "A".join(chars) + "A"
-    if normalize_native_type(probe) == probe:
-        return chars
-    if len(chars) == 1:
-        return ""
-    half = len(chars) // 2
-    return _kept_by_normalization(chars[:half]) + _kept_by_normalization(chars[half:])
-
-
-@functools.cache
-def _normalized_native_characters() -> bytes:
-    """Every character a normalized native can contain, concatenated, as UTF-8.
-
-    Read off `normalize_native_type` itself rather than a model of it. Bytes
-    because the RE2 binding re-encodes a `str` subject on every search, and this
-    subject is searched for every atom. Surrogates are excluded: they are not
-    characters and have no UTF-8 encoding."""
-    every = "".join(map(chr, itertools.chain(range(0xD800), range(0xE000, sys.maxunicode + 1))))
-    block = 1024
-    return "".join(
-        _kept_by_normalization(every[i:i + block]) for i in range(0, len(every), block)
-    ).encode()
-
-
-def case_dead_atoms(matcher: str) -> tuple[str, ...]:
-    """The atoms of a read matcher that no normalized native can satisfy only
-    because of their case, as authored.
-
-    An atom is case-dead when, under the inline flags in force where it sits, it
-    matches no character a normalized native contains, while its
-    case-insensitive form matches one. ValueError when the contract refuses
-    the matcher."""
-    characters = _normalized_native_characters()
-
-    def matches_one(pattern: str) -> bool:
-        return _compile_fragment(pattern, matcher).search(characters) is not None
-
-    return tuple(
-        token.text for token in compile_matcher(matcher).tokens
-        if isinstance(token, _Atom)
-        and not matches_one(_with_flags(token.pattern, token.flags))
-        and matches_one(_with_flags(token.pattern, token.flags | {_FOLD_CASE_FLAG}))
-    )
 
 
 def _native_is_schemaless_container(literal_text: str) -> bool:
@@ -491,8 +219,7 @@ def _native_is_schemaless_container(literal_text: str) -> bool:
     its SYNTAX — never a vendor type-name list. Container natives are recognised
     by shape: angle-bracket parameterization (`array<int>`, `struct<...>`,
     `map<k, v>`) or a SQL array suffix (`integer[]`), read from the native's
-    literal characters, so a regex rule's own syntax is never mistaken for
-    either. Bare vendor scalars-for-JSON (`JSONB`, `VARIANT`, …) are
+    literal characters. Bare vendor scalars-for-JSON (`JSONB`, `VARIANT`, …) are
     intentionally not special-cased; if their structure matters the author
     writes it with `<...>` or `[]`."""
     return ("<" in literal_text and ">" in literal_text) or literal_text.endswith("[]")
@@ -502,7 +229,7 @@ def _guard_container_not_collapsed(native_type: str, literal_text: str, arrow_ty
     """A schemaless/structured native_type must not resolve to a scalar Arrow type
     (which would silently drop the value's structure). Read direction only.
     `literal_text` is what container syntax is read from: the native itself for
-    an exact rule, the matcher's literal characters for a regex one."""
+    an exact rule, a reading of the matcher's literal characters for a regex one."""
     if _native_is_schemaless_container(literal_text):
         head = _arrow_type_head(arrow_type)
         if head and head not in _CONTAINER_CANONICAL_HEADS:
@@ -586,10 +313,6 @@ class TypeMapReadRegexRule(_TypeMapRuleBase):
             _validate_render_placeholders(self.arrow_type)
         except ValueError as detail:
             raise violation("RULE-TMAP-007", "read-regex-malformed-placeholder", str(detail)) from None
-        try:
-            _guard_container_not_collapsed(self.native_type, compiled.literal_text, self.arrow_type)
-        except ValueError as detail:
-            raise violation("RULE-TMAP-002", "read-regex-container-collapsed", str(detail)) from None
 
         # Every `${name}` in the `arrow_type` render must name a `native_type` capture.
         capture_names = set(compiled.regex.groupindex.keys())
