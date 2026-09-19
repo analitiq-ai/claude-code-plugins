@@ -783,12 +783,12 @@ def test_connection_type_maps_are_collected_as_a_connector_collects_its_own(tmp_
 def _rooted_at(site: str, path: str) -> str:
     """A `<reference>#<pointer>` path as the adapter addresses it beside `site`."""
     reference, _, pointer = path.partition("#")
-    return f"{site}/{reference}{'' if pointer in ('', '/') else pointer}"
+    return f"{site}/{reference}{pointer}"
 
 
 @pytest.mark.parametrize("path, rooted", [
     ("", "connections/pg/definition/endpoints/a.json"),
-    ("/", "connections/pg/definition/endpoints/a.json"),
+    ("/", "connections/pg/definition/endpoints/a.json/"),
     ("/endpoint_id", "connections/pg/definition/endpoints/a.json/endpoint_id"),
     ("../connector.json#", "connections/pg/definition/connector.json"),
     ("../connector.json#/transports", "connections/pg/definition/connector.json/transports"),
@@ -800,6 +800,18 @@ def test_a_finding_is_rooted_at_the_document_it_names(path, rooted):
     [found] = V._at_site("connections/pg/definition/endpoints/a.json",
                          [{"message_id": "m", "kind": "fail", "path": path, "message": "x"}])
     assert found["path"] == rooted
+
+
+def test_a_model_finding_escapes_the_keys_on_its_pointer():
+    # A `secret_refs` key is the author's own name, so it may hold `/`; left
+    # raw, the pointer would name a key `a` holding a key `b`.
+    findings = V._model_findings("connection", {"secret_refs": {"a/b": "raw secret"}})
+    assert "/secret_refs/a~1b" in [f["path"] for f in findings], findings
+
+
+def test_a_model_finding_about_the_whole_document_has_the_empty_pointer():
+    [found] = V._model_findings("connection", [1])
+    assert found["path"] == ""
 
 
 def test_a_definition_directory_that_cannot_be_listed_is_reported_at_the_directory(tmp_path, refuse):

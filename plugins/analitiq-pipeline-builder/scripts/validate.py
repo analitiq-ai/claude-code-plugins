@@ -168,6 +168,7 @@ def _model_findings(entity: str, doc) -> list[dict]:
     else:  # pragma: no cover - guarded by the entity choices
         raise ValueError(f"no contract model for entity {entity!r}")
     from pydantic import ValidationError
+    from analitiq.contracts.shared.json_schema import pointer_position
     from analitiq.validator._core import _model_error_message
     try:
         Model.model_validate(doc)
@@ -175,7 +176,7 @@ def _model_findings(entity: str, doc) -> list[dict]:
     except ValidationError as exc:
         return [
             _finding("contract-model", "error",
-                     "/" + "/".join(str(p) for p in err["loc"]), _model_error_message(err))
+                     pointer_position(err["loc"]), _model_error_message(err))
             for err in exc.errors()
         ]
 
@@ -217,8 +218,7 @@ def _at_site(site: str, findings: list[dict]) -> list[dict]:
     A document graded on its own reports a pointer into itself (`/scope`), which
     is the whole address when that document is what was validated. A bundle
     holds many, so the same pointer names none of them — the reader is told
-    what is wrong and not which entry to open. A finding about the whole
-    entry (`/`) is addressed at the entry itself."""
+    what is wrong and not which entry to open."""
     return [{**f, "path": _rooted(site, f.get("path", ""))} for f in findings]
 
 
@@ -226,17 +226,17 @@ def _rooted(site: str, path: str) -> str:
     """`path`, reported by grading the entry at `site`, addressed from the
     bundle root.
 
-    A bare pointer (empty, or starting with `/`) is into the entry itself. Any
-    other path names another document, as `<reference>#<pointer>` with the
-    percent-encoded reference relative to the entry's directory
-    (`rules/SCHEMA.md`, "Findings")."""
-    if path == "" or path.startswith("/"):
+    A bare pointer is into the entry itself. Any other path names another
+    document, as `<reference>#<pointer>` with the percent-encoded reference
+    relative to the entry's directory (`rules/SCHEMA.md`, "Findings")."""
+    from analitiq.validator._core import is_bare_pointer
+    if is_bare_pointer(path):
         target, pointer = site, path
     else:
         reference, _, pointer = path.partition("#")
         target = posixpath.normpath(
             posixpath.join(posixpath.dirname(site), unquote(reference)))
-    return target if pointer in ("", "/") else f"{target}{pointer}"
+    return f"{target}{pointer}"
 
 
 def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:
