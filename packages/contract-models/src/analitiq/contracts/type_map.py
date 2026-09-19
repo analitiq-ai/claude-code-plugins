@@ -161,18 +161,25 @@ def compile_matcher(pattern: str) -> CompiledMatcher:
     """Compile a type-map matcher in RE2, the dialect the rule is matched in.
 
     ValueError carrying RE2's own parse error when RE2 refuses the pattern, and
-    when a named group is spelled `(?P<name>…)`, which RE2 accepts and the
-    contract does not."""
+    for what RE2 accepts and the contract does not: a named group spelled
+    `(?P<name>…)`, and a name given to more than one group, which RE2 binds to
+    the first only, so a match through a later one captures nothing under it."""
     try:
         regex = compile_re2(pattern)
     except ValueError as refusal:
         raise ValueError(f"matcher {refusal}") from refusal
+    named: set[str] = set()
     for spelling in _NAMED_GROUP_SPELLING.finditer(pattern):
-        if spelling["python"] and _group_opened_at(pattern, spelling, regex.groupindex):
+        if not _group_opened_at(pattern, spelling, regex.groupindex):
+            continue
+        if spelling["python"]:
             raise ValueError(
                 "matcher spells a named group '(?P<name>…)'; the contract "
                 "takes only '(?<name>…)'"
             )
+        if spelling["name"] in named:
+            raise ValueError(f"matcher gives the name {spelling['name']!r} to more than one group")
+        named.add(spelling["name"])
     return CompiledMatcher(regex)
 
 

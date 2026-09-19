@@ -272,6 +272,26 @@ def test_regex_rejects_python_named_group(matcher):
         assert "(?<name>…)" in refusal, refusal
 
 
+@pytest.mark.parametrize("matcher", [
+    # RE2 binds the name to the first group only, so a match through the
+    # second leaves the placeholder with nothing to render.
+    r"^(?:(?<u>SECOND)|(?<u>MILLISECOND))$",
+    r"^(?<u>A)(?<v>B)(?<u>C)$",
+    r"^N\((?<u>(?<u>[1-9])\d*)\)$",
+])
+def test_regex_rejects_a_name_given_to_more_than_one_group(matcher):
+    for adapter, rule_id in ((READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")):
+        refusal = _refusal(adapter, _regex_rule(adapter, matcher))
+        assert rule_id in refusal, refusal
+        assert "'u'" in refusal, refusal
+
+
+@pytest.mark.parametrize("matcher", [r"^(?<u>X)[(?<u>]$", r"^(?<u>X)\Q(?<u>\E$"])
+def test_regex_accepts_a_group_name_repeated_where_it_opens_no_group(matcher):
+    for adapter in (READ, WRITE):
+        _accepts(adapter, [_regex_rule(adapter, matcher)])
+
+
 @pytest.mark.parametrize("matcher", [r"^INT\[\]{0}$", r"^INT(?:\[\]){0,0}$"])
 def test_regex_accepts_a_zero_count_repetition(matcher):
     for adapter in (READ, WRITE):
@@ -519,15 +539,6 @@ def test_capture_whose_class_opens_with_a_bracket_is_read_whole():
     assert "RULE-TMAP-010" in refusal, refusal
     _accepts(READ, [{"match": "regex", "native_type": r"^N\((?<p>[])1-9])\)$",
                      "arrow_type": "Decimal128(${p}, 0)"}])
-
-
-def test_a_repeated_group_name_is_read_as_the_group_re2_binds():
-    # RE2 binds a repeated name to the group opened first, which here is the
-    # outer, unbounded one, so that is the capture the bound is checked on.
-    refusal = _refusal(READ, {"match": "regex",
-                              "native_type": r"^N\((?<p>(?<p>[1-9])\d*)\)$",
-                              "arrow_type": "Decimal128(${p}, 0)"})
-    assert "RULE-TMAP-010" in refusal, refusal
 
 
 def test_families_without_a_cross_bound_are_capture_checked_too():
