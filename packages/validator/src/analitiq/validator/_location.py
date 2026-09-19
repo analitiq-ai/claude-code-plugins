@@ -12,7 +12,7 @@ import io
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from fnmatch import fnmatchcase
+from fnmatch import fnmatch, fnmatchcase
 from pathlib import Path, PurePath, PurePosixPath
 from typing import Iterable, Iterator, Mapping
 
@@ -40,12 +40,15 @@ class Tree(ABC):
     @abstractmethod
     def glob(self, key: PurePath, pattern: str) -> Iterable[PurePath]:
         """The entries directly inside `key` whose names match `pattern`, in no
-        particular order."""
+        particular order; none where `key` is no directory. Raises `OSError`
+        where `key` is a directory that cannot be listed."""
 
     @abstractmethod
     def rglob(self, key: PurePath, pattern: str) -> Iterable[PurePath]:
         """The entries anywhere below `key` whose names match `pattern`, never
-        from inside a linked directory below it, in no particular order."""
+        from inside a linked directory below it, in no particular order; none
+        where `key` is no directory. Raises `OSError` where `key`, or a
+        directory below it, cannot be listed."""
 
 
 class DiskTree(Tree):
@@ -64,14 +67,29 @@ class DiskTree(Tree):
     def read_text(self, key: Path) -> str:
         return key.read_text()
 
+    # Not `Path.glob`/`Path.rglob`: they drop a directory the kernel will not
+    # list, which reads it as empty. `fnmatch` applies the platform's case
+    # rule, as they do.
+
     def glob(self, key: Path, pattern: str) -> Iterable[Path]:
-        return key.glob(pattern)
+        if not key.is_dir():
+            return []
+        with os.scandir(key) as entries:
+            return [key / entry.name for entry in entries if fnmatch(entry.name, pattern)]
 
     def rglob(self, key: Path, pattern: str) -> Iterable[Path]:
         # Never descends into a linked directory below `key` (a linked `key` is
         # walked), and must not: through a loop of links, every file below it
         # would be reported again at each turn.
-        return key.rglob(pattern)
+        if not key.is_dir():
+            return []
+        return [Path(parent) / name
+                for parent, dirs, files in os.walk(key, onerror=_refuse)
+                for name in dirs + files if fnmatch(name, pattern)]
+
+
+def _refuse(error: OSError) -> None:
+    raise error
 
 
 DISK = DiskTree()

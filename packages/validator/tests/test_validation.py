@@ -1504,6 +1504,45 @@ def test_coverage_does_not_read_a_collected_sibling_that_blocks(tmp_path, valida
     assert any("not a regular file" in e["message"] for e in errors), errors
 
 
+_UNLISTABLE = pytest.mark.skipif(os.geteuid() == 0, reason="root lists any directory")
+
+
+@_UNLISTABLE
+@pytest.mark.parametrize("mode", [0o000, 0o300], ids=["no access", "searchable only"])
+@pytest.mark.parametrize("unlisted", ["endpoints/sub", "endpoints"])
+def test_coverage_does_not_pass_an_endpoints_directory_it_cannot_list(tmp_path, validator, unlisted, mode):
+    # Listed, `sub`'s document fails as nested. Read as empty instead, the
+    # connector would pass on the strength of what the walk never saw.
+    _write_tree(tmp_path, _min_connector("api"), [{"match": "exact", "native_type": "STRING",
+                                                   "arrow_type": "Utf8"}],
+                {"widgets.json": _endpoint("STRING", "Utf8")})
+    (tmp_path / "endpoints/sub").mkdir()
+    (tmp_path / "endpoints/sub/nested.json").write_text("{}")
+    (tmp_path / unlisted).chmod(mode)
+    try:
+        findings = validator.check_coverage(_min_connector("api"), tmp_path / "connector.json")
+    finally:
+        (tmp_path / unlisted).chmod(0o755)
+    unlisted_findings = [f for f in findings if f["message_id"] == "endpoints-dir-unlisted"]
+    assert [(f["kind"], f["rule"]) for f in unlisted_findings] == [
+        ("notApplicable", "RULE-PKG-031")], findings
+    assert str(tmp_path / unlisted) in unlisted_findings[0]["message"]
+    from analitiq.validator._core import _passed
+    assert not _passed(findings), findings
+
+
+@_UNLISTABLE
+def test_type_maps_in_a_directory_that_cannot_be_listed_are_unchecked_not_absent(tmp_path, validator):
+    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc([], "read")))
+    tmp_path.chmod(0o300)
+    try:
+        collection = validator.collect_type_maps(tmp_path, rule="RULE-PKG-030")
+    finally:
+        tmp_path.chmod(0o755)
+    assert [(name, f["kind"], f["rule"], f["message_id"]) for name, f in collection.findings] == [
+        (".", "notApplicable", "RULE-PKG-030", "type-map-dir-unlisted")], collection.findings
+
+
 def _plant_legacy_name(parent: Path, shape: str) -> None:
     """Put the dead pre-split name at `parent` as one of the things a name can be."""
     dead = parent / "type-map.json"

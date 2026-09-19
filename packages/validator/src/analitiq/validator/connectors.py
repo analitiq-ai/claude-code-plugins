@@ -1131,8 +1131,9 @@ class TypeMapSiblings:
     shipped nothing for the direction, the other shipped it twice, and the two
     ask for opposite edits.
 
-    `findings` pairs each finding with the name of the entry it concerns, so a
-    caller holding the directory at a different site can root it at that file.
+    `findings` pairs each finding with the name of the entry it concerns (`.`
+    for the directory itself), so a caller holding the directory at a different
+    site can root it at that file.
     Every message names that entry, so a caller that cannot root a pointer at
     the file still reports which one to open.
     """
@@ -1171,7 +1172,15 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
                 f"as {_READ_MAP_FILENAME} or {_WRITE_MAP_FILENAME}."))))
     maps: dict[str, tuple[str, Any]] = {}
     declared_by: dict[str, str] = {}
-    for path in _type_map_sibling_paths(parent):
+    try:
+        siblings = _type_map_sibling_paths(parent)
+    except OSError as exc:
+        siblings = []
+        findings.append((".", finding(
+            rule=rule,
+            message_id="type-map-dir-unlisted", kind="notApplicable", path="/",
+            message=f"type maps not collected: the directory could not be listed ({exc}).")))
+    for path in siblings:
         name = path.name
         doc, load = _load_json_sibling(path, rule=rule, message_id="type-map-unparseable")
         findings.extend((name, f) for f in load)
@@ -1302,7 +1311,17 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     # Scan recursively: every *.json the walk reaches under endpoints/ must sit
     # at exactly `endpoints/{endpoint_id}.json` (flat), so a nested or misplaced
     # file is flagged rather than reported as a false pass.
-    endpoint_files = sorted(endpoint_dir.rglob("*.json"))
+    try:
+        endpoint_files = sorted(endpoint_dir.rglob("*.json"))
+    except OSError as exc:
+        findings.append(finding(
+            rule="RULE-PKG-031",
+            message_id="endpoints-dir-unlisted", kind="notApplicable", path="/",
+            message=(
+                f"endpoint documents not checked: 'endpoints/' or a directory below it "
+                f"could not be listed ({exc}), so not every document there was found. "
+                "Make it listable and re-run.")))
+        return findings
     if not endpoint_files:
         findings.append(finding(
             rule="RULE-PKG-035",

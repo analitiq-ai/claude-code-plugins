@@ -201,6 +201,14 @@ def test_a_pattern_crossing_names_is_refused(tmp_path, pattern, walk):
             list(getattr(root, walk)(pattern))
 
 
+@pytest.mark.parametrize("name", ["missing", "file.json"], ids=["no entry", "a file"])
+@pytest.mark.parametrize("walk", ["glob", "rglob"])
+def test_a_key_that_is_no_directory_lists_nothing(tmp_path, name, walk):
+    (tmp_path / "file.json").write_text("")
+    for root in (Location(tmp_path / name, DISK), Location(PurePosixPath(name), MemoryTree({"file.json": ""}))):
+        assert list(getattr(root, walk)("*")) == []
+
+
 # ---------------------------------------------------------------------------
 # A `Path` becomes a location in the layout it spells. A link stands where the
 # link is, and a `..` is collapsed against the names written before it, unless
