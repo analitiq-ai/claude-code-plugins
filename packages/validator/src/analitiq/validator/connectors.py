@@ -1012,7 +1012,7 @@ def _load_json_sibling(
     except OSError as exc:
         return _REFUSED, [finding(
             rule=rule, message_id=message_id, kind="fail", path="/",
-            message=f"sibling {path.name} could not be read ({exc}).")]
+            message=f"sibling {path.name} could not be opened ({exc}).")]
     except _JSON_TEXT_REFUSALS as exc:
         return _UNREAD, [finding(
             rule=rule, message_id=message_id, kind="fail", path="/",
@@ -1479,20 +1479,22 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
             try:
                 sibling_exists = sibling is not None and sibling.is_file()
             except OSError as exc:
-                sibling_exists, refusal = False, f"could not be looked up ({exc})"
+                sibling_exists, refusal = False, (
+                    f"could not be looked up ({exc}). Make every directory on the path "
+                    "to it searchable and re-run")
             if sibling_exists:
                 # `rule=None`: a read/parse failure has not evaluated
                 # RULE-ENDP-047 one way or the other, so asserting a `fail`
                 # against it here would contradict the `notApplicable` the
-                # `elif sibling_exists` branch below reports for the identical
-                # case. The failure to read is a framework-level fact; which
-                # rule went unchecked as a result is that branch's to name.
+                # branches below report for the identical case. The failure to
+                # read is a framework-level fact; which rule went unchecked as a
+                # result is theirs to name.
                 connector_doc, load_findings = _load_json_sibling(
                     sibling, rule=None, message_id="sibling-connector-unreadable",
                 )
                 sibling_findings.extend(load_findings)
                 if connector_doc is _REFUSED:
-                    refusal = "could not be read (reported above)"
+                    refusal = "could not be read (reported above). Make it readable and re-run"
             transports = connector_doc.get("transports") if isinstance(connector_doc, dict) else None
             # `transports` resolved: RULE-ENDP-047 is graded against it by
             # `_api_endpoint_document_findings` below. What is left to report
@@ -1526,12 +1528,10 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                         kind="notApplicable", path="/",
                         message=(
                             f"transport_ref {declared_refs!r} not checked: the sibling "
-                            f"connector.json at {sibling} {refusal}. Make it readable "
-                            "and re-run.")))
+                            f"connector.json at {sibling} {refusal}.")))
                 elif sibling_exists:
-                    # The file IS there and nothing was read out of it. Reporting
-                    # it as absent would contradict the read/parse finding
-                    # emitted beside it.
+                    # The file IS there and did not parse. Reporting it as absent
+                    # would contradict the parse finding emitted beside it.
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
                         message_id="transport-ref-check-skipped-unparseable",

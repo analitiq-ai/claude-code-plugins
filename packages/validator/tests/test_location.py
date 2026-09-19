@@ -211,9 +211,13 @@ def test_a_key_carrying_nothing_answers_false(tmp_path, key):
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root looks up any entry")
 @pytest.mark.parametrize("ask", ["is_file", "is_dir", "glob", "rglob"])
-def test_a_refused_lookup_raises_rather_than_answering_absent(tmp_path, ask):
+def test_a_refused_lookup_raises_rather_than_answering_absent(tmp_path, monkeypatch, ask):
     """Every interpreter the package admits, whatever its pathlib swallows: a
-    caller reads an answer of absent as the entry not being there."""
+    caller reads an answer of absent as the entry not being there. pathlib is
+    made to swallow the refusal, as some interpreters' does, so the answer
+    cannot come from it on any."""
+    monkeypatch.setattr(Path, "is_file", lambda self, **_: False)
+    monkeypatch.setattr(Path, "is_dir", lambda self, **_: False)
     (tmp_path / "shut/inside").mkdir(parents=True)
     (tmp_path / "shut").chmod(0o000)
     try:
@@ -371,9 +375,12 @@ def test_an_endpoint_with_no_connector_read_is_told_why(tmp_path, validator, giv
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root looks up any entry")
-@pytest.mark.parametrize("shut,mode", [("pkg", 0o000), ("pkg", 0o400), ("pkg/connector.json", 0o000)],
-                         ids=["no access", "listable only", "connector unreadable"])
-def test_an_endpoint_whose_connector_is_refused_is_told_why(tmp_path, validator, shut, mode):
+@pytest.mark.parametrize("shut,mode,remedy", [
+    ("pkg", 0o000, "Make every directory on the path to it searchable"),
+    ("pkg", 0o400, "Make every directory on the path to it searchable"),
+    ("pkg/connector.json", 0o000, "Make it readable"),
+], ids=["no access", "listable only", "connector unreadable"])
+def test_an_endpoint_whose_connector_is_refused_is_told_why(tmp_path, validator, shut, mode, remedy):
     """A refused lookup or read of the connector is not its absence, nor a
     parse error: either remedy would send the author to the wrong fix."""
     doc = _endpoint("thing", transport_ref="api")
@@ -387,6 +394,7 @@ def test_an_endpoint_whose_connector_is_refused_is_told_why(tmp_path, validator,
     assert [(f["kind"], f["message_id"]) for f in refused] == [
         ("notApplicable", "transport-ref-check-skipped-sibling-refused")], findings
     assert str(tmp_path / "pkg/connector.json") in refused[0]["message"]
+    assert remedy in refused[0]["message"]
 
 
 def test_a_dotdot_out_of_a_link_landing_where_its_names_spell_is_collapsed(tmp_path, validator):
