@@ -134,13 +134,6 @@ a rule that is `error`-tier (or names none at all) — a check that could not
 run does not get the benefit of the doubt. A `warning` and a `notApplicable`
 naming a lesser-tier rule do not fail validation.
 
-This is the shape a release of `analitiq-validator` carrying the `rule` axis
-forwards; `VALIDATOR_PIN` (`scripts/_bootstrap.py`) predates that release and
-still self-installs one that returns the older `validator`/`severity`/`path`/
-`message` shape with no `rule`/`message_id`/`kind` at all — a forwarded
-finding missing those three keys is that older shape, not a malformed one.
-Treat both until the pin catches up.
-
 <!-- illustrative -->
 ```jsonc
 {

@@ -970,20 +970,18 @@ def test_main_contains_a_crash_that_leaves_the_validator_unimportable(monkeypatc
     assert _ids(out["findings"]) == ["adapter-crash"], out["findings"]
 
 
-def test_endpoint_route_crash_before_validate_document_contained(tmp_path, monkeypatch, capsys):
-    # the import and the path normalization ahead of validate_document's own
-    # internal guard are not themselves guarded by it — a failure there (e.g.
-    # a path that cannot be made absolute) must still produce Diagnostics on stdout
-    p = _write(tmp_path, "database-endpoint.json", DB_ENDPOINT)
-    original_abspath = os.path.abspath
-
-    def boom(path, *a, **kw):
-        if str(path) == str(p):
-            raise OSError("cannot resolve")
-        return original_abspath(path, *a, **kw)
-
-    monkeypatch.setattr(V.os.path, "abspath", boom)
-    rc = V.main(["--entity", "database-endpoint", "--document", str(p)])
+def test_endpoint_route_crash_before_validate_document_contained(tmp_path, capsys):
+    # the validator refuses a path it cannot locate by raising, ahead of
+    # validate_document's own internal guard, so the adapter must still produce
+    # Diagnostics on stdout. `link/..` is such a path: POSIX steps up from where
+    # the link leads, so the document opened is not the one the names spell
+    real = tmp_path / "real" / "inner"
+    real.mkdir(parents=True)
+    _write(tmp_path / "real", "database-endpoint.json", DB_ENDPOINT)
+    (tmp_path / "spelled").mkdir()
+    (tmp_path / "spelled" / "link").symlink_to(real)
+    rc = V.main(["--entity", "database-endpoint", "--document",
+                 str(tmp_path / "spelled" / "link" / ".." / "database-endpoint.json")])
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
     assert any(f.get("validator") == "adapter-crash" for f in out["findings"]), out["findings"]
