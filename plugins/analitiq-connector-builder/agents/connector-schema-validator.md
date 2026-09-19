@@ -45,11 +45,11 @@ on first use, then invoke it:
 # Ensure the pinned validator is present — it pins analitiq-contract-models with
 # an exact `==`, so installing it fixes both. Installs only if the exact version
 # is missing; pip output goes to stderr so it can't contaminate the Diagnostics JSON.
-python3 -c "import sys; from importlib.metadata import version; sys.exit(0 if version('analitiq-validator') == '1.0.0rc25' else 1)" 2>/dev/null \
-  || python3 -m pip install --quiet --disable-pip-version-check --pre "analitiq-validator==1.0.0rc25" 1>&2
-
-# Run it — prints the Diagnostics JSON verbatim, exits non-zero on any error finding.
-python3 - "<document_path>" <<'PY'
+# The run is chained on the install: a failed install must print no Diagnostics
+# JSON, or a validator already present from another version would answer instead.
+{ python3 -c "import sys; from importlib.metadata import version; sys.exit(0 if version('analitiq-validator') == '1.0.0rc25' else 1)" 2>/dev/null \
+  || python3 -m pip install --quiet --disable-pip-version-check --pre "analitiq-validator==1.0.0rc25" 1>&2; } \
+&& python3 - "<document_path>" <<'PY'
 import sys
 from analitiq.validator import main
 sys.argv = ["analitiq-validate", "--document", sys.argv[1]]
