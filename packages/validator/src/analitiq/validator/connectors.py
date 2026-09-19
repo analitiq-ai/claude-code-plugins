@@ -1156,6 +1156,8 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
     direction to report through. A direction two documents declare is held by
     neither: filename order is not an answer to which map a consumer takes, so
     grading either would report on a document no consumer can choose.
+
+    A `parent` that `located` refuses raises its refusal.
     """
     parent = located(parent)
     findings: list[tuple[str, dict]] = []
@@ -1195,7 +1197,10 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
 
 
 def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
-    """Connector ↔ sibling type-map coverage (the irreducibly cross-file check)."""
+    """Connector ↔ sibling type-map coverage (the irreducibly cross-file check).
+
+    A connector's `doc_path` that `located` refuses raises its refusal.
+    """
     if not isinstance(doc, dict) or not any(k in doc for k in _CONNECTOR_SENTINELS):
         return []
     if doc_path is None:
@@ -1294,10 +1299,9 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
             message_id="endpoints-dir-missing", kind="fail", path="/",
             message="api connector requires a sibling 'endpoints/' directory; missing."))
         return findings
-    # Scan recursively, matching the registry merge gate: every *.json under
-    # endpoints/ must sit at exactly `endpoints/{endpoint_id}.json` (flat) — a
-    # nested/misplaced file is rejected there, so the validator flags it too
-    # rather than reporting a false pass.
+    # Scan recursively: every *.json the walk reaches under endpoints/ must sit
+    # at exactly `endpoints/{endpoint_id}.json` (flat), so a nested or misplaced
+    # file is flagged rather than reported as a false pass.
     endpoint_files = sorted(endpoint_dir.rglob("*.json"))
     if not endpoint_files:
         findings.append(finding(
@@ -1403,9 +1407,10 @@ def _validate_connector(doc: Any, location: Location | None) -> list[dict]:
 def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
     transports: Any = None
     sibling_findings: list[dict] = []
+    addressed = location is not None and is_addressed_endpoint_path(location.key)
     if isinstance(doc, dict):
         # RULE-ENDP-047 is cross-document: it needs the sibling connector.json's
-        # `transports`, which only `check_coverage` has. Say so rather than
+        # `transports`. Where that cannot be read, say so rather than
         # returning a silent clean pass — an author validating a single
         # endpoint file would otherwise read `passed: true` as "the
         # transport_ref is fine", which is reassurance the check never earned.
@@ -1415,15 +1420,14 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
             ref for _, ref in _api_operation_transport_refs(doc) if isinstance(ref, str)
         })
         if declared_refs:
-            # Resolve the sibling connector when the layout gives us one:
+            # Look up the sibling connector when the layout gives us one:
             # `endpoints/{id}.json` sits one level below `connector.json`. The
             # connector-builder skill validates each endpoint on its own, so a
             # blind warning here would fire on every pass of its fix loop and
             # could never be cleared — an alarm that cannot be acted on trains
-            # authors to ignore the id. Only warn when the connector genuinely
-            # is not reachable.
-            package = location.ancestor(2) if location is not None else None
-            sibling = package / "connector.json" if package is not None else None
+            # authors to ignore the id. Outside that layout no connector is
+            # read: a connector two levels up is not this endpoint's.
+            sibling = location.parent.parent / "connector.json" if addressed else None
             connector_doc: Any = _UNREAD
             sibling_exists = sibling is not None and sibling.is_file()
             if sibling_exists:
@@ -1463,8 +1467,8 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                             "Validate the connector to see why.")))
                 elif sibling_exists:
                     # The file IS there and nothing was read out of it. Reporting
-                    # this as "not reachable" would contradict the read/parse
-                    # finding emitted beside it.
+                    # it as absent would contradict the read/parse finding
+                    # emitted beside it.
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
                         message_id="transport-ref-check-skipped-unparseable",
@@ -1475,18 +1479,27 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
                             "`transports` could not be read. Fix the error reported "
                             "above and re-run.")))
                 else:
+                    if location is None:
+                        reason = ("no path was given, so there is no directory to "
+                                  "read the connector from. Validate it at its path, "
+                                  "`endpoints/{endpoint_id}.json` beside its connector")
+                    elif addressed:
+                        reason = ("there is no connector.json file beside the "
+                                  "`endpoints/` directory holding this document. "
+                                  "Place the connector there and re-run")
+                    else:
+                        reason = ("the document is not directly inside an "
+                                  "`endpoints/` directory, so no connector is read "
+                                  "for it. Place it at `endpoints/{endpoint_id}.json` "
+                                  "beside its connector")
                     sibling_findings.append(finding(
                         rule="RULE-ENDP-047",
                         message_id="transport-ref-check-skipped-no-sibling",
                         kind="notApplicable", path="/",
-                        message=(
-                            f"transport_ref {declared_refs!r} not checked: no sibling "
-                            "connector.json was reachable from this document's path, so "
-                            "its `transports` could not be read. Validate the connector "
-                            "to resolve it.")))
+                        message=f"transport_ref {declared_refs!r} not checked: {reason}."))
     # Each api-endpoint document goes through the checks shared with
-    # `check_coverage`'s sibling-endpoint loop; `transports` is None wherever
-    # the branches above could not resolve it, and RULE-ENDP-047 stays silent
+    # `check_coverage`'s sibling-endpoint loop; `transports` is not a dict
+    # wherever the branches above could not resolve it, and RULE-ENDP-047 stays silent
     # there rather than reporting on an unresolved comparison. Silence is the
     # whole answer only when the document declares no `transport_ref` at all —
     # every other way of arriving here with `transports` unresolved has already
@@ -1494,9 +1507,7 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
     # along so the locating half of those checks reads the same on both routes.
     findings = _api_endpoint_document_findings(
         doc, transports,
-        filename=(location.name
-                  if location is not None and is_addressed_endpoint_path(location.key)
-                  else ""))
+        filename=location.name if addressed else "")
     findings.extend(sibling_findings)
     return findings
 

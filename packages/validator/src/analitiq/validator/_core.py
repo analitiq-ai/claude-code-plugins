@@ -302,7 +302,11 @@ def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: Typ
 # ---------------------------------------------------------------------------
 
 def validate_document(doc: Any, doc_path: Path | Location | None = None) -> list[dict]:
-    """Detect the document kind, validate via its model, add cross-file checks."""
+    """Detect the document kind, validate via its model, add cross-file checks.
+
+    A `doc_path` that `located` refuses raises its refusal: a finding would
+    come from the crash guard, which reports a validator bug.
+    """
     location = None if doc_path is None else located(doc_path)
     return _run_guarded(_dispatch, doc, location, crash_label="document validation")
 
@@ -365,7 +369,8 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
 _JSON_TEXT_REFUSALS = (ValueError, RecursionError)
 
 #: What reading a JSON document off disk raises for what the file holds rather
-#: than for this package: the path's own failure, or a refusal of its text.
+#: than for this package: the path's own failure, a refusal of its text, or
+#: `located`'s refusal of the path.
 _JSON_READ_ERRORS = (OSError, *_JSON_TEXT_REFUSALS)
 
 
@@ -386,14 +391,17 @@ def main() -> int:
     parser.add_argument("--document", required=True, help="Path to the JSON document to validate.")
     args = parser.parse_args()
 
-    document_path = Path(args.document)
     try:
-        document = json.loads(document_path.read_text())
+        # Read as given, so a path the kernel refuses is refused for the
+        # kernel's own reason, then located, which refuses a path it would
+        # grade somewhere other than where that read opened it.
+        document = json.loads(Path(args.document).read_text())
+        location = located(Path(args.document))
     except _JSON_READ_ERRORS as exc:
         print(json.dumps({"passed": False, "findings": [_unreadable_document_finding(exc)]}))
         return 1
 
-    findings = validate_document(document, doc_path=document_path.resolve())
+    findings = validate_document(document, doc_path=location)
     passed = _passed(findings)
     print(json.dumps({"passed": passed, "findings": findings}, indent=2))
     return 0 if passed else 1

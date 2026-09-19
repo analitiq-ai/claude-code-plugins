@@ -83,8 +83,8 @@ def validator_cli(tmp_path):
     def on_document(doc, filename="doc.json", timeout=CLI_DEADLINE_SECONDS):
         """The same, over a document staged into this test's `tmp_path`.
 
-        Staged rather than passed in memory because the CLI resolves a bundle's
-        siblings from the document's own path, which is what the connector-walk
+        Staged rather than passed in memory because the CLI reads a bundle's
+        siblings beside the document's own path, which is what the connector-walk
         entry point needs.
         """
         path = tmp_path / filename

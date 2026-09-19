@@ -4,11 +4,12 @@ A cross-file check reads a document's siblings through a `Location` — a key
 inside a `Tree` — never through the filesystem, so one implementation of each
 check serves a document found on disk and a package handed over as text.
 Navigation (`parent`, `name`, joining a name) is lexical arithmetic on the key;
-every question about what is actually there goes to the tree.
+every question a check asks about what is actually there goes to the tree.
 """
 from __future__ import annotations
 
 import io
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
@@ -43,13 +44,8 @@ class Tree(ABC):
 
     @abstractmethod
     def rglob(self, key: PurePath, pattern: str) -> Iterable[PurePath]:
-        """The entries anywhere below `key` whose names match `pattern`, in no
-        particular order."""
-
-    @abstractmethod
-    def ancestor(self, key: PurePath, levels: int) -> PurePath | None:
-        """The directory `levels` above `key`, or None when that is outside the
-        tree."""
+        """The entries anywhere below `key` whose names match `pattern`, never
+        from inside a linked directory below it, in no particular order."""
 
 
 class DiskTree(Tree):
@@ -72,17 +68,10 @@ class DiskTree(Tree):
         return key.glob(pattern)
 
     def rglob(self, key: Path, pattern: str) -> Iterable[Path]:
+        # Never descends into a linked directory below `key` (a linked `key` is
+        # walked), and must not: through a loop of links, every file below it
+        # would be reported again at each turn.
         return key.rglob(pattern)
-
-    def ancestor(self, key: Path, levels: int) -> Path:
-        # Resolved first: `Path("thing.json").parent.parent` is `.`, so a
-        # relative key would stop short of the directory it names. Resolving
-        # also follows links, so a linked document is anchored where its
-        # target lives, not where it was authored.
-        anchor = key.resolve()
-        for _ in range(levels):
-            anchor = anchor.parent
-        return anchor
 
 
 DISK = DiskTree()
@@ -128,10 +117,6 @@ class MemoryTree(Tree):
     def rglob(self, key: PurePath, pattern: str) -> list[PurePosixPath]:
         return [entry for entry in self._entries()
                 if key in entry.parents and fnmatchcase(entry.name, pattern)]
-
-    def ancestor(self, key: PurePath, levels: int) -> PurePath | None:
-        parents = key.parents
-        return parents[levels - 1] if levels <= len(parents) else None
 
 
 @dataclass(frozen=True)
@@ -179,12 +164,6 @@ class Location:
         return (Location(key, self.tree)
                 for key in self.tree.rglob(self.key, _one_name(pattern)))
 
-    def ancestor(self, levels: int) -> Location | None:
-        if levels < 1:
-            raise ValueError(f"levels must be at least 1, got {levels}")
-        key = self.tree.ancestor(self.key, levels)
-        return None if key is None else Location(key, self.tree)
-
 
 def _one_name(pattern: str) -> str:
     """`pattern`, refused unless it matches within one name.
@@ -199,5 +178,43 @@ def _one_name(pattern: str) -> str:
 
 
 def located(where: Path | Location) -> Location:
-    """`where` as a location: a `Path` names a place on disk."""
-    return where if isinstance(where, Location) else Location(where, DISK)
+    """`where` as a location: a `Path` names a place on disk.
+
+    A link stands where it is, so a linked document's siblings are read in the
+    directory holding the link, not where its target lives. Absolute, so that
+    `parent` of a relative path names the directory it sits in rather than
+    stopping at `.`.
+
+    Raises the kernel's `OSError` where it cannot look up a `Path` up to its
+    last `..`, and `ValueError` where that lookup lands elsewhere than the
+    names spell: such a path has no location to grade.
+    """
+    if isinstance(where, Location):
+        return where
+    return Location(_collapsed(Path(where).absolute()), DISK)
+
+
+def _collapsed(path: Path) -> Path:
+    """`path` with each `..` collapsed against the name written before it.
+
+    POSIX steps up from where a link leads, so a read of `link/..` can open a
+    directory other than the one the names spell, and the document would be
+    read from one directory while its siblings are read from another. The
+    kernel is asked whether the two agree, up to the last `..`, and the path
+    is refused where they do not; a lookup it cannot make is refused for its
+    own reason.
+    """
+    if ".." not in path.parts:
+        return path
+    last = len(path.parts) - path.parts[::-1].index("..")
+    prefix = Path(*path.parts[:last])
+    read = os.stat(prefix)
+    try:
+        agree = os.path.samestat(read, os.stat(os.path.normpath(prefix)))
+    except OSError:
+        agree = False
+    if not agree:
+        raise ValueError(
+            f"{path}: a `..` steps out of a link, so reading this path opens a different "
+            f"directory than its names spell; pass the path without the `..`")
+    return Path(os.path.normpath(path))
