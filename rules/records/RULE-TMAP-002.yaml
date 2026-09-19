@@ -3,9 +3,9 @@ statement: >
   A `regex` read rule whose native_type pattern spells a schemaless or structured
   container MUST NOT render a scalar Arrow type.
 tier: coherence
-severity: error
+severity: warning
 artifact_kinds: [type-map]
-validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"
+validator: "analitiq.validator.connectors::_type_map_rule_warnings"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapReadRegexRule]
 rationale: >
@@ -14,6 +14,9 @@ rationale: >
   more columns than the one literal an `exact` rule covers, so collapsing it to
   a scalar discards the structure of a whole family at once. The check reads
   the pattern's own container spelling, so a rule that reaches containers only
-  through a vendor label it does not spell out still validates clean.
+  through a vendor label it does not spell out still validates clean. It reads
+  that spelling off a rough estimate of the pattern's literal characters, not
+  off RE2's parse, so it can miss a container or flag a scalar; that is why it
+  warns rather than rejects.
 status: active
 superseded_by: null
