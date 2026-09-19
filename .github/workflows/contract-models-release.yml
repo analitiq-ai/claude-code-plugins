@@ -83,7 +83,9 @@ jobs:
         run: echo "version=${GITHUB_REF_NAME#contract-models-v}" >> "$GITHUB_OUTPUT"
 
       - name: Install build tooling
-        run: pip install --quiet build "pydantic>=2.12,<3"
+        # The dependency set is owned by requirements-dev.txt — never inline a
+        # version here.
+        run: pip install --quiet build -r requirements-dev.txt
 
       - name: Build guards (version match, minimal, no alq/private leak, boto3-free)
         run: python packages/contract-models/scripts/build.py --check --expect-version "${{ steps.ver.outputs.version }}"

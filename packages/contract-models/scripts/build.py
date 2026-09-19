@@ -10,9 +10,10 @@ Consequently the guards here check the SOURCE, where a human types, rather than
 an artifact after a translation.
 
 Responsibilities:
-  1. Guard the source structurally: it may import nothing beyond stdlib +
-     `pydantic` + the package itself — the architectural rule that public code may
-     not depend on private code, enforced rather than documented. (Prose hygiene —
+  1. Guard the source structurally: it may import nothing beyond stdlib, the
+     third-party modules `ALLOWED_THIRD_PARTY` names, and the package itself —
+     the architectural rule that public code may not depend on private code,
+     enforced rather than documented. (Prose hygiene —
      not naming Analitiq internals in docstrings/`description`s — is kept by author
      and review discipline, not machine-checked here.)
   2. Stage `dist/`: copy the source verbatim, plus the ONE file that cannot live

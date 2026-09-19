@@ -204,7 +204,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="TypeMapReadRegexRule",
-        prose_hash="1fa594a4d2d2",
+        prose_hash="8d59f35d926f",
         rule_ids=("RULE-TMAP-003", "RULE-TMAP-005", "RULE-TMAP-006"),
     ),
     ProseObligation(
@@ -218,7 +218,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="TypeMapWriteRegexRule",
-        prose_hash="b0ca4da498ef",
+        prose_hash="975fbe7264f9",
         rule_ids=("RULE-TMAP-009",),
     ),
     ProseObligation(
