@@ -130,7 +130,7 @@ def test_connection_scope_ref_requires_database_object(tmp_path):
                               "endpoint_id": "orders"})
     diagnostics = _diagnose(tmp_path, doc)
     assert not diagnostics["passed"]
-    assert "/source/endpoint_ref/connection/database_object" in _paths(diagnostics)
+    assert "/source/endpoint_ref/database_object" in _paths(diagnostics)
 
 
 # --- server-managed fields stay unauthorable -------------------------------

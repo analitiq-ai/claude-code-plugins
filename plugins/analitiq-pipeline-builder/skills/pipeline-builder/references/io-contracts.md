@@ -148,7 +148,7 @@ naming a lesser-tier rule do not fail validation.
     {
       "message_id": "coverage-check-skipped-no-path",
       "kind": "notApplicable",
-      "path": "/",
+      "path": "",
       "message": "type-map coverage skipped: no filesystem-anchored document path."
     }
   ]

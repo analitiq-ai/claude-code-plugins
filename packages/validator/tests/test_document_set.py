@@ -703,7 +703,7 @@ def test_a_connector_package_finding_names_the_document_it_is_about(validator):
     documents["connector.json"]["display_name"] = 7
     result = validator.validate_connector_package(_package_request(documents))
     assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
-        ("string_type", "connector.json#/api/display_name"),
+        ("string_type", "connector.json#/display_name"),
         ("native-type-unresolved",
          "endpoints/v2__widgets.json#/operations/read/response/schema/items/properties/b"),
     ], result
@@ -754,6 +754,92 @@ def test_a_connector_document_holding_another_entity_is_a_mismatch(validator):
     assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
         ("entity-mismatch", "connector.json#")], result
 
+
+
+def _package_texts(documents: dict, **texts: str) -> dict:
+    """`documents` serialized to request text, with `texts` (keyed by a
+    package key spelt with `__` for `/`) sent verbatim instead."""
+    return {**{key: json.dumps(doc) for key, doc in documents.items()},
+            **{key.replace("__", "/"): text for key, text in texts.items()}}
+
+
+def _without(documents: dict, *keys: str) -> dict:
+    return {key: doc for key, doc in documents.items() if key not in keys}
+
+
+def _mistyped_endpoint() -> dict:
+    endpoint = _uncovered_endpoint_document()
+    endpoint["endpoint_id"] = 7
+    return endpoint
+
+
+# Each package reports at least one finding, between them about the connector
+# itself, a sibling map, an endpoint, a key that needs encoding, and a document
+# that never parsed.
+_PACKAGES_WITH_FINDINGS = {
+    "mistyped connector, uncovered endpoint": {
+        **_connector_package_documents(),
+        "connector.json": {**_connector_package_documents()["connector.json"], "display_name": 7},
+        "endpoints/v2__widgets.json": _uncovered_endpoint_document()},
+    "key needing encoding": {**_connector_package_documents(),
+                             "endpoints/v2 widgets.json": _uncovered_endpoint_document()},
+    "mistyped endpoint": {**_connector_package_documents(),
+                          "endpoints/v2__widgets.json": _mistyped_endpoint()},
+    "read map missing": _without(_connector_package_documents(), "type-map-read.json"),
+    "endpoints missing": _without(_connector_package_documents(), "endpoints/v1__records.json"),
+    "endpoint nested": {**_without(_connector_package_documents(), "endpoints/v1__records.json"),
+                        "endpoints/sub/v1__records.json":
+                            _connector_package_documents()["endpoints/v1__records.json"]},
+    "pre-split map name": {**_connector_package_documents(),
+                           "type-map.json": _connector_package_documents()["type-map-read.json"]},
+    "direction declared twice": {**_connector_package_documents(),
+                                 "type-map-other.json":
+                                     _connector_package_documents()["type-map-read.json"]},
+    "database write map missing": {"connector.json": _CONNECTOR_PG,
+                                   "type-map-read.json": _CONNECTOR_PG_TYPE_MAP_READ},
+    "connector holding another entity": {**_connector_package_documents(),
+                                         "connector.json": _CONNECTOR_PG_TYPE_MAP_READ},
+}
+_PACKAGE_TEXTS_WITH_FINDINGS = {
+    **{name: _package_texts(documents) for name, documents in _PACKAGES_WITH_FINDINGS.items()},
+    "map unparseable": _package_texts(_connector_package_documents(),
+                                      **{"type-map-read.json": "{not json"}),
+    "connector unparseable": _package_texts(_connector_package_documents(),
+                                            **{"connector.json": "{not json"}),
+}
+
+
+def _assert_every_path_names_a_submitted_document(findings: list, keys: set) -> None:
+    # A package has no validated document, so a finding is located only by a
+    # key the caller sent. No document here carries a member keyed "", so a
+    # pointer of `/` can only be the whole document misspelt.
+    assert findings, "no findings: nothing was measured"
+    from urllib.parse import unquote
+    for f in findings:
+        reference, sep, pointer = f["path"].partition("#")
+        assert sep and unquote(reference) in keys, f
+        assert pointer == "" or (pointer.startswith("/") and pointer != "/"), f
+
+
+@pytest.mark.parametrize("texts", _PACKAGE_TEXTS_WITH_FINDINGS.values(),
+                         ids=_PACKAGE_TEXTS_WITH_FINDINGS.keys())
+def test_every_package_finding_names_a_submitted_document(validator, texts):
+    result = validator.validate_connector_package(ValidatePackageRequest(documents=texts))
+    _assert_every_path_names_a_submitted_document(result["findings"], set(texts))
+
+
+def test_a_finding_about_the_package_directory_names_the_connector(validator, tmp_path, refuse):
+    # A package in memory can always be listed, so only a directory on disk
+    # reaches the finding that is about the directory rather than a document
+    # in it. Both routes read that finding from the package root.
+    from analitiq.validator.document_set import _from_package_root
+    documents = _connector_package_documents()
+    _write_package(tmp_path, documents)
+    refuse(tmp_path, 0o300)
+    findings = validator.validate_document(documents["connector.json"],
+                                           doc_path=tmp_path / "connector.json")
+    assert "type-map-dir-unlisted" in [f["message_id"] for f in findings], findings
+    _assert_every_path_names_a_submitted_document(_from_package_root(findings), set(documents))
 
 # ---------------------------------------------------------------------------
 # Deterministic output: findings do not depend on the order the caller happened

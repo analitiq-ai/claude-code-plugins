@@ -1318,7 +1318,7 @@ def test_coverage_reads_a_type_map_under_any_matching_filename(tmp_path, kind, v
     (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
     (tmp_path / "connector.json").write_text("{}")
     errors = _errors(validator.check_coverage(_min_connector(kind), tmp_path / "connector.json"))
-    assert [e["path"] for e in errors] == ["type-map-natives.json#/rules/0/exact/arrow_type"], errors
+    assert [e["path"] for e in errors] == ["type-map-natives.json#/rules/0/arrow_type"], errors
 
 
 @pytest.mark.parametrize("kind", _STORAGE_KINDS)
@@ -1335,7 +1335,7 @@ def test_a_storage_write_map_is_graded_and_named(tmp_path, kind, validator):
         [{"match": "exact", "arrow_type": "NotAnArrowFamily", "native_type": "TEXT"}], "write")))
     (tmp_path / "connector.json").write_text("{}")
     errors = _errors(validator.check_coverage(_min_connector(kind), tmp_path / "connector.json"))
-    bad = [e for e in errors if e["path"] == "type-map-ddl.json#/rules/0/exact/arrow_type"]
+    bad = [e for e in errors if e["path"] == "type-map-ddl.json#/rules/0/arrow_type"]
     assert bad, errors
 
 
@@ -2559,7 +2559,7 @@ def test_type_map_findings_grades_as_the_direction_the_caller_names(validator):
         [{"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}], "read")
     errors = _errors(validator.type_map_findings(doc, "write"))
     assert {f["path"] for f in errors} == {
-        "/direction", "/$schema", "/rules/0/exact"}, errors
+        "/direction", "/$schema", "/rules/0"}, errors
     assert any(f["message_id"] == "write-exact-malformed-placeholder"
                for f in errors), errors
 

@@ -168,15 +168,15 @@ def _model_findings(entity: str, doc) -> list[dict]:
     else:  # pragma: no cover - guarded by the entity choices
         raise ValueError(f"no contract model for entity {entity!r}")
     from pydantic import ValidationError
-    from analitiq.contracts.shared.json_schema import pointer_position
-    from analitiq.validator._core import _model_error_message
+    from analitiq.validator._core import _model_error_message, document_pointer
     try:
         Model.model_validate(doc)
         return []
     except ValidationError as exc:
         return [
             _finding("contract-model", "error",
-                     pointer_position(err["loc"]), _model_error_message(err))
+                     document_pointer(err["loc"], Model.__pydantic_core_schema__),
+                     _model_error_message(err))
             for err in exc.errors()
         ]
 

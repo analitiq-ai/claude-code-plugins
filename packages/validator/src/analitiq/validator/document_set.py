@@ -247,7 +247,9 @@ def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnv
 
     The connector is graded exactly as it is from a path on disk, by the same
     checks reading the same siblings, so the two routes cannot disagree about
-    a package. What differs is where a finding says it applies: a package has
+    a package whose `connector.json` holds a connector. One that holds anything
+    else is refused as an `entity-mismatch`, where the disk route grades
+    whatever it detects. What differs is where a finding says it applies: a package has
     no one validated document, so every finding names the document it is
     about by its percent-encoded key. A document the connector's checks never read is not graded.
     """

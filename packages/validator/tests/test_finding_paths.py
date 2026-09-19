@@ -194,7 +194,36 @@ def test_a_model_error_escapes_the_keys_on_its_pointer(validator):
     connector = json.loads((CORPUS / "valid_connector.json").read_text())
     connector["transports"]["api"]["headers"]["A/b~c"] = 7
     paths = [f["path"] for f in validator.validate_document(connector)]
-    assert any("/headers/A~1b~0c" in p for p in paths), paths
+    assert "/transports/api/headers/A~1b~0c" in paths, paths
+
+
+def test_a_rejected_mapping_key_is_located_at_its_member(validator):
+    # pydantic marks a key that failed validation with a trailing `[key]`,
+    # which names no member.
+    connector = json.loads((CORPUS / "valid_connector.json").read_text())
+    connector["transports"]["api"]["headers"]["A b"] = "x"
+    assert [f["path"] for f in validator.validate_document(connector)
+            if f["message_id"] == "string_pattern_mismatch"] == ["/transports/api/headers/A b"]
+
+
+def test_a_model_error_names_no_union_tag_on_its_pointer(validator):
+    # The connector root is a union discriminated on `kind`; its tag is where
+    # the model walk went, not a member of the document.
+    connector = json.loads((CORPUS / "valid_connector.json").read_text())
+    connector["display_name"] = 7
+    assert [f["path"] for f in validator.validate_document(connector)
+            if f["message_id"] == "string_type"] == ["/display_name"]
+
+
+def test_a_union_tag_that_is_also_a_member_name_is_not_read_as_the_member(validator):
+    # Offset pagination is tagged `offset` and carries an `offset` member, so
+    # the error in `limit` is where the tag and the document disagree.
+    endpoint = json.loads((CORPUS / "valid_read.json").read_text())
+    endpoint["operations"]["read"]["pagination"] = {
+        "type": "offset", "offset": {"param": "skip", "initial": 0},
+        "limit": {"param": 7, "default": 50}, "stop_when": {"empty": {"ref": "response.body"}}}
+    assert [f["path"] for f in validator.validate_document(endpoint)
+            if f["message_id"] == "string_type"] == ["/operations/read/pagination/limit/param"]
 
 
 def _write_mode(endpoint, mode, request):
@@ -255,3 +284,66 @@ def test_only_a_bare_pointer_is_qualified(validator):
     found = validator.finding(message_id="x", kind="informational", path="/a", message="m")
     with pytest.raises(ValueError):
         qualified(qualified(found, "a.json"), "b.json")
+
+
+# ---------------------------------------------------------------------------
+# A model finding's pointer locates its node, across every contract model: each
+# fixture is graded with one member at a time made the wrong type, so the
+# errors reach every union, mapping and list the fixtures exercise.
+# ---------------------------------------------------------------------------
+
+def _node(doc, pointer: str):
+    """The node `pointer` locates in `doc`; raises `LookupError` when none."""
+    node = doc
+    for token in pointer.split("/")[1:] if pointer else ():
+        token = token.replace("~1", "/").replace("~0", "~")
+        if isinstance(node, dict) and token in node:
+            node = node[token]
+        elif isinstance(node, list) and token.isdigit() and int(token) < len(node):
+            node = node[int(token)]
+        else:
+            raise LookupError(pointer)
+    return node
+
+
+def _with_each_member_mistyped(doc, at=()):
+    if isinstance(doc, dict):
+        for key, value in doc.items():
+            yield at + (key,), {**doc, key: [[]]}
+            for where, inner in _with_each_member_mistyped(value, at + (key,)):
+                yield where, {**doc, key: inner}
+    elif isinstance(doc, list):
+        for i, value in enumerate(doc):
+            for where, inner in _with_each_member_mistyped(value, at + (i,)):
+                yield where, [*doc[:i], inner, *doc[i + 1:]]
+
+
+def _located(doc, f) -> bool:
+    # A `missing` error names the absent member under a node that exists.
+    try:
+        _node(doc, f["path"])
+        return True
+    except LookupError:
+        parent, _, _ = f["path"].rpartition("/")
+        if f["message_id"] != "missing":
+            return False
+        try:
+            _node(doc, parent)
+            return True
+        except LookupError:
+            return False
+
+
+def test_every_model_finding_locates_its_node():
+    from pydantic import TypeAdapter
+    from analitiq.contracts.shared.rule_fixtures import rule_fixtures
+    from analitiq.validator._core import _model_findings
+    adapters: dict = {}
+    unlocated = []
+    for fixture in rule_fixtures():
+        adapter = adapters.setdefault(fixture.model, TypeAdapter(fixture.model))
+        graded = [((), fixture.document), *_with_each_member_mistyped(fixture.document)]
+        for where, doc in graded:
+            unlocated += [(fixture.rule_id, fixture.name, where, f["path"], f["message_id"])
+                          for f in _model_findings(doc, adapter) if not _located(doc, f)]
+    assert not unlocated, unlocated[:10]

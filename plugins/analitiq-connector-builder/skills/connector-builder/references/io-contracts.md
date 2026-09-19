@@ -343,7 +343,7 @@ access and may not guess field types).
             "type": "string",
             "enum": ["error", "warning"]
           },
-          "path": { "type": "string", "description": "JSON pointer into the document" },
+          "path": { "type": "string" },
           "message": { "type": "string" }
         },
         "allOf": [

@@ -6,6 +6,8 @@ This module owns the parts that are independent of any particular artifact kind:
 - `_model_findings()` — validate a document against a Pydantic contract model and
   map each error to a finding (the single source of single-document validity,
   reused by every kind);
+- `document_pointer()` — the document location a pydantic error names, which
+  its `loc` does not spell directly; shared with the pipeline plugin's adapter;
 - `contract_model_domain()` — the env guard every kind imports its contract models
   under, defined once so the DOMAIN dance is not reimplemented per kind;
 - the KIND-VALIDATOR REGISTRY and `_dispatch()`/`validate_document()` driver — a
@@ -234,6 +236,126 @@ def finding_costs_a_pass(f: dict) -> bool:
 # Model validation — the single source of single-document validity
 # ---------------------------------------------------------------------------
 
+#: Core schema kinds that validate their one inner `schema` without adding a
+#: `loc` token of their own.
+_TRANSPARENT = frozenset({
+    "definitions", "model", "default", "nullable",
+    "function-after", "function-before", "function-wrap",
+})
+#: Core schema kinds with no members for a `loc` token to name.
+_LEAVES = frozenset({"str", "int", "float", "bool", "literal", "any", "enum"})
+
+
+def document_pointer(loc: tuple, schema: dict) -> str:
+    """The JSON Pointer to the member a pydantic error at `loc` concerns, in
+    the document validated against the core `schema`.
+
+    `loc` is the path the validator took, not a path through the document: a
+    tagged union adds the tag it dispatched on, a smart union the label of
+    the choice it tried, and a rejected mapping key a trailing `[key]`, and
+    none of them is a member. Only the schema tells them apart — a union
+    discriminated by the key it carries has a tag equal to a member name — so
+    the walk follows `loc` through it rather than through the document.
+
+    Raises `ValueError` for a `loc` the schema cannot account for.
+    """
+    from analitiq.contracts.shared.json_schema import pointer_position
+    refs = {node["ref"]: node for node in _schema_nodes(schema) if "ref" in node}
+    members = _members(schema, tuple(loc), refs)
+    if members is None:
+        raise ValueError(f"error location {loc!r} does not follow the model's schema")
+    return pointer_position(members)
+
+
+def _schema_nodes(node: dict) -> Iterator[dict]:
+    yield node
+    for child in _schema_children(node):
+        yield from _schema_nodes(child)
+
+
+def _schema_children(node: dict) -> Iterator[dict]:
+    kind = node["type"]
+    if kind == "definitions":
+        yield from node["definitions"]
+    if kind in _TRANSPARENT:
+        yield node["schema"]
+    elif kind == "model-fields":
+        yield from (field["schema"] for field in node["fields"].values())
+    elif kind == "list":
+        yield node["items_schema"]
+    elif kind == "tuple":
+        yield from node["items_schema"]
+    elif kind == "dict":
+        yield from (node[k] for k in ("keys_schema", "values_schema") if k in node)
+    elif kind == "tagged-union":
+        yield from node["choices"].values()
+    elif kind == "union":
+        yield from (_choice_schema(choice) for choice in node["choices"])
+    elif kind not in _LEAVES and kind != "definition-ref":
+        raise TypeError(f"core schema kind {kind!r} is not walked for error locations")
+
+
+def _choice_schema(choice: dict | tuple) -> dict:
+    # A union choice is a schema, or a `(schema, label)` pair when labelled.
+    return choice[0] if isinstance(choice, tuple) else choice
+
+
+def _members(node: dict, loc: tuple, refs: dict[str, dict]) -> list | None:
+    """The member tokens of `loc` below `node`, or `None` when `loc` does not
+    follow it."""
+    if not loc:
+        return []
+    kind = node["type"]
+    token, rest = loc[0], loc[1:]
+    if kind == "definition-ref":
+        return _members(refs[node["schema_ref"]], loc, refs)
+    if kind in _TRANSPARENT:
+        return _members(node["schema"], loc, refs)
+    if kind == "model-fields":
+        field = _field_at(node, token)
+        if field is None:
+            # A key the model declares no field for: `extra_forbidden`.
+            return None if rest else [token]
+        return _below(token, _members(field["schema"], rest, refs))
+    if kind == "list" and isinstance(token, int):
+        return _below(token, _members(node["items_schema"], rest, refs))
+    if kind == "tuple" and isinstance(token, int):
+        items = node["items_schema"]
+        variadic = node.get("variadic_item_index")
+        item = items[min(token, variadic)] if variadic is not None else (
+            items[token] if token < len(items) else None)
+        return None if item is None else _below(token, _members(item, rest, refs))
+    if kind == "dict":
+        if rest == ("[key]",):
+            return [token]
+        return _below(token, _members(node["values_schema"], rest, refs))
+    if kind == "tagged-union":
+        choice = node["choices"].get(token)
+        return None if choice is None else _members(choice, rest, refs)
+    if kind == "union":
+        # pydantic renders a choice's label itself and does not expose it, so
+        # the choice is the one the rest of `loc` follows.
+        for choice in node["choices"]:
+            members = _members(_choice_schema(choice), rest, refs)
+            if members is not None:
+                return members
+        return None
+    if kind in _LEAVES or kind in ("list", "tuple"):
+        return None
+    raise TypeError(f"core schema kind {kind!r} is not walked for error locations")
+
+
+def _field_at(node: dict, token: Any) -> dict | None:
+    """The field `token` names: a field is addressed by its alias when it has one."""
+    for name, field in node["fields"].items():
+        if field.get("validation_alias", name) == token:
+            return field
+    return None
+
+
+def _below(token: Any, members: list | None) -> list | None:
+    return None if members is None else [token, *members]
+
 def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     """Validate `doc` against a contract model; map each error to a finding.
 
@@ -245,7 +367,8 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     between. `rules.rule_violations` unpacks either shape from the pydantic
     error, and each violation becomes its own finding: its own attributes
     rather than the joined `err["msg"]` pydantic rendered for the raise, and
-    its `path` extending `err["loc"]` when it set one.
+    its `path` extending the pointer `document_pointer` builds from
+    `err["loc"]` when it set one.
 
     A field constraint pydantic enforces on its own — no `violation` call
     behind it — carries no violation, and the finding's `rule` is `None` for
@@ -255,7 +378,6 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     existing, already-stable vocabulary reused rather than a second one
     invented beside it.
     """
-    from analitiq.contracts.shared.json_schema import pointer_position
     from analitiq.contracts.shared.rules import rule_violations
     try:
         adapter.validate_python(doc)
@@ -263,7 +385,7 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     except ValidationError as exc:
         findings: list[dict] = []
         for err in exc.errors():
-            base_path = pointer_position(err["loc"])
+            base_path = document_pointer(err["loc"], adapter.core_schema)
             violations = rule_violations(err)
             if not violations:
                 findings.append(finding(
