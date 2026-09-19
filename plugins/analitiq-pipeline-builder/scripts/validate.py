@@ -72,7 +72,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
-import os
 from pathlib import Path, PurePosixPath
 
 from _bootstrap import ensure_deps_or_reexec
@@ -179,25 +178,9 @@ def _model_findings(entity: str, doc) -> list[dict]:
         ]
 
 
-def _authored_path(document_path: Path) -> Path:
-    """The document's path made absolute WITHOUT following any symlink on it.
-
-    The published validator reads the authored layout off the path it is given
-    — RULE-PKG-031 off `doc_path.name`, and the directories above it to decide
-    whether that name is one the engine will ever resolve. Every one of those is a fact about where the
-    author put the file, so following a link to wherever its bytes really live
-    grades a layout nobody wrote: a symlinked endpoint is re-graded under its
-    target's basename, and a symlinked `endpoints/` directory takes the file
-    out of the layout the gate recognises, which fails open. `abspath`
-    normalizes lexically, so it gives the validator an absolute path — which it
-    needs, to find a sibling `connector.json` — while leaving the authored
-    shape intact."""
-    return Path(os.path.abspath(document_path))
-
-
 def _endpoint_findings(doc, document_path: Path) -> list[dict]:
     from analitiq.validator import validate_document
-    return validate_document(doc, doc_path=_authored_path(document_path))
+    return validate_document(doc, doc_path=document_path)
 
 
 def _type_map_findings(doc) -> list[dict]:
