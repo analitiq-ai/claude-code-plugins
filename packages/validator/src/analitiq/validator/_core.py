@@ -257,7 +257,9 @@ def document_pointer(loc: tuple, schema: dict) -> str:
     discriminated by the key it carries has a tag equal to a member name — so
     the walk follows `loc` through it rather than through the document.
 
-    Raises `ValueError` for a `loc` the schema cannot account for.
+    Raises `ValueError` for a `loc` the schema cannot account for, and
+    `TypeError` when the schema uses a core schema kind the walk does not
+    know, wherever it sits and not only along `loc`.
     """
     from analitiq.contracts.shared.json_schema import pointer_position
     refs = {node["ref"]: node for node in _schema_nodes(schema) if "ref" in node}

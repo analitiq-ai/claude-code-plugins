@@ -206,6 +206,15 @@ def test_a_rejected_mapping_key_is_located_at_its_member(validator):
             if f["message_id"] == "string_pattern_mismatch"] == ["/transports/api/headers/A b"]
 
 
+def test_an_element_past_a_tuples_fixed_items_is_located_at_its_index(validator):
+    # `key_attrs` is a variadic tuple: every element after its fixed items is
+    # validated by the one repeated item schema.
+    connector = json.loads((CORPUS / "valid_connector.json").read_text())
+    connector["error_map"] = {"key_attrs": ["code", "1bad"], "codes": {"x": "auth"}}
+    assert [f["path"] for f in validator.validate_document(connector)
+            if f["message_id"] == "string_pattern_mismatch"] == ["/error_map/key_attrs/1"]
+
+
 def test_a_model_error_names_no_union_tag_on_its_pointer(validator):
     # The connector root is a union discriminated on `kind`; its tag is where
     # the model walk went, not a member of the document.
@@ -287,9 +296,9 @@ def test_only_a_bare_pointer_is_qualified(validator):
 
 
 # ---------------------------------------------------------------------------
-# A model finding's pointer locates its node, across every contract model: each
-# fixture is graded with one member at a time made the wrong type, so the
-# errors reach every union, mapping and list the fixtures exercise.
+# A model finding's pointer locates its node, across every model a rule fixture
+# names: each fixture is graded with one dict member at a time made the wrong
+# type, so the errors reach every union, mapping and list the fixtures exercise.
 # ---------------------------------------------------------------------------
 
 def _node(doc, pointer: str):
