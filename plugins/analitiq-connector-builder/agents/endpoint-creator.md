@@ -27,9 +27,11 @@ not the plugin's.
   authoring, and satisfy every row.)
 - Cited `RULE-PKG-*` ids resolve in
   `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector-package.md`,
-  and `RULE-DBEP-*` ids in
-  `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/database-endpoint.md` —
-  open those only to resolve a citation; you author neither artifact.
+  `RULE-DBEP-*` ids in
+  `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/database-endpoint.md`,
+  and `RULE-TMAP-*` ids in
+  `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/type-map.md` —
+  open those only to resolve a citation; you author none of those artifacts.
 
 ## Inputs
 
@@ -37,7 +39,8 @@ not the plugin's.
   run's per-endpoint research pass. Shape and field meanings:
   `connector-builder/references/io-contracts.md` § EndpointFacts. A field the
   provider's payloads show a value for carries a real `sample_value`; a
-  temporal also carries its `tz_aware` flag — step 3 depends on both.
+  date-time field sampled as a date-time string also carries its `tz_aware`
+  flag — step 3 depends on both.
 - `connector` — the assembled connector document (for `transports`, `auth`,
   and `connection_contract` reference paths).
 
@@ -144,14 +147,26 @@ was raised.
      field: declare neither on the node here too, rather than half a pair
      (`RULE-ENDP-006`) or a guess, and report the gap. This holds on both
      schemas an endpoint declares — the read record and a write mode's input.
-     - **Temporal fields follow the sample value, never a default**
-       (`RULE-SHRD-002`). Use the field's
-       `tz_aware` flag (set by research from a real `sample_value`): a
-       zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an
-       offset/`Z` → `Timestamp(<unit>, UTC)`. When two fields share a native
-       token but differ in zone-awareness, give them **distinct** native
-       tokens so each resolves to the right canonical under the read map's
-       first-match-wins rules.
+     - **Date-time fields follow the sample value, never a default**
+       (`RULE-SHRD-002`). A date-only field settles on its documented
+       `format` as `Date32` and has no zone question to answer. For a
+       date-time field, use the `tz_aware` flag research sets from an
+       observed date-time string: a zoneless wire value → bare
+       `Timestamp(<unit>)`; a value carrying an offset/`Z` →
+       `Timestamp(<unit>, UTC)`. An absent flag is missing evidence rather
+       than a zoneless value, and leaves the field untyped like any other
+       ungrounded one. The read map is first-match-wins,
+       so one native token resolves to exactly one canonical: two entries
+       that differ in zone-awareness reach different canonicals only under
+       different tokens. Compare tokens the way an `exact` read rule does,
+       which `RULE-TMAP-022` states — two spellings differing only in case
+       or spacing are one token. Where the provider already documents them
+       differently (its own `date` vs `date-time`, say) there is nothing to
+       fix, whether the entries come from different fields or from one
+       field's two directional entries. Where they compare equal, do not
+       invent a second token to separate them: that fabricates a
+       `native_type` no research observed. Report the collision as a
+       contract gap instead.
      - **Carry each sample onto the node it grounds.** Where a facts entry
        has a `sample_value`, put it verbatim into that node's `examples`, in
        the JSON kind the provider sends — the string `"0"` stays a string. It
@@ -207,7 +222,11 @@ was raised.
      set gets a different input schema. What the pair buys is a destination
      whose field types are declared and checkable rather than left to
      whatever a source produced; it is the contract's statement about the
-     field, not a conversion this document performs.
+     field, not a conversion this document performs. Carry each entry's
+     `sample_value` onto its node's `examples` the same way step 3 does for
+     the read record — the only value in the endpoint that came off the wire
+     for this direction, and the only thing this node's own assertions can be
+     graded against (`RULE-ENDP-063`).
      <!-- PROBE: write-input-pair-unresolved-through-read-map, write-input-unannotated-uncovered -->
      Those declarations are what put the destination record under the read map
      — `type-map-read` must resolve the `native_type` to the `arrow_type`
@@ -215,10 +234,13 @@ was raised.
      is resolved against nothing. A token the map cannot render is a
      domain-level type-map fix, exactly as on the read side.
      A field whose facts entry carries neither annotation is left untyped
-     here, exactly as on the read side. Never invent a token to satisfy the
-     map: the read map is first-match-wins and shared with the read
-     direction, so a rule added for a native the provider never emits can
-     shadow a real one.
+     here, exactly as on the read side. Never invent a token no researched
+     entry carries to satisfy the map: the read map is first-match-wins and
+     shared with the read direction, so a rule added for a native the
+     provider never emits can shadow a real one. This bans a fabricated
+     token — never distinct tokens the provider genuinely documents
+     differently, whether for different fields or for one field's separate
+     directional entries.
    - `conflict_keys` (`RULE-ENDP-019`, `RULE-ENDP-014`) — the
      provider-defined natural key the upsert matches on. Use
      `endpoint_facts.conflict_keys`; never invent one.
