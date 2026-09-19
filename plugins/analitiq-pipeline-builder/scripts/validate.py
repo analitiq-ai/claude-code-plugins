@@ -40,7 +40,7 @@ entry point. This adapter routes each entity as follows:
     published bundle validator receives assembled documents, never a
     connection's directory, so the bundle pass also hands each connection's
     ``definition/`` to ``analitiq.validator.collect_type_maps`` — the collection
-    a connector's siblings go through — roots every finding at the file it
+    a connector's siblings go through — roots every finding at the entry it
     concerns, and grades each map it kept as the ``type-map`` entity.
 
 One check is the adapter's own, because it reads files the published
@@ -73,7 +73,7 @@ import argparse
 import contextlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from _bootstrap import ensure_deps_or_reexec
 
@@ -218,8 +218,8 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
     from analitiq.validator import collect_type_maps
     site = f"connections/{conn_dir.name}/definition"
     collection = collect_type_maps(conn_dir / "definition", rule=None)
-    for name, f in collection.findings:
-        findings.extend(_at_site(f"{site}/{name}", [f]))
+    for entry, f in collection.findings:
+        findings.extend(_at_site(str(PurePosixPath(site, entry)), [f]))
     for name, doc in collection.maps.values():
         with _contained(findings, f"{site}/{name}"):
             findings.extend(_at_site(f"{site}/{name}", _type_map_findings(doc)))
