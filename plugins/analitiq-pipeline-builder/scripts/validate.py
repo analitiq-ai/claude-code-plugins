@@ -208,7 +208,8 @@ def _type_map_findings(doc) -> list[dict]:
 
 def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
     """The published validator's collection of the type maps beside one
-    connection.json, each finding rooted at the file it concerns, and every map
+    connection.json, each finding rooted at the entry it concerns (the
+    `definition` directory itself for one about the directory), and every map
     it kept graded at connection scope. The collection cites no rule: the
     record it cites beside a connector binds a connector package.
 
@@ -226,13 +227,13 @@ def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
 
 
 def _at_site(site: str, findings: list[dict]) -> list[dict]:
-    """Re-root a member's own findings at the file they came from.
+    """Re-root a member's own findings at the entry they came from.
 
     A document graded on its own reports a pointer into itself (`/scope`), which
     is the whole address when that document is what was validated. A bundle
     holds many, so the same pointer names none of them — the reader is told
-    what is wrong and not which file to open. A finding about the whole
-    document (`/`) is addressed at the file itself."""
+    what is wrong and not which entry to open. A finding about the whole
+    entry (`/`) is addressed at the entry itself."""
     return [{**f, "path": site if f.get("path", "") in ("", "/") else f"{site}{f['path']}"}
             for f in findings]
 

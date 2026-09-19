@@ -969,7 +969,7 @@ def is_addressed_endpoint_path(doc_path: PurePath) -> bool:
 
 class _Operation(Enum):
     """What a check asked of the package's tree. Each value is what an author
-    changes so the kernel answers it, which the operation alone decides."""
+    changes so the kernel grants it where the kernel refused the permission."""
 
     LOOKUP = "Make every directory on the path to it searchable"
     LISTING = "Make it readable, and every directory on the path to it searchable"
@@ -980,26 +980,30 @@ class _Operation(Enum):
 
 @dataclass(frozen=True)
 class _Refused:
-    """The kernel refused `operation`, which says nothing about what is there:
-    a check reading its answer is withheld, never graded as if nothing were."""
+    """`operation` failed, which says nothing about what is there: a check
+    reading its answer is withheld, never graded as if nothing were. Only a
+    refused permission is the author's to grant, so only it names a remedy."""
 
     operation: _Operation
     error: OSError
 
     @property
     def why(self) -> str:
-        return (f"could not be opened: the {self.operation.name.lower()} was refused "
-                f"({self.error}). {self.operation.value}, then re-run")
+        asked = self.operation.name.lower()
+        if isinstance(self.error, PermissionError):
+            return (f"could not be opened: the {asked} was refused ({self.error}). "
+                    f"{self.operation.value}, then re-run")
+        return f"could not be opened: the {asked} failed ({self.error})"
 
 
 _Answer = TypeVar("_Answer")
 
 
 def _asked(operation: _Operation, question: Callable[[], _Answer]) -> _Answer | _Refused:
-    """The tree's answer to `question`, or its refusal to give one.
+    """The tree's answer to `question`, or the failure it raised instead.
 
     Every lookup, listing and read a check makes beside the document goes
-    through here, so no refusal is read as absence and none escapes a check.
+    through here, so no failed one is read as absence and none escapes a check.
     """
     try:
         return question()
@@ -1049,24 +1053,18 @@ def _read_sibling(path: Location) -> _Sibling:
         return _Unparseable(error)
 
 
-def _load_json_sibling(
-    path: Location, *, rule: str | None, message_id: str,
-) -> tuple[_Sibling, list[dict]]:
-    """Read a sibling JSON document, reporting why when no document was read —
-    carrying, when the caller names one, the rule that sibling's content would
-    otherwise satisfy.
+def _unread(path: Location, sibling: _NotAFile | _Refused | _Unparseable) -> str:
+    return f"sibling {path.name} {sibling.why}."
 
-    `rule` is a parameter because the callers are different checks, each
-    attributing an unreadable sibling to whichever obligation it was reading
-    that sibling to satisfy, rather than a shared default that could name the
-    wrong one.
-    """
+
+def _load_json_sibling(path: Location, *, message_id: str) -> tuple[_Sibling, list[dict]]:
+    """Read a sibling JSON document, failing without a rule when no document
+    was read: which rule went unchecked is the caller's to name."""
     sibling = _read_sibling(path)
     if isinstance(sibling, _Read):
         return sibling, []
     return sibling, [finding(
-        rule=rule, message_id=message_id, kind="fail", path="/",
-        message=f"sibling {path.name} {sibling.why}.")]
+        rule=None, message_id=message_id, kind="fail", path="/", message=_unread(path, sibling))]
 
 
 def _no_map_reason(direction: str, declared_by: dict[str, str]) -> str:
@@ -1255,11 +1253,17 @@ def collect_type_maps(parent: Path | Location, *, rule: str | None) -> TypeMapSi
     refused: list[str] = []
     for path in siblings:
         name = path.name
-        sibling, load = _load_json_sibling(path, rule=rule, message_id="type-map-unparseable")
-        findings.extend((name, f) for f in load)
+        sibling = _read_sibling(path)
         if isinstance(sibling, _Refused):
             refused.append(name)
+            findings.append((name, finding(
+                rule=rule, message_id="type-map-refused", kind="notApplicable", path="/",
+                message=_unread(path, sibling))))
+            continue
         if not isinstance(sibling, _Read):
+            findings.append((name, finding(
+                rule=rule, message_id="type-map-unparseable", kind="fail", path="/",
+                message=_unread(path, sibling))))
             continue
         doc = sibling.doc
         declared = _declared_direction(doc)
@@ -1418,8 +1422,7 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
                     f"endpoint file 'endpoints/{rel}' is nested; endpoints must be flat "
                     "at 'endpoints/{endpoint_id}.json' (the engine resolves them by id).")))
             continue
-        endpoint, load = _load_json_sibling(
-            ep_path, rule=None, message_id="endpoint-file-unreadable")
+        endpoint, load = _load_json_sibling(ep_path, message_id="endpoint-file-unreadable")
         if not isinstance(endpoint, _Read):
             findings.extend(load)
             continue
@@ -1524,14 +1527,10 @@ def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
             sibling = location.parent.parent / "connector.json" if addressed else None
             connector: _Sibling = _NOT_A_FILE
             if sibling is not None:
-                # `rule=None`: a failed read has not evaluated RULE-ENDP-047 one
-                # way or the other, so asserting a `fail` against it here would
-                # contradict the `notApplicable` a branch below reports for the
-                # identical case. The failure to read is a framework-level fact;
-                # which rule went unchecked as a result is that branch's to name.
+                # A failed read has not evaluated RULE-ENDP-047 one way or the
+                # other; the branch below names it, as notApplicable.
                 connector, load_findings = _load_json_sibling(
-                    sibling, rule=None, message_id="sibling-connector-unreadable",
-                )
+                    sibling, message_id="sibling-connector-unreadable")
                 # No regular file there is not a failure to read one: an
                 # endpoint validated before its connector exists has none.
                 if connector is not _NOT_A_FILE:

@@ -6,6 +6,7 @@ this work: a write body mapping a bare field name (`{from_input: "category"}`)
 instead of the record. The model rejects it, so the validator now catches it —
 the gap the old validator missed.
 """
+import errno
 import json
 import os
 import re
@@ -21,6 +22,7 @@ from analitiq.contracts.endpoints import _REFUSED_REFERENCE_KEYWORDS
 from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
 from analitiq.contracts.stream import STREAM_SCHEMA_URL
 from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL
+from analitiq.validator._location import DiskTree
 from analitiq.validator.connectors import (
     _DATABASE_KINDS,
     _READ_MAP_FILENAME,
@@ -1535,7 +1537,7 @@ def test_type_maps_in_a_directory_that_cannot_be_listed_are_unchecked_not_absent
 
 
 _UNLISTED = ("notApplicable", "RULE-PKG-030", "type-map-dir-unlisted")
-_MAP_UNREAD = ("fail", "RULE-PKG-030", "type-map-unparseable")
+_MAP_REFUSED = ("notApplicable", "RULE-PKG-030", "type-map-refused")
 _COVERAGE_SKIPPED = ("notApplicable", "RULE-PKG-033", "native-type-coverage-skipped")
 _ENDPOINTS_UNLISTED = ("notApplicable", "RULE-PKG-031", "endpoints-dir-unlisted")
 # What the empty write map is graded to wherever it is read.
@@ -1545,15 +1547,15 @@ _WRITE_MAP_GRADED = [("fail", None, "too_short"), ("fail", "RULE-TMAP-017", "wri
 @pytest.mark.parametrize("kind,mode,expected", [
     ("api", 0o755, []),
     ("api", 0o300, [_UNLISTED, _COVERAGE_SKIPPED]),
-    ("api", 0o400, [_MAP_UNREAD, _COVERAGE_SKIPPED, _ENDPOINTS_UNLISTED]),
+    ("api", 0o400, [_MAP_REFUSED, _COVERAGE_SKIPPED, _ENDPOINTS_UNLISTED]),
     ("api", 0o000, [_UNLISTED, _COVERAGE_SKIPPED, _ENDPOINTS_UNLISTED]),
     ("database", 0o755, _WRITE_MAP_GRADED),
     ("database", 0o300, [_UNLISTED]),
-    ("database", 0o400, [_MAP_UNREAD, _MAP_UNREAD]),
+    ("database", 0o400, [_MAP_REFUSED, _MAP_REFUSED]),
     ("database", 0o000, [_UNLISTED]),
     ("file", 0o755, _WRITE_MAP_GRADED),
     ("file", 0o300, [_UNLISTED]),
-    ("file", 0o400, [_MAP_UNREAD, _MAP_UNREAD]),
+    ("file", 0o400, [_MAP_REFUSED, _MAP_REFUSED]),
     ("file", 0o000, [_UNLISTED]),
 ], ids=lambda v: f"{v:o}" if isinstance(v, int) else None)
 def test_a_refused_lookup_in_the_package_withholds_only_what_depends_on_it(
@@ -1583,8 +1585,8 @@ _WALK = ("Make it and every directory below it readable and searchable, and ever
 
 @pytest.mark.parametrize("shut,mode,message_id,remedy", [
     (".", 0o300, "type-map-dir-unlisted", _LISTING),
-    (".", 0o400, "type-map-unparseable", _LOOKUP),
-    ("type-map-read.json", 0o000, "type-map-unparseable", _READ),
+    (".", 0o400, "type-map-refused", _LOOKUP),
+    ("type-map-read.json", 0o000, "type-map-refused", _READ),
     (".", 0o400, "endpoints-dir-unlisted", _LOOKUP),
     ("endpoints/sub", 0o000, "endpoints-dir-unlisted", _WALK),
     ("endpoints", 0o400, "endpoint-file-unreadable", _LOOKUP),
@@ -1604,6 +1606,23 @@ def test_each_refusal_names_the_remedy_for_what_was_refused(
     assert refused["message"].endswith(remedy), refused
 
 
+def test_a_failure_the_author_cannot_chmod_away_names_no_remedy(tmp_path, validator, monkeypatch):
+    # Only a refused permission is the author's to grant; a failing disk is not.
+    _write_tree(tmp_path, _min_connector("api"), [{"match": "exact", "native_type": "STRING",
+                                                   "arrow_type": "Utf8"}],
+                {"widgets.json": _endpoint("STRING", "Utf8")})
+    def fail(self, key):
+        raise OSError(errno.EIO, "Input/output error", str(key))
+    monkeypatch.setattr(DiskTree, "read_text", fail)
+    findings = validator.check_coverage(_min_connector("api"), tmp_path / "connector.json")
+    failed = {f["message_id"]: f["message"] for f in findings
+              if f["message_id"] in ("type-map-refused", "endpoint-file-unreadable")}
+    assert set(failed) == {"type-map-refused", "endpoint-file-unreadable"}, findings
+    for message in failed.values():
+        assert re.search(r"the read failed \(\[Errno 5\] Input/output error: '[^']+'\)\.$",
+                         message), message
+
+
 def test_a_map_the_kernel_will_not_read_is_not_reported_missing(tmp_path, validator, refuse):
     # Its direction is unknown, so no direction can be said to lack a map.
     _write_tree(tmp_path, _min_connector("database"), [], {})
@@ -1611,7 +1630,7 @@ def test_a_map_the_kernel_will_not_read_is_not_reported_missing(tmp_path, valida
     refuse(tmp_path / "type-map-read.json", 0o000)
     findings = validator.check_coverage(_min_connector("database"), tmp_path / "connector.json")
     assert [(f["kind"], f.get("rule"), f["message_id"]) for f in findings] == [
-        _MAP_UNREAD, *_WRITE_MAP_GRADED], findings
+        _MAP_REFUSED, *_WRITE_MAP_GRADED], findings
 
 
 def test_an_endpoint_the_kernel_will_not_open_is_reported_unread(tmp_path, validator, refuse):
