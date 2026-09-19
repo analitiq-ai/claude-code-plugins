@@ -198,10 +198,12 @@ def _named_group_source(pattern: str, name: str) -> str:
     KeyError when the matcher has no group of that name."""
     names = _re2_compile(pattern).groupindex
     number = names[name]
-    opener = next(
+    opener = next((
         spelling for spelling in _NAMED_GROUP_SPELLING.finditer(pattern)
         if spelling["name"] == name and _group_opened_at(pattern, spelling, names) == number
-    )
+    ), None)
+    if opener is None:
+        raise ValueError(f"RE2 names group {name!r} but no spelling in the matcher opens it")
     close = opener.end("spelling")
     while True:
         close = pattern.index(")", close)
