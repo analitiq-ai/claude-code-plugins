@@ -258,9 +258,16 @@ def _regex_rule(adapter, matcher):
     return {"match": "regex", "arrow_type": matcher, "native_type": "TEXT"}
 
 
-def test_regex_rejects_python_named_group():
+@pytest.mark.parametrize("matcher", [
+    r"(?P<p>\d+)",
+    # A spelling that opens no group comes first and must not hide the one after it.
+    r"^[(?<]B(?P<x>C)$",
+    r"^[(?<](?P<p>\d+)$",
+    r"^X\(?<(?P<n>\d)>$",
+])
+def test_regex_rejects_python_named_group(matcher):
     for adapter, rule_id in ((READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")):
-        refusal = _refusal(adapter, _regex_rule(adapter, r"(?P<p>\d+)"))
+        refusal = _refusal(adapter, _regex_rule(adapter, matcher))
         assert rule_id in refusal, refusal
         assert "(?<name>…)" in refusal, refusal
 
@@ -554,8 +561,10 @@ def test_a_position_with_no_probe_alphabet_stands():
     # A quoted `)` is a literal, and so is a `]` opening a class.
     (r"^X(?<t>\Q)\E|A)$", "t", r"\Q)\E|A"),
     (r"^X(?<t>[]A)]+)$", "t", "[]A)]+"),
-    # A spelling inside a class opens no group, so the opener is the one after it.
+    # A spelling that opens no group comes before the opener RE2 binds.
     (r"^N[(?<p>]*\((?<p>[1-9])\)$", "p", "[1-9]"),
+    (r"^[(?<](?<p>\d+)$", "p", r"\d+"),
+    (r"^X\(?<(?<n>\d)>$", "n", r"\d"),
     # Inline flags set outside the group are not carried.
     (r"(?i)X(?<t>ab)", "t", "ab"),
     # An unnamed group takes a number too, so the names after it are read at

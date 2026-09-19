@@ -125,7 +125,8 @@ _RE2_OPTIONS = re2.Options()
 _RE2_OPTIONS.log_errors = False
 
 # Locates a spelling that may open a named group; RE2 decides whether it does.
-_NAMED_GROUP_SPELLING = re.compile(r"\(\?(?P<python>P?)<(?P<name>[^>]*)>")
+# A lookahead, so a spelling that opens nothing cannot consume the one after it.
+_NAMED_GROUP_SPELLING = re.compile(r"(?=(?P<spelling>\(\?(?P<python>P?)<(?P<name>[^>]*)>))")
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,7 +165,7 @@ def _group_opened_at(pattern: str, spelling: re.Match[str], names: Any) -> int |
     probe = "probe"
     while probe in names:
         probe += "_"
-    renamed = f"{pattern[:spelling.start()]}(?<{probe}>{pattern[spelling.end():]}"
+    renamed = f"{pattern[:spelling.start()]}(?<{probe}>{pattern[spelling.end('spelling'):]}"
     try:
         return _re2_compile(renamed).groupindex.get(probe)
     except ValueError:
@@ -201,10 +202,10 @@ def _named_group_source(pattern: str, name: str) -> str:
         spelling for spelling in _NAMED_GROUP_SPELLING.finditer(pattern)
         if spelling["name"] == name and _group_opened_at(pattern, spelling, names) == number
     )
-    close = opener.end()
+    close = opener.end("spelling")
     while True:
         close = pattern.index(")", close)
-        source = pattern[opener.end():close]
+        source = pattern[opener.end("spelling"):close]
         try:
             _re2_compile(f"(?:{source})")
         except ValueError:
@@ -216,8 +217,9 @@ def _named_group_source(pattern: str, name: str) -> str:
 def _capture_language(native: str, name: str, probes: tuple[str, ...]) -> frozenset[str]:
     """Which of `probes` the native's `(?<name>…)` capture can match.
 
-    An over-approximation on purpose: the capture is interrogated in isolation,
-    so surrounding context that would further constrain it is ignored."""
+    The capture is interrogated in isolation: surrounding context that would
+    further constrain it is ignored, and inline flags set outside it are
+    dropped, which can narrow it."""
     capture = _re2_compile(f"(?:{_named_group_source(native, name)})")
     return frozenset(probe for probe in probes if capture.fullmatch(probe))
 
