@@ -1585,21 +1585,12 @@ def _validate_type_map(doc: Any, location: Location | None) -> list[dict]:  # sk
     return type_map_findings(doc)
 
 
-# The top-level keys a type map may carry, read off the model it is graded by.
-_TYPE_MAP_KEYS = frozenset(f.alias or name for name, f in TypeMapDoc.model_fields.items())
-
-
 def is_type_map_doc(doc: Any) -> bool:
-    """A type map's `$schema` claims it, so a map declaring no section is told
-    what it lacks rather than that it is no known artifact. Without one, a
-    direction's section claims it only when nothing else is there: `read` and
-    `write` are words other kinds nest, and one misplaced at the top of a
-    stream or a connection belongs to that document's own detector."""
-    if not isinstance(doc, dict):
-        return False
-    if doc.get("$schema") == TYPE_MAP_SCHEMA_URL:
-        return True
-    return bool(doc.keys() & set(TYPE_MAP_DIRECTIONS)) and doc.keys() <= _TYPE_MAP_KEYS
+    """`$schema` claims a type map, and nothing else does. The model requires
+    the field, so no map a caller could author is missed — and `read` and
+    `write` are words a stream and a connection nest too, so a section read as
+    a claim would take documents belonging to their own kinds."""
+    return isinstance(doc, dict) and doc.get("$schema") == TYPE_MAP_SCHEMA_URL
 
 
 def _validate_kindless_connector(doc: Any, location: Location | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature

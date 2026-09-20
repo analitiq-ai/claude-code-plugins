@@ -603,12 +603,19 @@ def _p_write_coverage_sample_gap() -> list[dict]:
 
 
 def _p_type_map_schema_required() -> list[dict]:
-    doc = _wrap_type_map(read=[{"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"}])
-    del doc["$schema"]
+    # Beside its connector, because that is where a map missing `$schema` is
+    # still read as one: the package reaches it by the name the directory
+    # holds it under, where dispatch over a loose document has only the
+    # `$schema` to go on.
+    doc = _example_body(DB_EXAMPLE)
     with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / TYPE_MAP_FILENAME
-        path.write_text(json.dumps(doc))
-        return _validate(doc, doc_path=path)
+        definition = Path(tmp) / "definition"
+        definition.mkdir()
+        (definition / "connector.json").write_text(json.dumps(doc))
+        unlabelled = {direction: _example_rules(DB_EXAMPLE, direction)
+                      for direction in ("read", "write")}
+        (definition / TYPE_MAP_FILENAME).write_text(json.dumps(unlabelled))
+        return _validate(doc, doc_path=definition / "connector.json")
 
 
 def _p_type_map_rule_graded_by_section() -> list[dict]:

@@ -1750,18 +1750,28 @@ def test_a_document_with_no_path_is_graded_the_same_way(validator, tmp_path):
 
 @pytest.mark.parametrize("doc", [
     {"$schema": TYPE_MAP_SCHEMA_URL},
-    {"read": _read_rules()},
-    {"write": _write_rules()},
     {"$schema": TYPE_MAP_SCHEMA_URL, "write": "not-a-list"},
-    {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"), "read": _read_rules()},
-], ids=["no-section", "no-schema", "write-only-no-schema", "malformed-section", "stale-schema"])
-def test_a_map_missing_its_parts_is_graded_as_a_map(validator, doc):
-    # Either the type-map `$schema` or a direction's section identifies the
-    # document, so a map missing the other half is told what it lacks rather
-    # than that it is no known artifact.
+], ids=["no-section", "malformed-section"])
+def test_a_map_declaring_the_type_map_schema_is_graded_as_a_map(validator, doc):
+    # The `$schema` identifies the document, so a map that declares it and
+    # carries nothing else usable is told what it lacks rather than that it is
+    # no known artifact.
     errors = _errors(validator.validate_document(doc))
     assert errors, doc
     assert "unrecognized-document" not in {f["message_id"] for f in errors}, errors
+
+
+@pytest.mark.parametrize("doc", [
+    {"read": _read_rules()},
+    {"write": _write_rules()},
+    {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"), "read": _read_rules()},
+], ids=["no-schema", "write-only-no-schema", "stale-schema"])
+def test_a_document_declaring_no_type_map_schema_is_not_a_map(validator, doc):
+    # A section is not a claim. `read` and `write` are words other kinds nest,
+    # so a document carrying one and no type-map `$schema` is unidentified —
+    # which is what the model requiring the field means at the dispatch.
+    assert [f["message_id"] for f in _errors(validator.validate_document(doc))] == [
+        "unrecognized-document"], doc
 
 
 @pytest.mark.parametrize("doc,stray,own", [
