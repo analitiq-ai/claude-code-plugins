@@ -7,9 +7,10 @@ from pydantic import ConfigDict, RootModel
 
 from analitiq.contracts.shared.common import ParseOnly, schema_url_for
 
-# Paths are read from the package root. A pattern ends in `(?![\s\S])` rather
-# than `$` for the reason `closed_true_end_keys` in `shared.common` gives: `$`
-# lets a Python-`re` schema validator match before a trailing newline.
+# Paths are read from the connector's own directory, the one holding
+# `definition/`. A pattern ends in `(?![\s\S])` rather than `$` for the reason
+# `closed_true_end_keys` in `shared.common` gives: `$` lets a Python-`re` schema
+# validator match before a trailing newline.
 _DOCUMENT_LOCATIONS = {
     r"^definition/connector\.json(?![\s\S])": "connector",
     r"^definition/type-map\.json(?![\s\S])": "type-map",
@@ -25,6 +26,6 @@ def _locate_documents(schema: dict[str, Any]) -> None:
 
 
 class ConnectorPackage(ParseOnly, RootModel[dict[str, Any]]):
-    """A connector package's authored documents, keyed by path from the package root."""
+    """A connector package's authored documents, keyed by path from the connector's own directory."""
 
     model_config = ConfigDict(json_schema_extra=_locate_documents)

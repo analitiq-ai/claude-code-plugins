@@ -49,6 +49,10 @@ def test_a_location_outside_the_three_is_written_against_nothing():
         "definition/type-map-write.json",
         "definition/endpoints/a/b.json",
         "definition/endpoints/.gitkeep",
+        "vendor/definition/connector.json",
+        "definition/connector.json\n",
+        "definition/type-map.json\n",
+        "definition/endpoints/customers.json\n",
         "connector.json",
         "README.md",
     ):

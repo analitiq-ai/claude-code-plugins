@@ -1062,11 +1062,10 @@ RESOURCES: tuple[Resource, ...] = (
         title="Analitiq Connector Package",
         description=(
             "Public JSON Schema contract for where each authored document of a "
-            "connector package sits, read from the package root, and the published "
-            "schema a document at that location is written against: "
-            "`definition/connector.json`, `definition/type-map.json` and "
-            "`definition/endpoints/{endpoint_id}.json`. It holds locations only; "
-            "each document's shape is the schema it points at. "
+            "connector package sits, read from the connector's own directory (the "
+            "one holding `definition/`), and the published schema a document at "
+            "that location is written against. It holds locations only; each "
+            "document's shape is the schema it points at. "
             "Source of truth: analitiq.contracts.connector_package.ConnectorPackage "
             "(Pydantic)."
         ),
