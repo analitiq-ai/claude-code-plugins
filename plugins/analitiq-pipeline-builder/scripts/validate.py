@@ -15,19 +15,13 @@ owns the shape and the predicate in full).
 The published package exposes one single-document entry point plus one bundle
 entry point. This adapter routes each entity as follows:
 
-  * ``database-endpoint`` -> ``analitiq.validator.validate_document`` — the model
-    plus the derived-``endpoint_id`` gate and column checks (the same code the
-    ``analitiq-validate`` CLI runs).
-  * ``connection`` / ``stream`` / ``pipeline`` -> the matching ``*Input`` Pydantic
-    model's ``.model_validate`` (the source of truth the published JSON Schemas are
-    rendered from). ``validate_document`` would reach the same models, but it
-    selects them by *document shape*: its detectors key off ``connector_id``,
-    ``destinations`` and ``connections`` respectively. An authored document that
-    omits its discriminating key — precisely the broken input this adapter exists
-    to diagnose — would match no detector and collapse into a single generic
-    "unrecognized artifact" finding. Routing by the caller-supplied ``--entity``,
-    which is already known here, guarantees the right model runs and yields
-    per-field findings instead.
+  * every entity but ``type-map`` -> ``analitiq.validator.validate_document``,
+    handed the ``--entity`` name as the kind. That name is the only thing
+    deciding how the document is graded, which is what lets a document that
+    omits the field naming its own family — precisely the broken input this
+    adapter exists to diagnose — still be told which field it lacks. A
+    ``database-endpoint`` is handed its path too, so the derived-``endpoint_id``
+    gate and column checks read the files beside it; the rest settle alone.
   * ``type-map`` -> ``analitiq.validator.type_map_findings`` at
     ``scope="connection"``. ``scope`` is how the gap-only nature of a connection
     map (``RULE-TMAP-018``) reaches the published check, which otherwise holds a
@@ -153,36 +147,19 @@ def _contained(findings: list[dict], path: str):
 # importing this module never requires the validator to be installed)
 # ---------------------------------------------------------------------------
 
-def _model_findings(entity: str, doc) -> list[dict]:
-    """Validate a single connection/stream/pipeline document against its published
-    contract model, mapping each Pydantic error to a finding. The message is the
-    validator's own rendering of the error, so a document value it echoes is
-    clipped here exactly as it is there."""
-    if entity == "connection":
-        from analitiq.contracts.connection import ConnectionInput as Model
-    elif entity == "stream":
-        from analitiq.contracts.stream import StreamInput as Model
-    elif entity == "pipeline":
-        from analitiq.contracts.pipelines.config import PipelineInput as Model
-    else:  # pragma: no cover - guarded by the entity choices
-        raise ValueError(f"no contract model for entity {entity!r}")
-    from pydantic import ValidationError
-    from analitiq.validator._core import _model_error_message, document_pointer
-    try:
-        Model.model_validate(doc)
-        return []
-    except ValidationError as exc:
-        return [
-            _finding("contract-model", "error",
-                     document_pointer(err["loc"], Model.__pydantic_core_schema__),
-                     _model_error_message(err))
-            for err in exc.errors()
-        ]
+def _document_findings(entity: str, doc, document_path: Path | None = None) -> list[dict]:
+    """Grade one authored document as `entity`, the published document-schema
+    name this adapter was invoked for.
 
-
-def _endpoint_findings(doc, document_path: Path) -> list[dict]:
+    The published validator takes that name from its caller, so there is one
+    grading of a single document and this adapter adds none of its own:
+    `--entity` reaches the same entry point the `analitiq-validate` CLI's
+    `--kind` reaches, and the two cannot disagree about a document.
+    `document_path` is what the cross-file checks read a document's siblings
+    from; a document graded on its own has none.
+    """
     from analitiq.validator import validate_document
-    return validate_document(doc, doc_path=document_path)
+    return validate_document(doc, entity, doc_path=document_path)
 
 
 def _type_map_findings(doc) -> list[dict]:
@@ -307,7 +284,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                     # the bundle, which the append above already gave it.
                     with _contained(findings, f"streams/{p.name}"):
                         findings.extend(_at_site(f"streams/{p.name}",
-                                                 _model_findings("stream", doc)))
+                                                 _document_findings("stream", doc)))
             if outcome.crashed:
                 crashed = True
             if outcome.crashed or doc is None:
@@ -338,7 +315,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                     # out of the bundle the referential pass reads.
                     with _contained(findings, conn_site):
                         findings.extend(_at_site(conn_site,
-                                                 _model_findings("connection", conn)))
+                                                 _document_findings("connection", conn)))
                     connection_id = conn.get("connection_id")
                     for ep_json in sorted((conn_json.parent / "definition" / "endpoints").glob("*.json")):
                         # One endpoint is its own independently-decidable unit, same
@@ -369,8 +346,8 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                         # endpoint's place in the bundle, which the lines below
                         # still give it.
                         with _contained(findings, ep_site):
-                            findings.extend(_at_site(
-                                ep_site, _endpoint_findings(endpoint, ep_json)))
+                            findings.extend(_at_site(ep_site, _document_findings(
+                                "database-endpoint", endpoint, ep_json)))
                         # Endpoint documents omit connection_id (server-managed); supply the
                         # owning connection's id so the bundle's endpoint-ref check can resolve
                         # connection-scoped references.
@@ -607,12 +584,14 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     except _JSON_READ_ERRORS as exc:
         return _diagnostics([_finding("document", "error", "", f"Cannot read document: {exc}")])
 
-    if entity == "database-endpoint":
-        findings = _endpoint_findings(doc, document_path)
-    elif entity == "type-map":
+    if entity == "type-map":
         findings = _type_map_findings(doc)
     else:
-        findings = _model_findings(entity, doc)
+        # A database endpoint is graded from its own path, so the cross-file
+        # checks reach the files beside it; the rest settle alone.
+        findings = _document_findings(
+            entity, doc,
+            document_path if entity == "database-endpoint" else None)
         if entity == "pipeline" and bundle_root is not None:
             # Its own guarded unit: a crash enriching the bundle (e.g. `doc` is
             # not an object, so `_bundle_findings`'s own field access on it

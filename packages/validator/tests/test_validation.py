@@ -45,14 +45,14 @@ SRC_ROOT = _REPO_ROOT / "validator" / "src"
 # the two public source trees ride PYTHONPATH — the validator and the contract
 # models — so this exercises precisely what an installed consumer gets.
 
-# (corpus file, expected pass?) — single-document verdicts.
+# (corpus file, kind it is submitted as, expected pass?) — single-document verdicts.
 DOC_CASES = [
-    ("valid_read.json", True),
-    ("valid_write_insert.json", True),
-    ("valid_connector_sync_driver.json", True),
-    ("invalid_reserved_field.json", False),
-    ("invalid_write_from_input.json", False),
-    ("invalid_connector_bare_driver.json", False),
+    ("valid_read.json", "api-endpoint", True),
+    ("valid_write_insert.json", "api-endpoint", True),
+    ("valid_connector_sync_driver.json", "connector", True),
+    ("invalid_reserved_field.json", "api-endpoint", False),
+    ("invalid_write_from_input.json", "api-endpoint", False),
+    ("invalid_connector_bare_driver.json", "connector", False),
 ]
 
 
@@ -60,12 +60,12 @@ def _errors(findings):
     return [f for f in findings if f.get("severity") == "error"]
 
 
-@pytest.mark.parametrize("name,should_pass", DOC_CASES)
-def test_single_document_verdict(name, should_pass, validator):
+@pytest.mark.parametrize("name,kind,should_pass", DOC_CASES)
+def test_single_document_verdict(name, kind, should_pass, validator):
     # No doc_path: these exercise pure single-document validity, not the
     # filename↔endpoint_id cross-file check (the corpus filenames are labels).
     doc = json.loads((CORPUS / name).read_text())
-    findings = validator.validate_document(doc)
+    findings = validator.validate_document(doc, kind)
     errors = _errors(findings)
     assert (not errors) == should_pass, (
         f"{name}: expected {'pass' if should_pass else 'fail'}, "
@@ -76,7 +76,7 @@ def test_single_document_verdict(name, should_pass, validator):
 def test_from_input_defect_is_caught(validator):
     """The sevdesk regression: a bare-field from_input write body must be rejected."""
     doc = json.loads((CORPUS / "invalid_write_from_input.json").read_text())
-    findings = validator.validate_document(doc)
+    findings = validator.validate_document(doc, "api-endpoint")
     assert any(
         "from_input" in f["message"] and f["severity"] == "error" for f in findings
     ), "the from_input contract rule was not enforced"
@@ -92,27 +92,29 @@ def test_bare_sqlalchemy_driver_is_a_contract_model_finding(validator):
     on the transport's driver field — the model rejection reaching a consumer
     of validate_document, not just the pydantic layer."""
     doc = json.loads((CORPUS / "invalid_connector_bare_driver.json").read_text())
-    errors = _errors(validator.validate_document(doc))
+    errors = _errors(validator.validate_document(doc, "connector"))
     assert any(
         f.get("rule") is None and f["path"].endswith("/driver")
         for f in errors
     ), errors
 
 
-def test_unrecognized_document_errors(validator):
-    # A document we were asked to validate but cannot identify is a failure,
-    # not a pass — otherwise a broken doc silently gets a green light.
-    for doc in ({"totally": "unknown"}, {}, 42, "hello", None):
-        findings = validator.validate_document(doc)
-        assert _errors(findings), f"{doc!r} should error, got {findings}"
+@pytest.mark.parametrize("doc", [{"totally": "unknown"}, {}, 42, "hello", None])
+def test_a_document_of_no_use_to_its_kind_errors(validator, doc):
+    # Submitted as a connector, none of these is one — a mapping of unknown
+    # keys, an empty one, and three values that are not mappings at all. Each
+    # is a failure, not a pass, so a broken document never gets a green light
+    # for having too little in it to grade.
+    assert _errors(validator.validate_document(doc, "connector")), doc
 
 
 def test_kindless_connector_errors(validator):
-    # A connector-shaped dict missing its `kind` discriminator must reach the
-    # model and fail (not fall through to a silent pass).
+    # A connector missing its `kind` discriminator is still graded as the
+    # connector it was submitted as, so the model reports the omission rather
+    # than the document falling through to a silent pass.
     doc = {"connector_id": "x", "transports": {}, "connection_contract": {},
            "default_transport": "m"}
-    assert _errors(validator.validate_document(doc))
+    assert _errors(validator.validate_document(doc, "connector"))
 
 
 _TM_SCHEMA = TYPE_MAP_SCHEMA_URL
@@ -152,7 +154,7 @@ def test_valid_embedded_schema_passes(validator):
     ep = _endpoint("STRING", "Utf8")
     assert not any(
         e.get("rule") == "RULE-ENDP-048"
-        for e in _errors(validator.validate_document(ep))
+        for e in _errors(validator.validate_document(ep, "api-endpoint"))
     )
 
 
@@ -164,7 +166,7 @@ def test_embedded_schema_must_be_valid_draft_2020_12(validator):
     # `minItems` must be a non-negative integer; a string is meta-invalid, and the
     # contract model doesn't inspect it, so only RULE-ENDP-048 fires.
     ep["operations"]["read"]["response"]["schema"]["minItems"] = "notanumber"
-    errors = _errors(validator.validate_document(ep))
+    errors = _errors(validator.validate_document(ep, "api-endpoint"))
     assert any(e.get("rule") == "RULE-ENDP-048" for e in errors), errors
 
 
@@ -175,7 +177,7 @@ def test_embedded_schema_rejects_other_dialect(validator):
     ep["operations"]["read"]["response"]["schema"]["$schema"] = (
         "http://json-schema.org/draft-07/schema#"
     )
-    errors = _errors(validator.validate_document(ep))
+    errors = _errors(validator.validate_document(ep, "api-endpoint"))
     assert any(e.get("rule") == "RULE-ENDP-048" for e in errors), errors
 
 
@@ -185,7 +187,7 @@ def test_embedded_schema_accepts_the_empty_fragment_spelling(validator):
     the 2020-12 dialect. The contract accepts either."""
     ep = _endpoint("STRING", "Utf8")
     ep["operations"]["read"]["response"]["schema"]["$schema"] = f"{JS}#"
-    errors = _errors(validator.validate_document(ep))
+    errors = _errors(validator.validate_document(ep, "api-endpoint"))
     assert not any(e.get("rule") == "RULE-ENDP-048" for e in errors), errors
 
 
@@ -195,7 +197,7 @@ def test_embedded_schema_rejects_a_repeated_empty_fragment(validator):
     written in and is refused — stripping every trailing `#` would accept it."""
     ep = _endpoint("STRING", "Utf8")
     ep["operations"]["read"]["response"]["schema"]["$schema"] = f"{JS}##"
-    errors = _errors(validator.validate_document(ep))
+    errors = _errors(validator.validate_document(ep, "api-endpoint"))
     assert any(e.get("rule") == "RULE-ENDP-048" for e in errors), errors
 
 
@@ -207,7 +209,7 @@ def test_a_nested_dialect_declaration_is_a_contract_model_error(validator):
     the walker rule this exact "$schema on a subschema" complaint belongs to."""
     ep = _endpoint("STRING", "Utf8")
     ep["operations"]["read"]["response"]["schema"]["items"]["$schema"] = 5
-    findings = validator.validate_document(ep)
+    findings = validator.validate_document(ep, "api-endpoint")
     assert any(f.get("rule") == "RULE-ENDP-064" for f in _errors(findings)), findings
     assert not [f for f in findings if "validator bug" in f["message"]], findings
 
@@ -221,7 +223,7 @@ def test_a_root_non_string_dialect_declaration_is_a_document_error(validator):
     the tool instead of in the document."""
     ep = _endpoint("STRING", "Utf8")
     ep["operations"]["read"]["response"]["schema"]["$schema"] = 5
-    findings = validator.validate_document(ep)
+    findings = validator.validate_document(ep, "api-endpoint")
     errors = _errors(findings)
     assert any(e.get("rule") == "RULE-ENDP-048" for e in errors), errors
     assert not [f for f in findings if "validator bug" in f["message"]], findings
@@ -546,7 +548,7 @@ def test_coverage_passes_when_map_covers_endpoints(tmp_path, connector_base, val
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("STRING", "Utf8")})
-    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    findings = validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json")
     assert not _errors(findings), [e["message"] for e in _errors(findings)]
 
 
@@ -557,7 +559,7 @@ def test_coverage_passes_with_lowercase_exact_matcher(tmp_path, connector_base, 
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "varchar", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("varchar", "Utf8")})
-    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    findings = validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json")
     assert not _errors(findings), [e["message"] for e in _errors(findings)]
 
 
@@ -593,7 +595,7 @@ def test_directional_pairs_the_read_map_can_render(
                 [{"match": "exact", "native_type": n, "arrow_type": c} for n, c in rules],
                 {"widgets.json": _read_and_write(*read_pair, *write_pair)})
     errors = _errors(validator.validate_document(
-        connector_base, doc_path=tmp_path / "connector.json"))
+        connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert not errors, [e["message"] for e in errors]
 
 
@@ -605,7 +607,7 @@ def test_one_token_cannot_carry_two_canonicals(tmp_path, connector_base, validat
                 [{"match": "exact", "native_type": "date-time", "arrow_type": _UTC}],
                 {"widgets.json": _read_and_write("date-time", _UTC, "date-time", _NAIVE)})
     errors = _errors(validator.validate_document(
-        connector_base, doc_path=tmp_path / "connector.json"))
+        connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert any("resolves to" in e["message"] and _NAIVE in e["message"] for e in errors), \
         [e["message"] for e in errors]
 
@@ -614,7 +616,7 @@ def test_coverage_flags_uncovered_native(tmp_path, connector_base, validator):
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("BIGINT", "Int64")})
-    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    errors = _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert any("no matching rule" in e["message"] for e in errors)
 
 
@@ -622,7 +624,7 @@ def test_coverage_flags_arrow_mismatch(tmp_path, connector_base, validator):
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("STRING", "Int64")})
-    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    errors = _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert any("resolves to" in e["message"] and "Int64" in e["message"] for e in errors)
 
 
@@ -640,14 +642,14 @@ def test_coverage_still_runs_when_the_read_map_fails_its_model(tmp_path, connect
     doc = json.loads(read_map_path.read_text())
     doc["$schema"] = CONNECTOR_SCHEMA_URL
     read_map_path.write_text(json.dumps(doc))
-    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    errors = _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert any(e["path"] == f"{TYPE_MAP_FILENAME}#/$schema" for e in errors), errors
     assert any("no matching rule" in e["message"] for e in errors), errors
 
 
 def test_coverage_flags_missing_read_map(tmp_path, connector_base, validator):
     (tmp_path / "connector.json").write_text(json.dumps(connector_base))
-    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    errors = _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert any(e["message_id"] == "read-map-missing" for e in errors), errors
 
 
@@ -663,7 +665,7 @@ def test_an_endpoint_that_holds_a_json_null_is_graded(
                 {"widgets.json": _endpoint("STRING", "Utf8")})
     (tmp_path / "endpoints" / "widgets.json").write_text("null")
     errors = _errors(validator.validate_document(
-        connector_base, doc_path=tmp_path / "connector.json"))
+        connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert errors, "an endpoint holding a JSON null was graded by nothing"
 
 
@@ -679,7 +681,7 @@ def test_a_sibling_connector_that_holds_a_json_null_is_not_called_unparseable(
     ep_path.parent.mkdir(parents=True)
     ep_doc = _keyset_endpoint(initial=None, transport_ref="main")
     ep_path.write_text(json.dumps(ep_doc))
-    findings = validator.validate_document(ep_doc, doc_path=ep_path)
+    findings = validator.validate_document(ep_doc, "api-endpoint", doc_path=ep_path)
     skipped = [f for f in findings
                if str(f.get("message_id", "")).startswith("transport-ref-check-skipped")]
     assert skipped, [f.get("message_id") for f in findings]
@@ -694,7 +696,7 @@ def test_coverage_flags_missing_endpoints_directory(tmp_path, connector_base, va
     (tmp_path / "connector.json").write_text(json.dumps(connector_base))
     (tmp_path / TYPE_MAP_FILENAME).write_text(json.dumps(_type_map_doc(
         read=[{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])))
-    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    errors = _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert any("endpoints" in e["message"] and "missing" in e["message"] for e in errors)
 
 
@@ -706,7 +708,7 @@ def test_coverage_flags_empty_endpoints_directory(tmp_path, connector_base, vali
     (tmp_path / "connector.json").write_text(json.dumps(connector_base))
     (tmp_path / TYPE_MAP_FILENAME).write_text(json.dumps(_type_map_doc(
         read=[{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])))
-    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    errors = _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert any("endpoints" in e["message"] and "no *.json files" in e["message"] for e in errors)
 
 
@@ -730,7 +732,7 @@ def test_coverage_json_narrowing_allowed(tmp_path, connector_base, validator):
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "JSONB", "arrow_type": "Json"}],
                 {"widgets.json": _object_endpoint()})
-    assert not _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    assert not _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
 
 
 def test_coverage_json_narrowing_is_narrow(tmp_path, connector_base, validator):
@@ -738,7 +740,7 @@ def test_coverage_json_narrowing_is_narrow(tmp_path, connector_base, validator):
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "JSONB", "arrow_type": "Json"}],
                 {"widgets.json": _endpoint("JSONB", "Int64")})
-    assert _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    assert _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
 
 
 def test_coverage_checks_field_named_like_a_keyword(tmp_path, connector_base, validator):
@@ -754,7 +756,7 @@ def test_coverage_checks_field_named_like_a_keyword(tmp_path, connector_base, va
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],  # no WEIRDTYPE rule
                 {"widgets.json": ep})
-    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    errors = _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert any("WEIRDTYPE" in e["message"] and "no matching rule" in e["message"] for e in errors)
 
 
@@ -857,7 +859,7 @@ def test_coverage_regex_rule_with_capture(tmp_path, connector_base, validator):
                 [{"match": "regex", "native_type": r"NUMERIC\((?<p>[1-9]|[12]\d|3[0-8]),\s*(?<s>\d|[12]\d|3[0-8])\)",
                   "arrow_type": "Decimal128(${p}, ${s})"}],
                 {"widgets.json": _endpoint("NUMERIC(38,9)", "Decimal128(38, 9)")})
-    assert not _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    assert not _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
 
 
 def test_coverage_flags_duplicate_endpoint_id(tmp_path, connector_base, validator):
@@ -868,7 +870,7 @@ def test_coverage_flags_duplicate_endpoint_id(tmp_path, connector_base, validato
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"dup.json": ep, "other.json": ep})
-    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    errors = _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert any(e.get("rule") == "RULE-PKG-032" and "dup" in e["message"] for e in errors)
 
 
@@ -879,7 +881,7 @@ def test_coverage_distinct_endpoint_ids_pass(tmp_path, connector_base, validator
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"alpha.json": a, "beta.json": b})
-    assert not _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    assert not _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
 
 
 # --- endpoint_id must be the derived path locator (io-contracts resources[].key) ---
@@ -950,7 +952,7 @@ def test_coverage_non_dict_endpoint_file_no_crash(tmp_path, connector_base, vali
     (tmp_path / TYPE_MAP_FILENAME).write_text(
         json.dumps(_type_map_doc(read=[{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])))
     (tmp_path / "endpoints" / "widgets.json").write_text("[]")  # array, not object
-    errs = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    errs = _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert errs
     assert not any("validator bug" in e["message"] for e in errs)
 
@@ -962,7 +964,7 @@ def test_coverage_flags_endpoint_id_locator_mismatch(tmp_path, connector_base, v
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": ep})
-    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    errors = _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert any(e.get("rule") == "RULE-ENDP-046" for e in errors)
 
 
@@ -1010,7 +1012,7 @@ def _keyset_endpoint(initial=..., transport_ref=...):
 
 
 def test_keyset_explicit_null_initial_warns(validator):
-    findings = validator.validate_document(_keyset_endpoint(initial=None))
+    findings = validator.validate_document(_keyset_endpoint(initial=None), "api-endpoint")
     hits = [f for f in findings if f.get("rule") == "RULE-ENDP-044"]
     assert hits, findings
     assert hits[0]["kind"] == "fail"
@@ -1020,7 +1022,7 @@ def test_keyset_explicit_null_initial_warns(validator):
 
 @pytest.mark.parametrize("initial", [..., "abc123", 0])
 def test_keyset_non_null_initial_is_clean(initial, validator):
-    findings = validator.validate_document(_keyset_endpoint(initial=initial))
+    findings = validator.validate_document(_keyset_endpoint(initial=initial), "api-endpoint")
     assert not any(f.get("rule") == "RULE-ENDP-044" for f in findings), findings
 
 
@@ -1031,7 +1033,7 @@ def test_coverage_flags_keyset_explicit_null_initial(tmp_path, connector_base, v
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"v1__records.json": _keyset_endpoint(initial=None)})
-    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    findings = validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json")
     assert any(f.get("rule") == "RULE-ENDP-044" for f in findings), findings
 
 
@@ -1051,9 +1053,10 @@ def test_check_coverage_and_standalone_route_agree_on_shared_per_endpoint_checks
     def _graded(findings):
         return {(f.get("rule"), f.get("message_id"), f.get("kind")) for f in findings}
 
-    coverage_findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    coverage_findings = validator.validate_document(
+        connector_base, "connector", doc_path=tmp_path / "connector.json")
     standalone_findings = validator.validate_document(
-        ep_doc, doc_path=tmp_path / "endpoints" / "v1__records.json")
+        ep_doc, "api-endpoint", doc_path=tmp_path / "endpoints" / "v1__records.json")
 
     # The tree is a clean connector whose single endpoint carries the defects,
     # so neither route has anything of its own to add: equality both ways, not
@@ -1080,7 +1083,7 @@ def test_api_endpoint_filename_is_graded_only_where_the_engine_resolves_it(
     ep = _keyset_endpoint(initial="abc")
     path = tmp_path / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    findings = validator.validate_document(ep, doc_path=path)
+    findings = validator.validate_document(ep, "api-endpoint", doc_path=path)
     hit = any(f.get("rule") == "RULE-PKG-031" for f in findings)
     assert hit is graded, findings
 
@@ -1142,16 +1145,16 @@ def _connector_doc(schema_url=...):
 
 
 _SHRD_003_FAMILIES = [
-    (_connection_doc, CONNECTION_SCHEMA_URL),
-    (_stream_doc, STREAM_SCHEMA_URL),
-    (_pipeline_doc, PIPELINE_SCHEMA_URL),
-    (_connector_doc, CONNECTOR_SCHEMA_URL),
+    (_connection_doc, "connection", CONNECTION_SCHEMA_URL),
+    (_stream_doc, "stream", STREAM_SCHEMA_URL),
+    (_pipeline_doc, "pipeline", PIPELINE_SCHEMA_URL),
+    (_connector_doc, "connector", CONNECTOR_SCHEMA_URL),
 ]
 
 
-@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
-def test_missing_schema_url_warns(make_doc, schema_url, validator):
-    findings = validator.validate_document(make_doc(schema_url=...))
+@pytest.mark.parametrize("make_doc,kind,schema_url", _SHRD_003_FAMILIES)
+def test_missing_schema_url_warns(make_doc, kind, schema_url, validator):
+    findings = validator.validate_document(make_doc(schema_url=...), kind)
     hits = [f for f in findings if f.get("rule") == "RULE-SHRD-003"]
     assert hits, findings
     assert hits[0]["kind"] == "fail"
@@ -1159,18 +1162,18 @@ def test_missing_schema_url_warns(make_doc, schema_url, validator):
     assert hits[0]["path"] == "/$schema"
 
 
-@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
-def test_present_schema_url_is_clean(make_doc, schema_url, validator):
-    findings = validator.validate_document(make_doc(schema_url=schema_url))
+@pytest.mark.parametrize("make_doc,kind,schema_url", _SHRD_003_FAMILIES)
+def test_present_schema_url_is_clean(make_doc, kind, schema_url, validator):
+    findings = validator.validate_document(make_doc(schema_url=schema_url), kind)
     assert not any(f.get("rule") == "RULE-SHRD-003" for f in findings), findings
 
 
-@pytest.mark.parametrize("make_doc,schema_url", _SHRD_003_FAMILIES)
-def test_null_schema_url_reports_the_same_as_omission(make_doc, schema_url, validator):
+@pytest.mark.parametrize("make_doc,kind,schema_url", _SHRD_003_FAMILIES)
+def test_null_schema_url_reports_the_same_as_omission(make_doc, kind, schema_url, validator):
     # `$schema: null` is what every one of these models types as optional, so
     # nothing structural rejects it — and a document spelling the absence as a
     # null names no contract exactly as one leaving the key out does.
-    findings = validator.validate_document(make_doc(schema_url=None))
+    findings = validator.validate_document(make_doc(schema_url=None), kind)
     hits = [f for f in findings if f.get("rule") == "RULE-SHRD-003"]
     assert len(hits) == 1, findings
     assert hits[0]["severity"] == "warning"
@@ -1216,16 +1219,17 @@ def test_db_endpoint_id_golden_vectors():
 def test_database_endpoint_locator_gate(validator):
     # The derived id passes; the legacy `{schema}__{name}` form (no hash) is gated.
     good_id = derive_db_endpoint_id(None, "public", "orders")
-    assert not _errors(validator.validate_document(_db_endpoint(good_id)))
+    assert not _errors(validator.validate_document(_db_endpoint(good_id), "database-endpoint"))
     legacy = _db_endpoint("public__orders")
-    errs = _errors(validator.validate_document(legacy))
+    errs = _errors(validator.validate_document(legacy, "database-endpoint"))
     assert any(e.get("rule") == "RULE-DBEP-011" and "public__orders" in e["message"]
                for e in errs)
     # Catalog + schemaless variants are gated the same way (derived id passes).
     assert not _errors(validator.validate_document(
-        _db_endpoint(derive_db_endpoint_id("wh", "public", "orders"), schema="public", catalog="wh")))
+        _db_endpoint(derive_db_endpoint_id("wh", "public", "orders"), schema="public", catalog="wh"),
+        "database-endpoint"))
     assert not _errors(validator.validate_document(
-        _db_endpoint(derive_db_endpoint_id(None, None, "orders"), schema=None)))
+        _db_endpoint(derive_db_endpoint_id(None, None, "orders"), schema=None), "database-endpoint"))
 
 
 # --- coverage matrix (check_coverage isolates file-behavior from model validity) ---
@@ -1671,7 +1675,7 @@ def test_database_endpoint_filename_not_checked_for_snapshot(validator, tmp_path
     snap_dir.mkdir(parents=True)
     p = snap_dir / "sha256-abc123.json"  # hash basename, not {endpoint_id}.json
     p.write_text(json.dumps(db))
-    errors = _errors(validator.validate_document(db, doc_path=p))
+    errors = _errors(validator.validate_document(db, "database-endpoint", doc_path=p))
     assert not any(e.get("rule") == "RULE-PKG-031" for e in errors)
 
 
@@ -1686,13 +1690,13 @@ def test_database_endpoint_filename_checked_in_bundle_layout(validator, tmp_path
     ep_dir.mkdir(parents=True)
     wrong = ep_dir / "orders.json"  # stem != endpoint_id
     wrong.write_text(json.dumps(db))
-    errors = _errors(validator.validate_document(db, doc_path=wrong))
+    errors = _errors(validator.validate_document(db, "database-endpoint", doc_path=wrong))
     assert any(e.get("rule") == "RULE-PKG-031" for e in errors)
     # Correctly named -> no filename error.
     right = ep_dir / f"{eid}.json"
     right.write_text(json.dumps(db))
     assert not any(e.get("rule") == "RULE-PKG-031"
-                   for e in _errors(validator.validate_document(db, doc_path=right)))
+                   for e in _errors(validator.validate_document(db, "database-endpoint", doc_path=right)))
 
 
 def test_database_endpoint_filename_not_checked_when_unanchored(validator, tmp_path):
@@ -1702,7 +1706,7 @@ def test_database_endpoint_filename_not_checked_when_unanchored(validator, tmp_p
     db = _db_endpoint(eid)
     p = tmp_path / "orders.json"  # bare staged file, wrong stem, no endpoints/ parent
     p.write_text(json.dumps(db))
-    errors = _errors(validator.validate_document(db, doc_path=p))
+    errors = _errors(validator.validate_document(db, "database-endpoint", doc_path=p))
     assert not any(e.get("rule") == "RULE-PKG-031" for e in errors)
 
 
@@ -1860,7 +1864,7 @@ def test_coverage_flags_nested_endpoint_file(tmp_path, connector_base, validator
     nested = tmp_path / "endpoints" / "v1"
     nested.mkdir()
     (nested / "buried.json").write_text(json.dumps(_endpoint("STRING", "Utf8")))
-    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    errors = _errors(validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json"))
     assert any("nested" in e["message"] for e in errors)
 
 
@@ -1878,10 +1882,10 @@ def test_database_endpoint_valid_and_invalid(validator):
           "endpoint_id": derive_db_endpoint_id(None, "public", "orders"),
           "database_object": {"schema": "public", "name": "orders", "object_type": "table"},
           "columns": [{"name": "id", "native_type": "uuid", "arrow_type": "Utf8"}]}
-    assert not _errors(validator.validate_document(db))
+    assert not _errors(validator.validate_document(db, "database-endpoint"))
     bad = json.loads(json.dumps(db))
     bad["columns"][0]["arrow_type"] = "NotAnArrowType"
-    assert _errors(validator.validate_document(bad))
+    assert _errors(validator.validate_document(bad, "database-endpoint"))
 
 
 # --- advisory warnings ---
@@ -1893,7 +1897,7 @@ def _warnings(findings):
 def test_duplicate_type_map_rule_warns(validator):
     rules = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"},
              {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
-    warns = _warnings(validator.validate_document(_type_map_doc(read=rules)))
+    warns = _warnings(validator.validate_document(_type_map_doc(read=rules), "type-map"))
     assert any("duplicate" in w["message"] for w in warns)
 
 
@@ -1904,7 +1908,7 @@ def test_duplicate_exact_read_rule_warns_across_case_and_whitespace(validator):
     # rules map to DIFFERENT canonicals (a real, if rare, authoring bug).
     rules = [{"match": "exact", "native_type": "character varying", "arrow_type": "Utf8"},
              {"match": "exact", "native_type": "CHARACTER  VARYING", "arrow_type": "LargeUtf8"}]
-    warns = _warnings(validator.validate_document(_type_map_doc(read=rules)))
+    warns = _warnings(validator.validate_document(_type_map_doc(read=rules), "type-map"))
     assert any("duplicate" in w["message"] for w in warns)
 
 
@@ -2019,7 +2023,7 @@ def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
     covered = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"},
                {"match": "exact", "arrow_type": "Object", "native_type": "JSONB"},
                {"match": "exact", "arrow_type": "List", "native_type": "JSONB"}]
-    findings = validator.validate_document(_type_map_doc(write=covered), doc_path=p)
+    findings = validator.validate_document(_type_map_doc(write=covered), "type-map", doc_path=p)
     # Covering the two markers must narrow the warning, not silence it — the map
     # still lacks rules for other probes. So StopIteration here is the failure
     # signal working: it means the warning vanished entirely, which would make
@@ -2137,7 +2141,7 @@ def _database_tree(root: Path, *, type_map: str | None, endpoints: bool) -> Path
 
 def _assert_endpoint_checks_survive(root, connector, validator, read_map_text, reported):
     _write_defective_endpoints(root, connector, read_map_text)
-    errors = _errors(validator.validate_document(connector, doc_path=root / "connector.json"))
+    errors = _errors(validator.validate_document(connector, "connector", doc_path=root / "connector.json"))
     assert any(reported in e["message"] for e in errors), errors
     assert _defects_reported(errors) == set(_ENDPOINT_DEFECTS), (
         sorted(_defects_reported(errors)), [e["message"] for e in errors])
@@ -2161,7 +2165,7 @@ def test_unrendered_coverage_is_reported_not_silent(tmp_path, connector_base, va
     # The endpoint documents come back graded, so a reader must be told that the
     # one check the map feeds did not run — silence there reads as coverage passing.
     _write_defective_endpoints(tmp_path, connector_base, text)
-    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    findings = validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json")
     assert any(f.get("rule") == "RULE-PKG-033" and f["kind"] == "notApplicable"
                and "not rendered" in f["message"] for f in findings), findings
     # ... and the warning is the whole of what coverage says here: a rendering
@@ -2213,7 +2217,7 @@ def test_clean_tree_emits_no_coverage_finding(tmp_path, connector_base, validato
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("STRING", "Utf8")})
-    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    findings = validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json")
     assert [f for f in findings if f.get("rule") in _COVERAGE_RULE_IDS] == [], findings
 
 
@@ -2223,7 +2227,7 @@ def test_rendered_coverage_reports_only_the_uncovered_native(tmp_path, connector
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("BIGINT", "Int64")})
-    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    findings = validator.validate_document(connector_base, "connector", doc_path=tmp_path / "connector.json")
     coverage = [f for f in findings if f.get("rule") == "RULE-PKG-033"]
     assert len(coverage) == 1 and coverage[0]["severity"] == "error", coverage
     assert "no matching rule" in coverage[0]["message"], coverage

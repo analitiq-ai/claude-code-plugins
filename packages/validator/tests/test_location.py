@@ -79,6 +79,13 @@ _API_PACKAGE = {
 _API_PACKAGE_WITHOUT_MAP = {k: v for k, v in _API_PACKAGE.items() if k != "type-map.json"}
 
 #: `(entry key, package)` — the document validated, and every file beside it.
+def _kind_of(entry: str) -> str:
+    """The kind a package's entry document is submitted as, from the name it
+    sits under — the same routing the package entry point does, so a layout
+    table states its entry once instead of once per kind."""
+    return "connector" if entry.endswith("connector.json") else "api-endpoint"
+
+
 LAYOUTS = {
     "api package, covered": ("connector.json", _API_PACKAGE),
     # Path order compares parts, string order compares characters: `a-b.json`
@@ -166,9 +173,10 @@ def test_memory_tree_grades_as_the_same_files_on_disk(validator, tmp_path, entry
     _write(root, package)
     document = package[entry]
 
-    on_disk = validator.validate_document(document, doc_path=root / entry)
+    on_disk = validator.validate_document(document, _kind_of(entry), doc_path=root / entry)
     in_memory = validator.validate_document(
-        document, doc_path=Location(PurePosixPath(entry), MemoryTree(texts)))
+        document, _kind_of(entry),
+        doc_path=Location(PurePosixPath(entry), MemoryTree(texts)))
 
     # A disk finding naming a sibling by its full path names it under the
     # package root; the same sibling in memory is named by its key.
@@ -180,7 +188,7 @@ def test_a_covered_package_passes_from_memory(validator):
     entry, package = LAYOUTS["api package, covered"]
     tree = MemoryTree({key: _text(doc) for key, doc in package.items()})
     findings = validator.validate_document(
-        package[entry], doc_path=Location(PurePosixPath(entry), tree))
+        package[entry], _kind_of(entry), doc_path=Location(PurePosixPath(entry), tree))
     assert _passed(findings), findings
 
 
@@ -325,7 +333,7 @@ def test_a_linked_endpoint_is_graded_against_the_connector_beside_the_link(tmp_p
     (tmp_path / "pkg/endpoints").mkdir()
     (tmp_path / "pkg/endpoints/thing.json").symlink_to("../../shared/endpoints/thing.json")
 
-    findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/endpoints/thing.json")
+    findings = validator.validate_document(doc, "api-endpoint", doc_path=tmp_path / "pkg/endpoints/thing.json")
 
     assert ("fail", "transport-ref-undeclared") in _endpoint_047(findings), findings
 
@@ -341,8 +349,11 @@ def test_the_cli_grades_a_linked_connector_with_the_package_beside_the_link(tmp_
 
 
 def _split(cli, given: Path) -> list[str]:
-    """What the CLI reports on `given`, which `located` refuses."""
-    result = cli.run("--document", str(given))
+    """What the CLI reports on `given`, which `located` refuses.
+
+    The kind is required and immaterial: `given` is refused while being read,
+    before anything grades it."""
+    result = cli.run("--document", str(given), "--kind", _kind_of(given.name))
     with pytest.raises(ValueError):
         located(given)
     return [f["message_id"] for f in json.loads(result.stdout)["findings"]]
@@ -371,7 +382,7 @@ def test_a_dotdot_out_of_a_link_to_elsewhere_is_refused(tmp_path, validator_cli,
 
 
 _ENTRIES = {
-    "validate_document": lambda v, where: v.validate_document(_API, doc_path=where / "connector.json"),
+    "validate_document": lambda v, where: v.validate_document(_API, "connector", doc_path=where / "connector.json"),
     "check_coverage": lambda v, where: v.check_coverage(_API, where / "connector.json"),
     "load_type_map": lambda v, where: v.load_type_map(where, rule=None),
 }
@@ -404,7 +415,8 @@ def test_a_dotdot_is_stepped_up_before_the_layout_is_read(tmp_path, validator):
     (tmp_path / "shared/endpoints/sub").mkdir()
     (tmp_path / "pkg/endpoints").symlink_to("../shared/endpoints")
 
-    findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/endpoints/sub/../thing.json")
+    findings = validator.validate_document(
+        doc, "api-endpoint", doc_path=tmp_path / "pkg/endpoints/sub/../thing.json")
 
     assert ("fail", "transport-ref-undeclared") in _endpoint_047(findings), findings
 
@@ -426,7 +438,7 @@ def test_an_endpoint_with_no_connector_read_is_told_why(tmp_path, validator, giv
     doc = _endpoint("thing", transport_ref="api")
     _write(tmp_path, {"connector.json": _UNDECLARED})
 
-    findings = validator.validate_document(doc, doc_path=given and tmp_path / given)
+    findings = validator.validate_document(doc, "api-endpoint", doc_path=given and tmp_path / given)
 
     assert [(f["kind"], f["message_id"], f["message"]) for f in _about_the_connector(findings)] == [
         ("notApplicable", "transport-ref-check-skipped-no-sibling",
@@ -444,7 +456,7 @@ def test_an_endpoint_whose_connector_is_refused_is_told_why(tmp_path, validator,
     doc = _endpoint("thing", transport_ref="api")
     _write(tmp_path, {"pkg/connector.json": _API})
     refuse(tmp_path / shut, mode)
-    findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/endpoints/thing.json")
+    findings = validator.validate_document(doc, "api-endpoint", doc_path=tmp_path / "pkg/endpoints/thing.json")
     sibling = _about_the_connector(findings)
     assert [(f["kind"], f.get("rule"), f["message_id"]) for f in sibling] == [
         ("fail", None, "sibling-connector-unreadable"),
@@ -463,14 +475,18 @@ def test_a_dotdot_out_of_a_link_landing_where_its_names_spell_is_collapsed(tmp_p
     (tmp_path / "pkg/endpoints").symlink_to("../shared/endpoints")
     (tmp_path / "shared/endpoints/inner").symlink_to("real")
 
-    findings = validator.validate_document(doc, doc_path=tmp_path / "pkg/endpoints/inner/../thing.json")
+    findings = validator.validate_document(
+        doc, "api-endpoint", doc_path=tmp_path / "pkg/endpoints/inner/../thing.json")
 
     assert ("fail", "transport-ref-undeclared") in _endpoint_047(findings), findings
 
 
 def _refusals(cli, given: Path) -> tuple[list[str], int]:
-    """What the CLI reports on `given`, and the errno `located` raises on it."""
-    result = cli.run("--document", str(given))
+    """What the CLI reports on `given`, and the errno `located` raises on it.
+
+    The kind is required and immaterial: `given` is refused while being read,
+    before anything grades it."""
+    result = cli.run("--document", str(given), "--kind", _kind_of(given.name))
     with pytest.raises(OSError) as refused:
         located(given)
     return [f["message_id"] for f in json.loads(result.stdout)["findings"]], refused.value.errno
@@ -537,7 +553,8 @@ def test_more_links_than_one_lookup_follows_are_unreadable(tmp_path, validator_c
         stem = Path(where)
         _chain(tmp_path / stem.parent, stem.name, hops, target)
 
-    result = validator_cli.run("--document", str(tmp_path / given))
+    result = validator_cli.run("--document", str(tmp_path / given),
+                                 "--kind", _kind_of(Path(given).name))
 
     assert [f["message_id"] for f in json.loads(result.stdout)["findings"]] == [
         "unreadable-document"], result.stdout
@@ -549,6 +566,6 @@ def test_a_linked_directory_under_endpoints_is_not_walked(tmp_path, validator):
     _write(tmp_path / "pkg", _API_PACKAGE)
     (tmp_path / "pkg/endpoints/sub").symlink_to(".")
 
-    findings = validator.validate_document(_API, doc_path=tmp_path / "pkg/connector.json")
+    findings = validator.validate_document(_API, "connector", doc_path=tmp_path / "pkg/connector.json")
 
     assert _passed(findings), findings

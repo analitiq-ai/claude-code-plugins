@@ -80,8 +80,9 @@ def validator_cli(tmp_path):
         except subprocess.TimeoutExpired:
             pytest.fail(f"the validator did not return within {timeout}s: {argv}")
 
-    def on_document(doc, filename="doc.json", timeout=CLI_DEADLINE_SECONDS):
-        """The same, over a document staged into this test's `tmp_path`.
+    def on_document(doc, kind, filename="doc.json", timeout=CLI_DEADLINE_SECONDS):
+        """The same, over a document staged into this test's `tmp_path` and
+        submitted as `kind`.
 
         Staged rather than passed in memory because the CLI reads a bundle's
         siblings beside the document's own path, which is what the connector-walk
@@ -89,7 +90,7 @@ def validator_cli(tmp_path):
         """
         path = tmp_path / filename
         path.write_text(json.dumps(doc))
-        return run("--document", str(path), timeout=timeout)
+        return run("--document", str(path), "--kind", kind, timeout=timeout)
 
     return SimpleNamespace(run=run, on_document=on_document)
 

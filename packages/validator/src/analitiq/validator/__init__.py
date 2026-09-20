@@ -10,8 +10,9 @@ bundle** for cross-document referential integrity. Output is a JSON report
 also fails closed on an unchecked error-tier rule, not only a `fail` finding
 at `severity: "error"`.
 
-`validate_document` detects a document's kind from its own body, for a caller
-holding an unidentified document. A caller holding a type map grades it with
+`validate_document(doc, kind)` grades one document as the kind its caller names,
+which `document_kinds()` enumerates; nothing reads a document to work out what
+it is. A caller holding a type map grades it with
 `type_map_findings(doc, scope)`, where `scope` says whether it is a connector's
 map or a connection's. A caller holding a `definition/` *directory* calls
 `load_type_map(parent, rule=...)`, which reads the directory's
@@ -19,8 +20,8 @@ map or a connection's. A caller holding a `definition/` *directory* calls
 findings is its own.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
-`connections`, `streams`), each of which self-registers its detector→validator
-pairs with the core dispatch registry — a new kind is a new module registering
+`connections`, `streams`), each of which self-registers its validators under the
+published document-schema names it owns — a new kind is a new module registering
 the same way, without touching `_core`. The public surface is re-exported here.
 
 `document_set` declares the path-free document-set API;
@@ -30,7 +31,13 @@ points take the request models in `analitiq.contracts.validation_requests`,
 which own the document-set shape and are where a malformed argument is
 refused.
 """
-from ._core import finding, finding_costs_a_pass, main, validate_document
+from ._core import (
+    document_kinds,
+    finding,
+    finding_costs_a_pass,
+    main,
+    validate_document,
+)
 from .document_set import (
     Finding,
     ValidationEnvelope,
@@ -52,12 +59,8 @@ from .connectors import (  # skipcq: PY-W2000
     endpoint_filename_findings,
     load_type_map,
     type_map_findings,
-    is_api_endpoint_doc,
-    is_connector_doc,
     is_addressed_endpoint_path,
-    is_database_endpoint_doc,
     is_stem_addressed_endpoint_path,
-    is_type_map_doc,
     _arrow_type_eq,
     _collect_native_arrow_pairs,
     _database_endpoint_locator_findings,
@@ -65,15 +68,14 @@ from .connectors import (  # skipcq: PY-W2000
     _flatten_api_locator,
     _render_arrow_type,
 )
-from .pipelines import is_pipeline_bundle, is_pipeline_doc, validate_pipeline_bundle
-from .connections import is_connection_doc
-from .streams import is_stream_doc
+from .pipelines import validate_pipeline_bundle
 
 __all__ = [
     "finding",
     "finding_costs_a_pass",
     "main",
     "validate_document",
+    "document_kinds",
     "Finding",
     "ValidationEnvelope",
     "validate_connector_package",
@@ -87,13 +89,5 @@ __all__ = [
     "TYPE_MAP_FILENAME",
     "is_stem_addressed_endpoint_path",
     "is_addressed_endpoint_path",
-    "is_api_endpoint_doc",
-    "is_connector_doc",
-    "is_database_endpoint_doc",
-    "is_type_map_doc",
-    "is_connection_doc",
-    "is_stream_doc",
-    "is_pipeline_doc",
-    "is_pipeline_bundle",
     "validate_pipeline_bundle",
 ]

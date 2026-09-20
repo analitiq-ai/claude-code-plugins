@@ -60,7 +60,6 @@ from typing import Any
 from ._core import (
     contract_model_domain,
     finding,
-    register_kind,
     register_model_and_schema_kind,
 )
 
@@ -85,26 +84,6 @@ def _base_id(ref: Any) -> Any:
     if not isinstance(ref, str):
         return ref
     return _VERSION_SUFFIX_RE.sub("", ref)
-
-
-def is_pipeline_bundle(doc: Any) -> bool:
-    """A bundle is a mapping carrying a `pipeline` document plus its `streams` and
-    `connections` collections — the assembled run inputs. Structurally distinct
-    from every single-document kind (connector / endpoint / type-map / pipeline)."""
-    return (
-        isinstance(doc, dict)
-        and isinstance(doc.get("pipeline"), dict)
-        and "streams" in doc
-        and "connections" in doc
-    )
-
-
-def is_pipeline_doc(doc: Any) -> bool:
-    """A single pipeline document declares its source/destination wiring under
-    `connections` and, unlike a bundle, carries no nested `pipeline` document. The
-    bundle detector (registered first) claims the assembled-run shape, so a
-    `connections`-bearing mapping that is not a bundle is a pipeline document."""
-    return isinstance(doc, dict) and "connections" in doc and "pipeline" not in doc
 
 
 # ---------------------------------------------------------------------------
@@ -637,17 +616,4 @@ def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> l
     return findings
 
 
-def _validate_pipeline_bundle(doc: Any, location: Any = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature; a bundle reads nothing beside itself
-    """Kind entry point: dispatch a bundle document to the referential validator.
-
-    A bundle carries every document it references, so it reads nothing
-    beside its `location` (the registry's per-kind signature), unused here.
-    """
-    return validate_pipeline_bundle(doc)
-
-
-# The bundle is registered BEFORE the single-pipeline document so the bundle
-# detector claims an assembled-run mapping first; `is_pipeline_doc` then only sees
-# a `connections`-bearing mapping with no nested `pipeline` document.
-register_kind(is_pipeline_bundle, _validate_pipeline_bundle)
-register_model_and_schema_kind(is_pipeline_doc, _PIPELINE_ADAPTER)
+register_model_and_schema_kind("pipeline", _PIPELINE_ADAPTER)

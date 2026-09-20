@@ -17,8 +17,6 @@ new module.
 """
 from __future__ import annotations
 
-from typing import Any
-
 from ._core import contract_model_domain, register_model_and_schema_kind
 
 # Import the contract model under the shared DOMAIN guard (the model binds the
@@ -30,11 +28,4 @@ with contract_model_domain():
 _STREAM_ADAPTER = TypeAdapter(StreamInput)
 
 
-def is_stream_doc(doc: Any) -> bool:
-    """A stream binds a read `source` to write `destinations`: it is the only
-    authored kind carrying both top-level. (A pipeline nests its source/destination
-    connection refs under `connections`; it has no top-level `source`.)"""
-    return isinstance(doc, dict) and "source" in doc and "destinations" in doc
-
-
-register_model_and_schema_kind(is_stream_doc, _STREAM_ADAPTER)
+register_model_and_schema_kind("stream", _STREAM_ADAPTER)

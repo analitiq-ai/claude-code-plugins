@@ -17,8 +17,6 @@ is a new module.
 """
 from __future__ import annotations
 
-from typing import Any
-
 from ._core import contract_model_domain, register_model_and_schema_kind
 
 # Import the contract model under the shared DOMAIN guard (the model binds the
@@ -30,18 +28,4 @@ with contract_model_domain():
 _CONNECTION_ADAPTER = TypeAdapter(ConnectionInput)
 
 
-def is_connection_doc(doc: Any) -> bool:
-    """A connection configures a connector: it carries `connector_id` and none of
-    the connector/endpoint discriminators (`kind` / `operations`). Structurally
-    distinct from every other authored kind — the connector-family detectors run
-    first and claim their own shapes, so a `connector_id`-bearing document that is
-    not one of them is a connection."""
-    return (
-        isinstance(doc, dict)
-        and "connector_id" in doc
-        and "kind" not in doc
-        and "operations" not in doc
-    )
-
-
-register_model_and_schema_kind(is_connection_doc, _CONNECTION_ADAPTER)
+register_model_and_schema_kind("connection", _CONNECTION_ADAPTER)

@@ -7,7 +7,7 @@ root holds exactly one:
 
 - ``connector.json`` — a connector package, validated at its path so its
   sibling type map and ``endpoints/*.json`` are read beside it;
-- ``bundle.json`` — a pipeline bundle, validated as the CLI validates one,
+- ``bundle.json`` — a pipeline bundle, validated through the bundle entry point,
   and the only file its case root holds: a bundle carries its documents inline.
 
 :func:`rule_cases` loads the corpus and :func:`case_mismatch` grades one case
@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ._core import finding_costs_a_pass, validate_document
+from .pipelines import validate_pipeline_bundle
 
 if TYPE_CHECKING:  # the corpus layout, shared with the fixture corpus that ships
     from analitiq.contracts.shared.corpus import Verdict  # in analitiq-contract-models
@@ -70,8 +71,8 @@ def case_findings(case: RuleCase) -> list[dict]:
     entry = _entry_file(case.root)
     document = json.loads(entry.read_text(encoding="utf-8"))
     if entry.name == _CONNECTOR_ENTRY:
-        return validate_document(document, doc_path=entry)
-    return validate_document(document)
+        return validate_document(document, "connector", doc_path=entry)
+    return validate_pipeline_bundle(document)
 
 
 def case_mismatch(case: RuleCase) -> str | None:

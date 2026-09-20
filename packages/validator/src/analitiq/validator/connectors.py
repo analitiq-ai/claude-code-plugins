@@ -128,23 +128,6 @@ _STORAGE_KINDS = ("file", "s3", "stdout")
 _DATABASE_KINDS = ("database", "nosql", "document")
 
 
-def is_connector_doc(doc: Any) -> bool:
-    return isinstance(doc, dict) and "kind" in doc
-
-
-def is_api_endpoint_doc(doc: Any) -> bool:
-    return isinstance(doc, dict) and "kind" not in doc and "operations" in doc
-
-
-def is_database_endpoint_doc(doc: Any) -> bool:
-    return (
-        isinstance(doc, dict)
-        and "kind" not in doc
-        and "operations" not in doc
-        and ("database_object" in doc or "columns" in doc)
-    )
-
-
 # ---------------------------------------------------------------------------
 # Type-map rendering (read/write coverage) — cross-file / advisory only
 # ---------------------------------------------------------------------------
@@ -1585,35 +1568,7 @@ def _validate_type_map(doc: Any, location: Location | None) -> list[dict]:  # sk
     return type_map_findings(doc)
 
 
-def is_type_map_doc(doc: Any) -> bool:
-    """A `$schema` naming the published type-map URL claims a type map, and
-    nothing else does — not a `$schema` naming another resource, and not a
-    section. The model requires the field, so reading only it misses no map a
-    caller could author, and a stray top-level `read` or `write` in a malformed
-    document of another kind stays that document's extra key instead of making
-    it a map whose every other key is extra."""
-    return isinstance(doc, dict) and doc.get("$schema") == TYPE_MAP_SCHEMA_URL
-
-
-def _validate_kindless_connector(doc: Any, location: Location | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    # A dict carrying connector sentinels but no `kind` is a connector missing
-    # its discriminator — hand it to the model so the missing `kind` is reported
-    # (rather than silently passing as "unrecognized"). `$schema` is optional on
-    # the connector model, so RULE-SHRD-003 is the only thing reporting its
-    # omission; the kind-bearing route runs it, and which route a document
-    # reaches must not decide what it is told.
-    return _model_findings(doc, _CONNECTOR_ADAPTER) + _missing_schema_url_findings(doc)
-
-
-# Registration order is dispatch precedence: connector, api-endpoint,
-# database-endpoint, type-map, then the kindless-connector fallback.
-# `_core._dispatch` runs these in order and falls through to the
-# "unrecognized document" verdict if none match.
-register_kind(is_connector_doc, _validate_connector)
-register_kind(is_api_endpoint_doc, _validate_api_endpoint)
-register_kind(is_database_endpoint_doc, _validate_database_endpoint)
-register_kind(is_type_map_doc, _validate_type_map)
-register_kind(
-    lambda doc: isinstance(doc, dict) and any(k in doc for k in _CONNECTOR_SENTINELS),
-    _validate_kindless_connector,
-)
+register_kind("connector", _validate_connector)
+register_kind("api-endpoint", _validate_api_endpoint)
+register_kind("database-endpoint", _validate_database_endpoint)
+register_kind("type-map", _validate_type_map)

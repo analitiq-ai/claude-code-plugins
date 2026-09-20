@@ -117,64 +117,20 @@ def _envelope(findings: list[Finding]) -> ValidationEnvelope:
     return {"passed": _passed(findings), "findings": findings}
 
 
-def _consistent_entities(document: object) -> frozenset[str]:
-    """The published document-schema names `document`'s own content is
-    consistent with — empty when no registered kind claims it, or when the kind
-    that does has no published name (an assembled pipeline bundle, say).
-
-    Walks the live `_KIND_REGISTRY` in registration order, so which kind claims
-    a document is always the registry's own answer. A `register_kind` call
-    names its validator, while `register_model_and_schema_kind` builds an
-    anonymous validator closure and names only its detector, so each
-    registration is looked up by whichever half is a stable importable name.
-    """
-    from analitiq.validator import _core, is_connection_doc, is_pipeline_doc, is_stream_doc
-    from analitiq.validator.connectors import (
-        _validate_api_endpoint,
-        _validate_connector,
-        _validate_database_endpoint,
-        _validate_kindless_connector,
-        _validate_type_map,
-    )
-
-    entity_by_validator = {
-        _validate_connector: "connector",
-        _validate_api_endpoint: "api-endpoint",
-        _validate_database_endpoint: "database-endpoint",
-        _validate_type_map: "type-map",
-        _validate_kindless_connector: "connector",
-    }
-    entity_by_detector = {
-        is_connection_doc: "connection",
-        is_stream_doc: "stream",
-        is_pipeline_doc: "pipeline",
-    }
-
-    for detector, validator in _core._KIND_REGISTRY:  # skipcq: PYL-W0212 — same-package read of the live kind registry
-        if not detector(document):
-            continue
-        entity = entity_by_validator.get(validator) or entity_by_detector.get(detector)
-        return frozenset({entity}) if entity else frozenset()
-    return frozenset()
-
-
 def validate_single_document(
         request: ValidateSingleDocumentRequest) -> ValidationEnvelope:
     """Validate one document supplied as its file text.
 
     `request.entity` names the published document schema the caller says the
-    text is written against. It is checked, not trusted: a document whose own
-    content is inconsistent with the declared name is reported as an
-    `entity-mismatch` finding rather than validated as whatever it resembles.
-    A consistent document is graded exactly as `validate_document` grades it,
-    since the name it declares is the registration that claims it. Text
-    the JSON parser cannot read is a finding on the document, not a raised
-    error.
+    text is written against, and that name is what the document is graded as —
+    the request model already refuses a name outside the vocabulary, so every
+    name that reaches here grades. Text the JSON parser cannot read is a finding
+    on the document, not a raised error.
 
-    Nothing anchors the document to a path, so a connector declaring its
-    `kind` has no siblings for its cross-file coverage check to read: that
-    check reports `coverage-check-skipped-no-path`, which costs the pass. The
-    siblings belong in a `validate_connector_package` request.
+    Nothing anchors the document to a path, so a connector has no siblings for
+    its cross-file coverage check to read: that check reports
+    `coverage-check-skipped-no-path`, which costs the pass. The siblings belong
+    in a `validate_connector_package` request.
     """
     from analitiq.validator._core import (
         _JSON_TEXT_REFUSALS, _unreadable_document_finding, validate_document)
@@ -184,26 +140,7 @@ def validate_single_document(
     except _JSON_TEXT_REFUSALS as exc:
         return _envelope([_unreadable_document_finding(exc)])
 
-    mismatch = _entity_mismatch_findings(document, request.entity)
-    return _envelope(mismatch or validate_document(document))
-
-
-def _entity_mismatch_findings(document: object, entity: str) -> list[Finding]:
-    """The finding refusing `document` as `entity` when its own content is
-    inconsistent with that name, and none when it is consistent."""
-    from analitiq.validator._core import finding
-
-    consistent = _consistent_entities(document)
-    if entity in consistent:
-        return []
-    if consistent:
-        detected = " or ".join(repr(name) for name in sorted(consistent))
-        message = (f"declared entity {entity!r}, but this document's "
-                   f"content is detected as {detected}.")
-    else:
-        message = (f"declared entity {entity!r}, but this document's "
-                   "content matches no published document schema.")
-    return [finding(message_id="entity-mismatch", kind="fail", path="", message=message)]
+    return _envelope(validate_document(document, request.entity))
 
 
 #: The key a connector package's root document sits at. The package root is
@@ -216,11 +153,10 @@ def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnv
     files on disk: the connector document at `connector.json`, its sibling
     type map, and — for an api connector — its `endpoints/*.json` files.
 
-    The connector is graded exactly as it is from a path on disk, by the same
-    checks reading the same siblings, so the two routes cannot disagree about
-    a package whose `connector.json` holds a connector. One that holds anything
-    else is refused as an `entity-mismatch`, where the disk route grades
-    whatever it detects. What differs is where a finding says it applies: a package has
+    The key a document sits at is what names its kind, so `connector.json` is
+    graded as a connector whatever it holds — the same grading, by the same
+    checks reading the same siblings, that the disk route gives the same
+    package. What differs is where a finding says it applies: a package has
     no one validated document, so every finding names the document it is
     about by its percent-encoded key. A document the connector's checks never read is not graded.
     """
@@ -244,10 +180,8 @@ def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnv
         document = json.loads(anchor.read_text())
     except _JSON_TEXT_REFUSALS as exc:
         return _envelope([qualified(_unreadable_document_finding(exc), _CONNECTOR_KEY)])
-    mismatch = _entity_mismatch_findings(document, "connector")
-    if mismatch:
-        return _envelope(_from_package_root(mismatch))
-    return _envelope(_from_package_root(validate_document(document, doc_path=anchor)))
+    return _envelope(_from_package_root(
+        validate_document(document, "connector", doc_path=anchor)))
 
 
 def _from_package_root(findings: list[Finding]) -> list[Finding]:

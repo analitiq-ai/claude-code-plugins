@@ -125,7 +125,8 @@ def _write_tree(root: Path, connector: dict, endpoints: dict):
 
 def _run(tmp_path, connector, endpoints, validator):
     _write_tree(tmp_path, connector, endpoints)
-    return validator.validate_document(connector, doc_path=tmp_path / "connector.json")
+    return validator.validate_document(
+        connector, "connector", doc_path=tmp_path / "connector.json")
 
 
 def _ref_errors(findings):
