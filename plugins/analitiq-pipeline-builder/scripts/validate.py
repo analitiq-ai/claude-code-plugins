@@ -12,8 +12,10 @@ closed over every finding — a locally minted one (`validator`, `severity`,
 (`skills/pipeline-builder/references/io-contracts.md`'s `Diagnostics` section
 owns the shape and the predicate in full).
 
-The published package exposes one single-document entry point plus one bundle
-entry point. This adapter routes each entity as follows:
+The published package grades everything a caller can submit through one entry
+point, ``validate_document``, which takes the kind by name. The bundle's own
+function stays public for the authoring mode the kind route does not offer.
+This adapter routes each entity as follows:
 
   * every entity but ``type-map`` -> ``analitiq.validator.validate_document``,
     handed the ``--entity`` name as the kind. That name is the only thing

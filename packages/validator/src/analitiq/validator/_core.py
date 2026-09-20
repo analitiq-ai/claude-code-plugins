@@ -11,10 +11,9 @@ This module owns the parts that are independent of any particular artifact kind:
 - `contract_model_domain()` — the env guard every kind imports its contract models
   under, defined once so the DOMAIN dance is not reimplemented per kind;
 - the KIND-VALIDATOR REGISTRY and `validate_document()` driver — a per-kind
-  module (e.g. `connectors`) contributes a validator under a published
-  document-schema name via `register_kind()`, and `validate_document` looks the
-  caller's kind up in it rather than hard-coding any kind's branches, so a new
-  kind is *register, done*. A kind whose validity is its contract model plus the
+  module (e.g. `connectors`) contributes a validator under the kind name it owns
+  via `register_kind()`, and `validate_document` looks the caller's kind up in it
+  rather than hard-coding any kind's branches, so a new kind is *register, done*. A kind whose validity is its contract model plus the
   `$schema`-omission check registers via `register_model_and_schema_kind()`
   instead of hand-writing that combination;
 - `_bounded()` — the one width a diagnostic borrowed from another library, or
