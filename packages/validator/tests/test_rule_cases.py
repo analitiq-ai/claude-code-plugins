@@ -175,3 +175,26 @@ def test_a_bundle_case_holding_another_file_is_refused(monkeypatch, tmp_path):
     stray.write_text("{}")
     with pytest.raises(ValueError, match="endpoints/x.json"):
         _load_from(monkeypatch, tmp_path)
+
+
+@pytest.mark.parametrize("entry,kind", [
+    ("connector.json", "connector"),
+    ("bundle.json", "pipeline-bundle"),
+], ids=["connector", "bundle"])
+def test_a_crashing_check_is_contained_on_both_case_routes(monkeypatch, tmp_path, entry, kind):
+    """Both routes submit through `validate_document`, so both inherit its crash
+    guard. A case whose grading raises must come back as a `check-crashed`
+    finding — a propagating exception would abort the whole corpus run on one
+    bad case, and the bundle route hand-rolling its own guard is the way that
+    containment silently stops being the same containment."""
+    import analitiq.validator._core as core
+
+    def explode(_doc, _location=None):
+        raise RuntimeError("boom")
+
+    monkeypatch.setitem(core._KIND_VALIDATORS, kind, explode)
+    case_root = tmp_path / "case"
+    case_root.mkdir()
+    (case_root / entry).write_text("{}")
+    findings = corpus.case_findings(RuleCase("RULE-PIPE-011", "valid", "a", case_root))
+    assert [f["message_id"] for f in findings] == ["check-crashed"], findings

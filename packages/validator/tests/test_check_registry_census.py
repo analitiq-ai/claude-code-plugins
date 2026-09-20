@@ -70,11 +70,11 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
 
     A call is ruleless when its `rule` keyword is absent or the literal
     `None`. `_run_guarded` threads `rule` through from its caller, and
-    `_load_json_sibling` takes none, so a call to either is tracked the way a
-    direct `finding()` call would be, attributed to whichever function made
-    it. Their own internal `finding()` calls are not counted: `_run_guarded`'s
-    passes `rule` as a variable, and `_load_json_sibling`'s passes
-    `message_id` as one — their callers decide, and are what this counts.
+    `_load_json_sibling` and `_coverage_skipped` take none, so a call to any of
+    them is tracked the way a direct `finding()` call would be, attributed to
+    whichever function made it. Their own internal `finding()` calls are not
+    counted: `_run_guarded`'s passes `rule` as a variable, and the other two
+    pass `message_id` as one — their callers decide, and are what this counts.
     """
     found: dict[tuple[str, str], int] = {}
 
@@ -84,7 +84,7 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
                 walk(child, module, owner or child.name)
                 continue
             if isinstance(child, ast.Call) and getattr(child.func, "id", None) in (
-                "finding", "_load_json_sibling", "_run_guarded",
+                "finding", "_load_json_sibling", "_run_guarded", "_coverage_skipped",
             ):
                 callee = child.func.id
                 kwargs = {kw.arg: kw.value for kw in child.keywords}

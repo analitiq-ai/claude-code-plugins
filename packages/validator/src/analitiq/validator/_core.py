@@ -446,18 +446,23 @@ def _missing_schema_url_findings(doc: Any) -> list[dict]:
     )]
 
 
-def register_model_and_schema_kind(kind: str, adapter: TypeAdapter) -> None:
-    """Register a single-document kind whose entire validity is its contract model
-    plus the RULE-SHRD-003 `$schema`-omission check.
+def model_and_schema_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
+    """A document graded against its contract model and the RULE-SHRD-003
+    `$schema`-omission check — what every kind whose contract leaves `$schema`
+    optional owes, whatever else it also checks."""
+    return _model_findings(doc, adapter) + _missing_schema_url_findings(doc)
 
-    A kind with no further cross-file or referential checks needs only
-    `_model_findings(doc, adapter) + _missing_schema_url_findings(doc)` under the
-    per-kind `(doc, location)` signature. Packaging that here lets such a
-    module supply just its name and adapter, so the combination is
-    defined once rather than reimplemented per kind.
+
+def register_model_and_schema_kind(kind: str, adapter: TypeAdapter) -> None:
+    """Register a single-document kind whose entire validity is
+    `model_and_schema_findings`.
+
+    A kind with no further cross-file or referential checks needs only that pair
+    under the per-kind `(doc, location)` signature. Packaging it here lets such a
+    module supply just its name and adapter.
     """
     def _validate(doc: Any, location: Location | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-        return _model_findings(doc, adapter) + _missing_schema_url_findings(doc)
+        return model_and_schema_findings(doc, adapter)
     register_kind(kind, _validate)
 
 
@@ -542,7 +547,7 @@ _JSON_READ_ERRORS = (OSError, *_JSON_TEXT_REFUSALS)
 
 def _unreadable_document_finding(exc: Exception) -> dict:
     """The finding for a document whose text could not be read or parsed at
-    all, before any kind was even identified."""
+    all, so no check naming a rule ever ran on it."""
     return finding(
         message_id="unreadable-document", kind="fail", path="",
         message=f"Cannot read document: {exc}")

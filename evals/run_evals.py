@@ -95,6 +95,8 @@ that breaks any of this, before a single agent runs.
 from __future__ import annotations
 
 import argparse
+import functools
+import importlib
 import json
 import os
 import re
@@ -256,6 +258,31 @@ OP_ARGUMENT = {
 }
 
 
+@functools.cache
+def _pipeline_validate_module():
+    """The pipeline plugin's validate CLI, imported as a module.
+
+    `--entity`'s vocabulary is owned by that script's `choices=`, so the lint
+    reads it from there rather than keeping a second list in step by hand. The
+    script's own directory goes on the path because it imports `_bootstrap` as a
+    sibling, the way it does when a user runs it.
+    """
+    sys.path.insert(0, str(PIPELINE_VALIDATE.parent))
+    return importlib.import_module(PIPELINE_VALIDATE.stem)
+
+
+def _import_on_grader_terms() -> None:
+    """Make `analitiq` importable in this process on the terms a graded run gets.
+
+    The two source trees are handed to a graded run through `GRADER_ENV`, never
+    installed, and the contract models bind the `$schema` host from `DOMAIN` at
+    import — so anything importing them here needs both, and needs them before
+    the first import.
+    """
+    sys.path[:0] = [p for p in GRADER_ENV["PYTHONPATH"].split(os.pathsep) if p not in sys.path]
+    os.environ.setdefault("DOMAIN", GRADER_ENV["DOMAIN"])
+
+
 # ---------------------------------------------------------------------------
 # The rule registry
 # ---------------------------------------------------------------------------
@@ -270,8 +297,7 @@ def unenforced_rules() -> set[str]:
     registry already types the field, and a coverage denominator that quietly
     loses rules reports coverage nobody has.
     """
-    sys.path[:0] = [p for p in GRADER_ENV["PYTHONPATH"].split(os.pathsep) if p not in sys.path]
-    os.environ.setdefault("DOMAIN", GRADER_ENV["DOMAIN"])
+    _import_on_grader_terms()
     from analitiq.contracts.shared.rules import all_rules
 
     ids = {rule.id for rule in all_rules() if not rule.validator}
@@ -284,7 +310,6 @@ def unenforced_rules() -> set[str]:
 
 def known_rule_ids() -> set[str]:
     return {p.stem for p in RULE_RECORDS.glob("*.yaml")}
-
 
 
 # ---------------------------------------------------------------------------
@@ -369,10 +394,14 @@ def _scenario_problems(scenario: dict, path: Path) -> list[str]:
         elif not _compiles(item[named[0]]):
             problems.append(f"text_assert on {item.get('file')!r}: {item[named[0]]!r} does not "
                             f"compile as a regex")
-    # The kinds `--kind` takes, read off the validator so a scenario is graded
-    # against the vocabulary the run itself will use.
+    # The vocabularies the two routes take, read off the code each route runs so
+    # a scenario is linted against what the run itself will accept. Both routes
+    # reject an unknown name loudly, but only when the scenario is executed —
+    # which costs an agent run, so a typo is caught here instead.
+    _import_on_grader_terms()
     from analitiq.validator import document_kinds
     kinds = document_kinds()
+    entities = set(_pipeline_validate_module().PIPELINE_ENTITIES)
     for spec in scenario.get("validate", []):
         unknown = sorted(set(spec) - {"glob", "entity", "kind", "bundle_root"})
         if unknown:
@@ -391,6 +420,10 @@ def _scenario_problems(scenario: dict, path: Path) -> list[str]:
             problems.append(f"validate spec {spec.get('glob')!r} names kind "
                             f"{spec['kind']!r}, which the validator does not grade; "
                             f"expected one of {sorted(kinds)}")
+        elif "entity" in spec and spec["entity"] not in entities:
+            problems.append(f"validate spec {spec.get('glob')!r} names entity "
+                            f"{spec['entity']!r}, which the pipeline plugin's validate CLI does "
+                            f"not take; expected one of {sorted(entities)}")
     for item in scenario.get("seed", []):
         if not (REPO_ROOT / item["from"]).is_file():
             problems.append(f"seed source {item['from']} does not exist")

@@ -478,8 +478,9 @@ def render_validator_ids() -> str:
             rule.validator_module == "analitiq.validator.pipelines"
             and (rule.id not in gated_pipelines_ids or rule.id in reachable_gated_pipelines_ids)
         )
-        # A check in `_core` is one every registered per-kind validator runs,
-        # so every entity this adapter submits under reaches it.
+        # A check in `_core` belongs to the model-and-`$schema` pair a
+        # single-document kind is registered with, and this adapter submits
+        # kinds registered that way — so it is reachable here.
         or rule.validator_module == "analitiq.validator._core"
         or rule.id in reachable_connectors_ids
     )

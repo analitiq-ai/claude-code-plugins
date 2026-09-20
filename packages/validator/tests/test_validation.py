@@ -2212,6 +2212,18 @@ def test_validating_a_connector_with_no_path_fails_closed(validator):
     assert not _passed(findings), findings
 
 
+def test_a_non_mapping_connector_reports_coverage_as_skipped(validator):
+    """The other question coverage cannot ask. Every coverage rule reads a key
+    off the document to decide what the package must hold, so a document that is
+    not a mapping settles none of them — and the model's own rejection beside it
+    must not be read as coverage having passed."""
+    from analitiq.validator._core import _passed
+
+    findings = validator.validate_document([], "connector", doc_path=None)
+    assert "coverage-check-skipped-not-a-mapping" in [f["message_id"] for f in findings], findings
+    assert not _passed(findings), findings
+
+
 def test_database_missing_both_sections_reports_both(tmp_path, validator):
     # The read section's absence must not hide the write section's: the same connector
     # otherwise answers differently depending on how its map is broken. The

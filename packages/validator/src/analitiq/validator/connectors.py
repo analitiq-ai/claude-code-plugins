@@ -58,8 +58,8 @@ from ._core import (
     qualified,
     register_kind,
     _bounded,
-    _missing_schema_url_findings,
     _model_findings,
+    model_and_schema_findings,
     _run_guarded,
 )
 from ._location import Location, located, reference
@@ -1239,6 +1239,15 @@ def _missing_section(kind: str, direction: str, what: str, load: TypeMapLoad) ->
                  f"{direction!r} rule list ({what}); {reason}."))
 
 
+def _coverage_skipped(*, message_id: str, path: str, why: str) -> list[dict]:
+    """The one shape a coverage skip takes: a `notApplicable` naming the question
+    that went unasked, rather than a clean pass on one never put. No rule is
+    named — which of the coverage rules would have applied is itself what the
+    skipped reading would have decided."""
+    return [finding(message_id=message_id, kind="notApplicable", path=path,
+                    message=f"type-map coverage skipped: {why}")]
+
+
 def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
     """Connector ↔ sibling type-map coverage (the irreducibly cross-file check).
 
@@ -1248,29 +1257,21 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
         # No rule to name, for the reason the no-path branch below carries:
         # every coverage rule reads a key off the document to decide what its
         # package must hold, so a document that is not a mapping settles none
-        # of them — and saying so beats a clean pass on a question never asked.
-        return [finding(
-            message_id="coverage-check-skipped-not-a-mapping",
-            kind="notApplicable", path="",
-            message="type-map coverage skipped: the document is not a JSON object.")]
+        # of them.
+        return _coverage_skipped(message_id="coverage-check-skipped-not-a-mapping", path="",
+                                 why="the document is not a JSON object.")
     if doc_path is None:
-        # No rule to name: PKG-030/032/033/035 are each about a sibling file
-        # or directory this function reads beside the document, so without a
-        # location none of them can be checked, let alone singled out. A document validated
-        # this way can no longer report coverage passed — that question was
-        # never asked of it.
-        return [finding(
-            message_id="coverage-check-skipped-no-path",
-            kind="notApplicable", path="",
-            message="type-map coverage skipped: no filesystem-anchored document path.")]
+        # No rule to name: PKG-030/032/033/035 are each about a sibling file or
+        # directory this function reads beside the document, so without a
+        # location none of them can be checked, let alone singled out.
+        return _coverage_skipped(message_id="coverage-check-skipped-no-path", path="",
+                                 why="no filesystem-anchored document path.")
     kind = doc.get("kind")
     if kind not in ("api", *_DATABASE_KINDS, *_STORAGE_KINDS):
-        return [finding(
-            message_id="coverage-check-skipped-bad-kind",
-            kind="notApplicable", path="/kind",
-            message=(
-                f"type-map coverage skipped: connector 'kind'={kind!r} is not in the "
-                "closed enum (the model enforces this)."))]
+        return _coverage_skipped(
+            message_id="coverage-check-skipped-bad-kind", path="/kind",
+            why=f"connector 'kind'={kind!r} is not in the closed enum "
+                "(the model enforces this).")
 
     anchor = located(doc_path)
     package = anchor.parent
@@ -1431,8 +1432,7 @@ _TYPE_MAP_ADAPTER = TypeAdapter(TypeMapDoc)
 # ---------------------------------------------------------------------------
 
 def _validate_connector(doc: Any, location: Location | None) -> list[dict]:
-    findings = _model_findings(doc, _CONNECTOR_ADAPTER)
-    findings += _missing_schema_url_findings(doc)
+    findings = model_and_schema_findings(doc, _CONNECTOR_ADAPTER)
     findings += check_coverage(doc, location)
     return findings
 

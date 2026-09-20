@@ -140,7 +140,8 @@ naming a lesser-tier rule do not fail validation.
   "passed": false,
   "findings": [
     {
-      "validator": "contract-model",
+      "message_id": "missing",
+      "kind": "fail",
       "severity": "error",
       "path": "/schedule/interval_minutes",
       "message": "Field required"
@@ -155,12 +156,10 @@ naming a lesser-tier rule do not fail validation.
 }
 ```
 
-This adapter's `database-endpoint` and `type-map` entities also run the
-document against its contract model, whose own `@model_validator`s can reject
-it citing a rule of their own — every rule bound to `DatabaseEndpointDoc` or
-`TypeMapDoc` is reachable that way, catalogued in full
-in `references/rules/database-endpoint.md` and `references/rules/type-map.md`
-rather than restated here.
+Every entity runs the document against its contract model, whose own
+`@model_validator`s can reject it citing a rule of their own — every rule bound
+to an entity's model is reachable that way, catalogued in full per model in
+`references/rules/` rather than restated here.
 
 <!-- BEGIN GENERATED: validator-ids -->
 Rule ids this adapter's own `analitiq.validator` entry points can actually emit, whether the check needs a second document in hand (referential integrity across a bundle, filename↔id) or grades one document as a plain function rather than a `@model_validator` (a database endpoint's id, a type-map's own rule warnings) — never what a contract model rejects on its own, which is catalogued per model in `references/rules/` instead of restated here:
@@ -181,11 +180,6 @@ structurally cannot make:
 - `connector-endpoint-ref` — **warning-only**: a `scope: "connector"` stream ref
   naming an endpoint the downloaded connector does not publish. The message
   carries an alignment suggestion. See `stream-spec/spec-endpoint-refs.md`.
-- `contract-model` — **error**: a `connection`/`stream`/`pipeline` entity's
-  own contract-model rejection, mapped locally rather than through
-  `analitiq.validator` (that entity's model is validated directly; only
-  `database-endpoint`/`type-map` and the bundle path route through the
-  published package).
 - `document` — **error**: a sibling bundle member could not be read, parsed,
   or was not a JSON object.
 
@@ -197,8 +191,8 @@ printed no `Diagnostics` JSON at all and the driving agent reconstructed this
 finding from a stderr excerpt, carried in `message` with `path` empty.
 
 This id names only a crash reaching a guard in this adapter. A crash inside
-the published validator's own single-document dispatch (the `database-endpoint`
-/ `type-map` routes, which call it directly) is already caught there and
+the published validator's own single-document dispatch — which every entity
+but `type-map` routes through — is already caught there and
 returned as a forwarded `kind: "notApplicable"`,
 `message_id: "check-crashed"` finding whose `message` says the check itself
 crashed — that finding never reaches this adapter as an exception, so no

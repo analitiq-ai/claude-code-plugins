@@ -524,8 +524,8 @@ def is_runnable_required(pipeline_doc: object) -> bool:
     runnable, so its runnability verdicts are an author-time expectation, not a
     defect. Ask the bundle validator for referential integrity only
     (require_runnable=False) while the pipeline is a draft, and enforce runnability
-    once it is authored 'active'. A non-dict pipeline_doc already earned its own
-    contract-model finding at the single-document stage (see diagnostics_for) —
+    once it is authored 'active'. A non-dict pipeline_doc already earned the contract
+    model's own finding at the single-document stage (see diagnostics_for) —
     treat it as not-yet-active here rather than raising.
 
     Public (no leading underscore): `scripts/gen_pipeline_docs.py` calls this
@@ -599,8 +599,8 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
             # Its own guarded unit: a crash enriching the bundle (e.g. `doc` is
             # not an object, so `_bundle_findings`'s own field access on it
             # raises) must not discard the single-document findings above —
-            # the precise contract-model error a malformed pipeline document
-            # already earned stays in the result alongside the adapter-crash
+            # the precise error the contract model gave a malformed pipeline
+            # document stays in the result alongside the adapter-crash
             # finding, instead of being replaced by it.
             with _contained(findings, "pipeline-bundle"):
                 findings.extend(_bundle_findings(doc, document_path, bundle_root))

@@ -20,6 +20,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -255,6 +256,29 @@ def test_a_validate_spec_kind_outside_the_vocabulary_is_refused():
     # session at the last step unless the preflight reads the same set back.
     problems = _problems({"validate": [{"glob": "a.json", "kind": "connectr"}]})
     assert any("connectr" in p for p in problems), problems
+
+
+def test_a_validate_spec_entity_outside_the_vocabulary_is_refused():
+    # Same cost as a mistyped kind, on the other route: the pipeline plugin's
+    # `--entity` takes a closed set, and argparse only says so once the agent
+    # session that produced the document has already run.
+    problems = _problems({"validate": [{"glob": "a.json", "entity": "pipelines"}]})
+    assert any("pipelines" in p for p in problems), problems
+
+
+def test_the_runner_loads_scenarios_without_the_suite_s_environment():
+    """A subprocess, because the suite is the one caller that never exercises this.
+
+    `conftest.py` puts the contract packages on the path for every test, so an
+    in-process call finds `analitiq` however the runner is written. A user runs
+    `run_evals.py` from a bare shell, where only the runner's own bootstrap puts
+    them there — and scenario loading imports the validator before any
+    subcommand does anything.
+    """
+    env = {k: v for k, v in os.environ.items() if k not in {"PYTHONPATH", "DOMAIN"}}
+    proc = subprocess.run([sys.executable, str(SCRIPT_PATH), "list"],
+                          cwd=REPO_ROOT, capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stderr
 
 
 def test_a_validate_spec_must_name_a_glob():
