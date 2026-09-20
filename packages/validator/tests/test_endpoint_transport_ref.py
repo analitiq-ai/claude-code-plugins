@@ -170,8 +170,7 @@ def test_unknown_transport_ref_on_read_errors(tmp_path, connector_base, validato
     errors = _ref_errors(findings)
     assert len(errors) == 1, findings
     (err,) = errors
-    assert err["path"] == "/operations/read/request/transport_ref"
-    assert "widgets.json/operations/read/request/transport_ref" in err["message"]
+    assert err["path"] == "endpoints/widgets.json#/operations/read/request/transport_ref"
     assert "'nope'" in err["message"]
     assert f"['{DECLARED_TRANSPORT}']" in err["message"]  # the declared set is listed
     assert "§Transport Selection" in err["message"]
@@ -183,8 +182,7 @@ def test_unknown_transport_ref_on_write_mode_errors(tmp_path, connector_base, va
     errors = _ref_errors(findings)
     assert len(errors) == 1, findings
     (err,) = errors
-    assert err["path"] == "/operations/write/insert/request/transport_ref"
-    assert "widgets.json/operations/write/insert/request/transport_ref" in err["message"]
+    assert err["path"] == "endpoints/widgets.json#/operations/write/insert/request/transport_ref"
 
 
 def test_every_operation_is_checked_independently(tmp_path, connector_base, validator):
@@ -194,7 +192,7 @@ def test_every_operation_is_checked_independently(tmp_path, connector_base, vali
     ep["operations"]["write"] = write["operations"]["write"]
     findings = _run(tmp_path, connector_base, {"widgets.json": ep}, validator)
     paths = [e["path"] for e in _ref_errors(findings)]
-    assert paths == ["/operations/write/insert/request/transport_ref"]
+    assert paths == ["endpoints/widgets.json#/operations/write/insert/request/transport_ref"]
 
 
 def test_each_endpoint_file_is_checked(tmp_path, connector_base, validator):
@@ -203,9 +201,8 @@ def test_each_endpoint_file_is_checked(tmp_path, connector_base, validator):
         "gadgets.json": _read_endpoint(DECLARED_TRANSPORT, endpoint_id="gadgets",
                                        path="/gadgets"),
     }, validator)
-    messages = [e["message"] for e in _ref_errors(findings)]
-    assert len(messages) == 1, messages
-    assert "widgets.json" in messages[0]
+    paths = [e["path"] for e in _ref_errors(findings)]
+    assert paths == ["endpoints/widgets.json#/operations/read/request/transport_ref"], paths
 
 
 @pytest.mark.parametrize("ep", [

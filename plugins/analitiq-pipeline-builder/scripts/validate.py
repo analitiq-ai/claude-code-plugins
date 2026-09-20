@@ -72,7 +72,9 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import posixpath
 from pathlib import Path, PurePosixPath
+from urllib.parse import unquote
 
 from _bootstrap import ensure_deps_or_reexec
 
@@ -166,14 +168,15 @@ def _model_findings(entity: str, doc) -> list[dict]:
     else:  # pragma: no cover - guarded by the entity choices
         raise ValueError(f"no contract model for entity {entity!r}")
     from pydantic import ValidationError
-    from analitiq.validator._core import _model_error_message
+    from analitiq.validator._core import _model_error_message, document_pointer
     try:
         Model.model_validate(doc)
         return []
     except ValidationError as exc:
         return [
             _finding("contract-model", "error",
-                     "/" + "/".join(str(p) for p in err["loc"]), _model_error_message(err))
+                     document_pointer(err["loc"], Model.__pydantic_core_schema__),
+                     _model_error_message(err))
             for err in exc.errors()
         ]
 
@@ -215,10 +218,25 @@ def _at_site(site: str, findings: list[dict]) -> list[dict]:
     A document graded on its own reports a pointer into itself (`/scope`), which
     is the whole address when that document is what was validated. A bundle
     holds many, so the same pointer names none of them — the reader is told
-    what is wrong and not which entry to open. A finding about the whole
-    entry (`/`) is addressed at the entry itself."""
-    return [{**f, "path": site if f.get("path", "") in ("", "/") else f"{site}{f['path']}"}
-            for f in findings]
+    what is wrong and not which entry to open."""
+    return [{**f, "path": _rooted(site, f.get("path", ""))} for f in findings]
+
+
+def _rooted(site: str, path: str) -> str:
+    """`path`, reported by grading the entry at `site`, addressed from the
+    bundle root.
+
+    A bare pointer is into the entry itself. Any other path names another
+    document, as `<reference>#<pointer>` with the percent-encoded reference
+    relative to the entry's directory (`rules/SCHEMA.md`, "Findings")."""
+    from analitiq.validator._core import is_bare_pointer
+    if is_bare_pointer(path):
+        target, pointer = site, path
+    else:
+        reference, _, pointer = path.partition("#")
+        target = posixpath.normpath(
+            posixpath.join(posixpath.dirname(site), unquote(reference)))
+    return f"{target}{pointer}"
 
 
 def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:

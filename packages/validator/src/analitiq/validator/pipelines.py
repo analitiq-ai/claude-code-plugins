@@ -607,7 +607,7 @@ def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> l
         # rule records bind — could even begin (rules/SCHEMA.md's generalized
         # first ruleless-fail case).
         return [finding(
-            message_id="bundle-not-a-mapping", kind="fail", path="/",
+            message_id="bundle-not-a-mapping", kind="fail", path="",
             message=(
                 "pipeline bundle must be a mapping of pipeline/streams/connections/"
                 "connectors/endpoints."),

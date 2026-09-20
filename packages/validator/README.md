@@ -67,8 +67,7 @@ document content directly — cannot use either route: it has the documents'
 content in hand, never a directory they can be read from.
 
 `analitiq.validator.document_set` fixes the contract such a consumer calls
-instead. Each entry point taking a `ValidatePackageRequest` raises
-`NotImplementedError`.
+instead. `validate_pipeline_package` raises `NotImplementedError`.
 `packages/validator/tests/test_document_set.py` is the fixture corpus that
 fixes what an implementation must satisfy, a case `xfail` while the function
 it exercises raises. Read that module and that test file for the contract itself — it is

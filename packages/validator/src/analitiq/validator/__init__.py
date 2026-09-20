@@ -28,8 +28,8 @@ Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 pairs with the core dispatch registry — a new kind is a new module registering
 the same way, without touching `_core`. The public surface is re-exported here.
 
-`document_set` declares the path-free document-set API; each entry point
-taking a `ValidatePackageRequest` raises `NotImplementedError`. See that module's docstring and
+`document_set` declares the path-free document-set API;
+`validate_pipeline_package` raises `NotImplementedError`. See that module's docstring and
 `__all__` below for what it contributes to this package's surface. Its entry
 points take the request models in `analitiq.contracts.validation_requests`,
 which own the document-set shape and are where a malformed argument is

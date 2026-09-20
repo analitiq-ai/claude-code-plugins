@@ -502,7 +502,7 @@ def test_an_oversized_property_name_does_not_defeat_the_bound(node, validator):
     assert errors[0]["path"].count("k" * 10_000) == 1
 
 
-def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path, validator):
+def test_the_connector_walk_locates_findings_in_the_endpoint_file(tmp_path, validator):
     """The other entry point: a connector package, where a finding must name the
     endpoint file it came from."""
     from pathlib import Path
@@ -521,7 +521,8 @@ def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path,
         connector, doc_path=tmp_path / "connector.json")
     errors = _sample_findings(findings)
     assert len(errors) == 2, findings
-    assert all("widgets.json/operations/read/" in e["message"] for e in errors)
+    assert all(e["path"].startswith("endpoints/widgets.json#/operations/read/")
+               for e in errors), errors
 
 
 # ---------------------------------------------------------------------------
@@ -606,7 +607,7 @@ def test_the_connector_walk_bounds_a_pathological_sample(tmp_path, validator_cli
 
     errors = _sample_findings_via_cli(validator_cli, connector, "connector.json")
     assert len(errors) == 1, errors
-    assert "widgets.json/operations/read/" in errors[0]["message"]
+    assert errors[0]["path"].startswith("endpoints/widgets.json#/operations/read/"), errors
     assert "was not graded" in errors[0]["message"]
 
 

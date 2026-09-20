@@ -10,6 +10,7 @@ there are no committed fixtures to drift from the contract.
 from __future__ import annotations
 
 import ast
+import copy
 import json
 import os
 import re
@@ -505,7 +506,7 @@ def test_write_shaped_rules_in_a_read_map_fail_the_read_model(tmp_path):
     diag = V.diagnostics_for(
         "type-map", _write(tmp_path, "type-map-read.json", _tm(TYPE_MAP_WRITE, "read")))
     assert not diag["passed"]
-    assert any(f.get("rule") == "RULE-TMAP-006" and f.get("path") == "/rules/1/regex"
+    assert any(f.get("rule") == "RULE-TMAP-006" and f.get("path") == "/rules/1"
                for f in diag["findings"]), diag["findings"]
     assert not any(f.get("path") in {"/direction", "/$schema"}
                    for f in diag["findings"]), diag["findings"]
@@ -540,7 +541,7 @@ def test_the_filename_decides_none_of_what_is_reported(tmp_path):
 @pytest.mark.parametrize("doc,path,message_id", [
     (_tm([], "read"), "/rules", "too_short"),
     (_tm([{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "read"),
-     "/rules/0/exact/arrow_type", "string_pattern_mismatch"),
+     "/rules/0/arrow_type", "string_pattern_mismatch"),
 ])
 def test_invalid_type_map_content(tmp_path, doc, path, message_id):
     # the defect each fixture carries, not merely that something failed: an
@@ -632,7 +633,7 @@ def test_type_map_entity_rejects_bare_array(tmp_path):
         _write(tmp_path, "type-map-read.json",
                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]))
     assert not diag["passed"]
-    assert any(f.get("message_id") == "model_attributes_type" and f.get("path") == "/"
+    assert any(f.get("message_id") == "model_attributes_type" and f.get("path") == ""
                for f in diag["findings"]), diag["findings"]
 
 
@@ -774,8 +775,53 @@ def test_connection_type_maps_are_collected_as_a_connector_collects_its_own(tmp_
     # A finding about a whole file is addressed at the file: the pointer to a
     # document's root joined onto it would name a key "" inside it.
     assert not any(f["path"].endswith("/") for f in connection), connection
-    assert [f["path"].split(".json", 1)[1] or "/" for f in connection] == [
-        f["path"] for f in connector]
+    # The connector's finding names the file from the directory both share,
+    # so rooting it at the connection's directory is the adapter's whole job.
+    assert [f["path"] for f in connection] == [
+        _rooted_at("connections/pg/definition", f["path"]) for f in connector]
+
+
+def _rooted_at(site: str, path: str) -> str:
+    """A `<reference>#<pointer>` path as the adapter addresses it beside `site`."""
+    reference, _, pointer = path.partition("#")
+    return f"{site}/{reference}{pointer}"
+
+
+@pytest.mark.parametrize("path, rooted", [
+    ("", "connections/pg/definition/endpoints/a.json"),
+    ("/", "connections/pg/definition/endpoints/a.json/"),
+    ("/endpoint_id", "connections/pg/definition/endpoints/a.json/endpoint_id"),
+    ("../connector.json#", "connections/pg/definition/connector.json"),
+    ("../connector.json#/transports", "connections/pg/definition/connector.json/transports"),
+    ("b%23c.json#/x#y", "connections/pg/definition/endpoints/b#c.json/x#y"),
+])
+def test_a_finding_is_rooted_at_the_document_it_names(path, rooted):
+    # A bare pointer is into the entry graded; a `<reference>#<pointer>` names
+    # another document, relative to the entry's directory.
+    [found] = V._at_site("connections/pg/definition/endpoints/a.json",
+                         [{"message_id": "m", "kind": "fail", "path": path, "message": "x"}])
+    assert found["path"] == rooted
+
+
+def test_a_model_finding_escapes_the_keys_on_its_pointer():
+    # A `secret_refs` key is the author's own name, so it may hold `/`; left
+    # raw, the pointer would name a key `a` holding a key `b`.
+    findings = V._model_findings("connection", {"secret_refs": {"a/b": "raw secret"}})
+    assert "/secret_refs/a~1b" in [f["path"] for f in findings], findings
+
+
+def test_a_model_finding_names_no_union_tag_on_its_pointer():
+    # A stream's endpoint reference is a tagged union; the tag is where the
+    # model walk went, not a member of the stream.
+    stream = copy.deepcopy(STREAM)
+    stream["source"]["endpoint_ref"]["connection_id"] = 7
+    assert "/source/endpoint_ref/connection_id" in [
+        f["path"] for f in V._model_findings("stream", stream)]
+
+
+def test_a_model_finding_about_the_whole_document_has_the_empty_pointer():
+    [found] = V._model_findings("connection", [1])
+    assert found["path"] == ""
 
 
 def test_a_definition_directory_that_cannot_be_listed_is_reported_at_the_directory(tmp_path, refuse):
