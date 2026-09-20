@@ -21,8 +21,8 @@ findings is its own.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which self-registers its validators under the
-published document-schema names it owns — a new kind is a new module registering
-the same way, without touching `_core`. The public surface is re-exported here.
+kind names it owns — a new kind is a new module registering the same way,
+without touching `_core`. The public surface is re-exported here.
 
 `document_set` declares the path-free document-set API;
 `validate_pipeline_package` raises `NotImplementedError`. See that module's docstring and

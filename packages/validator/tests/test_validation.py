@@ -2217,11 +2217,14 @@ def test_a_non_mapping_connector_reports_coverage_as_skipped(validator):
     off the document to decide what the package must hold, so a document that is
     not a mapping settles none of them — and the model's own rejection beside it
     must not be read as coverage having passed."""
-    from analitiq.validator._core import _passed
+    from analitiq.validator import finding_costs_a_pass
 
     findings = validator.validate_document([], "connector", doc_path=None)
-    assert "coverage-check-skipped-not-a-mapping" in [f["message_id"] for f in findings], findings
-    assert not _passed(findings), findings
+    skipped = [f for f in findings if f["message_id"] == "coverage-check-skipped-not-a-mapping"]
+    assert skipped, findings
+    # The model rejects a non-mapping too, so `_passed` alone would be false
+    # whatever this finding costs. Grade the finding itself.
+    assert finding_costs_a_pass(skipped[0]), skipped
 
 
 def test_database_missing_both_sections_reports_both(tmp_path, validator):

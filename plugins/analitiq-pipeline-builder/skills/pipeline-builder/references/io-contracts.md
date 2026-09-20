@@ -147,10 +147,10 @@ naming a lesser-tier rule do not fail validation.
       "message": "Field required"
     },
     {
-      "message_id": "coverage-check-skipped-no-path",
-      "kind": "notApplicable",
-      "path": "",
-      "message": "type-map coverage skipped: no filesystem-anchored document path."
+      "validator": "connector-endpoint-ref",
+      "severity": "warning",
+      "path": "/streams/0/source/endpoint_ref",
+      "message": "the connector publishes no endpoint with this id"
     }
   ]
 }

@@ -598,12 +598,12 @@ def test_every_published_document_schema_name_grades_its_own_document(validator)
 
 
 def test_an_assembled_bundle_sent_as_a_pipeline_is_graded_as_one(validator):
-    """A bundle is not a single document and no published schema names one, so
-    the caller has no name for it here: `validate_pipeline_bundle` is where a
-    bundle goes. Sent as the `pipeline` its core carries, it is graded by the
-    pipeline model and told, field by field, how it is not one — its streams are
-    documents where the pipeline declares references, and the connections it
-    carries whole are not the two the pipeline names.
+    """A bundle has a kind of its own, so submitting one as `pipeline` is the
+    caller naming the wrong one — and the grading follows the name, not the
+    shape. Graded by the pipeline model, it is told field by field how it is not
+    a pipeline: its streams are documents where the pipeline declares
+    references, and the connections it carries whole are not the two the
+    pipeline names.
     """
     bundle = {"pipeline": _PIPELINE, "streams": [_STREAM], "connections": {_SRC: _CONN_WISE}}
     result = validator.validate_single_document(_document_request(bundle, "pipeline"))

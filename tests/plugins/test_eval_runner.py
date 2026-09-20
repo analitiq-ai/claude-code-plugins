@@ -281,6 +281,24 @@ def test_the_runner_loads_scenarios_without_the_suite_s_environment():
     assert proc.returncode == 0, proc.stderr
 
 
+def test_loading_scenarios_leaves_no_grader_variable_on_the_environment():
+    """`invoke` hands the agent this process's own environment on purpose, so a
+    `GRADER_ENV` value the preflight leaves behind is one the agent inherits —
+    and an agent holding `DOMAIN` validates against this checkout's contract host
+    rather than resolving what its users resolve."""
+    proc = subprocess.run(
+        [sys.executable, "-c",
+         "import importlib.util,os,sys;"
+         f"spec=importlib.util.spec_from_file_location('r', {str(SCRIPT_PATH)!r});"
+         "m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);"
+         "before=dict(os.environ);m.load_scenarios();"
+         "print(sorted(k for k in m.GRADER_ENV if os.environ.get(k) != before.get(k)))"],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+        env={k: v for k, v in os.environ.items() if k not in {"PYTHONPATH", "DOMAIN"}})
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == "[]", proc.stdout
+
+
 def test_a_validate_spec_must_name_a_glob():
     problems = _problems({"validate": [{"entity": "pipeline"}]})
     assert any("missing required key 'glob'" in p for p in problems)

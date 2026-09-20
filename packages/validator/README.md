@@ -117,11 +117,11 @@ analitiq-validate --document connection.json --kind connection
 nothing reads the body to work out what it is, so a document that omits the
 field naming its own family is still told which field it lacks instead of being
 graded as whatever it resembles. `analitiq-validate --help` lists the names it
-takes; each is a published document-schema name. Point `--document` at
-`definition/connector.json` to also trigger cross-file coverage: it discovers
-the sibling `type-map.json` and `endpoints/*.json` from the connector's
-directory. A `connection` / `stream` / `pipeline` document is validated purely
-against its contract model. Validation is always model-driven and offline.
+takes. Point `--document` at `definition/connector.json` to also trigger
+cross-file coverage: it discovers the sibling `type-map.json` and
+`endpoints/*.json` from the connector's directory. A `connection` / `stream` /
+`pipeline` document is validated purely against its contract model. Validation
+is always model-driven and offline.
 
 Output is a JSON report (`{"passed": bool, "findings": [...]}`) on stdout; the
 process exits non-zero exactly when `passed` is `false` — a `fail` finding at
@@ -129,8 +129,10 @@ process exits non-zero exactly when `passed` is `false` — a `fail` finding at
 naming none, might as well be) error-tier, since a check that could not run
 gets no benefit of the doubt.
 
-A pipeline bundle is assembled from many documents, so it is validated as a
-library call rather than from a single file:
+A pipeline bundle is an assembled run rather than an authored document, so no
+published schema names it — but it is submitted under the `pipeline-bundle`
+kind like anything else. Assembled in memory, it is graded by the library call
+the kind dispatches to, which is also where the authoring mode lives:
 
 ```python
 from analitiq.validator import validate_pipeline_bundle

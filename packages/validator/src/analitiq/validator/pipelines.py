@@ -628,8 +628,16 @@ PIPELINE_BUNDLE_KIND = "pipeline-bundle"
 def _validate_pipeline_bundle(doc: Any, location: Any = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature; a bundle reads nothing beside itself
     """Kind entry point: dispatch a bundle document to the referential validator.
 
-    A bundle carries every document it references, so it reads nothing
-    beside its `location` (the registry's per-kind signature), unused here.
+    A bundle carries every document it references, so it reads nothing beside
+    its `location` (the registry's per-kind signature), unused here.
+
+    Graded under `validate_pipeline_bundle`'s own default, which gates
+    runnability: a caller naming a kind is asking whether the thing it submitted
+    is sound, and for an assembled run that includes being runnable. Authoring a
+    draft is the other question — a document deliberately not yet runnable — and
+    it is asked by calling `validate_pipeline_bundle` with `require_runnable`
+    off, because the answer differs by who is asking rather than by what was
+    submitted.
     """
     return validate_pipeline_bundle(doc)
 

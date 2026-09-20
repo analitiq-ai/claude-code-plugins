@@ -475,9 +475,9 @@ def validate_document(doc: Any, kind: str,
     """Validate `doc` as `kind`: its contract model plus that kind's cross-file
     checks.
 
-    `kind` is a published document-schema name, and it is the only thing that
-    decides how the document is graded — nothing here reads the document to work
-    out what it is. A submitted document's content is the least reliable way to
+    `kind` is the name a caller submits a document under, and it is the only
+    thing that decides how the document is graded — nothing here reads the
+    document to work out what it is. A submitted document's content is the least reliable way to
     identify it, because the defects worth reporting are the ones that stop it
     resembling its own kind: a connector that omits the field naming its family
     needs to be told about that field, not told it is a document of some other
@@ -564,7 +564,7 @@ def main() -> int:
     # what it submitted, so a mistyped kind is refused as the usage error it is
     # rather than silently grading the document as something else.
     parser.add_argument("--kind", required=True, choices=sorted(document_kinds()),
-                        help="The published document-schema name the document is written against.")
+                        help="The kind to grade the document as.")
     args = parser.parse_args()
 
     try:

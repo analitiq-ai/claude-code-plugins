@@ -1,6 +1,6 @@
 ---
 name: connector-schema-validator
-description: Validate an Analitiq entity JSON document (connector, api-endpoint, database-endpoint, or type map) against the pinned contract models and the cross-file semantic checks. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Input is a document path and the kind it was authored as. Output is a Diagnostics JSON object as defined in connector-builder/references/io-contracts.md.
+description: Validate one Analitiq connector-domain JSON document against the pinned contract models and the cross-file semantic checks. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Input is a document path and the kind it was authored as. Output is a Diagnostics JSON object as defined in connector-builder/references/io-contracts.md.
 tools: Read, Bash, Grep
 color: orange
 ---
@@ -22,8 +22,9 @@ artifact.
 ## Inputs
 
 - `document_path` — absolute path to the draft JSON document.
-- `document_kind` — the published document-schema name the document was
-  authored against, one of the kinds this agent's `description` above names.
+- `document_kind` — the kind the document was authored against. `--kind` takes
+  a closed set and refuses anything else as a usage error, so a name invented
+  here validates nothing; `analitiq-validate --help` lists what it takes.
   The validator grades the document as this and reads nothing of
   the body to second-guess it, which is what lets a draft missing the very
   field that names its family still be told which field it lacks. Take the kind

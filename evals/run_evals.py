@@ -95,6 +95,7 @@ that breaks any of this, before a single agent runs.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import functools
 import importlib
 import json
@@ -107,6 +108,7 @@ import tempfile
 import time
 from collections import Counter
 from pathlib import Path
+from typing import Iterator
 
 # Stdout is block-buffered when it is not a terminal, so a run redirected to a
 # file or a pipe shows nothing until the process exits — and a job killed part
@@ -271,16 +273,31 @@ def _pipeline_validate_module():
     return importlib.import_module(PIPELINE_VALIDATE.stem)
 
 
-def _import_on_grader_terms() -> None:
+@contextlib.contextmanager
+def _import_on_grader_terms() -> Iterator[None]:
     """Make `analitiq` importable in this process on the terms a graded run gets.
 
     The two source trees are handed to a graded run through `GRADER_ENV`, never
     installed, and the contract models bind the `$schema` host from `DOMAIN` at
-    import — so anything importing them here needs both, and needs them before
-    the first import.
+    import — so anything importing them here needs both, before the first
+    import.
+
+    `DOMAIN` is bound for the import and restored afterwards. `invoke` hands the
+    agent this process's own environment, deliberately, so a `GRADER_ENV` value
+    left behind on it is a value the agent inherits — the one thing GRADER_ENV's
+    own comment forbids. `sys.path` needs no such care: it reaches no
+    subprocess.
     """
     sys.path[:0] = [p for p in GRADER_ENV["PYTHONPATH"].split(os.pathsep) if p not in sys.path]
-    os.environ.setdefault("DOMAIN", GRADER_ENV["DOMAIN"])
+    ambient = os.environ.get("DOMAIN")
+    os.environ["DOMAIN"] = GRADER_ENV["DOMAIN"]
+    try:
+        yield
+    finally:
+        if ambient is None:
+            os.environ.pop("DOMAIN", None)
+        else:
+            os.environ["DOMAIN"] = ambient
 
 
 # ---------------------------------------------------------------------------
@@ -297,8 +314,8 @@ def unenforced_rules() -> set[str]:
     registry already types the field, and a coverage denominator that quietly
     loses rules reports coverage nobody has.
     """
-    _import_on_grader_terms()
-    from analitiq.contracts.shared.rules import all_rules
+    with _import_on_grader_terms():
+        from analitiq.contracts.shared.rules import all_rules
 
     ids = {rule.id for rule in all_rules() if not rule.validator}
     if not ids:
@@ -398,8 +415,8 @@ def _scenario_problems(scenario: dict, path: Path) -> list[str]:
     # a scenario is linted against what the run itself will accept. Both routes
     # reject an unknown name loudly, but only when the scenario is executed —
     # which costs an agent run, so a typo is caught here instead.
-    _import_on_grader_terms()
-    from analitiq.validator import document_kinds
+    with _import_on_grader_terms():
+        from analitiq.validator import document_kinds
     kinds = document_kinds()
     entities = set(_pipeline_validate_module().PIPELINE_ENTITIES)
     for spec in scenario.get("validate", []):
