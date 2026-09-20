@@ -1768,12 +1768,14 @@ def test_a_map_declaring_the_type_map_schema_is_graded_as_a_map(validator, doc):
 ], ids=["no-schema", "write-only-no-schema", "stale-schema"])
 def test_a_document_declaring_no_type_map_schema_is_not_a_map(validator, doc):
     # A section is not a claim. `read` and `write` are words other kinds nest,
-    # so a document carrying one and no type-map `$schema` is unidentified —
-    # which is what the model requiring the field means at the dispatch.
+    # so a document whose `$schema` does not name the type map — omitted here,
+    # naming another resource there — is unidentified whatever sections it
+    # carries, which is what the model requiring that field means at dispatch.
     [unrecognized] = _errors(validator.validate_document(doc))
     assert unrecognized["message_id"] == "unrecognized-document", doc
-    # The only diagnostic these get, so it names the key they lack.
-    assert "$schema" in unrecognized["message"], unrecognized
+    # The only diagnostic these get, so it names the field that would have
+    # claimed them and the value it has to carry.
+    assert "'$schema' naming the published type-map URL" in unrecognized["message"], unrecognized
 
 
 @pytest.mark.parametrize("doc,stray,own", [
@@ -1797,10 +1799,11 @@ def test_a_stray_section_key_does_not_claim_another_kind(validator, doc, stray, 
      "rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]},
     {},
 ], ids=["bare-array", "split-shape", "empty"])
-def test_a_rule_list_in_no_type_map_shape_is_not_recognized(validator, tmp_path, doc):
-    # A bare rule array has no `$schema` to claim it, and a split-shape
-    # document names a `$schema` no detector registers; each fails loud as an
-    # unrecognized document rather than passing under some other detector.
+def test_a_document_in_no_type_map_shape_is_not_recognized(validator, tmp_path, doc):
+    # None of these names the type map: a bare rule array has nowhere to put a
+    # `$schema`, the split shape's names another resource, and an empty object
+    # declares nothing. Each fails loud as an unrecognized document rather than
+    # passing under some other detector.
     findings = validator.validate_document(doc, doc_path=tmp_path / TYPE_MAP_FILENAME)
     assert [f["message_id"] for f in _errors(findings)] == ["unrecognized-document"], findings
 

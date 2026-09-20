@@ -1586,8 +1586,10 @@ def _validate_type_map(doc: Any, location: Location | None) -> list[dict]:  # sk
 
 
 def is_type_map_doc(doc: Any) -> bool:
-    """`$schema` claims a type map, and nothing else does. The model requires
-    the field, so no map a caller could author is missed — and `read` and
+    """A `$schema` naming the published type-map URL claims a type map, and
+    nothing else does — not a `$schema` naming another resource, and not a
+    section. The model requires the field, so no map a caller could author is
+    missed by reading only it — and `read` and
     `write` are words a stream and a connection nest too, so a section read as
     a claim would take documents belonging to their own kinds."""
     return isinstance(doc, dict) and doc.get("$schema") == TYPE_MAP_SCHEMA_URL
