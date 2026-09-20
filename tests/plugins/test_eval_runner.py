@@ -233,10 +233,21 @@ def test_a_validate_spec_rejects_unknown_keys():
     assert any("unknown keys" in p for p in _problems({"validate": [unknown]}))
 
 
-def test_a_validate_spec_entity_is_optional():
-    # No `entity`: the plain validator detects the document's kind from its
-    # own shape instead of the pipeline plugin's `--entity`-selected adapter.
-    assert _problems({"validate": [{"glob": "a.json"}]}) == []
+def test_a_validate_spec_needs_entity_or_kind():
+    # Nothing here inspects a document to work out what it is, so a spec
+    # naming neither route leaves the validator with no kind to grade against.
+    problems = _problems({"validate": [{"glob": "a.json"}]})
+    assert any("entity" in p and "kind" in p for p in problems)
+
+
+def test_a_validate_spec_cannot_name_both_entity_and_kind():
+    problems = _problems(
+        {"validate": [{"glob": "a.json", "entity": "pipeline", "kind": "pipeline"}]})
+    assert any("entity" in p and "kind" in p for p in problems)
+
+
+def test_a_validate_spec_kind_alone_is_accepted():
+    assert _problems({"validate": [{"glob": "a.json", "kind": "connector"}]}) == []
 
 
 def test_a_validate_spec_must_name_a_glob():

@@ -130,7 +130,8 @@ either kind.
 ### 4. Validate the domain (barrier)
 
 Invoke `connector-schema-validator` over the connector body and type
-map; it detects each document's kind from its own shape.
+map, naming each document's kind — `connector` and `type-map` — since
+the validator grades a document as the kind it is given.
 <!-- PROBE: type-map-section-missing, type-map-stray-name-refused -->
 The map is one `type-map.json` carrying a section for each direction the
 connector's `kind` calls for (`RULE-PKG-030`); a section the kind needs and the
@@ -189,8 +190,8 @@ Database connectors skip this phase entirely.
      echoes the connector-wide pagination (`ProviderFacts.pagination` →
      style + params) into the branch's `EndpointFacts.pagination`
      (`io-contracts.md` §EndpointFacts).
-   - `connector-schema-validator` validates the endpoint, with the same
-     per-artifact 5-pass fix loop as phase 4 (re-dispatch
+   - `connector-schema-validator` validates the endpoint as `api-endpoint`,
+     with the same per-artifact 5-pass fix loop as phase 4 (re-dispatch
      `endpoint-creator` with `Diagnostics.findings` and the
      `EndpointCreatorOutput` it produced).
 3. **Isolate failure.** A branch that still fails after the fix cap is

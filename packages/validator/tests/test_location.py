@@ -321,7 +321,10 @@ def _about_the_connector(findings: list[dict]) -> list[dict]:
 
 def _assert_cli_agrees(cli, expected: Path, got: Path) -> None:
     """The CLI on `got` answers exactly as on `expected`, a package that passes."""
-    want, have = cli.run("--document", str(expected)), cli.run("--document", str(got))
+    def graded(path):
+        return cli.run("--document", str(path), "--kind", _kind_of(path.name))
+
+    want, have = graded(expected), graded(got)
     assert json.loads(want.stdout)["passed"], want.stdout
     assert (have.returncode, json.loads(have.stdout)) == (want.returncode, json.loads(want.stdout))
 

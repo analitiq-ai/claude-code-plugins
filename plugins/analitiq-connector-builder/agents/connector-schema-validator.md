@@ -1,6 +1,6 @@
 ---
 name: connector-schema-validator
-description: Validate an Analitiq entity JSON document (connector, api-endpoint, database-endpoint, or type map) against the pinned contract models and the cross-file semantic checks. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Input is a document path. Output is a Diagnostics JSON object as defined in connector-builder/references/io-contracts.md.
+description: Validate an Analitiq entity JSON document (connector, api-endpoint, database-endpoint, or type map) against the pinned contract models and the cross-file semantic checks. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Input is a document path and the kind it was authored as. Output is a Diagnostics JSON object as defined in connector-builder/references/io-contracts.md.
 tools: Read, Bash, Grep
 color: orange
 ---
@@ -22,6 +22,14 @@ artifact.
 ## Inputs
 
 - `document_path` — absolute path to the draft JSON document.
+- `document_kind` — the published document-schema name the document was
+  authored against: `connector`, `api-endpoint`, `database-endpoint` or
+  `type-map`. The validator grades the document as this and reads nothing of
+  the body to second-guess it, which is what lets a draft missing the very
+  field that names its family still be told which field it lacks. Take the kind
+  from the dispatch that produced the draft, never from reading the file; if
+  you were not given one, ask rather than guess — a draft graded as the wrong
+  kind earns a page of defects it does not have.
   <!-- PROBE: type-map-standalone-no-package-check, type-map-section-missing -->
   Validating a type map on its own runs no package-level check — those run when
   the **connector** is validated, off the `type-map.json` beside it, and a
@@ -48,10 +56,10 @@ on first use, then invoke it:
 # JSON, or a validator already present from another version would answer instead.
 { python3 -c "import sys; from importlib.metadata import version; sys.exit(0 if version('analitiq-validator') == '1.0.0rc25' else 1)" 2>/dev/null \
   || python3 -m pip install --quiet --disable-pip-version-check --pre "analitiq-validator==1.0.0rc25" 1>&2; } \
-&& python3 - "<document_path>" <<'PY'
+&& python3 - "<document_path>" "<document_kind>" <<'PY'
 import sys
 from analitiq.validator import main
-sys.argv = ["analitiq-validate", "--document", sys.argv[1]]
+sys.argv = ["analitiq-validate", "--document", sys.argv[1], "--kind", sys.argv[2]]
 sys.exit(main())
 PY
 ```
@@ -60,9 +68,8 @@ PY
 
 Report every finding as the validator emits it; never re-map its `rule` id
 yourself — resolve it in the rule files per this file's header note above.
-`rule` is absent on some findings — an unrecognized document, an
-unattributed model rejection, a check that could not run — and that is the
-framework saying so, not a gap to fill in.
+`rule` is absent on some findings — an unattributed model rejection, a check
+that could not run — and that is the framework saying so, not a gap to fill in.
 
 <!-- BEGIN GENERATED: validator-blind-spots -->
 Checks the plugin's prose once claimed but the validator does **not** perform —

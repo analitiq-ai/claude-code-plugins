@@ -108,33 +108,32 @@ def test_valid_single_document(tmp_path, entity, doc):
     assert diag["passed"], diag["findings"]
 
 
-@pytest.mark.parametrize("entity,doc,validator_id", [
+@pytest.mark.parametrize("entity,doc,finding_id", [
     # legacy connection carrying a `values` envelope — no longer part of the contract
     ("connection",
      {"$schema": f"{H}/connection/latest.json", "connector_id": "postgresql", "values": {"host": "x"}},
-     "contract-model"),
+     "extra_forbidden"),
     # legacy stream: flat endpoint_ref (missing database_object) + list-of-lists conflict_keys
     ("stream",
      {"$schema": f"{H}/stream/latest.json", "pipeline_id": PID,
       "source": {"endpoint_ref": {"scope": "connection", "connection_id": SRC, "endpoint_id": "orders"}},
       "destinations": [{"endpoint_ref": {"scope": "connection", "connection_id": DST, "endpoint_id": "orders"},
                         "write": {"mode": "upsert", "conflict_keys": [["id"]]}}]},
-     "contract-model"),
+     "missing"),
     # database endpoint whose id is not the derived handle
     ("database-endpoint",
      {"$schema": f"{H}/database-endpoint/latest.json", "endpoint_id": "public_orders",
       "database_object": DBOBJ, "columns": [{"name": "id", "native_type": "bigint", "arrow_type": "Int64"}]},
      "RULE-DBEP-011"),
 ])
-def test_invalid_single_document(tmp_path, entity, doc, validator_id):
-    # `connection`/`stream` route through this adapter's own local model check
-    # (a `validator` category); `database-endpoint` is forwarded unchanged from
-    # the published `analitiq.validator` (a `rule` id) — one assertion covers
-    # both without the test needing to know which.
+def test_invalid_single_document(tmp_path, entity, doc, finding_id):
+    # Every entity is graded by the published `analitiq.validator`, so a model
+    # rejection arrives as a `message_id` and a rule rejection as a `rule` —
+    # one assertion covers both without the test needing to know which.
     diag = V.diagnostics_for(entity, _write(tmp_path, f"{entity}.json", doc))
     assert not diag["passed"]
     assert any(
-        f.get("validator") == validator_id or f.get("rule") == validator_id
+        f.get("message_id") == finding_id or f.get("rule") == finding_id
         for f in diag["findings"]
     ), diag["findings"]
 
@@ -159,7 +158,7 @@ def test_active_pipeline_requires_stream_single_document(tmp_path):
     doc = {**PIPELINE, "status": "active", "streams": []}
     diag = V.diagnostics_for("pipeline", _write(tmp_path, "pipeline.json", doc))
     assert not diag["passed"]
-    assert any(f.get("validator") == "contract-model" and "stream" in f["message"].lower()
+    assert any(f.get("kind") == "fail" and "stream" in f["message"].lower()
                for f in diag["findings"]), diag["findings"]
 
 
@@ -605,9 +604,9 @@ def test_bundle_unreadable_connection_type_map(tmp_path):
 
 
 def test_type_map_entity_rejects_another_kinds_document(tmp_path):
-    # The entity routing is what makes this fail. Handed to kind detection a
-    # stray connection document matches the connection detector and passes
-    # clean; held to the type-map model, its `$schema` names another resource.
+    # The entity names which model grades the document; a stray connection
+    # document handed in as `type-map` is held to the type-map model
+    # regardless of its own shape, and its `$schema` names another resource.
     diag = V.diagnostics_for("type-map", _write(tmp_path, TYPE_MAP_FILENAME, CONN_PG))
     assert not diag["passed"]
     assert any(f.get("message_id") == "literal_error" and f.get("path") == "/$schema"
@@ -616,8 +615,8 @@ def test_type_map_entity_rejects_another_kinds_document(tmp_path):
 
 def test_type_map_entity_rejects_bare_array(tmp_path):
     # a bare rules array with no `{$schema, read, write}` wrapper is no object,
-    # so it is refused as an envelope rather than sent back out to kind
-    # detection to be called unrecognized.
+    # so it is refused as an envelope rather than as the type-map model it was
+    # named as.
     diag = V.diagnostics_for("type-map", _write(tmp_path, TYPE_MAP_FILENAME, TYPE_MAP_READ))
     assert not diag["passed"]
     assert any(f.get("message_id") == "model_type" and f.get("path") == ""
@@ -738,7 +737,7 @@ def test_a_finding_is_rooted_at_the_document_it_names(path, rooted):
 def test_a_model_finding_escapes_the_keys_on_its_pointer():
     # A `secret_refs` key is the author's own name, so it may hold `/`; left
     # raw, the pointer would name a key `a` holding a key `b`.
-    findings = V._model_findings("connection", {"secret_refs": {"a/b": "raw secret"}})
+    findings = V._document_findings("connection", {"secret_refs": {"a/b": "raw secret"}})
     assert "/secret_refs/a~1b" in [f["path"] for f in findings], findings
 
 
@@ -748,11 +747,11 @@ def test_a_model_finding_names_no_union_tag_on_its_pointer():
     stream = copy.deepcopy(STREAM)
     stream["source"]["endpoint_ref"]["connection_id"] = 7
     assert "/source/endpoint_ref/connection_id" in [
-        f["path"] for f in V._model_findings("stream", stream)]
+        f["path"] for f in V._document_findings("stream", stream)]
 
 
 def test_a_model_finding_about_the_whole_document_has_the_empty_pointer():
-    [found] = V._model_findings("connection", [1])
+    [found] = V._document_findings("connection", [1])
     assert found["path"] == ""
 
 
@@ -805,16 +804,17 @@ def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
 # than a bare traceback with an empty stdout.
 # ---------------------------------------------------------------------------
 
-def test_model_findings_crash_becomes_adapter_crash_finding(tmp_path, monkeypatch, capsys):
-    # an exception type pydantic never converts to ValidationError (a bug in a
-    # custom validator, a typo'd attribute access, ...) must not escape as a
-    # bare traceback — it is contained at the CLI's outermost guard
-    import analitiq.contracts.connection as connection_module
+def test_document_findings_crash_becomes_adapter_crash_finding(tmp_path, monkeypatch, capsys):
+    # an exception escaping the published grading — a regression that defeats
+    # its own crash guard — must not escape as a bare traceback; it is
+    # contained at the CLI's outermost guard. A crash *inside* a check is the
+    # published validator's own guard to contain, and it reports `check-crashed`.
+    import analitiq.validator as validator_module
 
-    def boom(cls, *a, **kw):
+    def boom(*a, **kw):
         raise TypeError("simulated crash")
 
-    monkeypatch.setattr(connection_module.ConnectionInput, "model_validate", classmethod(boom))
+    monkeypatch.setattr(validator_module, "validate_document", boom)
     p = _write(tmp_path, "connection.json", CONN_PG)
     rc = V.main(["--entity", "connection", "--document", str(p)])
     out = json.loads(capsys.readouterr().out)
@@ -1081,14 +1081,14 @@ def test_bundle_endpoint_grading_crash_preserves_endpoint_and_siblings(tmp_path,
                         "database_object": build_database_object(None, "public", "customers")}
     _write(tmp_path, f"connections/postgresql/definition/endpoints/{second_eid}.json", second_endpoint)
 
-    original = V._endpoint_findings
+    original = V._document_findings
 
-    def boom(endpoint, document_path):
-        if document_path.name == f"{EID}.json":
+    def boom(entity, doc, document_path=None):
+        if document_path is not None and document_path.name == f"{EID}.json":
             raise TypeError("simulated crash")
-        return original(endpoint, document_path)
+        return original(entity, doc, document_path)
 
-    monkeypatch.setattr(V, "_endpoint_findings", boom)
+    monkeypatch.setattr(V, "_document_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
@@ -1378,24 +1378,22 @@ def test_connector_endpoint_sets_crash_isolated_to_one_connector(tmp_path, monke
 
 
 def test_pipeline_document_error_survives_non_dict_bundle_enrichment(tmp_path):
-    # a pipeline document that is not even an object earns its precise
-    # contract-model finding at the single-document stage; require_runnable's
-    # own field access on that non-dict document must not crash and discard
-    # it — isinstance-guarded rather than raising AttributeError, so bundle
-    # enrichment runs through cleanly and the published validator gets to add
-    # its own precise finding too, instead of both being replaced by one
-    # opaque adapter-crash
+    # a pipeline document that is not even an object earns its precise model
+    # finding at the single-document stage; require_runnable's own field access
+    # on that non-dict document must not crash and discard it — isinstance-
+    # guarded rather than raising AttributeError, so bundle enrichment runs
+    # through cleanly and the published validator gets to add its own precise
+    # finding too, instead of both being replaced by one opaque adapter-crash
     doc = _write(tmp_path, "pipelines/p/pipeline.json", [1, 2, 3])
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = _ids(diag["findings"])
-    assert "contract-model" in validators, diag["findings"]
-    assert "adapter-crash" not in validators, diag["findings"]
+    assert "model_type" in [f.get("message_id") for f in diag["findings"]], diag["findings"]
+    assert "adapter-crash" not in _ids(diag["findings"]), diag["findings"]
 
 
 def test_pipeline_document_error_preserved_when_bundle_enrichment_crashes(tmp_path, monkeypatch):
     # a genuine crash enriching the bundle (not just a non-dict pipeline_doc,
-    # which no longer crashes) must not discard the precise contract-model
-    # finding the single-document pass already produced
+    # which no longer crashes) must not discard the precise model finding the
+    # single-document pass already produced
     doc = _write(tmp_path, "pipelines/p/pipeline.json", [1, 2, 3])
 
     def boom(pipeline_doc, document_path, root):
@@ -1403,9 +1401,8 @@ def test_pipeline_document_error_preserved_when_bundle_enrichment_crashes(tmp_pa
 
     monkeypatch.setattr(V, "_assemble_bundle", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = _ids(diag["findings"])
-    assert "contract-model" in validators, diag["findings"]
-    assert "adapter-crash" in validators, diag["findings"]
+    assert "model_type" in [f.get("message_id") for f in diag["findings"]], diag["findings"]
+    assert "adapter-crash" in _ids(diag["findings"]), diag["findings"]
 
 
 def test_crash_finding_handles_broken_exception_str():
@@ -1578,20 +1575,20 @@ def test_bundle_grades_an_endpoint_under_a_symlinked_directory(tmp_path, link):
 @pytest.mark.parametrize("member", ["connection", "stream"])
 def test_a_crash_grading_a_member_does_not_cost_it_its_place_in_the_bundle(
         tmp_path, monkeypatch, member):
-    # `_model_findings` catches only ValidationError. Anything else escaping it
-    # must cost its own findings and nothing more: a member excluded from the
-    # bundle marks assembly incomplete, and the whole cross-document referential
-    # pass is then skipped — so a crash grading one document's shape would
-    # silently stop grading every reference in the bundle.
+    # `_document_findings` catches only ValidationError. Anything else escaping
+    # it must cost its own findings and nothing more: a member excluded from
+    # the bundle marks assembly incomplete, and the whole cross-document
+    # referential pass is then skipped — so a crash grading one document's
+    # shape would silently stop grading every reference in the bundle.
     doc = _build_bundle(tmp_path)
-    original = V._model_findings
+    original = V._document_findings
 
-    def boom(entity, body):
+    def boom(entity, body, document_path=None):
         if entity == member:
             raise RecursionError("too deep")
-        return original(entity, body)
+        return original(entity, body, document_path)
 
-    monkeypatch.setattr(V, "_model_findings", boom)
+    monkeypatch.setattr(V, "_document_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert any(f.get("validator") == "adapter-crash" for f in diag["findings"]), \
         diag["findings"]

@@ -112,15 +112,9 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
 #: this table does not name fails the build — the only way a check earns the
 #: right to omit `rule` is stating which documented case it is.
 RULELESS_SITES: dict[tuple[str, str], str] = {
-    ("analitiq.validator._core::_dispatch", "unrecognized-document"): (
-        "no registered kind's detector claimed the document"),
     ("analitiq.validator._core::_unreadable_document_finding", "unreadable-document"): (
         "the document could not be read or parsed at all, before any kind "
         "was even identified"),
-    ("analitiq.validator.document_set::_entity_mismatch_findings", "entity-mismatch"): (
-        "a structural precondition — the caller's declared entity disagrees "
-        "with, or nothing recognises, the document's own content — rejected "
-        "before any rule-specific check could run"),
     ("analitiq.validator.document_set::validate_connector_package", "connector-document-missing"): (
         "a structural precondition — the package carries no connector "
         "document to grade — rejected before any rule-specific check could run"),

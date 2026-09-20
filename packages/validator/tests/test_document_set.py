@@ -453,12 +453,13 @@ def _write_package(root: Path, documents: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def test_single_document_wraps_the_path_based_route(validator):
-    """A document consistent with its declared `entity` reports exactly what
-    `validate_document` reports for it with no path, wrapped in one envelope.
+    """This entry point reports exactly what `validate_document` reports for
+    the same document under the same entity with no path, wrapped in one
+    envelope — it names the kind and adds nothing of its own.
     With no path there are no siblings to read, so a connector's coverage check
     is skipped, and the skip costs the pass."""
     document = json.loads((CORPUS / "valid_connector.json").read_text())
-    expected_findings = validator.validate_document(document)
+    expected_findings = validator.validate_document(document, "connector")
     result = validator.validate_single_document(_document_request(document, "connector"))
     assert json.dumps(result) == json.dumps(_expected_envelope(validator, expected_findings))
     assert result["passed"] is False
@@ -497,25 +498,34 @@ def test_type_map_is_graded_as_validate_document_grades_it(validator, section):
     grades it: each rule as the section it sits under."""
     document = _type_map_doc(**{section: _RULES_VALID_IN_ONE_DIRECTION})
     result = validator.validate_single_document(_document_request(document, "type-map"))
-    assert result == _expected_envelope(validator, validator.validate_document(document))
+    assert result == _expected_envelope(
+        validator, validator.validate_document(document, "type-map"))
     ids = [f["message_id"] for f in result["findings"]]
     for direction, only_that_section_reports in _GRADED_ONLY_AS.items():
         assert (only_that_section_reports in ids) == (direction == section), result
 
 
-@pytest.mark.parametrize("document,sent_as", [
-    (_CONNECTOR_PG_TYPE_MAP, "connector"),
+@pytest.mark.parametrize("document,sent_as,expected", [
+    (_CONNECTOR_PG_TYPE_MAP, "connector", [("union_tag_not_found", "")]),
     ({"$schema": f"{_H}/type-map-read/latest.json", "direction": "read",
-      "rules": [{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}]}, "type-map"),
+      "rules": [{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}]}, "type-map",
+     [("literal_error", "/$schema"), ("extra_forbidden", "/direction"),
+      ("extra_forbidden", "/rules")]),
 ], ids=["a map sent as a connector", "a split-shape map"])
-def test_a_type_map_entity_mismatch_is_reported(validator, document, sent_as):
-    """A map sent under another kind's name is reported — its `$schema` names
-    the type map, not the kind the caller declared. So is a split-shape
-    document, whose `$schema` is no document schema the contract registers, so
-    nothing grades it as a map either."""
+def test_a_document_is_graded_by_the_model_of_the_entity_it_was_sent_as(
+        validator, document, sent_as, expected):
+    """The entity the caller declares is what grades the document, so a document
+    that is not one of that kind earns that model's own per-field verdict rather
+    than a single refusal saying only that the two disagree.
+
+    A map sent as a connector is told the connector model cannot pick a variant
+    without `kind`; a split-shape map sent as a type map is told its `$schema`
+    names another resource and which of its keys the map has no place for. Each
+    names something its author can act on.
+    """
     result = validator.validate_single_document(_document_request(document, sent_as))
     assert result["passed"] is False
-    assert [f["message_id"] for f in result["findings"]] == ["entity-mismatch"], result
+    assert [(f["message_id"], f["path"]) for f in result["findings"]] == expected, result
 
 
 def test_unparseable_document_text_is_a_finding_not_a_raise(validator):
@@ -567,28 +577,37 @@ _DOCUMENT_FOR_ENTITY = (
 )
 
 
-def test_every_published_document_schema_name_is_detected(validator):
-    """Each name the contract publishes resolves from a document of that kind,
-    and only that name does. A name the contract adds or renames lands here as a
-    missing entry, rather than as every document of that kind drawing a spurious
-    `entity-mismatch`."""
+def test_every_published_document_schema_name_grades_its_own_document(validator):
+    """Each name the contract publishes grades a document written against it,
+    so no name is one this entry point cannot serve. A name the contract adds or
+    renames lands here as a missing entry rather than as a kind nothing reaches.
+
+    A connector missing `kind` is in the table beside the whole one: it is the
+    document the caller most needs graded as a connector, and it is graded as
+    one because the caller said so, not because anything recognised it.
+    """
     from analitiq.contracts.validation_requests import DOCUMENT_SCHEMA_NAMES
-    from analitiq.validator.document_set import _consistent_entities
 
     assert {entity for entity, _ in _DOCUMENT_FOR_ENTITY} == set(DOCUMENT_SCHEMA_NAMES)
     for entity, document in _DOCUMENT_FOR_ENTITY:
-        assert _consistent_entities(document) == {entity}, (entity, document)
+        result = validator.validate_single_document(_document_request(document, entity))
+        assert result == _expected_envelope(
+            validator, validator.validate_document(document, entity)), (entity, result)
 
 
-def test_an_assembled_bundle_resolves_to_no_published_name(validator):
+def test_an_assembled_bundle_sent_as_a_pipeline_is_graded_as_one(validator):
     """A bundle is not a single document and no published schema names one, so
-    it is deliberately absent from `_consistent_entities`'s tables. Sent to this
-    entry point it is reported as matching no published schema — never
-    validated as the `pipeline` its core carries."""
+    the caller has no name for it here: `validate_pipeline_bundle` is where a
+    bundle goes. Sent as the `pipeline` its core carries, it is graded by the
+    pipeline model and told, field by field, how it is not one — its streams are
+    documents where the pipeline declares references, and the connections it
+    carries whole are not the two the pipeline names.
+    """
     bundle = {"pipeline": _PIPELINE, "streams": [_STREAM], "connections": {_SRC: _CONN_WISE}}
     result = validator.validate_single_document(_document_request(bundle, "pipeline"))
     assert result["passed"] is False
-    assert [f["message_id"] for f in result["findings"] if f["kind"] == "fail"] == ["entity-mismatch"]
+    paths = {f["path"] for f in result["findings"] if f["kind"] == "fail"}
+    assert {"/connections/source", "/connections/destinations", "/streams/0"} <= paths, result
 
 
 # ---------------------------------------------------------------------------
@@ -704,13 +723,18 @@ def test_a_connector_document_that_does_not_parse_is_a_finding(validator):
         ("unreadable-document", "connector.json#")], result
 
 
-def test_a_connector_document_holding_another_entity_is_a_mismatch(validator):
+def test_a_connector_document_holding_another_entity_is_graded_as_a_connector(validator):
+    """The key names the kind, so whatever `connector.json` holds is graded as a
+    connector and answered in the connector model's terms — here, that no
+    variant can be picked without `kind` — rather than refused for resembling
+    something else. The finding names the key it is about, as every finding a
+    package earns does."""
     documents = _connector_package_documents()
     documents["connector.json"] = documents["type-map.json"]
     result = validator.validate_connector_package(_package_request(documents))
     assert result["passed"] is False
     assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
-        ("entity-mismatch", "connector.json#")], result
+        ("union_tag_not_found", "connector.json#")], result
 
 
 
@@ -794,7 +818,7 @@ def test_a_finding_about_the_package_directory_names_the_connector(validator, tm
     documents = _connector_package_documents()
     _write_package(tmp_path, documents)
     refuse(tmp_path, 0o300)
-    findings = validator.validate_document(documents["connector.json"],
+    findings = validator.validate_document(documents["connector.json"], "connector",
                                            doc_path=tmp_path / "connector.json")
     assert "type-map-dir-unlisted" in [f["message_id"] for f in findings], findings
     _assert_every_path_names_a_submitted_document(_from_package_root(findings), set(documents))
@@ -850,7 +874,8 @@ def test_connector_package_equivalence_with_the_path_based_route(validator, tmp_
     }
     from analitiq.validator.document_set import _from_package_root
     _write_package(tmp_path, documents)
-    path_based = validator.validate_document(documents["connector.json"], doc_path=tmp_path / "connector.json")
+    path_based = validator.validate_document(
+        documents["connector.json"], "connector", doc_path=tmp_path / "connector.json")
     assert len(path_based) >= 2, path_based  # non-vacuous: order genuinely matters below
     package_based = validator.validate_connector_package(_package_request(documents))
     # The disk route reads a finding about `connector.json` itself as a bare

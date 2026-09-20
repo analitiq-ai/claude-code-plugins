@@ -627,7 +627,7 @@ def _findings(entity: str, document: Any, tmp_path: Path,
     else:
         path = tmp_path / f"{entity}.json"
     path.write_text(json.dumps(document, indent=2), encoding="utf-8")
-    return ev._errors(validate_document(document, doc_path=path.resolve()))
+    return ev._errors(validate_document(document, entity, doc_path=path.resolve()))
 
 
 def _graded_document(marker: Marker, body: str, label: str,

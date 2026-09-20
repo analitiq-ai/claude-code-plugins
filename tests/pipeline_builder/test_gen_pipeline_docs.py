@@ -207,7 +207,7 @@ def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
     raw = validate_document(
         {"$schema": TYPE_MAP_SCHEMA_URL,
          "write": [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]},
-        doc_path=Path("type-map.json"))
+        "type-map", doc_path=Path("type-map.json"))
     assert "RULE-TMAP-017" in {f.get("rule") for f in raw}, (
         "probe stopped triggering the write-vocabulary check at the package "
         "level — this test no longer measures the filter it claims to"

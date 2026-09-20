@@ -8,10 +8,12 @@
   "expect": "build",
   "validate": [
     {
-      "glob": "mysql/definition/connector.json"
+      "glob": "mysql/definition/connector.json",
+      "kind": "connector"
     },
     {
-      "glob": "mysql/definition/type-map.json"
+      "glob": "mysql/definition/type-map.json",
+      "kind": "type-map"
     }
   ],
   "docs": {

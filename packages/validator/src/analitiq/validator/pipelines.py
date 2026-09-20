@@ -48,9 +48,10 @@ object, so a pipeline that pins `{stream}_v2` resolves the stream document that
 declares the bare id. Connector identities are matched whole (their version is a
 separate field, not a `_v{n}` ref suffix).
 
-At import this module registers its detector -> validator pairs with the core
-dispatch registry, so `_core` never hard-codes pipeline branches — a new
-referential rule is a new function, a new kind is a new module.
+At import this module registers its single-document validator under the
+published document schema name `pipeline`, so `_core` never hard-codes pipeline
+branches — a new referential rule is a new function, a new kind is a new
+module.
 """
 from __future__ import annotations
 

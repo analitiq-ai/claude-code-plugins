@@ -1483,7 +1483,8 @@ def test_cli_reports_a_document_the_parser_refuses_as_unreadable(
     from analitiq.validator import _core
     document = tmp_path / "connector.json"
     document.write_text(text)
-    monkeypatch.setattr("sys.argv", ["validator", "--document", str(document)])
+    monkeypatch.setattr(
+        "sys.argv", ["validator", "--document", str(document), "--kind", "connector"])
     assert _core.main() == 1
     out = json.loads(capsys.readouterr().out)
     assert [f["message_id"] for f in out["findings"]] == ["unreadable-document"], out
@@ -1747,69 +1748,86 @@ def test_a_document_with_no_path_is_graded_the_same_way(validator, tmp_path):
     # altogether would also return no errors, and only the findings it does
     # produce separate grading from not grading.
     doc = _type_map_doc(write=_write_rules())
-    pathless = validator.validate_document(doc)
+    pathless = validator.validate_document(doc, "type-map")
     assert any(f.get("rule") == "RULE-TMAP-017" for f in pathless), pathless
-    assert pathless == validator.validate_document(doc, doc_path=tmp_path / TYPE_MAP_FILENAME)
+    assert pathless == validator.validate_document(
+        doc, "type-map", doc_path=tmp_path / TYPE_MAP_FILENAME)
 
 
-@pytest.mark.parametrize("doc", [
-    {"$schema": TYPE_MAP_SCHEMA_URL},
-    {"$schema": TYPE_MAP_SCHEMA_URL, "write": "not-a-list"},
+@pytest.mark.parametrize("doc,expected_message_id", [
+    ({"$schema": TYPE_MAP_SCHEMA_URL}, "type-map-no-section"),
+    ({"$schema": TYPE_MAP_SCHEMA_URL, "write": "not-a-list"}, "list_type"),
 ], ids=["no-section", "malformed-section"])
-def test_a_map_declaring_the_type_map_schema_is_graded_as_a_map(validator, doc):
-    # The `$schema` identifies the document, so a map that declares it and
-    # carries nothing else usable is told what it lacks rather than that it is
-    # no known artifact.
-    errors = _errors(validator.validate_document(doc))
-    assert errors, doc
-    assert "unrecognized-document" not in {f["message_id"] for f in errors}, errors
+def test_a_type_map_document_is_graded_by_what_it_lacks(validator, doc, expected_message_id):
+    # Submitted as "type-map", a document naming no section is told by
+    # RULE-TMAP-023 that it must carry one, and one whose section is the
+    # wrong shape is told that by the model — both the type-map model's own
+    # verdict on the document it was told this is, not a guess about what it
+    # might be instead.
+    errors = _errors(validator.validate_document(doc, "type-map"))
+    assert [e["message_id"] for e in errors] == [expected_message_id], errors
 
 
-@pytest.mark.parametrize("doc", [
-    {"read": _read_rules()},
-    {"write": _write_rules()},
-    {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"), "read": _read_rules()},
+@pytest.mark.parametrize("doc,expected_message_id", [
+    ({"read": _read_rules()}, "missing"),
+    ({"write": _write_rules()}, "missing"),
+    ({"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"),
+      "read": _read_rules()}, "literal_error"),
 ], ids=["no-schema", "write-only-no-schema", "stale-schema"])
-def test_a_document_declaring_no_type_map_schema_is_not_a_map(validator, doc):
-    # A section is not a claim. `read` and `write` are words other kinds nest,
-    # so a document whose `$schema` does not name the type map — omitted here,
-    # naming another resource there — is unidentified whatever sections it
-    # carries, which is what the model requiring that field means at dispatch.
-    [unrecognized] = _errors(validator.validate_document(doc))
-    assert unrecognized["message_id"] == "unrecognized-document", doc
-    # The only diagnostic these get, so it names the field that would have
-    # claimed them and the value it has to carry.
-    assert "'$schema' naming the published type-map URL" in unrecognized["message"], unrecognized
+def test_a_type_map_document_with_the_wrong_schema_url_is_rejected(
+        validator, doc, expected_message_id):
+    # `$schema` is a required field of the type-map model, held to the one
+    # published URL: omitting it is a missing-field error, and naming another
+    # resource's URL — even one still built off the split-map family — is a
+    # literal mismatch. Either way the model rejects the document it was
+    # told this is; no detector runs first to decide whether it agrees.
+    errors = _errors(validator.validate_document(doc, "type-map"))
+    assert [e["message_id"] for e in errors] == [expected_message_id], errors
+    assert errors[0]["path"] == "/$schema", errors
 
 
-@pytest.mark.parametrize("doc,stray,own", [
-    ({"source": {}, "destinations": [], "write": {}}, "write", "source"),
-    ({"connector_id": "postgres", "read": {}}, "read", "connector_id"),
+@pytest.mark.parametrize("doc,stray,own,kind", [
+    ({"source": {}, "destinations": [], "write": {}}, "write", "source", "stream"),
+    ({"connector_id": "postgres", "read": {}}, "read", "connector_id", "connection"),
 ], ids=["stream", "connection"])
-def test_a_stray_section_key_does_not_claim_another_kind(validator, doc, stray, own):
+def test_a_stray_section_key_does_not_claim_another_kind(validator, doc, stray, own, kind):
     # `read` and `write` are words other kinds nest; one misplaced at the top
     # of a stream or a connection is that document's extra key, not a type map
     # whose every other key is extra — which would hide the document's own
     # defects behind findings about a map nobody wrote.
-    extra = {f["path"] for f in validator.validate_document(doc)
+    extra = {f["path"] for f in validator.validate_document(doc, kind)
              if f.get("message_id") == "extra_forbidden"}
     assert f"/{stray}" in extra and f"/{own}" not in extra, extra
 
 
-@pytest.mark.parametrize("doc", [
-    [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
-    {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"),
-     "direction": "read",
-     "rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]},
-    {},
+@pytest.mark.parametrize("doc,expected", [
+    (
+        [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        [("model_type", "")],
+    ),
+    (
+        {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"),
+         "direction": "read",
+         "rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]},
+        [
+            ("literal_error", "/$schema"),
+            ("extra_forbidden", "/direction"),
+            ("extra_forbidden", "/rules"),
+        ],
+    ),
+    ({}, [("missing", "/$schema")]),
 ], ids=["bare-array", "split-shape", "empty"])
-def test_a_document_in_no_type_map_shape_is_not_recognized(validator, tmp_path, doc):
-    # None of these names the type map: a bare rule array has nowhere to put a
-    # `$schema`, the split shape's names another resource, and an empty object
-    # declares nothing. Each fails loud as an unrecognized document rather than
-    # passing under some other detector.
-    findings = validator.validate_document(doc, doc_path=tmp_path / TYPE_MAP_FILENAME)
-    assert [f["message_id"] for f in _errors(findings)] == ["unrecognized-document"], findings
+def test_a_document_in_no_type_map_shape_is_rejected_by_the_model(
+        validator, tmp_path, doc, expected):
+    # None of these is a `TypeMapDoc`: a bare rule array has no place to hold a
+    # `$schema`, the split shape names another resource and carries that
+    # resource's own keys as extras here, and an empty object is missing the
+    # required field. Each is the model's own rejection of the shape it was
+    # handed, submitted as "type-map" — not a verdict reached by inspecting
+    # the document to guess what kind it might be.
+    findings = validator.validate_document(doc, "type-map", doc_path=tmp_path / TYPE_MAP_FILENAME)
+    errors = _errors(findings)
+    assert [(e["message_id"], e["path"]) for e in errors] == expected, errors
 
 
 def test_a_borrowed_diagnostic_does_not_carry_the_document_back_whole(validator):
@@ -1820,7 +1838,7 @@ def test_a_borrowed_diagnostic_does_not_carry_the_document_back_whole(validator)
     oversized = "Z" * 5000
     errors = _errors(validator.validate_document(
         {"$schema": CONNECTOR_SCHEMA_URL, "connector_id": "x", "display_name": "x",
-         "kind": oversized, "transports": {}}))
+         "kind": oversized, "transports": {}}, "connector"))
     [tag] = [e for e in errors if e["message_id"] == "union_tag_invalid"]
     assert oversized not in tag["message"], len(tag["message"])
     assert len(tag["message"]) < 500, len(tag["message"])
@@ -1835,7 +1853,7 @@ def test_a_short_wrong_tag_comes_back_with_every_accepted_value(validator):
     # ones an author could have picked.
     doc = _connector_doc()
     doc["auth"] = {"type": "oauth2"}
-    tag = [e for e in _errors(validator.validate_document(doc))
+    tag = [e for e in _errors(validator.validate_document(doc, "connector"))
            if e["message_id"] == "union_tag_invalid"]
     assert tag, doc["auth"]
     assert "…" not in tag[0]["message"], tag[0]["message"]
@@ -1849,7 +1867,7 @@ def test_a_borrowed_diagnostic_keeps_the_constraint_it_was_rejected_by(validator
     # a fragment of the legal alternatives and an ellipsis.
     doc = _type_map_doc(
         read=[{"match": "exact", "native_type": "X", "arrow_type": "NotAnArrowFamily"}])
-    [error] = _errors(validator.validate_document(doc))
+    [error] = _errors(validator.validate_document(doc, "type-map"))
     assert error["message_id"] == "string_pattern_mismatch", error
     assert error["message"].endswith("'"), error["message"][-80:]
     assert "…" not in error["message"], len(error["message"])
@@ -1952,7 +1970,7 @@ def test_regex_lowercase_literal_warning_truth_table(validator, tmp_path, native
         assert not re2.fullmatch(native, normalize_native_type(witness)), witness
     findings = validator.validate_document(
         _type_map_doc(read=[{"match": "regex", "native_type": native, "arrow_type": "Utf8"}]),
-        doc_path=tmp_path / TYPE_MAP_FILENAME)
+        "type-map", doc_path=tmp_path / TYPE_MAP_FILENAME)
     refused = [e for e in _errors(findings) if e.get("rule") == "RULE-TMAP-005"]
     assert bool(refused) is (verdict == "refused"), findings
     if verdict != "refused":
@@ -1975,7 +1993,7 @@ def test_regex_lowercase_literal_warning_truth_table(validator, tmp_path, native
 def test_regex_read_rule_container_warning(validator, tmp_path, native, arrow_type, warns):
     findings = validator.validate_document(
         _type_map_doc(read=[{"match": "regex", "native_type": native, "arrow_type": arrow_type}]),
-        doc_path=tmp_path / TYPE_MAP_FILENAME)
+        "type-map", doc_path=tmp_path / TYPE_MAP_FILENAME)
     assert not _errors(findings), findings
     collapsed = [w for w in _warnings(findings)
                  if w.get("rule") == "RULE-TMAP-002" and w.get("message_id") == "read-regex-container-collapsed"]
@@ -1989,7 +2007,7 @@ def test_regex_warnings_stay_cheap_across_a_whole_map(validator, tmp_path):
               "arrow_type": "Utf8"} for i in range(50)]
     started = time.perf_counter()
     findings = validator.validate_document(
-        _type_map_doc(read=rules), doc_path=tmp_path / TYPE_MAP_FILENAME)
+        _type_map_doc(read=rules), "type-map", doc_path=tmp_path / TYPE_MAP_FILENAME)
     elapsed = time.perf_counter() - started
     assert sum(w.get("rule") == "RULE-TMAP-014" for w in _warnings(findings)) == 50, findings
     assert elapsed < 1.0, elapsed
@@ -2000,7 +2018,7 @@ def test_write_vocabulary_gap_warns(validator, tmp_path):
     p = tmp_path / TYPE_MAP_FILENAME
     findings = validator.validate_document(
         _type_map_doc(write=[{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]),
-        doc_path=p)
+        "type-map", doc_path=p)
     assert any(w.get("rule") == "RULE-TMAP-017" for w in _warnings(findings))
 
 
@@ -2012,7 +2030,7 @@ def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
     p = tmp_path / TYPE_MAP_FILENAME
     findings = validator.validate_document(
         _type_map_doc(write=[{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]),
-        doc_path=p)
+        "type-map", doc_path=p)
     # StopIteration here is the failure signal working, not a case to guard:
     # no coverage warning at all means the probe stopped running.
     gap = next(  # skipcq: PTC-W0063
@@ -2062,7 +2080,7 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
         {"match": "regex", "arrow_type": r"^Duration\([A-Z]+\)$", "native_type": "INTERVAL"},
     ]
     findings = validator.validate_document(
-        _type_map_doc(write=full_map), doc_path=tmp_path / TYPE_MAP_FILENAME)
+        _type_map_doc(write=full_map), "type-map", doc_path=tmp_path / TYPE_MAP_FILENAME)
     coverage = [f for f in findings if f.get("rule") == "RULE-TMAP-017"]
     assert not coverage, coverage
 
@@ -2189,7 +2207,7 @@ def test_validating_a_connector_with_no_path_fails_closed(validator):
     from analitiq.validator._core import _passed
 
     doc = json.loads((CORPUS / "valid_connector_sync_driver.json").read_text())
-    findings = validator.validate_document(doc)  # no doc_path
+    findings = validator.validate_document(doc, "connector")  # no doc_path
     assert [f["message_id"] for f in findings] == ["coverage-check-skipped-no-path"]
     assert not _passed(findings), findings
 
@@ -2257,21 +2275,22 @@ def test_database_family_never_enumerates_endpoints(tmp_path, kind, validator):
 def test_cli_valid_doc_exit0(validator_cli):
     # Name the file after its endpoint_id so the filename↔id check is satisfied.
     doc = json.loads((CORPUS / "valid_read.json").read_text())
-    r = validator_cli.on_document(doc, filename=f"{doc['endpoint_id']}.json")
+    r = validator_cli.on_document(doc, "api-endpoint", filename=f"{doc['endpoint_id']}.json")
     assert r.returncode == 0, r.stdout
     out = json.loads(r.stdout)
     assert out["passed"] is True and isinstance(out["findings"], list)
 
 
 def test_cli_invalid_doc_exit1(validator_cli):
-    r = validator_cli.on_document(json.loads((CORPUS / "invalid_write_from_input.json").read_text()))
+    doc = json.loads((CORPUS / "invalid_write_from_input.json").read_text())
+    r = validator_cli.on_document(doc, "api-endpoint")
     assert r.returncode == 1
     assert json.loads(r.stdout)["passed"] is False
 
 
 def test_cli_unreadable_document_exit1(tmp_path, validator_cli):
     # A directory path: read raises IsADirectoryError → must still emit JSON + exit 1.
-    r = validator_cli.run("--document", str(tmp_path))
+    r = validator_cli.run("--document", str(tmp_path), "--kind", "connector")
     assert r.returncode == 1
     assert json.loads(r.stdout)["passed"] is False
 
@@ -2280,7 +2299,7 @@ def test_cli_text_refused_outside_jsondecodeerror_is_unreadable(
         tmp_path, validator_cli, text_refused_outside_jsondecodeerror):
     path = tmp_path / "doc.json"
     path.write_text(text_refused_outside_jsondecodeerror)
-    r = validator_cli.run("--document", str(path))
+    r = validator_cli.run("--document", str(path), "--kind", "connector")
     assert r.returncode == 1, r.stderr
     assert [f["message_id"] for f in json.loads(r.stdout)["findings"]] == ["unreadable-document"]
 
@@ -2304,7 +2323,7 @@ def test_kindless_connector_still_reports_a_missing_schema_url(validator):
     # claims it must carry the check as well as the model.
     doc = {"connector_id": "x", "transports": {}, "connection_contract": {},
            "default_transport": "m"}
-    findings = validator.validate_document(doc)
+    findings = validator.validate_document(doc, "connector")
     assert any(f.get("rule") == "RULE-SHRD-003" for f in findings), findings
 
 
@@ -2321,10 +2340,10 @@ def test_endpoint_findings_locate_the_same_node_on_both_routes(tmp_path, connect
                 {"widgets.json": ep})
 
     [via_connector] = [f for f in validator.validate_document(
-        connector_base, doc_path=tmp_path / "connector.json")
+        connector_base, "connector", doc_path=tmp_path / "connector.json")
         if f.get("rule") == "RULE-ENDP-048"]
     [via_endpoint] = [f for f in validator.validate_document(
-        ep, doc_path=tmp_path / "endpoints" / "widgets.json")
+        ep, "api-endpoint", doc_path=tmp_path / "endpoints" / "widgets.json")
         if f.get("rule") == "RULE-ENDP-048"]
 
     assert via_connector["path"] == "endpoints/widgets.json#/operations/read/response/schema"

@@ -152,7 +152,7 @@ def test_prose_type_map_rules_validate(tmp_path: Path) -> None:
         doc = {"$schema": TYPE_MAP_SCHEMA_URL, direction: [rule]}
         map_path = tmp_path / TYPE_MAP_FILENAME
         map_path.write_text(json.dumps(doc), encoding="utf-8")
-        findings = validate_document(doc, doc_path=map_path.resolve())
+        findings = validate_document(doc, "type-map", doc_path=map_path.resolve())
         failures += [
             f"{path.relative_to(REPO_ROOT)}:{lineno} ({direction}) "
             f"{f.get('rule')}: {f['message']}"
@@ -187,7 +187,7 @@ def test_example_connector_validates(example_dir: Path, tmp_path: Path) -> None:
     doc_path = _stage(example_dir, tmp_path)
     document = json.loads(doc_path.read_text(encoding="utf-8"))
 
-    findings = validate_document(document, doc_path=doc_path.resolve())
+    findings = validate_document(document, "connector", doc_path=doc_path.resolve())
     errors = _errors(findings)
     assert not errors, "\n".join(
         f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors
@@ -212,7 +212,7 @@ def test_example_type_map_validates(example_dir: Path, tmp_path: Path) -> None:
     assert map_path.exists(), f"{example_dir.name} ships no {TYPE_MAP_FILENAME}"
 
     document = json.loads(map_path.read_text(encoding="utf-8"))
-    findings = validate_document(document, doc_path=map_path.resolve())
+    findings = validate_document(document, "type-map", doc_path=map_path.resolve())
     errors = _errors(findings)
     assert not errors, "\n".join(
         f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors
@@ -252,7 +252,7 @@ def test_example_write_maps_render_bare_container_markers(
     """
     map_path = _stage(example_dir, tmp_path).parent / TYPE_MAP_FILENAME
     document = json.loads(map_path.read_text(encoding="utf-8"))
-    findings = validate_document(document, doc_path=map_path.resolve())
+    findings = validate_document(document, "type-map", doc_path=map_path.resolve())
     named = [
         f["message"]
         for f in findings
@@ -279,9 +279,14 @@ def test_example_endpoints_validate(example_dir: Path, tmp_path: Path) -> None:
     if not endpoint_files:
         pytest.skip(f"{example_dir.name} ships no endpoints")
 
+    # The spec tree an example lives under names its connector family, which
+    # is also what decides the endpoint kind its `endpoints/` files carry.
+    is_db = "connector-spec-db" in example_dir.parts
+    kind = "database-endpoint" if is_db else "api-endpoint"
+
     for endpoint_path in endpoint_files:
         document = json.loads(endpoint_path.read_text(encoding="utf-8"))
-        findings = validate_document(document, doc_path=endpoint_path.resolve())
+        findings = validate_document(document, kind, doc_path=endpoint_path.resolve())
         errors = _errors(findings)
         assert not errors, f"{endpoint_path.name}\n" + "\n".join(
             f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors

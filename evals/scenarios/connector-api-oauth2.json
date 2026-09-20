@@ -8,13 +8,16 @@
   "expect": "build",
   "validate": [
     {
-      "glob": "xero/definition/connector.json"
+      "glob": "xero/definition/connector.json",
+      "kind": "connector"
     },
     {
-      "glob": "xero/definition/endpoints/*.json"
+      "glob": "xero/definition/endpoints/*.json",
+      "kind": "api-endpoint"
     },
     {
-      "glob": "xero/definition/type-map.json"
+      "glob": "xero/definition/type-map.json",
+      "kind": "type-map"
     }
   ],
   "docs": {

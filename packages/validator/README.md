@@ -19,8 +19,8 @@ to `TypeAdapter(...).validate_python` from `analitiq-contract-models`
 (`analitiq.contracts`). It runs **offline** — no schema fetch, no network. On top
 of the models it adds only what a single-document model cannot express — the
 connection / stream / pipeline kinds are pure model validation (the model IS the
-whole contract), so `analitiq-validate --document x.json` validates every authored
-kind and emits the same uniform `{passed, findings[]}`.
+whole contract), so `analitiq-validate --document x.json --kind <name>` validates
+every authored kind and emits the same uniform `{passed, findings[]}`.
 
 **Connector-package cross-file checks:**
 
@@ -109,16 +109,19 @@ This pulls `analitiq-contract-models` (and pydantic) transitively.
 ## Use
 
 ```bash
-analitiq-validate --document definition/connector.json
-analitiq-validate --document connection.json   # connection / stream / pipeline work too
+analitiq-validate --document definition/connector.json --kind connector
+analitiq-validate --document connection.json --kind connection
 ```
 
-The kind is detected from the document's shape — no `--kind` flag. Point
-`--document` at `definition/connector.json` to also trigger cross-file coverage:
-it discovers the sibling `type-map.json` and
-`endpoints/*.json` from the connector's directory. A `connection` / `stream` /
-`pipeline` document is validated purely against its contract model. Validation
-is always model-driven and offline — `--document` is the only flag.
+`--kind` is required, and it is the whole of how the document is identified:
+nothing reads the body to work out what it is, so a document that omits the
+field naming its own family is still told which field it lacks instead of being
+graded as whatever it resembles. `--kind --help` lists the names it takes; each
+is a published document-schema name. Point `--document` at
+`definition/connector.json` to also trigger cross-file coverage: it discovers
+the sibling `type-map.json` and `endpoints/*.json` from the connector's
+directory. A `connection` / `stream` / `pipeline` document is validated purely
+against its contract model. Validation is always model-driven and offline.
 
 Output is a JSON report (`{"passed": bool, "findings": [...]}`) on stdout; the
 process exits non-zero exactly when `passed` is `false` — a `fail` finding at

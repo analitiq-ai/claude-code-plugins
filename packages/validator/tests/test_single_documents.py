@@ -1,11 +1,10 @@
 """Single-document validation for the connection / stream / pipeline authored
 kinds — the CLI now validates every authored kind, not just the connector family.
 
-Each kind is validated wholly against its contract model, so these tests assert
-two things per kind: it is DETECTED (routes to its model, not the generic
-"unrecognized document" verdict), and its model verdict is surfaced — a valid
-document passes and an invalid one fails. Detection is also checked to be mutually
-exclusive: no authored kind claims another's shape.
+The caller names the kind it is submitting; nothing here infers it from the
+document's shape. Each kind is validated wholly against its contract model, so
+these tests assert its model verdict is surfaced — a valid document passes and
+an invalid one fails.
 """
 import json
 from pathlib import Path
@@ -67,69 +66,41 @@ def _valid_pipeline() -> dict:
     }
 
 
-# --- detection: each kind is recognized, and only its own kind ---------------
-
-def test_detectors_are_mutually_exclusive(validator):
-    """Each authored document is claimed by exactly one single-document detector,
-    and never by the pipeline-bundle detector."""
-    detectors = {
-        "connection": validator.is_connection_doc,
-        "stream": validator.is_stream_doc,
-        "pipeline": validator.is_pipeline_doc,
-    }
-    docs = {
-        "connection": _valid_connection(),
-        "stream": _valid_stream(),
-        "pipeline": _valid_pipeline(),
-    }
-    for owner, doc in docs.items():
-        claimed = {kind for kind, is_kind in detectors.items() if is_kind(doc)}
-        assert claimed == {owner}, f"{owner} doc claimed by {claimed}"
-        assert not validator.is_pipeline_bundle(doc)
-
-
-def test_connector_family_not_claimed_by_new_detectors(validator):
-    """A connector / endpoint document must not be shadowed by the new detectors."""
-    connector = {"kind": "api", "transports": {}}
-    api_endpoint = {"endpoint_id": "x", "operations": {"read": {}}}
-    for doc in (connector, api_endpoint):
-        assert not validator.is_connection_doc(doc)
-        assert not validator.is_stream_doc(doc)
-        assert not validator.is_pipeline_doc(doc)
-
-
 # --- connection --------------------------------------------------------------
 
 def test_valid_connection_passes(validator):
-    assert validator.validate_document(_valid_connection()) == []
+    assert validator.validate_document(_valid_connection(), "connection") == []
 
 
-def test_invalid_connection_is_detected_and_flagged(validator):
-    # A secret-shaped key in `parameters` is a model rule violation (RULE-CONN-004)
-    # — it must be routed to the model, not the unrecognized-document verdict.
+def test_invalid_connection_is_flagged(validator):
+    # A secret-shaped key in `parameters` is a model rule violation (RULE-CONN-004).
     doc = {"connector_id": "stripe", "parameters": {"password": "hunter2"}}
-    findings = validator.validate_document(doc)
+    findings = validator.validate_document(doc, "connection")
     errors = _errors(findings)
     assert errors and all(e.get("rule") == "RULE-CONN-004" for e in errors)
 
 
-def test_connection_missing_connector_id_is_unrecognized(validator):
-    # `connector_id` IS the connection discriminator; without it the document is
-    # not a connection (and matches no other kind) — the unrecognized verdict.
-    findings = validator.validate_document({"display_name": "x"})
-    assert any(f.get("message_id") == "unrecognized-document" for f in _errors(findings))
+def test_connection_missing_connector_id_is_flagged_as_missing_field(validator):
+    # `connector_id` is a required field on the connection model; submitted as
+    # "connection", a document without it fails on that field, not on kind.
+    findings = validator.validate_document({"display_name": "x"}, "connection")
+    errors = _errors(findings)
+    assert any(
+        e.get("message_id") == "missing" and e["path"] == "/connector_id"
+        for e in errors
+    )
 
 
 # --- stream ------------------------------------------------------------------
 
 def test_valid_stream_passes(validator):
-    assert validator.validate_document(_valid_stream()) == []
+    assert validator.validate_document(_valid_stream(), "stream") == []
 
 
-def test_invalid_stream_is_detected_and_flagged(validator):
+def test_invalid_stream_is_flagged(validator):
     doc = _valid_stream()
     doc["status"] = "bogus"  # not a valid lifecycle status
-    errors = _errors(validator.validate_document(doc))
+    errors = _errors(validator.validate_document(doc, "stream"))
     # A closed-`Literal` mismatch is pydantic's own rejection, with no
     # `rules.violation` behind it — the field constraint carries no rule id.
     assert errors and all(e.get("rule") is None for e in errors)
@@ -140,30 +111,29 @@ def test_stream_extra_top_level_field_rejected(validator):
     # fires confirms the real StreamInput model runs, not a lax stand-in.
     doc = _valid_stream()
     doc["org_id"] = "server-managed"
-    assert _errors(validator.validate_document(doc))
+    assert _errors(validator.validate_document(doc, "stream"))
 
 
 # --- pipeline ----------------------------------------------------------------
 
 def test_valid_pipeline_passes(validator):
-    assert validator.validate_document(_valid_pipeline()) == []
+    assert validator.validate_document(_valid_pipeline(), "pipeline") == []
 
 
-def test_invalid_pipeline_is_detected_and_flagged(validator):
+def test_invalid_pipeline_is_flagged(validator):
     doc = _valid_pipeline()
     doc["status"] = "bogus"
-    errors = _errors(validator.validate_document(doc))
+    errors = _errors(validator.validate_document(doc, "pipeline"))
     # A closed-`Literal` mismatch is pydantic's own rejection, with no
     # `rules.violation` behind it — the field constraint carries no rule id.
     assert errors and all(e.get("rule") is None for e in errors)
 
 
-def test_single_pipeline_not_confused_with_bundle(validator):
-    """A single pipeline document (no nested `pipeline`) routes to the model and
-    passes; it must not be validated as a bundle."""
+def test_single_pipeline_document_passes_its_model(validator):
+    """A single pipeline document (no nested `pipeline`) submitted as "pipeline"
+    routes to and passes the pipeline model."""
     doc = _valid_pipeline()
-    assert validator.is_pipeline_doc(doc) and not validator.is_pipeline_bundle(doc)
-    assert validator.validate_document(doc) == []
+    assert validator.validate_document(doc, "pipeline") == []
 
 
 def test_active_pipeline_without_streams_flagged(validator):
@@ -172,7 +142,7 @@ def test_active_pipeline_without_streams_flagged(validator):
     passing document. (The API previously rejected such a document that this
     single-doc path accepted.)"""
     doc = {**_valid_pipeline(), "status": "active"}
-    errors = _errors(validator.validate_document(doc))
+    errors = _errors(validator.validate_document(doc, "pipeline"))
     assert errors and all(e.get("rule") == "RULE-PIPE-004" for e in errors)
     assert any("at least one stream reference" in e["message"] for e in errors)
 
@@ -181,13 +151,13 @@ def test_active_pipeline_with_stream_passes(validator):
     """The active-status gate is not blanket rejection: an `active` pipeline that
     references a stream still passes the single-document model."""
     doc = {**_valid_pipeline(), "status": "active", "streams": [f"{PIPELINE}_v1"]}
-    assert validator.validate_document(doc) == []
+    assert validator.validate_document(doc, "pipeline") == []
 
 
 # --- CLI end to end (the one-stop-validator ask) -----------------------------
 
 def test_cli_validates_connection_exit0(validator_cli):
-    r = validator_cli.on_document(_valid_connection())
+    r = validator_cli.on_document(_valid_connection(), "connection")
     assert r.returncode == 0, r.stdout + r.stderr
     out = json.loads(r.stdout)
     assert out["passed"] is True
@@ -196,6 +166,6 @@ def test_cli_validates_connection_exit0(validator_cli):
 def test_cli_invalid_stream_exit1(validator_cli):
     bad = _valid_stream()
     bad["status"] = "bogus"
-    r = validator_cli.on_document(bad)
+    r = validator_cli.on_document(bad, "stream")
     assert r.returncode == 1
     assert json.loads(r.stdout)["passed"] is False

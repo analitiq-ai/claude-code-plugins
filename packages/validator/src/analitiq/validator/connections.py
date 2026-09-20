@@ -11,9 +11,9 @@ the model cannot carry is RULE-SHRD-003, which reports a `warning` — a severit
 no `@model_validator` can carry (`rules/SCHEMA.md`, `validator`) — so this kind
 registers a combined validator.
 
-At import this module registers its detector -> validator pair with the core
-dispatch registry, so `_core` never hard-codes a connection branch — a new kind
-is a new module.
+At import this module registers that validator under the published document
+schema name `connection`, so `_core` never hard-codes a connection branch — a
+new kind is a new module registering the name it owns.
 """
 from __future__ import annotations
 

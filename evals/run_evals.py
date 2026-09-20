@@ -63,10 +63,12 @@ that breaks any of this, before a single agent runs.
                check in the sense `.claude/rules/guards.md` requires: the id is
                resolved against the registry, and no verdict here depends on
                what the surrounding sentence means.
-    validate — `{glob, entity?, bundle_root?}` per document family. `entity`
-               selects the contract to grade against via the pipeline plugin's
-               adapter; omit it and the plain validator detects the document's
-               kind from its own shape instead.
+    validate — `{glob, entity?, kind?, bundle_root?}` per document family,
+               naming exactly one of `entity` or `kind` — nothing here inspects
+               a document to work out what it is. `entity` routes through the
+               pipeline plugin's adapter, which reads the same name as its own
+               `--entity`; `kind` routes straight through the published
+               `analitiq-validate` CLI's `--kind`.
     docs     — name → `{glob, where?}`, resolving one document per name for
                assertions. `where` selects by top-level field value where a glob
                matches more than one.
@@ -367,15 +369,19 @@ def _scenario_problems(scenario: dict, path: Path) -> list[str]:
             problems.append(f"text_assert on {item.get('file')!r}: {item[named[0]]!r} does not "
                             f"compile as a regex")
     for spec in scenario.get("validate", []):
-        unknown = sorted(set(spec) - {"glob", "entity", "bundle_root"})
+        unknown = sorted(set(spec) - {"glob", "entity", "kind", "bundle_root"})
         if unknown:
             problems.append(f"validate spec {spec.get('glob')!r} names unknown keys "
-                            f"{unknown}; expected a subset of glob/entity/bundle_root")
+                            f"{unknown}; expected a subset of glob/entity/kind/bundle_root")
         if "glob" not in spec:
             problems.append(f"validate spec {spec!r} is missing required key 'glob'")
         if "bundle_root" in spec and "entity" not in spec:
             problems.append(f"validate spec {spec.get('glob')!r} names 'bundle_root' with no "
                             f"'entity'; bundle_root is only read on the entity route")
+        if ("entity" in spec) == ("kind" in spec):
+            problems.append(f"validate spec {spec.get('glob')!r} must name exactly one of "
+                            f"'entity' or 'kind' — nothing here detects a document's kind "
+                            f"from its shape")
     for item in scenario.get("seed", []):
         if not (REPO_ROOT / item["from"]).is_file():
             problems.append(f"seed source {item['from']} does not exist")
@@ -474,9 +480,10 @@ def run_validator(workdir: Path, spec: dict, timeout: int) -> list[str]:
         else:
             cmd = [sys.executable, "-c",
                    "import sys;from analitiq.validator import main;"
-                   "sys.argv=['analitiq-validate','--document',sys.argv[1]];"
+                   "sys.argv=['analitiq-validate','--kind',sys.argv[1],"
+                   "'--document',sys.argv[2]];"
                    "sys.exit(main())",
-                   str(doc)]
+                   spec["kind"], str(doc)]
         try:
             proc = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True,
                                   timeout=timeout, env={**os.environ, **GRADER_ENV})

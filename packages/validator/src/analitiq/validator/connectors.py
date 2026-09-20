@@ -37,8 +37,8 @@ module adds only what a single-document model cannot express:
   container that renders a scalar, and write-rule vocabulary gaps
   (`RULE-TMAP-022`/`RULE-TMAP-014`/`RULE-TMAP-002`/`RULE-TMAP-017`).
 
-At import this module registers its detector→validator pairs with the core
-dispatch registry, so `_core` never hard-codes connector branches.
+At import this module registers each validator under the published document
+schema name it grades, so `_core` never hard-codes connector branches.
 """
 from __future__ import annotations
 

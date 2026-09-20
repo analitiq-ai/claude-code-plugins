@@ -11,9 +11,9 @@ RULE-SHRD-003, which reports a `warning` — a severity no `@model_validator` ca
 carry (`rules/SCHEMA.md`, `validator`) — so this kind registers a combined
 validator.
 
-At import this module registers its detector -> validator pair with the core
-dispatch registry, so `_core` never hard-codes a stream branch — a new kind is a
-new module.
+At import this module registers that validator under the published document
+schema name `stream`, so `_core` never hard-codes a stream branch — a new kind
+is a new module registering the name it owns.
 """
 from __future__ import annotations
 

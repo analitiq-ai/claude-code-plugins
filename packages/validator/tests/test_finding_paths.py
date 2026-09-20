@@ -50,7 +50,8 @@ def _package(root: Path, *, type_map=None, endpoints=None) -> dict:
 
 def _graded(validator, root: Path, message_id: str) -> list[dict]:
     connector = json.loads((root / "connector.json").read_text())
-    findings = validator.validate_document(connector, doc_path=root / "connector.json")
+    findings = validator.validate_document(
+        connector, "connector", doc_path=root / "connector.json")
     return [f for f in findings if f["message_id"] == message_id]
 
 
@@ -147,7 +148,8 @@ def test_an_endpoint_finding_names_no_file_in_its_message(tmp_path, validator):
     endpoint["operations"]["read"]["response"]["schema"]["type"] = 7
     _package(tmp_path, endpoints={"v1__records.json": endpoint})
     connector = json.loads((tmp_path / "connector.json").read_text())
-    findings = validator.validate_document(connector, doc_path=tmp_path / "connector.json")
+    findings = validator.validate_document(
+        connector, "connector", doc_path=tmp_path / "connector.json")
     [found] = [f for f in findings if f.get("rule") == "RULE-ENDP-048"]
     assert found["path"] == "endpoints/v1__records.json#/operations/read/response/schema", found
     assert "v1__records.json" not in found["message"], found
@@ -163,7 +165,7 @@ def test_a_standalone_endpoint_locates_its_unreadable_connector(tmp_path, valida
     _package(tmp_path, endpoints={"v1__records.json": endpoint})
     (tmp_path / "connector.json").write_text("{not json")
     findings = validator.validate_document(
-        endpoint, doc_path=tmp_path / "endpoints" / "v1__records.json")
+        endpoint, "api-endpoint", doc_path=tmp_path / "endpoints" / "v1__records.json")
     [found] = [f for f in findings if f["message_id"] == "sibling-connector-unreadable"]
     assert found["path"] == "../connector.json#", found
     # The check it could not run is the endpoint's own, so it stays unqualified.
@@ -178,7 +180,6 @@ def test_a_standalone_endpoint_locates_its_unreadable_connector(tmp_path, valida
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("graded,message_id", [
-    (lambda v: v.validate_document(42), "unrecognized-document"),
     # A model error at the document root: pydantic's `loc` is empty.
     (lambda v: v.type_map_findings(
         [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
@@ -193,7 +194,7 @@ def test_a_whole_document_finding_has_the_empty_pointer(validator, graded, messa
 def test_a_model_error_escapes_the_keys_on_its_pointer(validator):
     connector = json.loads((CORPUS / "valid_connector.json").read_text())
     connector["transports"]["api"]["headers"]["A/b~c"] = 7
-    paths = [f["path"] for f in validator.validate_document(connector)]
+    paths = [f["path"] for f in validator.validate_document(connector, "connector")]
     assert "/transports/api/headers/A~1b~0c" in paths, paths
 
 
@@ -202,7 +203,7 @@ def test_a_rejected_mapping_key_is_located_at_its_member(validator):
     # which names no member.
     connector = json.loads((CORPUS / "valid_connector.json").read_text())
     connector["transports"]["api"]["headers"]["A b"] = "x"
-    assert [f["path"] for f in validator.validate_document(connector)
+    assert [f["path"] for f in validator.validate_document(connector, "connector")
             if f["message_id"] == "string_pattern_mismatch"] == ["/transports/api/headers/A b"]
 
 
@@ -211,7 +212,7 @@ def test_an_element_past_a_tuples_fixed_items_is_located_at_its_index(validator)
     # validated by the one repeated item schema.
     connector = json.loads((CORPUS / "valid_connector.json").read_text())
     connector["error_map"] = {"key_attrs": ["code", "1bad"], "codes": {"x": "auth"}}
-    assert [f["path"] for f in validator.validate_document(connector)
+    assert [f["path"] for f in validator.validate_document(connector, "connector")
             if f["message_id"] == "string_pattern_mismatch"] == ["/error_map/key_attrs/1"]
 
 
@@ -220,7 +221,7 @@ def test_a_model_error_names_no_union_tag_on_its_pointer(validator):
     # the model walk went, not a member of the document.
     connector = json.loads((CORPUS / "valid_connector.json").read_text())
     connector["display_name"] = 7
-    assert [f["path"] for f in validator.validate_document(connector)
+    assert [f["path"] for f in validator.validate_document(connector, "connector")
             if f["message_id"] == "string_type"] == ["/display_name"]
 
 
@@ -231,7 +232,7 @@ def test_a_union_tag_that_is_also_a_member_name_is_not_read_as_the_member(valida
     endpoint["operations"]["read"]["pagination"] = {
         "type": "offset", "offset": {"param": "skip", "initial": 0},
         "limit": {"param": 7, "default": 50}, "stop_when": {"empty": {"ref": "response.body"}}}
-    assert [f["path"] for f in validator.validate_document(endpoint)
+    assert [f["path"] for f in validator.validate_document(endpoint, "api-endpoint")
             if f["message_id"] == "string_type"] == ["/operations/read/pagination/limit/param"]
 
 
@@ -251,7 +252,7 @@ def test_an_unresolved_transport_ref_escapes_its_write_mode(tmp_path, validator)
 def test_an_unstable_locator_escapes_its_write_mode(validator):
     endpoint = _write_mode(_endpoint(), "a/b", {"path": "/records.json"})
     del endpoint["operations"]["read"]
-    [found] = [f for f in validator.validate_document(endpoint)
+    [found] = [f for f in validator.validate_document(endpoint, "api-endpoint")
                if f["message_id"] == "locator-unstable"]
     assert found["path"] == "/operations/write/a~1b/request/path", found
 
