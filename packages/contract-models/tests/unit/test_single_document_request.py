@@ -56,9 +56,9 @@ def test_rejects_missing_document():
     _refused_by_both(json.dumps({"entity": DOCUMENT_SCHEMA_NAMES[0]}))
 
 
-# `type-map` is the rule-record kind, not a published schema; `credentials` is a
+# `type-map-read` is no document schema the contract names; `credentials` is a
 # published schema whose model declares no `$schema`, so it names no document.
-@pytest.mark.parametrize("entity", ["type-map", "credentials", "connector-package", "any", ""])
+@pytest.mark.parametrize("entity", ["type-map-read", "credentials", "connector-package", "any", ""])
 def test_rejects_entity_that_names_no_document_schema(entity):
     _refused_by_both(_json("{}", entity))
 

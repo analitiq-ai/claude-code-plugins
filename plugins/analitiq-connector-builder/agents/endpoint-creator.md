@@ -135,7 +135,7 @@ was raised.
      For each field, the declared `arrow_type` is the field's
      `endpoint_facts.fields[].arrow_type` and the `native_type` annotation is
      its `native_type`. These are **not** two independent sources: the
-     connector's `type-map-read` must resolve that `native_type` to the
+     connector's read map must resolve that `native_type` to the
      `arrow_type` declared beside it (`RULE-PKG-033`). If they would diverge,
      the read map is wrong (a domain-level type-map fix, re-author +
      re-validate the domain), not the endpoint. Do not invent or guess field
@@ -210,7 +210,7 @@ was raised.
      field, not a conversion this document performs.
      <!-- PROBE: write-input-pair-unresolved-through-read-map, write-input-unannotated-uncovered -->
      Those declarations are what put the destination record under the read map
-     — `type-map-read` must resolve the `native_type` to the `arrow_type`
+     — the read map must resolve the `native_type` to the `arrow_type`
      declared beside it (`RULE-PKG-033`); a node carrying no type declaration
      is resolved against nothing. A token the map cannot render is a
      domain-level type-map fix, exactly as on the read side.

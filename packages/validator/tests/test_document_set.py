@@ -33,6 +33,7 @@ from pathlib import Path
 import pytest
 
 from analitiq.contracts.endpoint_identity import build_database_object, derive_db_endpoint_id
+from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
 from analitiq.contracts.validation_requests import (
     ValidatePackageRequest,
     ValidateSingleDocumentRequest,
@@ -198,8 +199,8 @@ def _connector_package_documents(*, native="STRING", arrow="Utf8") -> dict:
     }
     return {
         "connector.json": connector,
-        "type-map-read.json": _type_map_doc(
-            "read", [{"match": "exact", "native_type": native, "arrow_type": arrow}]),
+        "type-map.json": _type_map_doc(
+            read=[{"match": "exact", "native_type": native, "arrow_type": arrow}]),
         "endpoints/v1__records.json": endpoint,
     }
 
@@ -225,10 +226,10 @@ def _uncovered_endpoint_document(*, endpoint_id="v2__widgets", request_path="/v2
 _H = "https://schemas.analitiq.ai"
 
 
-def _type_map_doc(direction: str, rules: list) -> dict:
-    """A `{$schema, direction, rules}` type-map document for the given
-    direction — the shape `TypeMapReadDoc`/`TypeMapWriteDoc` require."""
-    return {"$schema": f"{_H}/type-map-{direction}/latest.json", "direction": direction, "rules": rules}
+def _type_map_doc(**sections) -> dict:
+    """A type-map document carrying the given `read` / `write` rule lists."""
+    return {"$schema": TYPE_MAP_SCHEMA_URL, **sections}
+
 
 _SRC, _DST, _PID, _SID = (
     "22222222-2222-4222-8222-222222222222",
@@ -303,8 +304,8 @@ _CONNECTOR_WISE = {
             "ui": {"label": "API Token", "widget": "password", "help_text": "Wise API token."}}},
         "required_for_activation": ["secrets.api_token"]},
 }
-_CONNECTOR_WISE_TYPE_MAP_READ = _type_map_doc(
-    "read", [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])
+_CONNECTOR_WISE_TYPE_MAP = _type_map_doc(
+    read=[{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])
 _WISE_TRANSFERS_ENDPOINT = {
     "$schema": f"{_H}/api-endpoint/latest.json", "endpoint_id": "transfers",
     "operations": {"read": {
@@ -353,12 +354,12 @@ _CONNECTOR_PG = {
         "produces": ["connection.endpoints", "connection.type_map"],
         "triggers": {"list_resources": "on_activation", "describe_resource": "on_resource_selected"}},
 }
-_CONNECTOR_PG_TYPE_MAP_READ = _type_map_doc(
-    "read", [{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}])
-_CONNECTOR_PG_TYPE_MAP_WRITE = _type_map_doc("write", [
-    {"match": "exact", "native_type": "bigint", "arrow_type": "Int64"},
-    {"match": "regex", "native_type": "TEXT", "arrow_type": ".*"},
-])
+_CONNECTOR_PG_TYPE_MAP = _type_map_doc(
+    read=[{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}],
+    write=[
+        {"match": "exact", "native_type": "bigint", "arrow_type": "Int64"},
+        {"match": "regex", "native_type": "TEXT", "arrow_type": ".*"},
+    ])
 def _pipeline_core_documents() -> dict:
     """The connection, stream, pipeline, and destination-endpoint documents a
     pipeline package carries regardless of what its embedded
@@ -386,11 +387,10 @@ def _pipeline_package_documents() -> dict:
     return {
         **_pipeline_core_documents(),
         "connectors/wise/definition/connector.json": _CONNECTOR_WISE,
-        "connectors/wise/definition/type-map-read.json": _CONNECTOR_WISE_TYPE_MAP_READ,
+        "connectors/wise/definition/type-map.json": _CONNECTOR_WISE_TYPE_MAP,
         "connectors/wise/definition/endpoints/transfers.json": _WISE_TRANSFERS_ENDPOINT,
         "connectors/postgresql/definition/connector.json": _CONNECTOR_PG,
-        "connectors/postgresql/definition/type-map-read.json": _CONNECTOR_PG_TYPE_MAP_READ,
-        "connectors/postgresql/definition/type-map-write.json": _CONNECTOR_PG_TYPE_MAP_WRITE,
+        "connectors/postgresql/definition/type-map.json": _CONNECTOR_PG_TYPE_MAP,
     }
 
 
@@ -480,13 +480,10 @@ def test_declared_entity_that_disagrees_with_the_document_is_a_finding(validator
     assert not any(f["kind"] == "fail" for f in matched["findings"]), matched
 
 
-# A type map is the one document a single registration claims under more than
-# one published name, so which model grades it turns on how the document
-# declares its direction and which name the caller sent. Every combination is a
-# row below. Each of the map's rules is valid in one direction only — a regex
-# `arrow_type` a read map may not render, an exact `native_type` placeholder a
-# write map may not leave unclosed — so each model reports a rule the other
-# never does.
+# Each of these rules is valid in one direction only — a regex `arrow_type` a
+# read rule may not render, an exact `native_type` placeholder a write rule may
+# not leave unclosed — so each section's model reports a rule the other never
+# does, and which one fired shows the section a rule was graded as.
 _RULES_VALID_IN_ONE_DIRECTION = [
     {"match": "regex", "native_type": "TEXT", "arrow_type": ".*"},
     {"match": "exact", "native_type": "VARCHAR(${", "arrow_type": "Utf8"},
@@ -494,69 +491,31 @@ _RULES_VALID_IN_ONE_DIRECTION = [
 _GRADED_ONLY_AS = {"read": "read-regex-arrow-type-invalid", "write": "write-exact-malformed-placeholder"}
 
 
-def _type_map_declaring(direction: str | None, via: str) -> dict:
-    document = {"rules": _RULES_VALID_IN_ONE_DIRECTION}
-    if via == "direction":
-        document["direction"] = direction
-    elif via == "$schema":
-        document["$schema"] = f"{_H}/type-map-{direction}/latest.json"
-    return document
-
-
-_TYPE_MAP_DECLARATIONS = [
-    ("read", "direction"), ("write", "direction"),
-    ("read", "$schema"), ("write", "$schema"),
-    (None, "nothing"), ("sideways", "direction"),
-]
-
-
-@pytest.mark.parametrize("sent_as", ["type-map-read", "type-map-write", "connector"])
-@pytest.mark.parametrize("declared,via", _TYPE_MAP_DECLARATIONS)
-def test_type_map_is_graded_by_the_model_its_declared_name_selects(validator, declared, via, sent_as):
-    """Content that declares a direction is consistent only with that
-    direction's name, and is graded exactly as `validate_document` grades it.
-    Only `direction` declares one: a `$schema` naming a direction declares
-    nothing. Content that declares none is consistent with either type-map
-    name, and the caller's name is then what selects the model — never a
-    default the document did not ask for."""
-    document = _type_map_declaring(declared, via)
-    result = validator.validate_single_document(_document_request(document, sent_as))
+@pytest.mark.parametrize("section", ["read", "write"])
+def test_type_map_is_graded_as_validate_document_grades_it(validator, section):
+    """A type map sent as `type-map` is graded exactly as `validate_document`
+    grades it: each rule as the section it sits under."""
+    document = _type_map_doc(**{section: _RULES_VALID_IN_ONE_DIRECTION})
+    result = validator.validate_single_document(_document_request(document, "type-map"))
+    assert result == _expected_envelope(validator, validator.validate_document(document))
     ids = [f["message_id"] for f in result["findings"]]
-
-    if not sent_as.startswith("type-map-"):
-        assert ids == ["entity-mismatch"], result
-        return
-    sent_direction = sent_as.removeprefix("type-map-")
-    if via == "direction" and declared in _GRADED_ONLY_AS:
-        if declared == sent_direction:
-            assert result == _expected_envelope(validator, validator.validate_document(document))
-            assert _GRADED_ONLY_AS[declared] in ids, result
-        else:
-            assert ids == ["entity-mismatch"], result
-        return
-    assert "/direction" in [f["path"] for f in result["findings"] if f["kind"] == "fail"], result
-    for direction, only_that_model_reports in _GRADED_ONLY_AS.items():
-        assert (only_that_model_reports in ids) == (direction == sent_direction), result
-    # The path-based route has no name to take a direction from, so it grades
-    # nothing past the missing one.
-    path_route = [f for f in validator.validate_document(document) if f["kind"] == "fail"]
-    assert path_route and {f["path"] for f in path_route} == {"/direction"}, path_route
+    for direction, only_that_section_reports in _GRADED_ONLY_AS.items():
+        assert (only_that_section_reports in ids) == (direction == section), result
 
 
-def test_type_map_entity_names_the_direction_the_document_declares(validator):
-    """`entity`'s vocabulary separates the read direction from the write one
-    while the core registry's detector claims a type map by shape alone, so the
-    declared name is checked against the direction the document itself
-    declares: a read map sent as `type-map-write` is reported, and the same
-    document sent as `type-map-read` is not."""
-    sent_as_write = validator.validate_single_document(
-        _document_request(_CONNECTOR_WISE_TYPE_MAP_READ, "type-map-write"))
-    assert sent_as_write["passed"] is False
-    assert [f["kind"] for f in sent_as_write["findings"]].count("fail") == 1, sent_as_write
-
-    sent_as_read = validator.validate_single_document(
-        _document_request(_CONNECTOR_WISE_TYPE_MAP_READ, "type-map-read"))
-    assert not any(f["kind"] == "fail" for f in sent_as_read["findings"]), sent_as_read
+@pytest.mark.parametrize("document,sent_as", [
+    (_CONNECTOR_PG_TYPE_MAP, "connector"),
+    ({"$schema": f"{_H}/type-map-read/latest.json", "direction": "read",
+      "rules": [{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}]}, "type-map"),
+], ids=["a map sent as a connector", "a split-shape map"])
+def test_a_type_map_entity_mismatch_is_reported(validator, document, sent_as):
+    """A map sent under another kind's name is reported — its `$schema` names
+    the type map, not the kind the caller declared. So is a split-shape
+    document, whose `$schema` is no document schema the contract registers, so
+    nothing grades it as a map either."""
+    result = validator.validate_single_document(_document_request(document, sent_as))
+    assert result["passed"] is False
+    assert [f["message_id"] for f in result["findings"]] == ["entity-mismatch"], result
 
 
 def test_unparseable_document_text_is_a_finding_not_a_raise(validator):
@@ -604,8 +563,7 @@ _DOCUMENT_FOR_ENTITY = (
     ("stream", _STREAM),
     ("api-endpoint", _WISE_TRANSFERS_ENDPOINT),
     ("database-endpoint", _DB_ENDPOINT),
-    ("type-map-read", _CONNECTOR_PG_TYPE_MAP_READ),
-    ("type-map-write", _CONNECTOR_PG_TYPE_MAP_WRITE),
+    ("type-map", _CONNECTOR_PG_TYPE_MAP),
 )
 
 
@@ -711,7 +669,7 @@ def test_a_connector_package_finding_names_the_document_it_is_about(validator):
 
 def test_a_connector_package_obligation_is_about_the_whole_connector(validator):
     documents = _connector_package_documents()
-    del documents["type-map-read.json"]
+    del documents["type-map.json"]
     result = validator.validate_connector_package(_package_request(documents))
     [found] = [f for f in result["findings"] if f["message_id"] == "read-map-missing"]
     assert found["path"] == "connector.json#", found
@@ -748,7 +706,7 @@ def test_a_connector_document_that_does_not_parse_is_a_finding(validator):
 
 def test_a_connector_document_holding_another_entity_is_a_mismatch(validator):
     documents = _connector_package_documents()
-    documents["connector.json"] = documents["type-map-read.json"]
+    documents["connector.json"] = documents["type-map.json"]
     result = validator.validate_connector_package(_package_request(documents))
     assert result["passed"] is False
     assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
@@ -785,25 +743,25 @@ _PACKAGES_WITH_FINDINGS = {
                              "endpoints/v2 widgets.json": _uncovered_endpoint_document()},
     "mistyped endpoint": {**_connector_package_documents(),
                           "endpoints/v2__widgets.json": _mistyped_endpoint()},
-    "read map missing": _without(_connector_package_documents(), "type-map-read.json"),
+    "read map missing": _without(_connector_package_documents(), "type-map.json"),
     "endpoints missing": _without(_connector_package_documents(), "endpoints/v1__records.json"),
     "endpoint nested": {**_without(_connector_package_documents(), "endpoints/v1__records.json"),
                         "endpoints/sub/v1__records.json":
                             _connector_package_documents()["endpoints/v1__records.json"]},
-    "pre-split map name": {**_connector_package_documents(),
-                           "type-map.json": _connector_package_documents()["type-map-read.json"]},
-    "direction declared twice": {**_connector_package_documents(),
-                                 "type-map-other.json":
-                                     _connector_package_documents()["type-map-read.json"]},
-    "database write map missing": {"connector.json": _CONNECTOR_PG,
-                                   "type-map-read.json": _CONNECTOR_PG_TYPE_MAP_READ},
+    "stray map name": {**_connector_package_documents(),
+                       "type-map-other.json":
+                           _connector_package_documents()["type-map.json"]},
+    "database write section missing": {
+        "connector.json": _CONNECTOR_PG,
+        "type-map.json": _type_map_doc(
+            read=[{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}])},
     "connector holding another entity": {**_connector_package_documents(),
-                                         "connector.json": _CONNECTOR_PG_TYPE_MAP_READ},
+                                         "connector.json": _CONNECTOR_PG_TYPE_MAP},
 }
 _PACKAGE_TEXTS_WITH_FINDINGS = {
     **{name: _package_texts(documents) for name, documents in _PACKAGES_WITH_FINDINGS.items()},
     "map unparseable": _package_texts(_connector_package_documents(),
-                                      **{"type-map-read.json": "{not json"}),
+                                      **{"type-map.json": "{not json"}),
     "connector unparseable": _package_texts(_connector_package_documents(),
                                             **{"connector.json": "{not json"}),
 }

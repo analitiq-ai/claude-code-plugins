@@ -27,7 +27,7 @@ import gen_pipeline_docs as G  # noqa: E402
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
-from analitiq.contracts.type_map import TYPE_MAP_WRITE_SCHEMA_URL  # noqa: E402
+from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL  # noqa: E402
 
 
 def test_generated_blocks_in_sync():
@@ -125,7 +125,7 @@ def test_every_schema_url_in_prose_is_published():
         schema_url_for(resource)
         for resource in ("pipeline", "stream", "connection", "database-endpoint",
                          "api-endpoint", "connector", "credentials",
-                         "type-map-read", "type-map-write")
+                         "type-map")
     }
     url_re = re.compile(r"https://schemas\.analitiq\.ai/[A-Za-z0-9._/-]+")
     offenders = {}
@@ -205,9 +205,9 @@ def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
     from analitiq.validator import validate_document
 
     raw = validate_document(
-        {"$schema": TYPE_MAP_WRITE_SCHEMA_URL,
-         "direction": "write", "rules": []},
-        doc_path=Path("type-map-write.json"))
+        {"$schema": TYPE_MAP_SCHEMA_URL,
+         "write": [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]},
+        doc_path=Path("type-map.json"))
     assert "RULE-TMAP-017" in {f.get("rule") for f in raw}, (
         "probe stopped triggering the write-vocabulary check at the package "
         "level — this test no longer measures the filter it claims to"

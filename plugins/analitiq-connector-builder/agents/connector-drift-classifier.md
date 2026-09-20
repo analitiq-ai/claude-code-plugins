@@ -34,8 +34,7 @@ rules for every document" says which file carries which artifact.
 
 ## Process
 
-1. Read both documents, every sibling type-map file the connector's kind
-   ships (`RULE-PKG-030`), and every endpoint document under the `endpoints/`
+1. Read both documents, the sibling `type-map.json` (`RULE-PKG-030`), and every endpoint document under the `endpoints/`
    directory beside each `connector.json` (`RULE-PKG-031`) — a database connector release ships
    none (`RULE-DBEP-006`). Each file is diffed independently; a change in any
    of them drives the bump.

@@ -47,9 +47,11 @@ def _endpoint(endpoint_id: str, native: str = "STRING", arrow: str = "Utf8",
     return doc
 
 
-def _map(direction: str) -> dict:
-    return {"$schema": f"{_H}/type-map-{direction}/latest.json", "direction": direction,
-            "rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]}
+_RULES = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+
+
+def _map(*directions: str) -> dict:
+    return {"$schema": f"{_H}/type-map/latest.json", **{d: _RULES for d in directions}}
 
 
 def _db_endpoint() -> dict:
@@ -71,9 +73,10 @@ def _text(doc) -> str:
 _API = _corpus("valid_connector.json")
 _API_PACKAGE = {
     "connector.json": _API,
-    "type-map-read.json": _map("read"),
+    "type-map.json": _map("read"),
     "endpoints/v1__records.json": _endpoint("v1__records"),
 }
+_API_PACKAGE_WITHOUT_MAP = {k: v for k, v in _API_PACKAGE.items() if k != "type-map.json"}
 
 #: `(entry key, package)` — the document validated, and every file beside it.
 LAYOUTS = {
@@ -87,30 +90,29 @@ LAYOUTS = {
         "endpoints/a-b.json": _endpoint("a-b", native="BOOLEAN", arrow="Boolean"),
         "endpoints/a/z.json": _endpoint("z"),
     }),
-    "api package, read map missing": ("connector.json", {
-        "connector.json": _API, "endpoints/v1__records.json": _endpoint("v1__records")}),
-    "api package, read map unparseable": ("connector.json", {
-        **_API_PACKAGE, "type-map-read.json": "{not json"}),
+    "api package, type map missing": ("connector.json", _API_PACKAGE_WITHOUT_MAP),
+    "api package, type map unparseable": ("connector.json", {
+        **_API_PACKAGE, "type-map.json": "{not json"}),
     # Text-mode reads turn `\r\n` and a lone `\r` into `\n`, and a parse error
     # quotes offsets into the text it was handed.
-    "api package, read map unparseable with CRLF endings": ("connector.json", {
-        **_API_PACKAGE, "type-map-read.json": '{\r\n  "direction": "read",\r\n  "rules": [,]\r\n}'}),
-    "api package, read map unparseable with lone CR endings": ("connector.json", {
-        **_API_PACKAGE, "type-map-read.json": '{\r  "direction": "read",\r  "rules": [,]\r}'}),
-    "api package, write map beside the read map": ("connector.json", {
-        **_API_PACKAGE, "type-map-write.json": _map("write")}),
-    "api package, legacy type-map name": ("connector.json", {
-        **_API_PACKAGE, "type-map.json": _map("read")}),
+    "api package, type map unparseable with CRLF endings": ("connector.json", {
+        **_API_PACKAGE, "type-map.json": '{\r\n  "read": [,]\r\n}'}),
+    "api package, type map unparseable with lone CR endings": ("connector.json", {
+        **_API_PACKAGE, "type-map.json": '{\r  "read": [,]\r}'}),
+    "api package, write section in the map": ("connector.json", {
+        **_API_PACKAGE, "type-map.json": _map("read", "write")}),
+    "api package, stray type-map name": ("connector.json", {
+        **_API_PACKAGE, "type-map-natives.json": _map("read")}),
     "api package, no endpoints": ("connector.json", {
-        "connector.json": _API, "type-map-read.json": _map("read")}),
+        "connector.json": _API, "type-map.json": _map("read")}),
     "api package, endpoints holding no json": ("connector.json", {
-        "connector.json": _API, "type-map-read.json": _map("read"),
+        "connector.json": _API, "type-map.json": _map("read"),
         "endpoints/README.md": "notes"}),
     "api package, a file named endpoints": ("connector.json", {
-        "connector.json": _API, "type-map-read.json": _map("read"), "endpoints": "notes"}),
-    "api package, legacy type-map name on a directory": ("connector.json", {
-        **_API_PACKAGE, "type-map.json/x.json": _map("read")}),
-    "api package, type-map name on a directory": ("connector.json", {
+        "connector.json": _API, "type-map.json": _map("read"), "endpoints": "notes"}),
+    "api package, map name on a directory": ("connector.json", {
+        **_API_PACKAGE_WITHOUT_MAP, "type-map.json/x.json": _map("read")}),
+    "api package, stray type-map name on a directory": ("connector.json", {
         **_API_PACKAGE, "type-map-extra.json/x.json": _map("read")}),
     # Every other layout sits at the root, where a key's name and the key are
     # the same string; below it they are not.
@@ -120,10 +122,9 @@ LAYOUTS = {
         **_API_PACKAGE, "endpoints/v2__broken.json": "{not json"}),
     "api package, directory under an endpoint name": ("connector.json", {
         **_API_PACKAGE, "endpoints/x.json/y.json": _endpoint("y")}),
-    "database package, both maps": ("connector.json", {
+    "database package, both sections": ("connector.json", {
         "connector.json": _corpus("valid_connector_sync_driver.json"),
-        "type-map-read.json": _map("read"),
-        "type-map-write.json": _map("write"),
+        "type-map.json": _map("read", "write"),
     }),
     "api endpoint, transport undeclared by its connector": ("endpoints/thing.json", {
         "connector.json": {**_API, "transports": {"other": {}}},
@@ -372,7 +373,7 @@ def test_a_dotdot_out_of_a_link_to_elsewhere_is_refused(tmp_path, validator_cli,
 _ENTRIES = {
     "validate_document": lambda v, where: v.validate_document(_API, doc_path=where / "connector.json"),
     "check_coverage": lambda v, where: v.check_coverage(_API, where / "connector.json"),
-    "collect_type_maps": lambda v, where: v.collect_type_maps(where, rule=None),
+    "load_type_map": lambda v, where: v.load_type_map(where, rule=None),
 }
 
 
@@ -507,7 +508,7 @@ def test_a_dotdot_the_kernel_cannot_take_is_refused_as_the_kernel_refuses_it(
     say."""
     _write(tmp_path / "pkg", _API_PACKAGE)
     (tmp_path / "pkg/dangling").symlink_to("gone")
-    (tmp_path / "pkg/filelink").symlink_to("type-map-read.json")
+    (tmp_path / "pkg/filelink").symlink_to("type-map.json")
     (tmp_path / "pkg/loop").symlink_to("loop")
 
     assert _refusals(validator_cli, tmp_path / f"pkg/{left}/../connector.json") == (

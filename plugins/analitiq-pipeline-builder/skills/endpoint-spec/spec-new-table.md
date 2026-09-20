@@ -60,7 +60,7 @@ For an uncovered canonical:
 - If a connector dialect override covers the family, follow the
   dialect-override case in `spec-type-map-gaps.md`: author the fallback label
   `spec-columns.md` §`native_type` names (`RULE-DBEP-012`), plus a
-  `type_maps.notes` entry, and no rule.
+  `type_map.notes` entry, and no rule.
 - Otherwise the engine cannot render the DDL at all. The user must supply the
   native (the orchestrator interviews → `write_render_choices`); author it as
   the column's `native_type` **and** as a connection-scoped write rule per

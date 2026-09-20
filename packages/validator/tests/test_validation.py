@@ -22,14 +22,13 @@ from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
 from analitiq.contracts.endpoints import _REFUSED_REFERENCE_KEYWORDS
 from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
 from analitiq.contracts.stream import STREAM_SCHEMA_URL
-from analitiq.contracts.type_map import TYPE_MAP_READ_SCHEMA_URL, TYPE_MAP_WRITE_SCHEMA_URL
+from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
 from analitiq.validator._location import DiskTree
 from analitiq.validator.connectors import (
     _DATABASE_KINDS,
-    _READ_MAP_FILENAME,
     _STORAGE_KINDS,
-    _TYPE_MAP_GLOB,
-    _WRITE_MAP_FILENAME,
+    _STRAY_TYPE_MAP_GLOB,
+    TYPE_MAP_FILENAME,
 )
 
 def _raise_timeout(signum, frame):
@@ -116,22 +115,19 @@ def test_kindless_connector_errors(validator):
     assert _errors(validator.validate_document(doc))
 
 
-_TM_READ_SCHEMA = TYPE_MAP_READ_SCHEMA_URL
-_TM_WRITE_SCHEMA = TYPE_MAP_WRITE_SCHEMA_URL
+_TM_SCHEMA = TYPE_MAP_SCHEMA_URL
 
 
-_ABSENT = object()  # parametrize marker: delete the key rather than set it
-
-
-def _type_map_doc(rules, direction="read"):
-    schema = _TM_READ_SCHEMA if direction == "read" else _TM_WRITE_SCHEMA
-    return {"$schema": schema, "direction": direction, "rules": rules}
+def _type_map_doc(read=None, write=None):
+    """A `type-map.json` document carrying each section given."""
+    sections = {"read": read, "write": write}
+    return {"$schema": _TM_SCHEMA, **{d: r for d, r in sections.items() if r is not None}}
 
 
 def _write_tree(root: Path, connector: dict, read_map, endpoints: dict):
     (root / "endpoints").mkdir(parents=True)
     (root / "connector.json").write_text(json.dumps(connector))
-    (root / "type-map-read.json").write_text(json.dumps(_type_map_doc(read_map, "read")))
+    (root / TYPE_MAP_FILENAME).write_text(json.dumps(_type_map_doc(read=read_map)))
     for name, ep in endpoints.items():
         (root / "endpoints" / name).write_text(json.dumps(ep))
 
@@ -631,28 +627,28 @@ def test_coverage_flags_arrow_mismatch(tmp_path, connector_base, validator):
 
 
 def test_coverage_still_runs_when_the_read_map_fails_its_model(tmp_path, connector_base, validator):
-    # A document that declares the read direction has named which direction it
-    # covers, whatever else about it the model rejects. `check_coverage` reads
-    # `rules` from the raw dict rather than from the (rejected) model instance,
+    # A map carrying a `read` section has named what it covers, whatever else
+    # about it the model rejects. `check_coverage` reads that
+    # section from the raw dict rather than from the (rejected) model instance,
     # so endpoint coverage runs against those rules instead of silently no-oping
     # behind the envelope's own error — staged with an endpoint the map does not
     # cover, so only coverage having run can produce the second finding.
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("BIGINT", "Int64")})
-    read_map_path = tmp_path / "type-map-read.json"
+    read_map_path = tmp_path / TYPE_MAP_FILENAME
     doc = json.loads(read_map_path.read_text())
-    doc["$schema"] = _TM_WRITE_SCHEMA
+    doc["$schema"] = CONNECTOR_SCHEMA_URL
     read_map_path.write_text(json.dumps(doc))
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
-    assert any(e["path"] == "type-map-read.json#/$schema" for e in errors), errors
+    assert any(e["path"] == f"{TYPE_MAP_FILENAME}#/$schema" for e in errors), errors
     assert any("no matching rule" in e["message"] for e in errors), errors
 
 
 def test_coverage_flags_missing_read_map(tmp_path, connector_base, validator):
     (tmp_path / "connector.json").write_text(json.dumps(connector_base))
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
-    assert any("type-map-read.json" in e["message"] for e in errors)
+    assert any(e["message_id"] == "read-map-missing" for e in errors), errors
 
 
 def test_an_endpoint_that_holds_a_json_null_is_graded(
@@ -696,8 +692,8 @@ def test_coverage_flags_missing_endpoints_directory(tmp_path, connector_base, va
     # document. No `endpoints/` directory at all is the more severe of its two
     # ways to fail — nothing here even attempts to name an endpoint.
     (tmp_path / "connector.json").write_text(json.dumps(connector_base))
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "read")))
+    (tmp_path / TYPE_MAP_FILENAME).write_text(json.dumps(_type_map_doc(
+        read=[{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])))
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert any("endpoints" in e["message"] and "missing" in e["message"] for e in errors)
 
@@ -708,8 +704,8 @@ def test_coverage_flags_empty_endpoints_directory(tmp_path, connector_base, vali
     # filesystem level while offering nothing to validate against.
     (tmp_path / "endpoints").mkdir()
     (tmp_path / "connector.json").write_text(json.dumps(connector_base))
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "read")))
+    (tmp_path / TYPE_MAP_FILENAME).write_text(json.dumps(_type_map_doc(
+        read=[{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])))
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert any("endpoints" in e["message"] and "no *.json files" in e["message"] for e in errors)
 
@@ -951,8 +947,8 @@ def test_coverage_non_dict_endpoint_file_no_crash(tmp_path, connector_base, vali
     # "validator bug" crash from the coverage walk calling .get() on a list.
     (tmp_path / "endpoints").mkdir(parents=True)
     (tmp_path / "connector.json").write_text(json.dumps(connector_base))
-    (tmp_path / "type-map-read.json").write_text(
-        json.dumps(_type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "read")))
+    (tmp_path / TYPE_MAP_FILENAME).write_text(
+        json.dumps(_type_map_doc(read=[{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])))
     (tmp_path / "endpoints" / "widgets.json").write_text("[]")  # array, not object
     errs = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert errs
@@ -1238,65 +1234,6 @@ def _min_connector(kind: str):
     return {"kind": kind, "transports": {}}
 
 
-@pytest.mark.parametrize("payload,expected_id", [
-    ({"rules": []}, "union_tag_not_found"),
-    ({"direction": 7, "rules": []}, "union_tag_invalid"),
-    ({"direction": "read", "rules": [
-        {"match": "exact", "native_type": "X", "arrow_type": "Utf8"},
-        {"match": "exact", "native_type": "X", "arrow_type": "Int64"}]},
-     "duplicate-type-map-rule"),
-])
-def test_a_sibling_map_finding_names_the_sibling_it_was_read_from(
-        tmp_path, validator, payload, expected_id):
-    # A document finding locates itself with a pointer into the document it
-    # graded. Forwarded beside a connector as a bare pointer it reads as a
-    # defect in `connector.json`, which carries no such node — and any collected
-    # name can hold a map, so the file is not recoverable from the direction
-    # either. The author would be told what is wrong and not which file to open.
-    (tmp_path / "type-map-natives.json").write_text(json.dumps(payload))
-    (tmp_path / "endpoints").mkdir()
-    (tmp_path / "connector.json").write_text("{}")
-    # Every finding, not just the error-severity ones: a warning about a map is
-    # as unlocatable as a failure about it.
-    reported = validator.check_coverage(_min_connector("api"), tmp_path / "connector.json")
-    named = [e for e in reported if e.get("message_id") == expected_id]
-    assert named, [e.get("message_id") for e in reported]
-    assert named[0]["path"].startswith("type-map-natives.json#/"), named[0]
-
-
-def test_coverage_database_requires_write_map(tmp_path, validator):
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}], "read")))
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
-    assert any("type-map-write.json" in e["message"] for e in errors)
-
-
-def test_coverage_holds_a_connector_write_map_to_the_whole_vocabulary(tmp_path, validator):
-    # The sibling-map route grades at connector scope: a connector that renders
-    # one Arrow family materializes nothing else, and the gap-only allowance
-    # belongs to a connection map filling in behind one.
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}], "read")))
-    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")))
-    (tmp_path / "connector.json").write_text("{}")
-    findings = validator.check_coverage(_min_connector("database"), tmp_path / "connector.json")
-    assert "RULE-TMAP-017" in {f.get("rule") for f in findings}, findings
-
-
-def test_coverage_api_rejects_write_map(tmp_path, validator):
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "read")))
-    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")))
-    (tmp_path / "endpoints").mkdir()
-    (tmp_path / "endpoints" / "w.json").write_text("{}")
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("api"), tmp_path / "connector.json"))
-    assert any("must not ship" in e["message"] for e in errors)
-
-
 def _read_rules():
     return [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}]
 
@@ -1305,38 +1242,177 @@ def _write_rules():
     return [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]
 
 
-@pytest.mark.parametrize("kind", ["database", "file"])
-def test_coverage_reads_a_type_map_under_any_matching_filename(tmp_path, kind, validator):
-    # The filename selects candidates and nothing else, so a map under a name no
-    # convention reserves still covers the direction it declares, rather than
-    # sitting unread beside the connector. The map carries a defect, so a branch
-    # that never read it would pass this as surely as one that read a clean map.
-    # Each family walks its siblings down its own branch, so each is graded here.
-    (tmp_path / "type-map-natives.json").write_text(json.dumps(
-        {"$schema": _TM_READ_SCHEMA, "direction": "read",
-         "rules": [{"match": "exact", "native_type": "X", "arrow_type": "NotAnArrowFamily"}]}))
-    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector(kind), tmp_path / "connector.json"))
-    assert [e["path"] for e in errors] == ["type-map-natives.json#/rules/0/arrow_type"], errors
+_SECTION_RULES = {"read": _read_rules, "write": _write_rules}
+
+
+def _plant_map(root: Path, sections) -> None:
+    """`type-map.json` carrying a valid rule list for each direction in
+    `sections`, or no map at all when `sections` is None."""
+    if sections is not None:
+        (root / TYPE_MAP_FILENAME).write_text(json.dumps(
+            _type_map_doc(**{d: _SECTION_RULES[d]() for d in sections})))
+
+
+# The RULE-PKG-030 complaints each kind earns for the sections its map carries —
+# `None` for a package shipping no map.
+_SECTION_VERDICTS = [
+    *(("api", sections, expected) for sections, expected in [
+        (("read",), set()),
+        (("read", "write"), {"write-map-not-allowed"}),
+        (("write",), {"read-map-missing", "write-map-not-allowed"}),
+        (None, {"read-map-missing"}),
+    ]),
+    *((kind, sections, expected) for kind in _DATABASE_KINDS for sections, expected in [
+        (("read", "write"), set()),
+        (("read",), {"write-map-missing"}),
+        (("write",), {"read-map-missing"}),
+        (None, {"read-map-missing", "write-map-missing"}),
+    ]),
+    *((kind, sections, set()) for kind in _STORAGE_KINDS
+      for sections in (None, ("read",), ("write",), ("read", "write"))),
+]
+
+
+@pytest.mark.parametrize("kind,sections,expected", _SECTION_VERDICTS)
+def test_a_kind_is_held_to_the_sections_its_map_carries(tmp_path, validator, kind, sections, expected):
+    # A storage kind moves bytes and resolves no type, so it requires no
+    # section; an api connector has no write direction; a database-family one
+    # renders DDL, so it needs a `read` and a `write` section.
+    _plant_map(tmp_path, sections)
+    (tmp_path / "endpoints").mkdir()
+    findings = validator.check_coverage(_min_connector(kind), tmp_path / "connector.json")
+    assert {f["message_id"] for f in findings if f.get("rule") == "RULE-PKG-030"} == expected, findings
+
+
+@pytest.mark.parametrize("kind,expected", [("api", set()), ("database", {"write-map-missing"})])
+def test_a_null_section_is_an_absent_one(tmp_path, validator, kind, expected):
+    # The model reads a `null` section as absent, so the package check does
+    # too: a database map's `null` write section is no write rules, and an api
+    # map's is no write section to refuse.
+    (tmp_path / TYPE_MAP_FILENAME).write_text(json.dumps(
+        {"$schema": _TM_SCHEMA, "read": _read_rules(), "write": None}))
+    (tmp_path / "endpoints").mkdir()
+    findings = validator.check_coverage(_min_connector(kind), tmp_path / "connector.json")
+    assert {f["message_id"] for f in findings if f.get("rule") == "RULE-PKG-030"} == expected, findings
+
+
+@pytest.mark.parametrize("section", ["read", "write"])
+def test_a_malformed_section_is_not_a_missing_one(tmp_path, validator, section):
+    # A section present in the wrong shape is the model's finding; reporting it
+    # missing as well would send the author to add a section they already have.
+    doc = {"$schema": _TM_SCHEMA,
+           **{d: {} if d == section else _SECTION_RULES[d]() for d in ("read", "write")}}
+    (tmp_path / TYPE_MAP_FILENAME).write_text(json.dumps(doc))
+    (tmp_path / "endpoints").mkdir()
+    findings = validator.check_coverage(_min_connector("database"), tmp_path / "connector.json")
+    assert f"{TYPE_MAP_FILENAME}#/{section}" in {
+        f.get("path") for f in _errors(findings)}, findings
+    assert not {f["message_id"] for f in findings if f.get("rule") == "RULE-PKG-030"}, findings
+
+
+def test_a_refused_write_section_is_not_held_to_the_write_vocabulary(tmp_path, validator):
+    # An api connector has no write direction, so its write section is refused
+    # whole; asking in the same pass for write rules covering the Arrow
+    # vocabulary would tell the author to extend the section and delete it.
+    _plant_map(tmp_path, ("read", "write"))
+    (tmp_path / "endpoints").mkdir()
+    findings = validator.check_coverage(_min_connector("api"), tmp_path / "connector.json")
+    rules = {f.get("rule") for f in findings}
+    assert "RULE-PKG-030" in rules and "RULE-TMAP-017" not in rules, findings
+
+
+@pytest.mark.parametrize("sections,reason", [
+    (None, f"no {TYPE_MAP_FILENAME} was read"),
+    (("write",), f"{TYPE_MAP_FILENAME} carries no 'read' section"),
+])
+def test_a_missing_section_says_whether_the_map_was_read_or_lacks_the_section(
+        tmp_path, validator, sections, reason):
+    # A map that was not read at all — absent, or present and not loadable,
+    # which its own finding reports — asks for a different edit than one read
+    # without the section, so the message says which it is.
+    _plant_map(tmp_path, sections)
+    findings = validator.check_coverage(_min_connector("database"), tmp_path / "connector.json")
+    [missing] = [f for f in findings if f["message_id"] == "read-map-missing"]
+    assert reason in missing["message"], missing
+
+
+@pytest.mark.parametrize("payload,expected_id", [
+    ({"$schema": _TM_SCHEMA, "read": "not-a-list"}, "list_type"),
+    (_type_map_doc(read=_read_rules() * 2), "duplicate-type-map-rule"),
+])
+def test_a_map_finding_names_the_file_it_was_read_from(tmp_path, validator, payload, expected_id):
+    # A document finding locates itself with a pointer into the document it
+    # graded. Forwarded beside a connector it reads as a defect in
+    # `connector.json`, which carries no such node, so the author is told what
+    # is wrong and cannot tell which file to open.
+    (tmp_path / TYPE_MAP_FILENAME).write_text(json.dumps(payload))
+    (tmp_path / "endpoints").mkdir()
+    # Every finding, not just the error-severity ones: a warning about a map is
+    # as unlocatable as a failure about it.
+    reported = validator.check_coverage(_min_connector("api"), tmp_path / "connector.json")
+    named = [e for e in reported if e.get("message_id") == expected_id]
+    assert named, [e.get("message_id") for e in reported]
+    assert named[0]["path"].startswith(f"{TYPE_MAP_FILENAME}#/"), named[0]
+
+
+def _plant_stray(parent: Path, name: str, shape: str) -> None:
+    """Put a type-map-shaped name at `parent` as one of the things a name can be.
+    The regular file is a well-formed split read map carrying a defect, so a
+    loader that read it would report that defect."""
+    stray = parent / name
+    if shape == "regular file":
+        stray.write_text(json.dumps({
+            "$schema": _TM_SCHEMA.replace("/type-map/", "/type-map-read/"),
+            "direction": "read",
+            "rules": [{"match": "exact", "native_type": "X", "arrow_type": "NotAnArrowFamily"}]}))
+    elif shape == "directory":
+        stray.mkdir()
+    elif shape == "dangling symlink":
+        stray.symlink_to(parent / "nothing-here.json")
+    else:  # pragma: no cover - a shape the parametrization does not carry
+        raise AssertionError(shape)
+
+
+@pytest.mark.parametrize("shape", ["regular file", "directory", "dangling symlink"])
+@pytest.mark.parametrize("kind,sections", [
+    ("api", ("read",)), ("database", ("read", "write")), ("file", None)])
+def test_a_stray_type_map_name_is_refused_and_not_read(tmp_path, validator, kind, sections, shape):
+    # One document carries the whole vocabulary, so a second file under a
+    # type-map name holds rules nothing grades while reading as part of the
+    # package. It is refused for carrying the name, whatever sits under it —
+    # reading it as "a regular file with this name" would let an author keep
+    # the name by making it something else.
+    _plant_map(tmp_path, sections)
+    _plant_stray(tmp_path, "type-map-natives.json", shape)
+    (tmp_path / "endpoints").mkdir()
+    findings = validator.check_coverage(_min_connector(kind), tmp_path / "connector.json")
+    stray = [f for f in findings if f["message_id"] == "stray-type-map-document"]
+    assert [(f.get("rule"), f["kind"]) for f in stray] == [("RULE-PKG-030", "fail")], findings
+    assert "type-map-natives.json" in stray[0]["message"], stray[0]
+    assert not any("NotAnArrowFamily" in f["message"] for f in findings), findings
+
+
+@pytest.mark.parametrize("kind", (*_DATABASE_KINDS, *_STORAGE_KINDS))
+def test_coverage_holds_a_connector_write_map_to_the_whole_vocabulary(tmp_path, kind, validator):
+    # The package route grades at connector scope: a connector that renders
+    # one Arrow family materializes nothing else, and the gap-only allowance
+    # belongs to a connection map filling in behind one.
+    _plant_map(tmp_path, ("read", "write"))
+    findings = validator.check_coverage(_min_connector(kind), tmp_path / "connector.json")
+    assert "RULE-TMAP-017" in {f.get("rule") for f in findings}, findings
 
 
 @pytest.mark.parametrize("kind", _STORAGE_KINDS)
-def test_a_storage_write_map_is_graded_and_named(tmp_path, kind, validator):
-    # The storage branch grades each direction a sibling declares, and the write
-    # direction is reached only by a map declaring it. A branch that graded the
-    # read direction alone
-    # would pass this package, and the defect would arrive at the first
-    # destination write. The map sits under a name no convention reserves, so
-    # the finding has to name it — a bare pointer roots the defect in
-    # `connector.json`, which has no `/rules` node.
-    (tmp_path / "type-map-natives.json").write_text(json.dumps(_type_map_doc(_read_rules(), "read")))
-    (tmp_path / "type-map-ddl.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "arrow_type": "NotAnArrowFamily", "native_type": "TEXT"}], "write")))
-    (tmp_path / "connector.json").write_text("{}")
+def test_a_storage_map_is_graded_in_every_section_it_carries(tmp_path, kind, validator):
+    # A storage kind requires no section, and one it ships anyway is still read
+    # by whoever resolves types through it — so a defect in any section is
+    # reported, not waved through with the requirement.
+    (tmp_path / TYPE_MAP_FILENAME).write_text(json.dumps(_type_map_doc(
+        read=_read_rules(),
+        write=[{"match": "exact", "arrow_type": "NotAnArrowFamily", "native_type": "TEXT"}])))
     errors = _errors(validator.check_coverage(_min_connector(kind), tmp_path / "connector.json"))
-    bad = [e for e in errors if e["path"] == "type-map-ddl.json#/rules/0/arrow_type"]
-    assert bad, errors
+    assert [e["path"] for e in errors] == [
+        f"{TYPE_MAP_FILENAME}#/write/0/arrow_type"], errors
 
 
 @pytest.mark.parametrize("native_type, arrow_type, message_id", [
@@ -1346,149 +1422,33 @@ def test_a_storage_write_map_is_graded_and_named(tmp_path, kind, validator):
 def test_a_coverage_finding_names_the_map_it_was_rendered_from(
         tmp_path, connector_base, native_type, arrow_type, message_id, validator):
     # The message sends an author to a file, so it names the one the rules came
-    # from. Naming the conventional filename instead would send them to a
-    # document the package does not carry. Every verdict the endpoint walk
-    # renders off the read map sends the author to it, not only the one where no
-    # rule matched.
+    # from. Every verdict the endpoint walk renders off the read section sends
+    # the author to it, not only the one where no rule matched.
     _write_tree(tmp_path, connector_base, _read_rules(),
                 {"widgets.json": _endpoint(native_type, arrow_type)})
-    (tmp_path / "type-map-read.json").rename(tmp_path / "type-map-natives.json")
     errors = _errors(validator.check_coverage(connector_base, tmp_path / "connector.json"))
     named = [e for e in errors if e["message_id"] == message_id]
     assert named, errors
-    assert "type-map-natives.json" in named[0]["message"], named[0]
+    assert TYPE_MAP_FILENAME in named[0]["message"], named[0]
 
 
-def test_coverage_rejects_two_maps_declaring_one_direction(tmp_path, validator):
-    # Nothing chooses between them, so neither is the package's write map, and
-    # the direction is reported as covered by nobody. Picking one would pick it
-    # by filename order, which is the answer this rule exists to stop giving:
-    # a stray sibling sorting ahead of the authored map would become the map,
-    # and every check rendered from it would report on a document no consumer
-    # can reach. The read direction, which neither claims, is uncovered too.
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
-    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
-    ids = {e["message_id"] for e in errors}
-    assert {"type-map-direction-duplicated", "read-map-missing",
-            "write-map-missing"} <= ids, errors
-
-
-def test_coverage_lets_no_sibling_take_a_direction_from_the_map_that_declared_it_first(
-        tmp_path, validator):
-    # The stray sorts ahead of the authored map and declares the same direction.
-    # Order decides who is reported against whom and nothing else: a package
-    # where one direction is declared twice has no map for it, so the stray's
-    # own defect is not reported as the package's read map's defect, and the
-    # endpoint coverage that renders from the read map is not rendered from the
-    # stray's rules.
-    (tmp_path / "type-map-aaa.json").write_text(json.dumps(
-        {"$schema": _TM_READ_SCHEMA, "direction": "read",
-         "rules": [{"match": "exact", "native_type": "X", "arrow_type": "NotAnArrowFamily"}]}))
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(_read_rules(), "read")))
-    (tmp_path / "endpoints").mkdir()
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("api"), tmp_path / "connector.json"))
-    ids = {e["message_id"] for e in errors}
-    assert "type-map-direction-duplicated" in ids, errors
-    assert "read-map-missing" in ids, errors
-    assert not any("#/rules" in e["path"] for e in errors), errors
-    # Both documents are named, and the finding is rooted where the collision
-    # was decided: a report naming one of them leaves the author unable to act,
-    # and `claim` hands back the other one so it can be named.
-    collision = [e for e in errors if e["message_id"] == "type-map-direction-duplicated"]
-    assert "type-map-aaa.json" in collision[0]["message"], collision[0]
-    assert "type-map-read.json" in collision[0]["message"], collision[0]
-    assert collision[0]["path"] == "type-map-read.json#/direction", collision[0]
-
-
-def test_coverage_grades_a_sibling_that_parsed_to_no_document(tmp_path, validator):
+def test_coverage_grades_a_map_that_parsed_to_no_document(tmp_path, validator):
     # `null` parses to `None`, the value a loader answering `None` for "nothing
     # was read" also returns. Reading the loader's answer as "nothing to grade"
     # would let it through: a storage kind
-    # requires no map, so a package whose only sibling is that file passes with
-    # nothing said about it, and the load stops there for every consumer. What
-    # says a sibling was already reported is the finding the loader returned,
-    # not the value it parsed to.
-    (tmp_path / "type-map-read.json").write_text("null")
+    # requires no map, so a package whose only map is that file passes with
+    # nothing said about it. What says the file was read is the load's
+    # `loaded`, not the value it parsed to.
+    (tmp_path / TYPE_MAP_FILENAME).write_text("null")
     (tmp_path / "connector.json").write_text("{}")
     errors = _errors(validator.check_coverage(_min_connector("file"), tmp_path / "connector.json"))
     assert errors, "a sibling that is no document was graded as nothing"
 
 
-def test_coverage_counts_no_direction_for_a_map_declaring_none(tmp_path, validator):
-    # A document whose `direction` names neither direction covers neither. It is
-    # graded through the union keyed on `direction`, which names the
-    # discriminator rather than picking a direction to report the rest through.
-    (tmp_path / "type-map-read.json").write_text(json.dumps(
-        {"$schema": _TM_READ_SCHEMA, "direction": "sideways", "rules": _read_rules()}))
-    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
-    assert any(e["message_id"] in ("union_tag_invalid", "union_tag_not_found")
-               and e["path"] == "type-map-read.json#/direction" for e in errors), errors
-    assert any(e["message_id"] == "read-map-missing" for e in errors), errors
-
-
-def test_coverage_rejects_an_api_write_map_under_any_name(tmp_path, validator):
-    # An api connector has no write direction, and a document declaring one
-    # reads as a capability whichever file it arrived in.
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(_read_rules(), "read")))
-    (tmp_path / "type-map-ddl.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
-    (tmp_path / "endpoints").mkdir()
-    (tmp_path / "endpoints" / "w.json").write_text("{}")
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("api"), tmp_path / "connector.json"))
-    refused = [e for e in errors if e["message_id"] == "write-map-not-allowed"]
-    assert refused, errors
-    assert "type-map-ddl.json" in refused[0]["message"], refused[0]
-
-
-def test_a_direction_two_siblings_declare_is_not_reported_as_undeclared(tmp_path, validator):
-    # The finding is the author's whole account of why the direction has no map,
-    # and the two accounts call for opposite edits: ship a map, or delete one.
-    (tmp_path / "type-map-aaa.json").write_text(json.dumps(_type_map_doc(_read_rules(), "read")))
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(_read_rules(), "read")))
-    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
-    missing = [e for e in errors if e["message_id"] == "read-map-missing"]
-    assert missing, errors
-    assert "more than one sibling declares it" in missing[0]["message"], missing[0]
-
-
-def test_a_direction_no_sibling_declares_is_not_reported_as_declared_twice(tmp_path, validator):
-    # The mirror of the collision, and the ordinary case: nothing was shipped.
-    # Told the other cause, the author goes looking for a map to delete.
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
-    for message_id in ("read-map-missing", "write-map-missing"):
-        missing = [e for e in errors if e["message_id"] == message_id]
-        assert missing, errors
-        assert "no readable sibling declares it" in missing[0]["message"], missing[0]
-
-
-def test_coverage_refuses_an_api_write_direction_two_siblings_declare(tmp_path, validator):
-    # An api connector is refused for shipping a document that declares the
-    # write direction, so a second document declaring it cannot be what lifts
-    # the refusal — the author would delete one and only then be told the
-    # direction was never allowed.
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(_read_rules(), "read")))
-    (tmp_path / "type-map-ddl.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
-    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
-    (tmp_path / "endpoints").mkdir()
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("api"), tmp_path / "connector.json"))
-    ids = {e["message_id"] for e in errors}
-    assert "type-map-direction-duplicated" in ids, errors
-    assert "write-map-not-allowed" in ids, errors
-
-
-def test_an_unparseable_sibling_is_reported_as_unparseable_and_nothing_else(tmp_path, validator):
+def test_an_unparseable_map_is_reported_as_unparseable_and_nothing_else(tmp_path, validator):
     # Nothing was read, so there is no document to grade: a model finding over
     # it would describe a value the file never held.
-    (tmp_path / "type-map-read.json").write_text("[ not json")
+    (tmp_path / TYPE_MAP_FILENAME).write_text("[ not json")
     (tmp_path / "connector.json").write_text("{}")
     findings = validator.check_coverage(_min_connector("file"), tmp_path / "connector.json")
     assert [(f["message_id"], f.get("rule")) for f in findings] == [
@@ -1504,17 +1464,13 @@ _PARSER_REFUSALS = {
 
 
 @pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
-def test_a_sibling_the_parser_refuses_is_reported_as_unparseable(tmp_path, validator, text):
-    # Uncaught, the refusal ends the whole coverage check, so one sibling costs
-    # the package every other finding about its maps.
-    (tmp_path / "type-map-read.json").write_text(text)
-    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "native_type": "citext", "arrow_type": "utf8"}], "write")))
-    (tmp_path / "connector.json").write_text("{}")
-    findings = validator.check_coverage(_min_connector("file"), tmp_path / "connector.json")
-    ids = [f["message_id"] for f in findings]
-    assert ids[0] == "type-map-unparseable", findings
-    assert any(f["path"].startswith("type-map-write.json#/rules/") for f in findings), findings
+def test_a_map_the_parser_refuses_is_reported_as_unparseable(tmp_path, validator, text):
+    # Uncaught, the refusal ends the whole coverage check, so the package loses
+    # every other finding about it — the sections its kind requires included.
+    (tmp_path / TYPE_MAP_FILENAME).write_text(text)
+    findings = validator.check_coverage(_min_connector("database"), tmp_path / "connector.json")
+    assert [f["message_id"] for f in findings] == [
+        "type-map-unparseable", "read-map-missing", "write-map-missing"], findings
 
 
 @pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
@@ -1529,22 +1485,22 @@ def test_cli_reports_a_document_the_parser_refuses_as_unreadable(
     assert [f["message_id"] for f in out["findings"]] == ["unreadable-document"], out
 
 
-def test_coverage_reports_a_collected_sibling_that_is_not_a_regular_file(tmp_path, validator):
-    # The pattern collects directory entries, not documents, so what it hands
-    # the loader is whatever carries the name. A directory raises on the read
-    # and reports an errno that says nothing about the package.
-    (tmp_path / "type-map-read.json").mkdir()
+def test_coverage_reports_a_map_that_is_not_a_regular_file(tmp_path, validator):
+    # The name locates a directory entry, not a document, so what the loader is
+    # handed is whatever carries it. A directory raises on the read and reports
+    # an errno that says nothing about the package.
+    (tmp_path / TYPE_MAP_FILENAME).mkdir()
     (tmp_path / "connector.json").write_text("{}")
     errors = _errors(validator.check_coverage(
         _min_connector("file"), tmp_path / "connector.json"))
     assert any("not a regular file" in e["message"] for e in errors), errors
 
 
-def test_coverage_does_not_read_a_collected_sibling_that_blocks(tmp_path, validator):
+def test_coverage_does_not_read_a_map_that_blocks(tmp_path, validator):
     # The payload nothing can time out on its own: `read_text` on a FIFO waits
-    # for a writer that never comes, so a check that opens what the pattern
-    # collected never answers at all.
-    os.mkfifo(tmp_path / "type-map-read.json")
+    # for a writer that never comes, so a check that opens the map file never
+    # answers at all.
+    os.mkfifo(tmp_path / TYPE_MAP_FILENAME)
     (tmp_path / "connector.json").write_text("{}")
     signal.signal(signal.SIGALRM, _raise_timeout)
     signal.alarm(10)
@@ -1577,20 +1533,21 @@ def test_coverage_does_not_pass_an_endpoints_directory_it_cannot_list(tmp_path, 
 
 
 @pytest.mark.parametrize("mode", [0o000, 0o300], ids=["no access", "searchable only"])
-def test_type_maps_in_a_directory_that_cannot_be_listed_are_unchecked_not_absent(tmp_path, validator, refuse, mode):
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc([], "read")))
+def test_a_type_map_in_a_directory_that_cannot_be_listed_is_unchecked_not_absent(
+        tmp_path, validator, refuse, mode):
+    (tmp_path / TYPE_MAP_FILENAME).write_text(json.dumps(_type_map_doc(read=[])))
     refuse(tmp_path, mode)
-    collection = validator.collect_type_maps(tmp_path, rule="RULE-PKG-030")
-    assert [(name, f["kind"], f["rule"], f["message_id"]) for name, f in collection.findings] == [
-        (".", "notApplicable", "RULE-PKG-030", "type-map-dir-unlisted")], collection.findings
-    assert (collection.maps, collection.unread) == ({}, ["."])
+    load = validator.load_type_map(tmp_path, rule="RULE-PKG-030")
+    assert [(name, f["kind"], f["rule"], f["message_id"]) for name, f in load.findings] == [
+        (".", "notApplicable", "RULE-PKG-030", "type-map-dir-unlisted")], load.findings
+    assert (load.loaded, load.unread) == (False, ["."])
 
 
 _UNLISTED = ("notApplicable", "RULE-PKG-030", "type-map-dir-unlisted")
 _MAP_UNREADABLE = ("notApplicable", "RULE-PKG-030", "type-map-unreadable")
 _COVERAGE_SKIPPED = ("notApplicable", "RULE-PKG-033", "native-type-coverage-skipped")
 _ENDPOINTS_UNLISTED = ("notApplicable", "RULE-PKG-031", "endpoints-dir-unlisted")
-# What the empty write map is graded to wherever it is read.
+# What the empty write section is graded to wherever the map is read.
 _WRITE_MAP_GRADED = [("fail", None, "too_short"), ("fail", "RULE-TMAP-017", "write-map-missing-family")]
 
 
@@ -1601,22 +1558,22 @@ _WRITE_MAP_GRADED = [("fail", None, "too_short"), ("fail", "RULE-TMAP-017", "wri
     ("api", 0o000, [_UNLISTED, _COVERAGE_SKIPPED, _ENDPOINTS_UNLISTED]),
     ("database", 0o755, _WRITE_MAP_GRADED),
     ("database", 0o300, [_UNLISTED]),
-    ("database", 0o400, [_MAP_UNREADABLE, _MAP_UNREADABLE]),
+    ("database", 0o400, [_MAP_UNREADABLE]),
     ("database", 0o000, [_UNLISTED]),
     ("file", 0o755, _WRITE_MAP_GRADED),
     ("file", 0o300, [_UNLISTED]),
-    ("file", 0o400, [_MAP_UNREADABLE, _MAP_UNREADABLE]),
+    ("file", 0o400, [_MAP_UNREADABLE]),
     ("file", 0o000, [_UNLISTED]),
 ], ids=lambda v: f"{v:o}" if isinstance(v, int) else None)
 def test_a_refused_lookup_in_the_package_withholds_only_what_depends_on_it(
         tmp_path, validator, refuse, kind, mode, expected):
     # 300 refuses the listing only, 400 every lookup by name, 000 both. What a
     # refusal hides is unknown, not absent; every check not reading it still runs.
-    _write_tree(tmp_path, _min_connector(kind), [{"match": "exact", "native_type": "STRING",
-                                                  "arrow_type": "Utf8"}],
+    read = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+    _write_tree(tmp_path, _min_connector(kind), read,
                 {"widgets.json": _endpoint("STRING", "Utf8")} if kind == "api" else {})
     if kind != "api":
-        (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc([], "write")))
+        (tmp_path / TYPE_MAP_FILENAME).write_text(json.dumps(_type_map_doc(read=read, write=[])))
     refuse(tmp_path, mode)
     findings = validator.check_coverage(_min_connector(kind), tmp_path / "connector.json")
     assert [(f["kind"], f.get("rule"), f["message_id"]) for f in findings] == expected, findings
@@ -1636,7 +1593,7 @@ _WALK = ("Make it and every directory below it readable and searchable, and ever
 @pytest.mark.parametrize("shut,mode,message_id,remedy", [
     (".", 0o300, "type-map-dir-unlisted", _LISTING),
     (".", 0o400, "type-map-unreadable", _LOOKUP),
-    ("type-map-read.json", 0o000, "type-map-unreadable", _READ),
+    (TYPE_MAP_FILENAME, 0o000, "type-map-unreadable", _READ),
     (".", 0o400, "endpoints-dir-unlisted", _LOOKUP),
     ("endpoints/sub", 0o000, "endpoints-dir-unlisted", _WALK),
     ("endpoints", 0o400, "endpoint-file-unreadable", _LOOKUP),
@@ -1674,13 +1631,12 @@ def test_a_failure_the_author_cannot_chmod_away_names_no_remedy(tmp_path, valida
 
 
 def test_a_map_the_kernel_will_not_read_is_not_reported_missing(tmp_path, validator, refuse):
-    # Its direction is unknown, so no direction can be said to lack a map.
+    # What it carries is unknown, so no section can be said to be missing.
     _write_tree(tmp_path, _min_connector("database"), [], {})
-    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc([], "write")))
-    refuse(tmp_path / "type-map-read.json", 0o000)
+    refuse(tmp_path / TYPE_MAP_FILENAME, 0o000)
     findings = validator.check_coverage(_min_connector("database"), tmp_path / "connector.json")
     assert [(f["kind"], f.get("rule"), f["message_id"]) for f in findings] == [
-        _MAP_UNREADABLE, *_WRITE_MAP_GRADED], findings
+        _MAP_UNREADABLE], findings
 
 
 def test_an_endpoint_the_kernel_will_not_open_is_reported_unread(tmp_path, validator, refuse):
@@ -1696,65 +1652,13 @@ def test_an_endpoint_the_kernel_will_not_open_is_reported_unread(tmp_path, valid
 
 
 @pytest.mark.parametrize("shape", ["regular file", "directory", "dangling symlink"])
-def test_the_legacy_name_is_found_where_the_package_lists_but_cannot_be_searched(
+def test_a_stray_name_is_found_where_the_package_lists_but_cannot_be_searched(
         tmp_path, validator, refuse, shape):
-    _plant_legacy_name(tmp_path, shape)
+    _plant_stray(tmp_path, "type-map-read.json", shape)
     refuse(tmp_path, 0o400)
-    collection = validator.collect_type_maps(tmp_path, rule="RULE-PKG-030")
-    assert [(name, f["message_id"]) for name, f in collection.findings] == [
-        ("type-map.json", "legacy-type-map-filename")], collection.findings
-
-
-def _plant_legacy_name(parent: Path, shape: str) -> None:
-    """Put the dead pre-split name at `parent` as one of the things a name can be."""
-    dead = parent / "type-map.json"
-    if shape == "regular file":
-        dead.write_text('[{"match":"exact","native_type":"X","arrow_type":"Utf8"}]')
-    elif shape == "directory":
-        dead.mkdir()
-    elif shape == "dangling symlink":
-        dead.symlink_to(parent / "nothing-here.json")
-    else:  # pragma: no cover - a shape the parametrization does not carry
-        raise AssertionError(shape)
-
-
-@pytest.mark.parametrize("shape", ["regular file", "directory", "dangling symlink"])
-def test_coverage_flags_legacy_type_map(tmp_path, validator, shape):
-    # The dead name is reported for carrying the name, not for what is under it:
-    # the rule is that nothing loads a `type-map.json`, and that is as true of a
-    # directory or a broken link as of a file. Reading it as "a regular file with
-    # this name" lets the author keep the name by making it something else.
-    _plant_legacy_name(tmp_path, shape)
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "native_type": "X", "arrow_type": "Utf8"}], "read")))
-    (tmp_path / "endpoints").mkdir()
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("api"), tmp_path / "connector.json"))
-    assert any("pre-split name" in e["message"] for e in errors), [e["message"] for e in errors]
-
-
-def test_standalone_type_map_at_the_pre_split_name_is_graded_as_it_declares(tmp_path, validator):
-    # The pre-split name is a fact about a package: what it says is that a
-    # direction was never split out, and the direction nobody looked at is the
-    # sibling that is missing. `check_coverage` holds the package and reports it.
-    # A document handed to the validator on its own has no siblings to be missing
-    # and nothing the name can be wrong relative to, so it is graded on what it
-    # declares. The routes answer differently on purpose, and this pins it.
-    # A write document: the pre-split name stood for a read map, so that is the
-    # direction a name-derived answer would have picked, and only the other one
-    # shows the declaration deciding.
-    doc = _type_map_doc([{"match": "exact", "native_type": "X", "arrow_type": "Utf8"}], "write")
-    assert not _errors(validator.validate_document(doc, doc_path=tmp_path / "type-map.json"))
-
-
-@pytest.mark.parametrize("kind", ["database", "nosql", "document"])
-def test_coverage_database_family_requires_write_map(tmp_path, kind, validator):
-    # nosql/document are database-family kinds — same read+write map requirement.
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}], "read")))
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage({"kind": kind, "transports": {}}, tmp_path / "connector.json"))
-    assert any("type-map-write.json" in e["message"] for e in errors)
+    load = validator.load_type_map(tmp_path, rule="RULE-PKG-030")
+    assert [(name, f["message_id"]) for name, f in load.findings] == [
+        ("type-map-read.json", "stray-type-map-document")], load.findings
 
 
 def test_database_endpoint_filename_not_checked_for_snapshot(validator, tmp_path):
@@ -1832,128 +1736,93 @@ def test_is_stem_addressed_endpoint_path_public_helper(validator):
     assert validator.is_stem_addressed_endpoint_path(Path("orders.json")) is False
 
 
-@pytest.mark.parametrize("declared,filename", [
-    ("write", "type-map-read.json"),
-    ("read", "type-map-write.json"),
-    ("write", "generic.json"),
-])
-def test_the_declared_direction_decides_whatever_the_filename_says(
-        validator, tmp_path, declared, filename):
-    # Nothing located this document by name, so the name is not evidence about
-    # it — a map validated on its own sits wherever its author put it. Resolving
-    # direction from the filename instead measures the document against the
-    # rules of the direction it is not, and reports the `$schema` it carries
-    # correctly as wrong.
-    doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], declared)
-    findings = validator.validate_document(doc, doc_path=tmp_path / filename)
-    assert not _errors(findings), findings
-    if declared == "write":
-        # `direction` selects the rule model too, not just the envelope: graded
-        # as read this document could not earn the write-vocabulary check.
-        assert any(f.get("rule") == "RULE-TMAP-017" for f in findings), findings
-
-
 def test_a_document_with_no_path_is_graded_the_same_way(validator, tmp_path):
     # The route takes a path only because its callers have one; nothing here
     # reads it, so a document handed over without one is graded identically.
     # A map earning a warning is used: a route that skipped a pathless document
     # altogether would also return no errors, and only the findings it does
     # produce separate grading from not grading.
-    doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write")
+    doc = _type_map_doc(write=_write_rules())
     pathless = validator.validate_document(doc)
     assert any(f.get("rule") == "RULE-TMAP-017" for f in pathless), pathless
-    assert pathless == validator.validate_document(
-        doc, doc_path=tmp_path / "type-map-write.json")
+    assert pathless == validator.validate_document(doc, doc_path=tmp_path / TYPE_MAP_FILENAME)
 
 
-def test_direction_disagreeing_with_schema_is_a_model_error(validator, tmp_path):
-    # `direction` picks the model; `$schema` is that model's own required
-    # Literal, so a document whose declarations disagree is rejected by
-    # whichever one `direction` selected — internally inconsistent, not
-    # silently resolved.
-    doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write")
-    doc["direction"] = "read"
-    findings = validator.validate_document(doc, doc_path=tmp_path / "type-map-write.json")
-    assert [f["path"] for f in _errors(findings)] == ["/$schema"], findings
+@pytest.mark.parametrize("doc", [
+    {"$schema": TYPE_MAP_SCHEMA_URL},
+    {"$schema": TYPE_MAP_SCHEMA_URL, "write": "not-a-list"},
+], ids=["no-section", "malformed-section"])
+def test_a_map_declaring_the_type_map_schema_is_graded_as_a_map(validator, doc):
+    # The `$schema` identifies the document, so a map that declares it and
+    # carries nothing else usable is told what it lacks rather than that it is
+    # no known artifact.
+    errors = _errors(validator.validate_document(doc))
+    assert errors, doc
+    assert "unrecognized-document" not in {f["message_id"] for f in errors}, errors
 
 
-def test_declared_direction_selects_the_rule_model_not_just_the_envelope(validator, tmp_path):
-    # `VARCHAR${` is an unclosed render placeholder. Only the WRITE exact rule
-    # reads `native_type` as a render template, so this rule is clean under read
-    # grading and RULE-TMAP-008 under write. Under the read filename, a
-    # write-only rule finding can only have come from the document's own
-    # `direction` — which the envelope Literals alone could never show.
-    doc = _type_map_doc([{"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}], "write")
-    findings = validator.validate_document(doc, doc_path=tmp_path / "type-map-read.json")
-    assert any(f["message_id"] == "write-exact-malformed-placeholder"
-               for f in _errors(findings)), findings
+@pytest.mark.parametrize("doc", [
+    {"read": _read_rules()},
+    {"write": _write_rules()},
+    {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"), "read": _read_rules()},
+], ids=["no-schema", "write-only-no-schema", "stale-schema"])
+def test_a_document_declaring_no_type_map_schema_is_not_a_map(validator, doc):
+    # A section is not a claim. `read` and `write` are words other kinds nest,
+    # so a document whose `$schema` does not name the type map — omitted here,
+    # naming another resource there — is unidentified whatever sections it
+    # carries, which is what the model requiring that field means at dispatch.
+    [unrecognized] = _errors(validator.validate_document(doc))
+    assert unrecognized["message_id"] == "unrecognized-document", doc
+    # The only diagnostic these get, so it names the field that would have
+    # claimed them and the value it has to carry.
+    assert "'$schema' naming the published type-map URL" in unrecognized["message"], unrecognized
 
 
-def _unusable(bad):
-    doc = _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "write")
-    if bad is _ABSENT:
-        del doc["direction"]
-    else:
-        doc["direction"] = bad
-    return doc
+@pytest.mark.parametrize("doc,stray,own", [
+    ({"source": {}, "destinations": [], "write": {}}, "write", "source"),
+    ({"connector_id": "postgres", "read": {}}, "read", "connector_id"),
+], ids=["stream", "connection"])
+def test_a_stray_section_key_does_not_claim_another_kind(validator, doc, stray, own):
+    # `read` and `write` are words other kinds nest; one misplaced at the top
+    # of a stream or a connection is that document's extra key, not a type map
+    # whose every other key is extra — which would hide the document's own
+    # defects behind findings about a map nobody wrote.
+    extra = {f["path"] for f in validator.validate_document(doc)
+             if f.get("message_id") == "extra_forbidden"}
+    assert f"/{stray}" in extra and f"/{own}" not in extra, extra
 
 
-@pytest.mark.parametrize("bad,message_id", [
-    ("Write", "union_tag_invalid"),
-    ("", "union_tag_invalid"),
-    (None, "union_tag_invalid"),
-    (5, "union_tag_invalid"),
-    (_ABSENT, "union_tag_not_found"),
-])
-@pytest.mark.parametrize("filename", ["generic.json", "type-map-write.json"])
-def test_an_unusable_direction_is_answered_on_the_discriminator(
-        validator, tmp_path, bad, message_id, filename):
-    # With no usable `direction` there is no direction to grade against, and the
-    # filename supplies none either, so the document is handed to the
-    # discriminated union and answered once, on the discriminator. Picking a
-    # direction to report through would tell the author of a write map that its
-    # correct `$schema` is the wrong one.
-    #
-    # A value present but outside the vocabulary is separated from one missing
-    # altogether, because only the first can name the values it should have been
-    # among. The pointer is the field either way: a consumer routes on `path`,
-    # and every other direction defect reports the field there.
-    errors = _errors(validator.validate_document(
-        _unusable(bad), doc_path=tmp_path / filename))
-    assert [(f["path"], f["message_id"]) for f in errors] == [
-        ("/direction", message_id)], errors
-    assert "direction" in errors[0]["message"], errors
-
-
-def test_the_discriminator_answer_says_what_is_wrong_and_what_went_ungraded(validator):
-    # Pydantic's sentence for an absent tag names the field and stops: it never
-    # says the field is missing, and it names none of the values that would
-    # resolve it. For a tag present and wrong it names the field and the
-    # accepted values, so only the absent case is replaced.
-    #
-    # Nothing past the discriminator was measured either way — the tag selects
-    # the model the rest is graded against — and a report that does not say so
-    # reads as one defect rather than one so far.
-    absent, wrong = (_errors(validator.validate_document(_unusable(bad)))[0]["message"]
-                     for bad in (_ABSENT, "Write"))
-    assert "missing" in absent, absent
-    for message in (absent, wrong):
-        assert "'read'" in message and "'write'" in message, message
-        assert "Nothing else in the document was graded" in message, message
+@pytest.mark.parametrize("doc", [
+    [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+    {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"),
+     "direction": "read",
+     "rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]},
+    {},
+], ids=["bare-array", "split-shape", "empty"])
+def test_a_document_in_no_type_map_shape_is_not_recognized(validator, tmp_path, doc):
+    # None of these names the type map: a bare rule array has nowhere to put a
+    # `$schema`, the split shape's names another resource, and an empty object
+    # declares nothing. Each fails loud as an unrecognized document rather than
+    # passing under some other detector.
+    findings = validator.validate_document(doc, doc_path=tmp_path / TYPE_MAP_FILENAME)
+    assert [f["message_id"] for f in _errors(findings)] == ["unrecognized-document"], findings
 
 
 def test_a_borrowed_diagnostic_does_not_carry_the_document_back_whole(validator):
     # A discriminator error's sentence comes from pydantic, which renders the
-    # failing tag into it. This package is the gate over documents it did not author,
-    # and the sentence reaches a CI log and an agent's context, so an oversized
-    # value is clipped rather than echoed.
-    oversized = "X" * 5000
-    [error] = _errors(validator.validate_document(_unusable(oversized)))
-    assert oversized not in error["message"], len(error["message"])
-    assert len(error["message"]) < 500, len(error["message"])
+    # failing tag into it. This package is the gate over documents it did not
+    # author, and the sentence reaches a CI log and an agent's context, so an
+    # oversized value is clipped rather than echoed.
+    oversized = "Z" * 5000
+    errors = _errors(validator.validate_document(
+        {"$schema": CONNECTOR_SCHEMA_URL, "connector_id": "x", "display_name": "x",
+         "kind": oversized, "transports": {}}))
+    [tag] = [e for e in errors if e["message_id"] == "union_tag_invalid"]
+    assert oversized not in tag["message"], len(tag["message"])
+    assert len(tag["message"]) < 500, len(tag["message"])
     # Only the echoed value is clipped. The accepted values sit after it in the
     # same sentence, and they are what the author needs to fix it.
-    assert "'read', 'write'" in error["message"], error["message"][-120:]
+    assert "'api'" in tag["message"], tag["message"][-120:]
 
 
 def test_a_short_wrong_tag_comes_back_with_every_accepted_value(validator):
@@ -1974,70 +1843,12 @@ def test_a_borrowed_diagnostic_keeps_the_constraint_it_was_rejected_by(validator
     # contract's own pattern carries no input at all, and its whole length is
     # the vocabulary an author needs to fix the value. Clipping it leaves them
     # a fragment of the legal alternatives and an ellipsis.
-    doc = {"$schema": TYPE_MAP_READ_SCHEMA_URL, "direction": "read",
-           "rules": [{"match": "exact", "native_type": "X", "arrow_type": "NotAnArrowFamily"}]}
+    doc = _type_map_doc(
+        read=[{"match": "exact", "native_type": "X", "arrow_type": "NotAnArrowFamily"}])
     [error] = _errors(validator.validate_document(doc))
     assert error["message_id"] == "string_pattern_mismatch", error
     assert error["message"].endswith("'"), error["message"][-80:]
     assert "…" not in error["message"], len(error["message"])
-
-
-def test_a_connector_tag_too_is_bounded(validator):
-    # The type-map union is not the only discriminated one: the same echo
-    # reaches a log through `kind`, and the document is as untrusted there.
-    oversized = "Z" * 5000
-    errors = _errors(validator.validate_document(
-        {"$schema": CONNECTOR_SCHEMA_URL, "connector_id": "x", "display_name": "x",
-         "kind": oversized, "transports": {}}))
-    tag = [e for e in errors if e["message_id"] == "union_tag_invalid"]
-    assert tag, errors
-    assert oversized not in tag[0]["message"], len(tag[0]["message"])
-
-
-def test_an_envelope_declaring_nothing_is_still_answered_on_the_discriminator(validator):
-    # `$schema` is the other field that names a direction, so a document
-    # carrying it could be answered by its Literal rather than by the
-    # discriminator. Without it there is nothing left in the envelope to stand
-    # in, and the answer is the same one.
-    doc = _unusable(_ABSENT)
-    del doc["$schema"]
-    errors = _errors(validator.validate_document(doc))
-    assert [(f["path"], f["message_id"]) for f in errors] == [
-        ("/direction", "union_tag_not_found")], errors
-
-
-@pytest.mark.parametrize("kind", (*_DATABASE_KINDS, *_STORAGE_KINDS))
-def test_sibling_type_maps_are_graded_by_what_they_declare(validator, tmp_path, kind):
-    # Each sibling is graded as the direction it declares, so a package whose
-    # maps sit under each other's conventional names is error-free: the name
-    # chose no direction for either of them. Both maps are swapped rather than
-    # one, so a branch that fell back to the filename fails the `$schema` and
-    # `direction` Literals of both and cannot pass by accident.
-    # The database and storage families walk their siblings down separate
-    # branches, so each family is graded here.
-    (tmp_path / "endpoints").mkdir()
-    read_doc = _type_map_doc([{"match": "exact", "native_type": "STRING",
-                               "arrow_type": "Utf8"}], "read")
-    write_doc = _type_map_doc([{"match": "exact", "arrow_type": "Utf8",
-                                "native_type": "TEXT"}], "write")
-    (tmp_path / "type-map-read.json").write_text(json.dumps(write_doc))
-    (tmp_path / "type-map-write.json").write_text(json.dumps(read_doc))
-    errors = _errors(validator.check_coverage(
-        _min_connector(kind), tmp_path / "connector.json"))
-    assert not errors, (kind, errors)
-
-
-def test_legacy_bare_array_type_map_is_rejected_not_silently_accepted(validator, tmp_path):
-    # Pre-migration documents (a bare top-level rule array, no envelope) no
-    # longer sniff as a type-map at all — `register_kind`'s detector requires
-    # a dict with a `rules` key. This pins that the old shape still fails
-    # loud, as an unrecognized document, rather than silently passing under
-    # some other detector or vanishing with no finding.
-    doc = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
-    p = tmp_path / "type-map-read.json"
-    findings = validator.validate_document(doc, doc_path=p)
-    errors = _errors(findings)
-    assert any(f["message_id"] == "unrecognized-document" for f in errors), findings
 
 
 def test_coverage_flags_nested_endpoint_file(tmp_path, connector_base, validator):
@@ -2054,7 +1865,7 @@ def test_coverage_flags_nested_endpoint_file(tmp_path, connector_base, validator
 
 
 def test_coverage_flags_unparseable_read_map(tmp_path, validator):
-    (tmp_path / "type-map-read.json").write_text("{ not json")
+    (tmp_path / TYPE_MAP_FILENAME).write_text("{ not json")
     (tmp_path / "connector.json").write_text("{}")
     errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
     assert any("could not be read or parsed" in e["message"] for e in errors)
@@ -2082,7 +1893,7 @@ def _warnings(findings):
 def test_duplicate_type_map_rule_warns(validator):
     rules = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"},
              {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
-    warns = _warnings(validator.validate_document(_type_map_doc(rules, "read")))
+    warns = _warnings(validator.validate_document(_type_map_doc(read=rules)))
     assert any("duplicate" in w["message"] for w in warns)
 
 
@@ -2093,7 +1904,7 @@ def test_duplicate_exact_read_rule_warns_across_case_and_whitespace(validator):
     # rules map to DIFFERENT canonicals (a real, if rare, authoring bug).
     rules = [{"match": "exact", "native_type": "character varying", "arrow_type": "Utf8"},
              {"match": "exact", "native_type": "CHARACTER  VARYING", "arrow_type": "LargeUtf8"}]
-    warns = _warnings(validator.validate_document(_type_map_doc(rules, "read")))
+    warns = _warnings(validator.validate_document(_type_map_doc(read=rules)))
     assert any("duplicate" in w["message"] for w in warns)
 
 
@@ -2136,8 +1947,8 @@ def test_regex_lowercase_literal_warning_truth_table(validator, tmp_path, native
         assert re2.fullmatch(native, witness), witness
         assert not re2.fullmatch(native, normalize_native_type(witness)), witness
     findings = validator.validate_document(
-        _type_map_doc([{"match": "regex", "native_type": native, "arrow_type": "Utf8"}], "read"),
-        doc_path=tmp_path / "type-map-read.json")
+        _type_map_doc(read=[{"match": "regex", "native_type": native, "arrow_type": "Utf8"}]),
+        doc_path=tmp_path / TYPE_MAP_FILENAME)
     refused = [e for e in _errors(findings) if e.get("rule") == "RULE-TMAP-005"]
     assert bool(refused) is (verdict == "refused"), findings
     if verdict != "refused":
@@ -2159,12 +1970,13 @@ def test_regex_lowercase_literal_warning_truth_table(validator, tmp_path, native
 ])
 def test_regex_read_rule_container_warning(validator, tmp_path, native, arrow_type, warns):
     findings = validator.validate_document(
-        _type_map_doc([{"match": "regex", "native_type": native, "arrow_type": arrow_type}], "read"),
-        doc_path=tmp_path / "type-map-read.json")
+        _type_map_doc(read=[{"match": "regex", "native_type": native, "arrow_type": arrow_type}]),
+        doc_path=tmp_path / TYPE_MAP_FILENAME)
     assert not _errors(findings), findings
     collapsed = [w for w in _warnings(findings)
                  if w.get("rule") == "RULE-TMAP-002" and w.get("message_id") == "read-regex-container-collapsed"]
     assert bool(collapsed) is warns, findings
+    assert [w["path"] for w in collapsed] == ["/read/0"] * len(collapsed), collapsed
 
 
 def test_regex_warnings_stay_cheap_across_a_whole_map(validator, tmp_path):
@@ -2173,7 +1985,7 @@ def test_regex_warnings_stay_cheap_across_a_whole_map(validator, tmp_path):
               "arrow_type": "Utf8"} for i in range(50)]
     started = time.perf_counter()
     findings = validator.validate_document(
-        _type_map_doc(rules, "read"), doc_path=tmp_path / "type-map-read.json")
+        _type_map_doc(read=rules), doc_path=tmp_path / TYPE_MAP_FILENAME)
     elapsed = time.perf_counter() - started
     assert sum(w.get("rule") == "RULE-TMAP-014" for w in _warnings(findings)) == 50, findings
     assert elapsed < 1.0, elapsed
@@ -2181,23 +1993,11 @@ def test_regex_warnings_stay_cheap_across_a_whole_map(validator, tmp_path):
 
 def test_write_vocabulary_gap_warns(validator, tmp_path):
     # A write map missing whole canonical families → advisory warning.
-    p = tmp_path / "type-map-write.json"
+    p = tmp_path / TYPE_MAP_FILENAME
     findings = validator.validate_document(
-        _type_map_doc([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write"),
+        _type_map_doc(write=[{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]),
         doc_path=p)
     assert any(w.get("rule") == "RULE-TMAP-017" for w in _warnings(findings))
-
-
-def test_coverage_grades_the_sibling_write_map_at_connector_scope(validator, tmp_path):
-    # The connector's sibling walk is the route that reaches the write-vocabulary
-    # check with a connector in hand, at `type_map_findings`' default scope.
-    (tmp_path / "type-map-read.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "native_type": "TEXT", "arrow_type": "Utf8"}], "read")))
-    (tmp_path / "type-map-write.json").write_text(json.dumps(_type_map_doc(
-        [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")))
-    findings = validator.check_coverage(
-        _min_connector("database"), tmp_path / "connector.json")
-    assert any(f.get("rule") == "RULE-TMAP-017" for f in findings), findings
 
 
 def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
@@ -2205,9 +2005,9 @@ def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
     # verbatim, and API-sourced documents carry the bare `Object`/`List` shape
     # markers — a map without rules for them hard-errors the stream at
     # configuration. The coverage warning must name both.
-    p = tmp_path / "type-map-write.json"
+    p = tmp_path / TYPE_MAP_FILENAME
     findings = validator.validate_document(
-        _type_map_doc([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write"),
+        _type_map_doc(write=[{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]),
         doc_path=p)
     # StopIteration here is the failure signal working, not a case to guard:
     # no coverage warning at all means the probe stopped running.
@@ -2219,7 +2019,7 @@ def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
     covered = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"},
                {"match": "exact", "arrow_type": "Object", "native_type": "JSONB"},
                {"match": "exact", "arrow_type": "List", "native_type": "JSONB"}]
-    findings = validator.validate_document(_type_map_doc(covered, "write"), doc_path=p)
+    findings = validator.validate_document(_type_map_doc(write=covered), doc_path=p)
     # Covering the two markers must narrow the warning, not silence it — the map
     # still lacks rules for other probes. So StopIteration here is the failure
     # signal working: it means the warning vanished entirely, which would make
@@ -2243,7 +2043,7 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
         for c, n in [
             ("Boolean", "BOOLEAN"), ("Int8", "SMALLINT"), ("Int16", "SMALLINT"),
             ("Int32", "INTEGER"), ("Int64", "BIGINT"), ("UInt8", "SMALLINT"),
-            ("UInt16", "INTEGER"), ("UInt32", "BIGINT"), ("UInt64", "BIGINT"),
+            ("UInt16", "INTEGER"), ("UInt32", "BIGINT"), ("UInt64", "NUMERIC(20, 0)"),
             ("Float16", "REAL"), ("Float32", "REAL"), ("Float64", "DOUBLE PRECISION"),
             ("Utf8", "TEXT"), ("LargeUtf8", "TEXT"), ("Json", "JSONB"),
             ("Object", "JSONB"), ("List", "JSONB"), ("Binary", "BYTEA"),
@@ -2258,24 +2058,19 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
         {"match": "regex", "arrow_type": r"^Duration\([A-Z]+\)$", "native_type": "INTERVAL"},
     ]
     findings = validator.validate_document(
-        _type_map_doc(full_map, "write"), doc_path=tmp_path / "type-map-write.json")
+        _type_map_doc(write=full_map), doc_path=tmp_path / TYPE_MAP_FILENAME)
     coverage = [f for f in findings if f.get("rule") == "RULE-TMAP-017"]
     assert not coverage, coverage
 
 
-# --- a broken sibling read map withholds coverage and nothing else -------------
-# No per-endpoint check but the native→Arrow rendering reads the sibling read map,
-# so a map that cannot be rendered from must not withhold them. The map is broken
-# in each of the states the walk distinguishes, and every state is graded the
-# same way.
-
-# Each broken state of the read map, with what still reports the map itself.
+# Each broken state of the read section, with what still reports the map itself.
 _BROKEN_READ_MAPS = (
-    ("missing", None, "sibling type-map document declaring direction 'read'"),
-    ("not-a-list",
-     json.dumps({"$schema": _TM_READ_SCHEMA, "direction": "read", "rules": {}}),
+    ("missing", None, "no type-map.json was read"),
+    ("no-read-section", json.dumps(_type_map_doc(write=_write_rules())),
+     "carries no 'read' section"),
+    ("not-a-list", json.dumps({"$schema": _TM_SCHEMA, "read": {}}),
      "Input should be a valid list"),
-    ("legacy-bare-array",
+    ("not-an-object",
      json.dumps([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
      "Input should be a valid dictionary"),
     ("unparseable", "{ not json", "could not be read or parsed"),
@@ -2301,11 +2096,11 @@ _RENDERED_COVERAGE = ("has no matching rule in", "resolves to")
 
 def _write_defective_endpoints(root: Path, connector: dict, read_map_text: str | None):
     """A connector tree carrying every defect `_ENDPOINT_DEFECTS` names, beside a
-    read map in one of the broken states (or none at all)."""
+    map in one of the broken states (or none at all)."""
     (root / "endpoints").mkdir(parents=True)
     (root / "connector.json").write_text(json.dumps(connector))
     if read_map_text is not None:
-        (root / "type-map-read.json").write_text(read_map_text)
+        (root / TYPE_MAP_FILENAME).write_text(read_map_text)
     # filename ≠ endpoint_id; endpoint_id ≠ the handle its path derives;
     # transport_ref names a transport the connector does not declare; a recorded
     # sample contradicts the node declaring it.
@@ -2325,17 +2120,14 @@ def _defects_reported(findings) -> set[str]:
             if any(f.get("rule") == vid and fragment in f["message"] for f in findings)}
 
 
-def _database_tree(root: Path, *, read_map: str | None, write_map: bool, endpoints: bool) -> Path:
-    """A database-family connector tree, with the read map's text, the write map
-    and an `endpoints/` directory the kind has no business shipping each optional.
+def _database_tree(root: Path, *, type_map: str | None, endpoints: bool) -> Path:
+    """A database-family connector tree, with the type map's text and an
+    `endpoints/` directory the kind has no business shipping each optional.
     Returns the connector.json path."""
     root.mkdir(parents=True)
     (root / "connector.json").write_text("{}")
-    if read_map is not None:
-        (root / _READ_MAP_FILENAME).write_text(read_map)
-    if write_map:
-        (root / _WRITE_MAP_FILENAME).write_text(json.dumps(_type_map_doc(
-            [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")))
+    if type_map is not None:
+        (root / TYPE_MAP_FILENAME).write_text(type_map)
     if endpoints:
         (root / "endpoints").mkdir()
         (root / "endpoints" / "misnamed.json").write_text(
@@ -2398,19 +2190,19 @@ def test_validating_a_connector_with_no_path_fails_closed(validator):
     assert not _passed(findings), findings
 
 
-def test_database_missing_both_maps_reports_both(tmp_path, validator):
-    # The read map's absence must not hide the write map's: the same connector
-    # otherwise answers differently depending on how its read map is broken. The
+def test_database_missing_both_sections_reports_both(tmp_path, validator):
+    # The read section's absence must not hide the write section's: the same connector
+    # otherwise answers differently depending on how its map is broken. The
     # branch stays terminal, so an `endpoints/` directory beside it is neither
     # enumerated nor demanded.
     doc = _min_connector("database")
     with_dir = validator.check_coverage(doc, _database_tree(
-        tmp_path / "with", read_map=None, write_map=False, endpoints=True))
+        tmp_path / "with", type_map=None, endpoints=True))
     without_dir = validator.check_coverage(doc, _database_tree(
-        tmp_path / "without", read_map=None, write_map=False, endpoints=False))
+        tmp_path / "without", type_map=None, endpoints=False))
     assert with_dir == without_dir, (with_dir, without_dir)
-    messages = " ".join(e["message"] for e in _errors(with_dir))
-    assert "type-map-read.json" in messages and "type-map-write.json" in messages, with_dir
+    assert {"read-map-missing", "write-map-missing"} <= {
+        e["message_id"] for e in _errors(with_dir)}, with_dir
     assert not [f for f in with_dir if "endpoints" in f["message"]], with_dir
 
 
@@ -2440,24 +2232,20 @@ def test_rendered_coverage_reports_only_the_uncovered_native(tmp_path, connector
 @pytest.mark.parametrize("kind", _DATABASE_KINDS)
 def test_database_family_never_enumerates_endpoints(tmp_path, kind, validator):
     # A database connector's release ships no endpoint documents, so the walk
-    # enumerates `endpoints/` for api connectors only — a broken read map does not
-    # change that. An `endpoints/` directory beside the connector therefore moves
+    # enumerates `endpoints/` for api connectors only — a broken read section does
+    # not change that. An `endpoints/` directory beside the connector therefore moves
     # nothing in the verdict, and a rendering the kind never asks for is not
     # warned about either.
     doc = _min_connector(kind)
     with_dir = validator.check_coverage(doc, _database_tree(
-        tmp_path / "with", read_map="{}", write_map=True, endpoints=True))
+        tmp_path / "with", type_map=json.dumps({"$schema": _TM_SCHEMA, "read": {}, "write": _write_rules()}),
+        endpoints=True))
     without_dir = validator.check_coverage(doc, _database_tree(
-        tmp_path / "without", read_map="{}", write_map=True, endpoints=False))
+        tmp_path / "without", type_map=json.dumps({"$schema": _TM_SCHEMA, "read": {}, "write": _write_rules()}),
+        endpoints=False))
     assert with_dir == without_dir, (with_dir, without_dir)
     assert not [f for f in with_dir if "endpoints" in f["message"]], with_dir
     assert not [f for f in with_dir if "not rendered" in f["message"]], with_dir
-
-
-@pytest.mark.parametrize("kind", _STORAGE_KINDS)
-def test_storage_kinds_need_no_read_map(tmp_path, kind, validator):
-    (tmp_path / "connector.json").write_text("{}")
-    assert validator.check_coverage({"kind": kind, "transports": {}}, tmp_path / "connector.json") == []
 
 
 # --- CLI / exit-code contract (the integration surface consumers depend on) ---
@@ -2541,87 +2329,67 @@ def test_endpoint_findings_locate_the_same_node_on_both_routes(tmp_path, connect
 
 
 # ---------------------------------------------------------------------------
-# type_map_findings — the published entry point for a caller that already knows
-# what direction a document is meant to be.
+# type_map_findings — the published grading of one type-map document.
 # ---------------------------------------------------------------------------
 
-def test_type_map_findings_grades_as_the_direction_the_caller_names(validator):
-    # The document declares the direction the caller did not, so what is graded
-    # says which one decided: `native_type` is read as a render template only
-    # under write grading, and a malformed placeholder is a defect no read
-    # grading can produce.
-    #
-    # The disagreement itself is reported alongside that defect, not instead of
-    # it. A caller holding a slot is looking at the file once, and a route that
-    # stopped at the disagreement would hand back a defect list the author
-    # completes only by fixing `direction` and running again.
-    doc = _type_map_doc(
-        [{"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}], "read")
-    errors = _errors(validator.type_map_findings(doc, "write"))
-    assert {f["path"] for f in errors} == {
-        "/direction", "/$schema", "/rules/0"}, errors
-    assert any(f["message_id"] == "write-exact-malformed-placeholder"
-               for f in errors), errors
+def test_type_map_findings_grades_each_section_as_its_direction(validator):
+    # `native_type` is read as a render template only under `write`, so the
+    # same rule is clean under one key and a defect under the other: the key a
+    # rule list sits under is what decides the model it is measured against.
+    rule = [{"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}]
+    assert not _errors(validator.type_map_findings(_type_map_doc(read=rule), scope="connection"))
+    errors = _errors(validator.type_map_findings(_type_map_doc(write=rule), scope="connection"))
+    assert [(e["path"], e["message_id"]) for e in errors] == [
+        ("/write/0", "write-exact-malformed-placeholder")], errors
 
 
-def test_type_map_findings_grades_a_map_declaring_no_direction_as_named(validator):
-    # A document with no `direction` disagrees with nothing, so the caller's
-    # direction is the only one there is. Skipping the advisories with the
-    # disagreeing case would hand back the envelope error alone, and the
-    # author fixing it would meet the vocabulary gap only on the next run.
-    doc = _type_map_doc([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")
-    del doc["direction"]
-    findings = validator.type_map_findings(doc, "write")
-    assert "/direction" in {f["path"] for f in _errors(findings)}, findings
-    assert "RULE-TMAP-017" in {f.get("rule") for f in findings}, findings
+def test_type_map_findings_points_each_advisory_into_its_section(validator):
+    # A rule's matcher is `native_type` under `read` and `arrow_type` under
+    # `write`, so each section is deduplicated on its own matcher and every
+    # warning points into the section it is about.
+    doc = _type_map_doc(read=_read_rules() * 2, write=_write_rules() * 2)
+    duplicates = [f["path"] for f in validator.type_map_findings(doc, scope="connection")
+                  if f["message_id"] == "duplicate-type-map-rule"]
+    assert duplicates == ["/read/1", "/write/1"], duplicates
+
+
+def test_type_map_findings_reads_no_section_as_the_other_direction(validator):
+    # These four are a legitimate many-to-one write mapping; read as matching on
+    # `native_type`, they are one native matched four times.
+    doc = _type_map_doc(write=[{"match": "exact", "arrow_type": a, "native_type": "BIGINT"}
+                               for a in ("Int8", "Int16", "Int32", "Int64")])
+    assert validator.type_map_findings(doc, scope="connection") == []
 
 
 def test_type_map_findings_scope_decides_the_write_vocabulary_alone(validator):
     # the whole reason `scope` exists: a connector write map must render the
     # canonical vocabulary, a connection map is gap-only and would earn
     # RULE-TMAP-017 forever
-    gap_only = _type_map_doc(
-        [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}], "write")
-    at_connector = validator.type_map_findings(gap_only, "write", scope="connector")
-    at_connection = validator.type_map_findings(gap_only, "write", scope="connection")
-    assert [f.get("rule") for f in at_connector] == ["RULE-TMAP-017"], at_connector
+    gap_only = _type_map_doc(write=_write_rules())
+    at_connector = validator.type_map_findings(gap_only, scope="connector")
+    at_connection = validator.type_map_findings(gap_only, scope="connection")
+    assert [(f.get("rule"), f["path"]) for f in at_connector] == [("RULE-TMAP-017", "/write")], at_connector
     assert at_connection == [], at_connection
 
 
 def test_type_map_findings_scope_does_not_reach_the_read_direction(validator):
-    # nothing about a read map differs by scope; a divergence here would mean
-    # `scope` had grown a second meaning
+    # nothing about a read section differs by scope; a divergence here would
+    # mean `scope` had grown a second meaning
     # The rule earns an advisory, so the equality has content: over a clean
     # document both sides are empty and any scope-keyed filter passes.
-    doc = _type_map_doc([{"match": "regex", "native_type": "^vector\\(", "arrow_type": "Utf8"}])
-    at_connector = validator.type_map_findings(doc, "read", scope="connector")
+    doc = _type_map_doc(read=[{"match": "regex", "native_type": "^vector\\(", "arrow_type": "Utf8"}])
+    at_connector = validator.type_map_findings(doc, scope="connector")
     assert at_connector, "the document must earn a finding or this asserts nothing"
-    assert at_connector == validator.type_map_findings(doc, "read", scope="connection")
+    assert at_connector == validator.type_map_findings(doc, scope="connection")
 
 
-def test_type_map_findings_does_not_grade_rules_authored_for_the_other_direction(validator):
-    # A map's rules are keyed for the direction it declares — read matches on
-    # `native_type`, write on `arrow_type` — so under the other direction there is
-    # nothing the advisories can read. Grading them anyway mints defects the
-    # document does not have: these four are a legitimate many-to-one write
-    # mapping, and read grading sees one native matched four times.
-    doc = _type_map_doc([{"match": "exact", "arrow_type": a, "native_type": "BIGINT"}
-                         for a in ("Int8", "Int16", "Int32", "Int64")], "write")
-    findings = validator.type_map_findings(doc, "read")
-    assert {f["path"] for f in findings} == {"/$schema", "/direction"}, findings
-
-
-@pytest.mark.parametrize("kwargs,expected", [
-    ({"direction": "READ"}, "direction must be"),
-    ({"direction": None}, "direction must be"),
-    ({"direction": "read", "scope": "Connection"}, "scope must be"),
-])
-def test_type_map_findings_rejects_its_own_bad_arguments(validator, kwargs, expected):
-    # a typo'd direction would silently grade the document as the one nobody
-    # asked for. It is the caller's mistake, not the document's, so it raises
-    # past the crash guard instead of arriving as a finding about the map.
-    with pytest.raises(ValueError, match=expected):
-        validator.type_map_findings(_type_map_doc([]), **kwargs)
+@pytest.mark.parametrize("scope", ["Connection", None])
+def test_type_map_findings_rejects_its_own_bad_arguments(validator, scope):
+    # a typo'd scope would silently grade the document at the one nobody asked
+    # for. It is the caller's mistake, not the document's, so it raises past the
+    # crash guard instead of arriving as a finding about the map.
+    with pytest.raises(ValueError, match="scope must be"):
+        validator.type_map_findings(_type_map_doc(read=_read_rules()), scope=scope)
 
 
 def test_type_map_findings_reports_its_own_crash_as_unchecked(validator, monkeypatch):
@@ -2631,7 +2399,7 @@ def test_type_map_findings_reports_its_own_crash_as_unchecked(validator, monkeyp
     from analitiq.validator import connectors
     monkeypatch.setattr(connectors, "_type_map_rule_warnings",
                         lambda *a, **k: (_ for _ in ()).throw(TypeError("boom")))
-    findings = validator.type_map_findings(_type_map_doc([]), "read")
+    findings = validator.type_map_findings(_type_map_doc(read=_read_rules()))
     assert len(findings) == 1, findings
     assert findings[0].get("rule") is None, findings[0]
     assert findings[0]["message_id"] == "check-crashed", findings[0]
@@ -2639,80 +2407,55 @@ def test_type_map_findings_reports_its_own_crash_as_unchecked(validator, monkeyp
     assert validator.finding_costs_a_pass(findings[0]) is True
 
 
-# --- the collection, shared with every caller holding a directory of maps ---
+# --- the loader, shared with every caller holding a `definition/` directory ---
 
-def _read_doc():
-    return _type_map_doc([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "read")
-
-
-def test_collect_type_maps_collects_by_name_shape_and_keys_by_declaration(validator, tmp_path):
-    # The pre-split name and the connector beside them are not maps: what makes
-    # a file one is the shape of its name, and nothing about the name says which
-    # direction it holds.
-    for name in ("type-map.json", "connector.json"):
-        (tmp_path / name).write_text(json.dumps(_read_doc()))
-    (tmp_path / "type-map-extra.json").write_text(json.dumps(_type_map_doc(_write_rules(), "write")))
-    collection = validator.collect_type_maps(tmp_path, rule=None)
-    assert {d: name for d, (name, _) in collection.maps.items()} == {"write": "type-map-extra.json"}
-    assert [(name, f["message_id"]) for name, f in collection.findings] == [
-        ("type-map.json", "legacy-type-map-filename")]
+def test_load_type_map_reads_the_one_name_and_refuses_the_rest(validator, tmp_path):
+    # The connector beside the map is not one, and a type-map-shaped name that
+    # is not `type-map.json` is refused rather than read.
+    doc = _type_map_doc(read=_read_rules())
+    for name in (TYPE_MAP_FILENAME, "connector.json", "type-map-extra.json"):
+        (tmp_path / name).write_text(json.dumps(doc))
+    load = validator.load_type_map(tmp_path, rule=None)
+    assert load.loaded and load.document == doc
+    assert [(name, f["message_id"], f.get("rule")) for name, f in load.findings] == [
+        ("type-map-extra.json", "stray-type-map-document", None)]
 
 
-def test_type_map_sibling_paths_orders_what_the_directory_hands_back():
+def test_load_type_map_reports_nothing_for_a_directory_without_one(validator, tmp_path):
+    # Whether an absent map is a defect is the caller's to say: a connector
+    # requires one for most kinds, a connection never does.
+    load = validator.load_type_map(tmp_path, rule="RULE-PKG-030")
+    assert not load.loaded and load.findings == []
+    # Nothing was read, so there is no document to hand over: asking for one
+    # is the caller's defect, and grading a stand-in would report a file that
+    # is not there.
+    with pytest.raises(LookupError):
+        load.document
+
+
+def test_load_type_map_attributes_every_finding_to_the_rule_given(validator, tmp_path):
+    (tmp_path / TYPE_MAP_FILENAME).write_text("[ not json")
+    (tmp_path / "type-map-b.json").mkdir()
+    (tmp_path / "type-map-a.json").write_text(json.dumps(_type_map_doc(read=_read_rules())))
+    load = validator.load_type_map(tmp_path, rule="RULE-PKG-030")
+    assert not load.loaded
+    assert [(name, f["message_id"], f.get("rule")) for name, f in load.findings] == [
+        (TYPE_MAP_FILENAME, "type-map-unparseable", "RULE-PKG-030"),
+        ("type-map-a.json", "stray-type-map-document", "RULE-PKG-030"),
+        ("type-map-b.json", "stray-type-map-document", "RULE-PKG-030")]
+
+
+def test_stray_type_map_paths_orders_what_the_directory_hands_back():
     # Directory order is the filesystem's, and it is not sorted: two runs taking
-    # it as given could disagree about which of two documents declaring one
-    # direction declared it first. A stub stands in for the directory because a
-    # real one cannot be made to hand back an unsorted listing on demand.
-    from analitiq.validator.connectors import _type_map_sibling_paths
+    # it as given would report the same strays in different orders. A stub
+    # stands in for the directory because a real one cannot be made to hand back
+    # an unsorted listing on demand.
+    from analitiq.validator.connectors import _stray_type_map_paths
 
     class _Scrambled:
         def glob(self, pattern):
-            assert pattern == _TYPE_MAP_GLOB
+            assert pattern == _STRAY_TYPE_MAP_GLOB
             return iter(Path(f"/d/type-map-{c}.json") for c in "cabd")
 
-    assert [p.name for p in _type_map_sibling_paths(_Scrambled())] == [
+    assert [p.name for p in _stray_type_map_paths(_Scrambled())] == [
         f"type-map-{c}.json" for c in "abcd"]
-
-
-def test_collect_type_maps_reports_every_later_declaration_against_the_first(validator, tmp_path):
-    for c in "abc":
-        (tmp_path / f"type-map-{c}.json").write_text(json.dumps(_read_doc()))
-    collection = validator.collect_type_maps(tmp_path, rule=None)
-    assert collection.maps == {}
-    assert collection.declared_by == {"read": "type-map-a.json"}
-    duplicated = [(name, f["message"]) for name, f in collection.findings
-                  if f["message_id"] == "type-map-direction-duplicated"]
-    assert [name for name, _ in duplicated] == ["type-map-b.json", "type-map-c.json"]
-    assert all("type-map-a.json" in message for _, message in duplicated), duplicated
-
-
-def test_collect_type_maps_attributes_every_finding_about_the_siblings_to_the_rule_given(
-        validator, tmp_path):
-    (tmp_path / "type-map.json").write_text(json.dumps(_read_doc()))
-    (tmp_path / "type-map-a.json").write_text(json.dumps(_read_doc()))
-    (tmp_path / "type-map-b.json").write_text(json.dumps(_read_doc()))
-    (tmp_path / "type-map-c.json").write_text("[ not json")
-    (tmp_path / "type-map-d.json").mkdir()
-    collection = validator.collect_type_maps(tmp_path, rule="RULE-PKG-030")
-    assert sorted((name, f["message_id"], f.get("rule")) for name, f in collection.findings) == [
-        ("type-map-b.json", "type-map-direction-duplicated", "RULE-PKG-030"),
-        ("type-map-c.json", "type-map-unparseable", "RULE-PKG-030"),
-        ("type-map-d.json", "type-map-unparseable", "RULE-PKG-030"),
-        ("type-map.json", "legacy-type-map-filename", "RULE-PKG-030")]
-
-
-@pytest.mark.parametrize("payload", [
-    *(pytest.param(_unusable(bad), id=repr(bad)) for bad in ["Write", "", None, 5]),
-    pytest.param(_unusable(_ABSENT), id="absent"),
-    pytest.param(["not", "an", "object"], id="no object"),
-])
-def test_collect_type_maps_takes_no_direction_for_a_document_declaring_none(
-        validator, tmp_path, payload):
-    # Nothing was declared, so nothing collided: reporting a collision here would
-    # name a direction neither document claimed.
-    for c in "ab":
-        (tmp_path / f"type-map-{c}.json").write_text(json.dumps(payload))
-    collection = validator.collect_type_maps(tmp_path, rule=None)
-    assert collection.maps == {} and collection.declared_by == {}
-    assert not any(f["message_id"] == "type-map-direction-duplicated"
-                   for _, f in collection.findings), collection.findings

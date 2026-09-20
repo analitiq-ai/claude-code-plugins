@@ -20,10 +20,10 @@ carry only what that statement does not say.
 | `default_transport` | Names a transport this document declares (`RULE-CTOR-001`). |
 | `sql_capabilities` | A `database` connector declares it (`RULE-CTOR-040`); authoring: `connector-spec-db/spec-sql-write-path.md`. |
 
-Note: the connector's type maps are **not** top-level fields. They ship as
-separate sibling artifacts, one per direction — authoring:
-`connector-spec-db/spec-type-maps.md`; on-disk paths and schema URLs:
-`pipeline.md` §4 and §7.
+Note: the connector's type map is **not** a top-level field. It ships as one
+sibling artifact, `type-map.json`, with a section for each direction its
+`kind` calls for (`RULE-PKG-030`) — authoring:
+`connector-spec-db/spec-type-maps.md`; on-disk path: `pipeline.md` §7.
 
 ## Authoring `connector_id`
 
@@ -69,9 +69,9 @@ Authored connector files declare `$schema` (`RULE-SHRD-003`) as
 
 The document families differ, so don't generalize from one to another:
 
-<!-- PROBE: connector-schema-optional, endpoint-schema-host-locked, type-map-schema-required, type-map-direction-from-document, type-map-direction-not-schema-url, type-map-coverage-counts-declarations, type-map-duplicate-direction-rejected, type-map-duplicate-direction-covers-nothing -->
+<!-- PROBE: connector-schema-optional, endpoint-schema-host-locked, type-map-schema-required, type-map-rule-graded-by-section -->
 | Document | `$schema` | Enforced? |
 |---|---|---|
 | Connector | Author it; matched by pattern, tolerating any environment host (`schemas.analitiq.<tld>`). | Partly. The *pattern* is enforced when present, but the field is optional — a connector omitting `$schema` entirely validates clean. Always writing it is our convention, not a contract rule. |
 | API endpoint | Locked to the `.ai` URL by a `const`. | Yes — required, and a different host is rejected. |
-| Type maps | Required, locked to the direction's `.ai` URL by a `Literal` (`type-map-read` / `type-map-write`). | Yes — required, and a mismatched or missing `$schema` is rejected. A map is graded as the direction its own `direction` field names — not its `$schema`, and not its filename — whether it is validated on its own or inside a connector package. Which directions a package covers is counted from what its maps declare, so two maps declaring one direction is rejected and neither is the map for it (`RULE-PKG-030`); the filename only decides which siblings are type-map documents at all. |
+| Type map | Required, locked to the `.ai` `type-map` URL by a `Literal`. | Yes — required, and a mismatched or missing `$schema` is rejected. The `$schema` names no direction: each rule is graded as the section it sits under, `read` or `write`. |

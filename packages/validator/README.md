@@ -24,8 +24,8 @@ kind and emits the same uniform `{passed, findings[]}`.
 
 **Connector-package cross-file checks:**
 
-- **cross-file coverage** — a connector ships the right sibling type-map files
-  for its kind, and an API connector's read map covers every
+- **cross-file coverage** — a connector ships a sibling `type-map.json`
+  carrying the sections its kind calls for, and no other type-map name, and an API connector's read map covers every
   `(native_type, arrow_type)` its endpoint files declare;
 - **filename ↔ id** — an endpoint file is named `{endpoint_id}.json`;
 - **advisory warnings** the contract tolerates — duplicate type-map rules, read
@@ -115,7 +115,7 @@ analitiq-validate --document connection.json   # connection / stream / pipeline 
 
 The kind is detected from the document's shape — no `--kind` flag. Point
 `--document` at `definition/connector.json` to also trigger cross-file coverage:
-it discovers the sibling `type-map-read.json` / `type-map-write.json` and
+it discovers the sibling `type-map.json` and
 `endpoints/*.json` from the connector's directory. A `connection` / `stream` /
 `pipeline` document is validated purely against its contract model. Validation
 is always model-driven and offline — `--document` is the only flag.

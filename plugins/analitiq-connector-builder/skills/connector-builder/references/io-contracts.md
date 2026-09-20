@@ -14,8 +14,7 @@ Pin every I/O between phases and sub-agents as a JSON Schema fragment.
 ## ProviderFacts (discriminated union by kind)
 
 `ProviderFacts` is the researcher's **coverage of the published contract** —
-the facts the live schemas (`connector`, `api-endpoint`,
-`type-map-read`/`-write`) require in order to author a connector for the
+the facts the live schemas (`connector`, `api-endpoint`, `type-map`) require in order to author a connector for the
 target system. It is shaped *like* the contract, not maintained as a curated
 parallel list.
 
@@ -115,7 +114,7 @@ fan-out and returned as `EndpointFacts` (below).
         },
         "native_type_vocabulary": {
           "type": "array",
-          "description": "Connector-wide set of native wire-type tokens observed across the provider's resources (e.g. `string`, `integer`, `date-time`, `number`, `boolean`, provider-specific scalar names). Researched at the domain level so the creator can author a COMPLETE `type-map-read` before fan-out — every endpoint field must resolve through that map (`RULE-PKG-033`). A genuinely new native surfaced by an endpoint is a domain-level type-map addition, never an endpoint-local one.",
+          "description": "Connector-wide set of native wire-type tokens observed across the provider's resources (e.g. `string`, `integer`, `date-time`, `number`, `boolean`, provider-specific scalar names). Researched at the domain level so the creator can author a COMPLETE read map before fan-out — every endpoint field must resolve through that map (`RULE-PKG-033`). A genuinely new native surfaced by an endpoint is a domain-level type-map addition, never an endpoint-local one.",
           "items": { "type": "string" }
         },
         "pagination": {
@@ -417,7 +416,7 @@ Returned by `api-connector-creator` and `db-connector-creator`.
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["connector", "type_map_read"],
+  "required": ["connector", "type_map"],
   "properties": {
     "connector": {
       "anyOf": [
@@ -425,22 +424,13 @@ Returned by `api-connector-creator` and `db-connector-creator`.
         { "type": "null", "description": "Returned by stub agents (e.g. storage-connector-creator) that decline to author." }
       ]
     },
-    "type_map_read": {
+    "type_map": {
       "anyOf": [
         {
-          "$ref": "https://schemas.analitiq.ai/type-map-read/latest.json",
-          "description": "On-disk shape of the standalone type-map-read.json (native → Arrow): a `{$schema, direction, rules}` document whose each `rules[]` entry has `native_type` as the matcher (regex patterns authored UPPERCASE) and `arrow_type` as the rendered Arrow type (may carry ${name} substitutions backed by named captures in `native_type`). Written by the orchestrator to {connector_id}/definition/type-map-read.json."
+          "$ref": "https://schemas.analitiq.ai/type-map/latest.json",
+          "description": "On-disk shape of the standalone type-map.json: a `{$schema, read, write}` document. Each `read` rule has `native_type` as the matcher (regex patterns authored UPPERCASE) and `arrow_type` as the rendered Arrow type (may carry ${name} substitutions backed by named captures in `native_type`); each `write` rule inverts that — `arrow_type` is the matcher (regex with named captures for parameterized types) and `native_type` the rendered DDL. Which sections each kind must carry, and must not: `RULE-PKG-030`. Arrow-vocabulary coverage of `write`: `RULE-TMAP-017`; when a family may be left unrendered: `RULE-TMAP-019`. Written by the orchestrator to {connector_id}/definition/type-map.json."
         },
         { "type": "null", "description": "Returned by stub agents that decline to author." }
-      ]
-    },
-    "type_map_write": {
-      "anyOf": [
-        {
-          "$ref": "https://schemas.analitiq.ai/type-map-write/latest.json",
-          "description": "On-disk shape of the standalone type-map-write.json: a `{$schema, direction, rules}` document (Arrow → native DDL render rules). Which kinds must ship it, and which must not: `RULE-PKG-030`. Each `rules[]` entry has the same shape as the read map's but the direction inverts: `arrow_type` is the matcher (regex with named captures for parameterized types) and `native_type` is the rendered DDL (may carry ${name} substitutions backed by captures in `arrow_type`). Arrow-vocabulary coverage, and when a family may be left unrendered: `RULE-TMAP-019`. Written to {connector_id}/definition/type-map-write.json."
-        },
-        { "type": "null", "description": "kind=api connectors and stub agents return null — the write direction is a database-package concept." }
       ]
     },
     "package_files": {

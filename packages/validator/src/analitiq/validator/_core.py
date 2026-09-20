@@ -469,9 +469,9 @@ def _dispatch(doc: Any, location: Location | None) -> list[dict]:
             "document does not match any known artifact (connector / api-endpoint / "
             "database-endpoint / type-map / connection / stream / pipeline); a connector "
             "must declare 'kind', an api-endpoint 'operations', a type-map a "
-            "'rules' array (inside the {$schema, direction, rules} object), a "
-            "connection a 'connector_id', a stream 'source' + 'destinations', "
-            "a pipeline 'connections'."))]
+            "'$schema' naming the published type-map URL (a 'read' or 'write' "
+            "section does not claim one), a connection a 'connector_id', a "
+            "stream 'source' + 'destinations', a pipeline 'connections'."))]
 
 
 def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None) -> list[dict]:
