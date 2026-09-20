@@ -50,8 +50,9 @@ def test_fail_finding_refuses_an_info_tier_rule():
 
 
 def test_fail_finding_with_no_rule_costs_error():
-    # The two framework cases (rules/SCHEMA.md's case table): a rejection or
-    # an unrecognized document, with no record to derive a lesser cost from.
+    # The framework case (rules/SCHEMA.md's case table): a structural
+    # precondition rejected the document before any rule-specific check could
+    # run, with no record to derive a lesser cost from.
     result = finding(message_id="m", kind="fail", path="/", message="x")
     assert result["severity"] == "error"
     assert "rule" not in result

@@ -1575,11 +1575,14 @@ def test_bundle_grades_an_endpoint_under_a_symlinked_directory(tmp_path, link):
 @pytest.mark.parametrize("member", ["connection", "stream"])
 def test_a_crash_grading_a_member_does_not_cost_it_its_place_in_the_bundle(
         tmp_path, monkeypatch, member):
-    # `_document_findings` catches only ValidationError. Anything else escaping
-    # it must cost its own findings and nothing more: a member excluded from
-    # the bundle marks assembly incomplete, and the whole cross-document
-    # referential pass is then skipped — so a crash grading one document's
-    # shape would silently stop grading every reference in the bundle.
+    # A kind's own grading runs under `_run_guarded`, which catches bare
+    # `Exception` so a crash there costs only that document's findings.
+    # `_document_findings` is a two-line forward to `validate_document` with no
+    # except clause of its own, so an exception reaching it means that guard
+    # was defeated. Simulating one anyway: it must still cost only the
+    # member's own findings, not the member's place in the bundle — excluding
+    # the member would mark assembly incomplete and skip the whole
+    # cross-document referential pass.
     doc = _build_bundle(tmp_path)
     original = V._document_findings
 

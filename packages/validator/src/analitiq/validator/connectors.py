@@ -86,7 +86,7 @@ try:
             walk_structural_positions,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
-        from analitiq.contracts.type_map import TYPE_MAP_DIRECTIONS, TYPE_MAP_SCHEMA_URL, TypeMapDoc
+        from analitiq.contracts.type_map import TYPE_MAP_DIRECTIONS, TypeMapDoc
         # Reuse the contract's matcher compilation, `${name}` placeholder
         # syntax and container test from the model so the validator's
         # rule-rendering and warnings can't drift from the model's rule-validation.
@@ -121,7 +121,6 @@ TYPE_MAP_FILENAME = "type-map.json"
 # looks as though it ships them.
 _STRAY_TYPE_MAP_GLOB = "type-map-*.json"
 
-_CONNECTOR_SENTINELS = ("transports", "connection_contract", "default_transport", "auth")
 _STORAGE_KINDS = ("file", "s3", "stdout")
 # Database-family kinds own database-endpoint documents and need a read section
 # (source) and a write section (destination DDL rendering).
@@ -1245,8 +1244,15 @@ def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
 
     A connector's `doc_path` that `located` refuses raises its refusal.
     """
-    if not isinstance(doc, dict) or not any(k in doc for k in _CONNECTOR_SENTINELS):
-        return []
+    if not isinstance(doc, dict):
+        # No rule to name, for the reason the no-path branch below carries:
+        # every coverage rule reads a key off the document to decide what its
+        # package must hold, so a document that is not a mapping settles none
+        # of them — and saying so beats a clean pass on a question never asked.
+        return [finding(
+            message_id="coverage-check-skipped-not-a-mapping",
+            kind="notApplicable", path="",
+            message="type-map coverage skipped: the document is not a JSON object.")]
     if doc_path is None:
         # No rule to name: PKG-030/032/033/035 are each about a sibling file
         # or directory this function reads beside the document, so without a

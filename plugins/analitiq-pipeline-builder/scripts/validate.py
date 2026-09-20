@@ -20,8 +20,10 @@ entry point. This adapter routes each entity as follows:
     deciding how the document is graded, which is what lets a document that
     omits the field naming its own family — precisely the broken input this
     adapter exists to diagnose — still be told which field it lacks. A
-    ``database-endpoint`` is handed its path too, so the derived-``endpoint_id``
-    gate and column checks read the files beside it; the rest settle alone.
+    ``database-endpoint`` is handed its path too, but only to gate its own
+    filename against its own ``endpoint_id`` (``RULE-PKG-031``) where the
+    layout places it at a stem-addressed path; the derived-``endpoint_id``
+    gate and the column checks already settle from the document alone.
   * ``type-map`` -> ``analitiq.validator.type_map_findings`` at
     ``scope="connection"``. ``scope`` is how the gap-only nature of a connection
     map (``RULE-TMAP-018``) reaches the published check, which otherwise holds a
@@ -155,8 +157,9 @@ def _document_findings(entity: str, doc, document_path: Path | None = None) -> l
     grading of a single document and this adapter adds none of its own:
     `--entity` reaches the same entry point the `analitiq-validate` CLI's
     `--kind` reaches, and the two cannot disagree about a document.
-    `document_path` is what the cross-file checks read a document's siblings
-    from; a document graded on its own has none.
+    `document_path` is passed only for a `database-endpoint`, to gate its own
+    filename against its own `endpoint_id`; a document graded on its own has
+    no filename to gate.
     """
     from analitiq.validator import validate_document
     return validate_document(doc, entity, doc_path=document_path)
@@ -587,8 +590,8 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     if entity == "type-map":
         findings = _type_map_findings(doc)
     else:
-        # A database endpoint is graded from its own path, so the cross-file
-        # checks reach the files beside it; the rest settle alone.
+        # A database endpoint is graded with its own path only so its own
+        # filename can be gated against its own endpoint_id; the rest settle alone.
         findings = _document_findings(
             entity, doc,
             document_path if entity == "database-endpoint" else None)

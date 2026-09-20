@@ -78,14 +78,14 @@ _API_PACKAGE = {
 }
 _API_PACKAGE_WITHOUT_MAP = {k: v for k, v in _API_PACKAGE.items() if k != "type-map.json"}
 
-#: `(entry key, package)` — the document validated, and every file beside it.
 def _kind_of(entry: str) -> str:
-    """The kind a package's entry document is submitted as, from the name it
-    sits under — the same routing the package entry point does, so a layout
-    table states its entry once instead of once per kind."""
+    """The kind a package's entry document is submitted as, derived from its
+    filename — a layout table names its entry once instead of once per
+    kind."""
     return "connector" if entry.endswith("connector.json") else "api-endpoint"
 
 
+#: `(entry key, package)` — the document validated, and every file beside it.
 LAYOUTS = {
     "api package, covered": ("connector.json", _API_PACKAGE),
     # Path order compares parts, string order compares characters: `a-b.json`

@@ -74,7 +74,8 @@ Run this loop for each document, and do not skip step 4:
 ```
 - [ ] 1. Read the rule file for the document being authored
 - [ ] 2. Author it
-- [ ] 3. Run `connector-schema-validator`; fix findings; repeat until clean
+- [ ] 3. Run `connector-schema-validator`, naming the document's kind; fix
+        findings; repeat until clean
 - [ ] 4. Re-read the rule file and confirm every row whose Checked column
         reads `—`; nothing rejects those, so step 3 says nothing about them
 ```
@@ -112,7 +113,8 @@ worklist protocol, and the on-disk layout — is `references/pipeline.md`
 3. **Dispatch creator** — `api-` / `db-` / `storage-connector-creator`
    by kind; always pass `provider_facts` (the creator's hard gate).
 4. **Validate the domain (barrier)** — `connector-schema-validator` over
-   the connector body and type map; the domain must be clean before
+   the connector body and type map, naming each document's kind —
+   `connector` and `type-map`; the domain must be clean before
    any fan-out. Findings are passed verbatim to the owning creator,
    which triages them — never you.
 5. **Endpoint fan-out (api only)** — a bounded worklist; one researcher

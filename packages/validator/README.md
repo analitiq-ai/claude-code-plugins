@@ -116,8 +116,8 @@ analitiq-validate --document connection.json --kind connection
 `--kind` is required, and it is the whole of how the document is identified:
 nothing reads the body to work out what it is, so a document that omits the
 field naming its own family is still told which field it lacks instead of being
-graded as whatever it resembles. `--kind --help` lists the names it takes; each
-is a published document-schema name. Point `--document` at
+graded as whatever it resembles. `analitiq-validate --help` lists the names it
+takes; each is a published document-schema name. Point `--document` at
 `definition/connector.json` to also trigger cross-file coverage: it discovers
 the sibling `type-map.json` and `endpoints/*.json` from the connector's
 directory. A `connection` / `stream` / `pipeline` document is validated purely

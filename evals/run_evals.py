@@ -286,6 +286,7 @@ def known_rule_ids() -> set[str]:
     return {p.stem for p in RULE_RECORDS.glob("*.yaml")}
 
 
+
 # ---------------------------------------------------------------------------
 # Scenario loading
 # ---------------------------------------------------------------------------
@@ -368,6 +369,10 @@ def _scenario_problems(scenario: dict, path: Path) -> list[str]:
         elif not _compiles(item[named[0]]):
             problems.append(f"text_assert on {item.get('file')!r}: {item[named[0]]!r} does not "
                             f"compile as a regex")
+    # The kinds `--kind` takes, read off the validator so a scenario is graded
+    # against the vocabulary the run itself will use.
+    from analitiq.validator import document_kinds
+    kinds = document_kinds()
     for spec in scenario.get("validate", []):
         unknown = sorted(set(spec) - {"glob", "entity", "kind", "bundle_root"})
         if unknown:
@@ -382,6 +387,10 @@ def _scenario_problems(scenario: dict, path: Path) -> list[str]:
             problems.append(f"validate spec {spec.get('glob')!r} must name exactly one of "
                             f"'entity' or 'kind' — nothing here detects a document's kind "
                             f"from its shape")
+        elif "kind" in spec and spec["kind"] not in kinds:
+            problems.append(f"validate spec {spec.get('glob')!r} names kind "
+                            f"{spec['kind']!r}, which the validator does not grade; "
+                            f"expected one of {sorted(kinds)}")
     for item in scenario.get("seed", []):
         if not (REPO_ROOT / item["from"]).is_file():
             problems.append(f"seed source {item['from']} does not exist")

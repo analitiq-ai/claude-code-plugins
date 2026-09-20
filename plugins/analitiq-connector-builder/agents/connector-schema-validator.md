@@ -23,8 +23,8 @@ artifact.
 
 - `document_path` — absolute path to the draft JSON document.
 - `document_kind` — the published document-schema name the document was
-  authored against: `connector`, `api-endpoint`, `database-endpoint` or
-  `type-map`. The validator grades the document as this and reads nothing of
+  authored against, one of the kinds this agent's `description` above names.
+  The validator grades the document as this and reads nothing of
   the body to second-guess it, which is what lets a draft missing the very
   field that names its family still be told which field it lacks. Take the kind
   from the dispatch that produced the draft, never from reading the file; if

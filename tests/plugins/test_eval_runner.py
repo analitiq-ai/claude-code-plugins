@@ -250,6 +250,13 @@ def test_a_validate_spec_kind_alone_is_accepted():
     assert _problems({"validate": [{"glob": "a.json", "kind": "connector"}]}) == []
 
 
+def test_a_validate_spec_kind_outside_the_vocabulary_is_refused():
+    # The CLI's `--kind` takes a closed set, so a typo costs a whole agent
+    # session at the last step unless the preflight reads the same set back.
+    problems = _problems({"validate": [{"glob": "a.json", "kind": "connectr"}]})
+    assert any("connectr" in p for p in problems), problems
+
+
 def test_a_validate_spec_must_name_a_glob():
     problems = _problems({"validate": [{"entity": "pipeline"}]})
     assert any("missing required key 'glob'" in p for p in problems)

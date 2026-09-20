@@ -448,8 +448,8 @@ def _write_package(root: Path, documents: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# validate_single_document — one document, the caller's declared schema name
-# checked against detection rather than trusted.
+# validate_single_document — one document, graded as the schema name the
+# caller declares.
 # ---------------------------------------------------------------------------
 
 def test_single_document_wraps_the_path_based_route(validator):
@@ -506,7 +506,11 @@ def test_type_map_is_graded_as_validate_document_grades_it(validator, section):
 
 
 @pytest.mark.parametrize("document,sent_as,expected", [
-    (_CONNECTOR_PG_TYPE_MAP, "connector", [("union_tag_not_found", "")]),
+    # Graded as a connector, a type map is told the union tag it lacks — and
+    # that coverage went unasked, this route carrying no path to read a
+    # package from.
+    (_CONNECTOR_PG_TYPE_MAP, "connector",
+     [("union_tag_not_found", ""), ("coverage-check-skipped-no-path", "")]),
     ({"$schema": f"{_H}/type-map-read/latest.json", "direction": "read",
       "rules": [{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}]}, "type-map",
      [("literal_error", "/$schema"), ("extra_forbidden", "/direction"),
@@ -552,12 +556,10 @@ def test_text_refused_outside_jsondecodeerror_is_a_finding_not_a_raise(
 
 
 # ---------------------------------------------------------------------------
-# `_consistent_entities`'s tables restate a vocabulary the contract package
-# generates, and nothing else in the validator package reads that owner. Per
-# `.claude/rules/no-drift-surfaces.md` a copy is pinned by a test that reads the
-# owner, or it is a defect — so the pin below reads `DOCUMENT_SCHEMA_NAMES`
-# itself. A kind registering with no name there cannot be declared as an
-# `entity` at all, so the vocabulary is what the tables have to track.
+# Every published document-schema name must reach a registered validator, so
+# a name added or renamed in the contract has to fail here rather than become
+# an entity nothing grades. The table below is pinned against
+# `DOCUMENT_SCHEMA_NAMES` itself, per `.claude/rules/no-drift-surfaces.md`.
 # ---------------------------------------------------------------------------
 
 #: A document for every registration a published document-schema name resolves
@@ -734,7 +736,8 @@ def test_a_connector_document_holding_another_entity_is_graded_as_a_connector(va
     result = validator.validate_connector_package(_package_request(documents))
     assert result["passed"] is False
     assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
-        ("union_tag_not_found", "connector.json#")], result
+        ("union_tag_not_found", "connector.json#"),
+        ("coverage-check-skipped-bad-kind", "connector.json#/kind")], result
 
 
 

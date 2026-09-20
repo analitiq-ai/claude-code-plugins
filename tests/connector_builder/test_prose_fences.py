@@ -84,11 +84,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ROOT = REPO_ROOT / "plugins" / "analitiq-connector-builder"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "prose-hosts"
 
-#: The published resources a marker entity may name — the spellings are the
-#: resource slugs the convention uses, so a marker naming a resource this
-#: gate cannot validate fails loudly rather than being skipped. The validator
-#: detects each document's kind from its own shape, so nothing here routes by
-#: schema URL; only membership is asked.
+#: The published document-schema names this gate can submit a fenced block
+#: under. The entity a marker names is the kind the validator grades the
+#: block as, so a marker naming the wrong resource grades the block against
+#: the wrong model rather than being detected and corrected.
 KNOWN_ENTITIES = {"connector", "api-endpoint", "type-map"}
 
 

@@ -19,17 +19,26 @@ import pytest
 from analitiq.contracts.connection import CONNECTION_SCHEMA_URL
 from analitiq.contracts.connector import CONNECTOR_SCHEMA_URL
 from analitiq.contracts.validation_requests import DOCUMENT_SCHEMA_NAMES
+from analitiq.validator import PIPELINE_BUNDLE_KIND
 
 
 def _errors(findings):
-    return [f for f in findings if f["severity"] == "error"]
+    # A `notApplicable` carries no `severity` at all (`rules/SCHEMA.md`).
+    return [f for f in findings if f.get("severity") == "error"]
 
 
 def test_every_published_document_schema_name_grades_a_document(validator):
-    """The kinds the validator grades are exactly the published document-schema
-    names, so a caller that reads the vocabulary off the contract can submit
-    under any name in it and no name in it is unreachable."""
-    assert validator.document_kinds() == set(DOCUMENT_SCHEMA_NAMES)
+    """A caller that reads the vocabulary off the contract can submit under any
+    name in it, and no name in it is unreachable."""
+    assert set(DOCUMENT_SCHEMA_NAMES) <= validator.document_kinds()
+
+
+def test_an_assembled_run_is_a_kind_beside_the_published_names(validator):
+    """One entry point grades everything a caller can submit. A bundle is the
+    only kind no published document schema names, because it is assembled from
+    documents rather than authored as one — so the kinds are the published
+    names plus it, and a kind arriving from anywhere else is unaccounted for."""
+    assert validator.document_kinds() == set(DOCUMENT_SCHEMA_NAMES) | {PIPELINE_BUNDLE_KIND}
 
 
 def test_a_kind_outside_the_vocabulary_is_refused(validator):

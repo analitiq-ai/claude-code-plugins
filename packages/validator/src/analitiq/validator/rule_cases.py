@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ._core import finding_costs_a_pass, validate_document
-from .pipelines import validate_pipeline_bundle
+from .pipelines import PIPELINE_BUNDLE_KIND
 
 if TYPE_CHECKING:  # the corpus layout, shared with the fixture corpus that ships
     from analitiq.contracts.shared.corpus import Verdict  # in analitiq-contract-models
@@ -72,7 +72,7 @@ def case_findings(case: RuleCase) -> list[dict]:
     document = json.loads(entry.read_text(encoding="utf-8"))
     if entry.name == _CONNECTOR_ENTRY:
         return validate_document(document, "connector", doc_path=entry)
-    return validate_pipeline_bundle(document)
+    return validate_document(document, PIPELINE_BUNDLE_KIND)
 
 
 def case_mismatch(case: RuleCase) -> str | None:

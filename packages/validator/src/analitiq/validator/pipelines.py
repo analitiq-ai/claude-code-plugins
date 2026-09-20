@@ -61,6 +61,7 @@ from typing import Any
 from ._core import (
     contract_model_domain,
     finding,
+    register_kind,
     register_model_and_schema_kind,
 )
 
@@ -617,4 +618,21 @@ def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> l
     return findings
 
 
+#: The kind name an assembled run is submitted under. Not a published document
+#: schema: a bundle is the inputs of one run gathered by whoever assembles them,
+#: so nothing publishes a shape for it. It is a kind because it is a thing a
+#: caller hands `validate_document` to be graded, which is what a kind is.
+PIPELINE_BUNDLE_KIND = "pipeline-bundle"
+
+
+def _validate_pipeline_bundle(doc: Any, location: Any = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature; a bundle reads nothing beside itself
+    """Kind entry point: dispatch a bundle document to the referential validator.
+
+    A bundle carries every document it references, so it reads nothing
+    beside its `location` (the registry's per-kind signature), unused here.
+    """
+    return validate_pipeline_bundle(doc)
+
+
+register_kind(PIPELINE_BUNDLE_KIND, _validate_pipeline_bundle)
 register_model_and_schema_kind("pipeline", _PIPELINE_ADAPTER)

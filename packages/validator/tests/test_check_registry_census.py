@@ -113,13 +113,13 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
 #: right to omit `rule` is stating which documented case it is.
 RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator._core::_unreadable_document_finding", "unreadable-document"): (
-        "the document could not be read or parsed at all, before any kind "
-        "was even identified"),
+        "the document could not be read or parsed at all, so no check ran to "
+        "name a rule"),
     ("analitiq.validator.document_set::validate_connector_package", "connector-document-missing"): (
         "a structural precondition — the package carries no connector "
         "document to grade — rejected before any rule-specific check could run"),
     ("analitiq.validator._core::validate_document", "check-crashed"): (
-        "top-level dispatch crashed before any kind was even identified, so "
+        "the kind's grading crashed before reaching any one rule, so "
         "the crash is not attributable to any one rule; a guarded check "
         "bound to exactly one rule instead passes it through _run_guarded's "
         "own rule= parameter, which keeps that crash off this table"),
@@ -130,6 +130,10 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator.connectors::<module>", "missing-contract-models-dependency"): (
         "the contract-models dependency is missing; no rule was even "
         "reachable to ask about"),
+    ("analitiq.validator.connectors::check_coverage", "coverage-check-skipped-not-a-mapping"): (
+        "every coverage rule reads a key off the document to decide what its "
+        "package must hold, so a document that is not a mapping settles none "
+        "of them"),
     ("analitiq.validator.connectors::check_coverage", "coverage-check-skipped-no-path"): (
         "coverage needs a filesystem-anchored document path this call did "
         "not have"),

@@ -60,12 +60,13 @@ from ._location import Location, located
 _KINDS = ("fail", "notApplicable", "informational")
 
 
-# The kind registry: one validator per published document-schema name. A
-# validator takes `(doc, location)` and returns a list of findings. The names
-# are supplied by the per-kind modules rather than listed here, so this module
-# imports nothing from the contract package and the vocabulary has one owner;
+# The kind registry: one validator per kind a caller can submit a document as.
+# A validator takes `(doc, location)` and returns a list of findings. The names
+# are supplied by the per-kind modules rather than listed here, so the
+# vocabulary has one owner and this module never names a kind of its own;
 # `packages/validator/tests/test_document_kind.py` holds the registered names to
-# `analitiq.contracts.validation_requests.DOCUMENT_SCHEMA_NAMES`.
+# `analitiq.contracts.validation_requests.DOCUMENT_SCHEMA_NAMES` plus the
+# assembled-run kind no published document schema names.
 _Validator = Callable[[Any, "Location | None"], list[dict]]
 _KIND_VALIDATORS: dict[str, _Validator] = {}
 
@@ -165,8 +166,8 @@ def finding(
     through the same `rule_by_id` a rejection raised via `rules.violation`
     resolves through, so the two never disagree about what an id names. A
     `fail` finding's `severity` is derived from that record — never accepted
-    as a literal — and is `error` for the two framework cases that fail with
-    no rule to name (`rule=None`). A `notApplicable` or `informational`
+    as a literal — and is `error` for a framework case that fails with no
+    rule to name (`rule=None`). A `notApplicable` or `informational`
     finding carries no `severity` at all.
     """
     if kind not in _KINDS:

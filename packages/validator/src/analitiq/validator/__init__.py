@@ -68,7 +68,7 @@ from .connectors import (  # skipcq: PY-W2000
     _flatten_api_locator,
     _render_arrow_type,
 )
-from .pipelines import validate_pipeline_bundle
+from .pipelines import PIPELINE_BUNDLE_KIND, validate_pipeline_bundle
 
 __all__ = [
     "finding",
@@ -89,5 +89,6 @@ __all__ = [
     "TYPE_MAP_FILENAME",
     "is_stem_addressed_endpoint_path",
     "is_addressed_endpoint_path",
+    "PIPELINE_BUNDLE_KIND",
     "validate_pipeline_bundle",
 ]
