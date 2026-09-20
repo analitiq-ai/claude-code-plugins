@@ -98,7 +98,7 @@
     {
       "match": "exact",
       "arrow_type": "UInt64",
-      "native_type": "BIGINT"
+      "native_type": "NUMERIC(20, 0)"
     },
     {
       "match": "exact",

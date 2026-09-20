@@ -2038,7 +2038,7 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
         for c, n in [
             ("Boolean", "BOOLEAN"), ("Int8", "SMALLINT"), ("Int16", "SMALLINT"),
             ("Int32", "INTEGER"), ("Int64", "BIGINT"), ("UInt8", "SMALLINT"),
-            ("UInt16", "INTEGER"), ("UInt32", "BIGINT"), ("UInt64", "BIGINT"),
+            ("UInt16", "INTEGER"), ("UInt32", "BIGINT"), ("UInt64", "NUMERIC(20, 0)"),
             ("Float16", "REAL"), ("Float32", "REAL"), ("Float64", "DOUBLE PRECISION"),
             ("Utf8", "TEXT"), ("LargeUtf8", "TEXT"), ("Json", "JSONB"),
             ("Object", "JSONB"), ("List", "JSONB"), ("Binary", "BYTEA"),
