@@ -10,7 +10,7 @@ This skill is loaded by `api-connector-creator` when authoring an API
 connector. It carries the API-specific vocabulary and examples needed to
 populate `transports`, `auth`, `connection_contract`, and
 `resource_discovery` for `kind: "api"`, plus the standalone
-`type-map-read.json` shipped alongside the connector. An API connector's
+`type-map.json` shipped alongside the connector. An API connector's
 release carries no connector-package Python files (`RULE-CTOR-043`).
 
 ## Required reading (load on demand)
@@ -24,8 +24,8 @@ Pick what you need for the auth and pagination styles you're authoring:
 - This skill's `spec-pagination.md` (for endpoint pagination)
 - This skill's `spec-replication.md` (for incremental sync)
 - `connector-spec-db/spec-type-maps.md` for authoring the standalone
-  `type-map-read.json` (same rule shape for API and DB; API ships the
-  read direction only)
+  `type-map.json` (same rule shape for API and DB; API ships the `read`
+  section only)
 - `connector-builder/references/value-expressions.md` §Function catalog (the
   registered functions, and the ones documented as planned)
 - `connector-builder/references/lifecycle-phases.md` (for `post_auth_outputs`
@@ -33,7 +33,7 @@ Pick what you need for the auth and pagination styles you're authoring:
   inheriting transport see `spec-transport.md`)
 - The closest auth archetype under `examples/<name>/` (`api-key`,
   `oauth2-authorization-code`, `jwt`) — each a `<name>.example.json` connector
-  body with a sibling `type-map-read.json` and `endpoints/`.
+  body with a sibling `type-map.json` and `endpoints/`.
   `spec-auth-flows.md` carries a section per API auth type (`db` is
   `connector-spec-db`'s); only the diverse archetypes ship a full example dir
 

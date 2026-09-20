@@ -1,9 +1,9 @@
 id: RULE-PKG-023
 statement: >
-  A connector's write direction MUST live in its write type-map document: the
-  package ships no Python type-rendering table, and a `render_column_type`
-  override exists only for logic the map's rules cannot express, delegating
-  every other type back to the map.
+  A connector's write direction MUST live in the `write` section of its type
+  map: the package ships no Python type-rendering table, and a
+  `render_column_type` override exists only for logic the map's rules cannot
+  express, delegating every other type back to the map.
 tier: shape
 severity: warning
 artifact_kinds: [connector-package]
@@ -14,7 +14,7 @@ rationale: >
   Every transport renders column types through that one hook, whose default
   is the write map, so a rendering table transcribed into Python quietly
   takes over the direction the map is validated for — the map's coverage
-  warnings then grade a document nothing reads, and the two drift apart
+  warnings then grade a `write` section nothing reads, and the two drift apart
   from the first new type onward. Code feels like the natural home for
   parameterised rendering, which is why the map has substitution rules at
   all. Nothing here can tell a delegating override from a full table: the

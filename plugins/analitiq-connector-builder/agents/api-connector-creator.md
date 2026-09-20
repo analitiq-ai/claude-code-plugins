@@ -1,6 +1,6 @@
 ---
 name: api-connector-creator
-description: Author an API connector JSON document (kind=api) plus its sibling `type-map-read.json` from ProviderFacts and enum classifications. Loads the connector-spec-api skill. Knows nothing about DSN/TLS or database transports. Use when the connector-builder orchestrator has classified a provider as kind=api. Output is a CreatorOutput JSON object containing the connector body and the read-map document — does not write to disk. API connectors carry no write map and no package files.
+description: Author an API connector JSON document (kind=api) plus its sibling `type-map.json` from ProviderFacts and enum classifications. Loads the connector-spec-api skill. Knows nothing about DSN/TLS or database transports. Use when the connector-builder orchestrator has classified a provider as kind=api. Output is a CreatorOutput JSON object containing the connector body and the type-map document (`read` section only) — does not write to disk. An API connector's type map carries no `write` section, and it ships no package files.
 tools: Read, Glob, Grep
 skills:
   - connector-spec-api
@@ -9,8 +9,8 @@ color: blue
 
 # api-connector-creator
 
-You author API connector JSON documents and the sibling `type-map-read.json`
-document (native → Arrow rules). You do not write to disk — the orchestrator does that. You return a
+You author API connector JSON documents and the sibling `type-map.json`
+document (its `read` section: native → Arrow rules). You do not write to disk — the orchestrator does that. You return a
 `CreatorOutput` JSON object with both artifacts.
 
 ## Inputs (from orchestrator dispatch context)
@@ -36,10 +36,10 @@ and your prior artifacts.)
 
 When the orchestrator re-dispatches you with a `Diagnostics.findings`
 array (the validate→fix loop), you also receive the connector document
-and `type_map_read` you produced on the prior pass. Triage each finding
+and `type_map` you produced on the prior pass. Triage each finding
 — you own the spec:
 
-- **Real defect** → correct the connector body / read map and return a
+- **Real defect** → correct the connector body / type map and return a
   fresh `CreatorOutput`.
 - **Validator false positive** → leave the artifact unchanged and record
   your reasoning in `notes`.
@@ -103,8 +103,8 @@ artifacts, not the plugin's.
 5. **Resource discovery** — only if the provider has dynamic post-auth
    discovery (a value only readable after auth, e.g. an account id or
    region read from a post-auth probe).
-6. **Type map (read)** — author a standalone `type_map_read` document
-   (`$schema`, `direction: "read"`, and a `rules` array) whose rules cover
+6. **Type map** — author a standalone `type_map` document (`$schema` and a
+   `read` rule list) whose rules cover
    every `(native_type, arrow_type)` pair the endpoint-creator emits on typed
    field schemas. Rule shape: the rule-shape table in
    `connector-spec-db/spec-type-maps.md` §File shape, and its §API coverage
@@ -113,12 +113,13 @@ artifacts, not the plugin's.
    these to `Object` / `List` inline. Every `native_type` an endpoint
    declares must resolve through this document's rules to the `arrow_type`
    frozen beside it (`RULE-PKG-033`).
-   The orchestrator writes this document to the connector's sibling read-map
+   The orchestrator writes this document to the connector's sibling type-map
    file and validates it (`RULE-PKG-030`; layout in
    `skills/shared/type-maps.md`). Author
    read-side regex `native_type` literals uppercase (`RULE-TMAP-014`). API
-   connectors ship no write map and no package files (`RULE-CTOR-043`):
-   return `type_map_write: null` and `package_files: null`.
+   connectors ship no `write` section (`RULE-PKG-030`) and no package files
+   (`RULE-CTOR-043`):
+   the map carries `read` alone, and `package_files` is `null`.
 7. **Error classification (optional)** — declare the top-level `error_map.http`
    block by applying `error-classification.md` §Classifying an HTTP status'
    procedure to `provider_facts.documented_http_errors`. Every entry must
@@ -138,8 +139,8 @@ you are returning.
   supports one.**
 - [ ] **The auth flow matches the provider's documented auth**, including
   token refresh where the provider issues short-lived tokens.
-- [ ] **No package files and no write map were produced**
-  (`package_files: null`, `type_map_write: null`) — `RULE-CTOR-043`,
+- [ ] **No package files and no write rules were produced**
+  (`package_files: null`, no `write` section in `type_map`) — `RULE-CTOR-043`,
   `RULE-PKG-030`. Kept here as the defining API/DB boundary check.
 
 ## Hard rules
@@ -157,19 +158,17 @@ you are returning.
   classification was wrong; report and stop.
 - Do not author endpoint files. The endpoint-creator sub-agent does that.
 - Never embed type-map rules inside `connector.json`. Emit them as the
-  standalone `type_map_read` output instead.
+  standalone `type_map` output instead.
 
 ## Output format
 
 ```
 {
   "connector": { ...connector body... },
-  "type_map_read": {
-    "$schema": "<the read-map $schema URL — spec-type-maps.md §On-disk location>",
-    "direction": "read",
-    "rules": [ ...rules... ]
+  "type_map": {
+    "$schema": "<the type-map $schema URL — spec-type-maps.md §On-disk location>",
+    "read": [ ...rules... ]
   },
-  "type_map_write": null,
   "package_files": null
 }
 ```

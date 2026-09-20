@@ -1,21 +1,27 @@
 """Cross-field rules of the type-map contract models — the single-document
-validity the validator delegates to. The PR premise ("the model rejects it, so
-the validator catches it") rests on these, so they are pinned directly.
+validity the validator delegates to. The validator's premise ("the model
+rejects it, so the validator catches it") rests on these, so they are pinned
+directly.
 """
+import json
+from pathlib import Path
+
+import jsonschema
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from analitiq.contracts.type_map import (
-    TYPE_MAP_READ_SCHEMA_URL,
-    TYPE_MAP_WRITE_SCHEMA_URL,
-    TypeMapReadDoc,
-    TypeMapWriteDoc,
+    TYPE_MAP_DIRECTIONS,
+    TYPE_MAP_SCHEMA_URL,
+    TypeMapDoc,
     compile_matcher,
     normalize_native_type,
 )
 
-READ = TypeAdapter(TypeMapReadDoc)
-WRITE = TypeAdapter(TypeMapWriteDoc)
+MAP = TypeAdapter(TypeMapDoc)
+# The section a rule list is wrapped under — the key is the direction.
+READ = "read"
+WRITE = "write"
 
 # Capture fragments bounded to what a `Decimal128` parameter position admits.
 # A read rule feeding a decimal position from an unbounded `\d+` is refused
@@ -54,95 +60,112 @@ def test_normalize_native_type_canonical(raw, expected):
     assert normalize_native_type(raw) == expected
 
 
-def _wrap(adapter, rules):
-    """A bare rule list wrapped in the published `{$schema, direction, rules}`
-    type-map document shape, direction inferred from which adapter it targets."""
-    direction = "read" if adapter is READ else "write"
-    schema_url = TYPE_MAP_READ_SCHEMA_URL if adapter is READ else TYPE_MAP_WRITE_SCHEMA_URL
-    return {
-        "$schema": schema_url,
-        "direction": direction,
-        "rules": rules,
-    }
+def _wrap(direction, rules):
+    """A bare rule list wrapped in the published `{$schema, read | write}`
+    type-map document shape, under the section its direction names."""
+    return {"$schema": TYPE_MAP_SCHEMA_URL, direction: rules}
 
 
-def _accepts(adapter, rules):
-    adapter.validate_python(_wrap(adapter, rules))
+def _accepts(direction, rules):
+    MAP.validate_python(_wrap(direction, rules))
 
 
-def _rejects(adapter, rules):
+def _rejects(direction, rules):
     with pytest.raises(ValidationError):
-        adapter.validate_python(_wrap(adapter, rules))
+        MAP.validate_python(_wrap(direction, rules))
 
 
-def test_empty_array_rejected():
+def test_empty_section_rejected():
     _rejects(READ, [])
     _rejects(WRITE, [])
 
 
 # ---------------------------------------------------------------------------
-# The document envelope itself: `$schema` + `direction` + `rules`, each
-# required and each pinned — the shape `_wrap`'s helpers exercise, never
-# their own field-level rejections.
+# The document envelope itself: a required `$schema` and one section per
+# direction, each optional on its own and at least one present — the shape
+# `_wrap`'s helpers exercise, never their own field-level rejections.
 # ---------------------------------------------------------------------------
 
 _ONE_READ_RULE = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
 _ONE_WRITE_RULE = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
 
 
+def test_both_sections_accepted_together():
+    MAP.validate_python({"$schema": TYPE_MAP_SCHEMA_URL,
+                         "read": _ONE_READ_RULE, "write": _ONE_WRITE_RULE})
+
+
 def test_missing_schema_url_rejected():
     doc = _wrap(READ, _ONE_READ_RULE)
     del doc["$schema"]
     with pytest.raises(ValidationError):
-        READ.validate_python(doc)
+        MAP.validate_python(doc)
 
 
-def test_missing_direction_rejected():
+@pytest.mark.parametrize("doc", [
+    {"$schema": TYPE_MAP_SCHEMA_URL},
+    {"$schema": TYPE_MAP_SCHEMA_URL, "read": None},
+    {"$schema": TYPE_MAP_SCHEMA_URL, "read": None, "write": None},
+], ids=["no-section", "null-read", "both-null"])
+def test_a_document_without_a_section_rejected(doc):
+    with pytest.raises(ValidationError):
+        MAP.validate_python(doc)
+
+
+_PUBLISHED = json.loads(
+    (Path(__file__).resolve().parents[3] / "schemas" / "type-map" / "latest.json").read_text())
+
+
+@pytest.mark.parametrize("doc", [
+    {"$schema": TYPE_MAP_SCHEMA_URL},
+    {"$schema": TYPE_MAP_SCHEMA_URL, "read": None},
+    {"$schema": TYPE_MAP_SCHEMA_URL, "read": None, "write": None},
+    {"$schema": TYPE_MAP_SCHEMA_URL, "read": _ONE_READ_RULE},
+    {"$schema": TYPE_MAP_SCHEMA_URL, "read": _ONE_READ_RULE, "write": None},
+    {"$schema": TYPE_MAP_SCHEMA_URL, "write": _ONE_WRITE_RULE},
+    {"$schema": TYPE_MAP_SCHEMA_URL, "read": None, "write": _ONE_WRITE_RULE},
+], ids=["no-section", "null-read", "both-null", "read", "read-null-write", "write",
+        "null-read-write"])
+def test_the_published_schema_decides_a_section_as_the_model_does(doc):
+    # The at-least-one-section rule is a model validator the renderer cannot
+    # see, so the schema carries it as a hand-declared anyOf; a render check
+    # only compares the file to that declaration, never its meaning to the model.
+    try:
+        MAP.validate_python(doc)
+        model_accepts = True
+    except ValidationError:
+        model_accepts = False
+    schema_accepts = jsonschema.Draft202012Validator(_PUBLISHED).is_valid(doc)
+    assert schema_accepts == model_accepts
+
+
+@pytest.mark.parametrize("key,value", [
+    ("direction", "read"),
+    ("rules", _ONE_READ_RULE),
+    ("extra", 1),
+])
+def test_unknown_top_level_key_rejected(key, value):
+    """The key a rule list sits under is its direction, so neither a
+    `direction` field nor a flat `rules` list is part of the document."""
     doc = _wrap(READ, _ONE_READ_RULE)
-    del doc["direction"]
+    doc[key] = value
     with pytest.raises(ValidationError):
-        READ.validate_python(doc)
+        MAP.validate_python(doc)
 
 
-def test_missing_rules_rejected():
+def test_rules_graded_by_the_section_they_sit_under():
+    """A write rule's `arrow_type` is a matcher, a read rule's a rendered Arrow
+    type: the same rule is valid under `write` and refused under `read`."""
+    rule = [{"match": "regex", "native_type": "TEXT", "arrow_type": "^Utf8$"}]
+    _accepts(WRITE, rule)
+    _rejects(READ, rule)
+
+
+def test_schema_url_must_be_the_type_map_url():
     doc = _wrap(READ, _ONE_READ_RULE)
-    del doc["rules"]
+    doc["$schema"] = TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/")
     with pytest.raises(ValidationError):
-        READ.validate_python(doc)
-
-
-def test_unknown_top_level_key_rejected():
-    doc = _wrap(READ, _ONE_READ_RULE)
-    doc["extra"] = 1
-    with pytest.raises(ValidationError):
-        READ.validate_python(doc)
-
-
-def test_direction_literal_must_match_the_adapter():
-    """The invariant `direction` exists to express: a document graded against
-    one direction's adapter whose own `direction` names the other is a model
-    error, not a silent resolution. That is what lets a caller holding a
-    direction from somewhere other than the document — an external caller of
-    `type_map_findings`, which takes the direction to grade against as an
-    argument — grade a map against that direction and have the disagreement
-    reported.
-    """
-    read_doc = _wrap(READ, _ONE_READ_RULE)
-    read_doc["direction"] = "write"
-    with pytest.raises(ValidationError):
-        READ.validate_python(read_doc)
-
-    write_doc = _wrap(WRITE, _ONE_WRITE_RULE)
-    write_doc["direction"] = "read"
-    with pytest.raises(ValidationError):
-        WRITE.validate_python(write_doc)
-
-
-def test_schema_url_literal_must_match_the_direction():
-    read_doc = _wrap(READ, _ONE_READ_RULE)
-    read_doc["$schema"] = _wrap(WRITE, _ONE_WRITE_RULE)["$schema"]
-    with pytest.raises(ValidationError):
-        READ.validate_python(read_doc)
+        MAP.validate_python(doc)
 
 
 def test_match_enum_and_required_keys():
@@ -226,7 +249,7 @@ def test_exact_write_native_render_placeholders_validated():
     # half ("...the native_type DDL it renders MUST carry only well-formed
     # placeholders").
     with pytest.raises(ValidationError) as exc:
-        WRITE.validate_python(_wrap(WRITE, [{"match": "exact", "arrow_type": "Utf8", "native_type": "VARCHAR(${})"}]))
+        MAP.validate_python(_wrap(WRITE, [{"match": "exact", "arrow_type": "Utf8", "native_type": "VARCHAR(${})"}]))
     assert "RULE-TMAP-008" in str(exc.value)
 
 
@@ -239,21 +262,21 @@ def test_regex_write_native_render_placeholders_validated():
     _rejects(WRITE, [{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+)\)",
                       "native_type": "NUMERIC(${})"}])
     with pytest.raises(ValidationError) as exc:
-        WRITE.validate_python(_wrap(WRITE, [{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+)\)",
+        MAP.validate_python(_wrap(WRITE, [{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+)\)",
                                "native_type": "NUMERIC(${})"}]))
     assert "RULE-TMAP-009" in str(exc.value)
 
 
-def _refusal(adapter, rule) -> str:
+def _refusal(direction, rule) -> str:
     """The model's refusal of a one-rule document, as the text an author reads."""
     with pytest.raises(ValidationError) as exc:
-        adapter.validate_python(_wrap(adapter, [rule]))
+        MAP.validate_python(_wrap(direction, [rule]))
     return str(exc.value)
 
 
-def _regex_rule(adapter, matcher):
+def _regex_rule(direction, matcher):
     """A regex rule whose matcher is `matcher`, with a render the model accepts."""
-    if adapter is READ:
+    if direction == READ:
         return {"match": "regex", "native_type": matcher, "arrow_type": "Utf8"}
     return {"match": "regex", "arrow_type": matcher, "native_type": "TEXT"}
 
@@ -266,8 +289,8 @@ def _regex_rule(adapter, matcher):
     r"^X\(?<(?P<n>\d)>$",
 ])
 def test_regex_rejects_python_named_group(matcher):
-    for adapter, rule_id in ((READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")):
-        refusal = _refusal(adapter, _regex_rule(adapter, matcher))
+    for direction, rule_id in ((READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")):
+        refusal = _refusal(direction, _regex_rule(direction, matcher))
         assert rule_id in refusal, refusal
         assert "(?<name>…)" in refusal, refusal
 
@@ -280,36 +303,36 @@ def test_regex_rejects_python_named_group(matcher):
     r"^N\((?<u>(?<u>[1-9])\d*)\)$",
 ])
 def test_regex_rejects_a_name_given_to_more_than_one_group(matcher):
-    for adapter, rule_id in ((READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")):
-        refusal = _refusal(adapter, _regex_rule(adapter, matcher))
+    for direction, rule_id in ((READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")):
+        refusal = _refusal(direction, _regex_rule(direction, matcher))
         assert rule_id in refusal, refusal
         assert "'u'" in refusal, refusal
 
 
 @pytest.mark.parametrize("matcher", [r"^(?<u>X)[(?<u>]$", r"^(?<u>X)\Q(?<u>\E$"])
 def test_regex_accepts_a_group_name_repeated_where_it_opens_no_group(matcher):
-    for adapter in (READ, WRITE):
-        _accepts(adapter, [_regex_rule(adapter, matcher)])
+    for direction in (READ, WRITE):
+        _accepts(direction, [_regex_rule(direction, matcher)])
 
 
 @pytest.mark.parametrize("matcher", [r"^INT\[\]{0}$", r"^INT(?:\[\]){0,0}$"])
 def test_regex_accepts_a_zero_count_repetition(matcher):
-    for adapter in (READ, WRITE):
-        _accepts(adapter, [_regex_rule(adapter, matcher)])
+    for direction in (READ, WRITE):
+        _accepts(direction, [_regex_rule(direction, matcher)])
 
 
 def test_python_named_group_spelling_inside_a_quote_is_a_literal():
     # `\Q…\E` quotes its contents, and a class holds members, so neither
     # spelling opens a group.
     for matcher in (r"^\Q(?P<x>\E$", r"^[(?P<x>)]$"):
-        for adapter in (READ, WRITE):
-            _accepts(adapter, [_regex_rule(adapter, matcher)])
+        for direction in (READ, WRITE):
+            _accepts(direction, [_regex_rule(direction, matcher)])
 
 
 @pytest.mark.parametrize("matcher", [r"^(?<probe>X)[(?P<y>]$", r"^(?<probe>X)\Q(?P<y>\E$"])
 def test_python_named_group_spelling_is_located_beside_a_group_named_probe(matcher):
-    for adapter in (READ, WRITE):
-        _accepts(adapter, [_regex_rule(adapter, matcher)])
+    for direction in (READ, WRITE):
+        _accepts(direction, [_regex_rule(direction, matcher)])
 
 
 def test_regex_named_backreference_rejected():
@@ -328,17 +351,17 @@ def test_regex_named_backreference_rejected():
     (r"(?>A+)B", "invalid perl operator: (?>"),
     (r"A{1001}", "invalid repetition size: {1001}"),
 ])
-@pytest.mark.parametrize("adapter,rule_id", [(READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")],
+@pytest.mark.parametrize("direction,rule_id", [(READ, "RULE-TMAP-005"), (WRITE, "RULE-TMAP-009")],
                          ids=["read", "write"])
-def test_regex_outside_re2_is_rejected_with_re2s_own_error(adapter, rule_id, matcher, re2_error):
-    refusal = _refusal(adapter, _regex_rule(adapter, matcher))
+def test_regex_outside_re2_is_rejected_with_re2s_own_error(direction, rule_id, matcher, re2_error):
+    refusal = _refusal(direction, _regex_rule(direction, matcher))
     assert rule_id in refusal, refusal
     assert re2_error in refusal, refusal
 
 
-@pytest.mark.parametrize("adapter", [READ, WRITE], ids=["read", "write"])
-def test_regex_only_re2_accepts_is_accepted(adapter):
-    _accepts(adapter, [_regex_rule(adapter, r"\p{L}+")])
+@pytest.mark.parametrize("direction", [READ, WRITE], ids=["read", "write"])
+def test_regex_only_re2_accepts_is_accepted(direction):
+    _accepts(direction, [_regex_rule(direction, r"\p{L}+")])
 
 
 def test_named_group_compiles_as_written():
@@ -349,6 +372,11 @@ def test_named_group_compiles_as_written():
 
 def test_regex_must_compile():
     _rejects(READ, [{"match": "regex", "native_type": "([", "arrow_type": "Utf8"}])
+
+
+def test_the_directions_are_the_sections_the_model_declares():
+    sections = {f.alias or name for name, f in TypeMapDoc.model_fields.items()} - {"$schema"}
+    assert set(TYPE_MAP_DIRECTIONS) == sections
 
 
 def test_placeholder_needs_matching_capture():
@@ -623,6 +651,6 @@ def test_a_capture_locator_fault_is_not_reported_as_the_authors_violation(monkey
 
         monkeypatch.setattr(type_map, "compile_re2", refuse_every_cut)
     with pytest.raises(RuntimeError):
-        READ.validate_python(_wrap(READ, [{"match": "regex",
+        MAP.validate_python(_wrap(READ, [{"match": "regex",
                                            "native_type": r"^N\((?<p>[1-9])\)$",
                                            "arrow_type": "Decimal128(${p}, 0)"}]))

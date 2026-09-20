@@ -1,21 +1,23 @@
 # Type maps
 
-How to author the standalone type-map files that ship alongside every
-connector. Type maps connect provider-native type labels and Apache
-Arrow canonical types, in two directions:
+How to author the standalone `type-map.json` that ships alongside every
+connector. A type map connects provider-native type labels and Apache
+Arrow canonical types, with a section for each direction the connector's
+`kind` calls for (`RULE-PKG-030`):
 
-- **Read map** (`type-map-read.json`) — native → Arrow. For databases it
+- **Read map** (the `read` section) — native → Arrow. For databases it
   maps native column types (`BIGINT`, `NUMERIC(10,2)`); for API connectors
   it maps the JSON Schema `format`/`type` strings used as endpoint-field
   natives.
-- **Write map** (`type-map-write.json`) — Arrow → native. It is the
+- **Write map** (the `write` section) — Arrow → native. It is the
   connector's declarative DDL vocabulary: every transport (SQLAlchemy
   DDL, ADBC DDL, control-plane create_table) renders column types
   through `dialect.render_column_type`, whose default implementation is
   this map (`RULE-PKG-023`).
 
-Which map a connector ships is decided by its `kind` (`RULE-PKG-030`): a
-database connector ships both, an API connector the read map alone.
+Which sections a connector's map carries is decided by its `kind`
+(`RULE-PKG-030`): a database connector's carries `read` and `write`, an API
+connector's `read` alone.
 
 ## Contents
 
@@ -34,35 +36,34 @@ database connector ships both, an API connector the read map alone.
 
 ## On-disk location
 
-Both files are **standalone** siblings of `connector.json`:
+The map is a **standalone** sibling of `connector.json`:
 
 ```
-{connector_id}/definition/type-map-read.json
-{connector_id}/definition/type-map-write.json   # database only
+{connector_id}/definition/type-map.json
 ```
 
-The read map validates against
-`https://schemas.analitiq.ai/type-map-read/latest.json`. The write map
-shares the same rule shape but inverts the direction
-(`arrow_type` matches, `native_type` renders) and validates against its own
-published schema, `https://schemas.analitiq.ai/type-map-write/latest.json`.
-Neither map is ever embedded inside `connector.json` or any endpoint document.
-
-The pre-split filename `type-map.json` is never authored (`RULE-PKG-030`).
+It validates against `https://schemas.analitiq.ai/type-map/latest.json`. The
+`write` section shares the `read` section's rule shape but inverts the direction
+(`arrow_type` matches, `native_type` renders). The map is never embedded inside
+`connector.json` or any endpoint document, and no other `type-map-*.json` name
+is authored beside it (`RULE-PKG-030`).
 
 ## File shape
 
-Each file is a top-level JSON object: a fixed `direction` (`"read"` /
-`"write"`), the file's own `$schema` URL, and `rules` — a non-empty array of
-rule objects authored in resolution order (`RULE-TMAP-013`):
+The file is a top-level JSON object: its `$schema` URL and, keyed `read` and
+`write`, a non-empty array of rule objects per direction, each authored in
+resolution order (`RULE-TMAP-013`). A section the connector has no use for is
+left out:
 
-<!-- validate: type-map-read -->
+<!-- validate: type-map -->
 ```json
 {
-  "$schema": "https://schemas.analitiq.ai/type-map-read/latest.json",
-  "direction": "read",
-  "rules": [
+  "$schema": "https://schemas.analitiq.ai/type-map/latest.json",
+  "read": [
     { "match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean" }
+  ],
+  "write": [
+    { "match": "exact", "arrow_type": "Boolean", "native_type": "BOOLEAN" }
   ]
 }
 ```
@@ -71,7 +72,7 @@ Each rule object carries exactly the keys named below
 and no others — but which key is the *matcher* and which is *rendered*
 depends on the direction:
 
-| Key | Read map (`type-map-read.json`) | Write map (`type-map-write.json`) |
+| Key | Read map (`read`) | Write map (`write`) |
 |---|---|---|
 | `match` | `"exact"` or `"regex"` — how the matcher is compared. | Same. |
 | `native_type` | **Matcher.** Literal label (`exact`) or pattern (`regex`). | **Rendered.** The native DDL emitted for a matching `arrow_type`; may carry `${name}` substitutions on `regex` rules. |
@@ -208,12 +209,11 @@ The shape markers `Object` and `List` split by direction:
   `List`. A write map without rules for them hard-errors the stream at
   configuration time. Render both exactly like `Json`:
 
-  <!-- validate: type-map-write -->
+  <!-- validate: type-map -->
   ```json
   {
-    "$schema": "https://schemas.analitiq.ai/type-map-write/latest.json",
-    "direction": "write",
-    "rules": [
+    "$schema": "https://schemas.analitiq.ai/type-map/latest.json",
+    "write": [
       { "match": "exact", "arrow_type": "Object", "native_type": "JSONB" },
       { "match": "exact", "arrow_type": "List",   "native_type": "JSONB" }
     ]
@@ -260,7 +260,7 @@ mechanical — the same judgment transfers across providers:
 
 <!-- PROBE: endpoint-pair-unresolved-through-read-map -->
 For API connectors, every `(native_type, arrow_type)` pair a typed endpoint
-field declares must resolve through `type-map-read.json` — the matched rule's
+field declares must resolve through the read map — the matched rule's
 rendered `arrow_type` (with any `${name}` captures substituted) has to equal
 the field's frozen `arrow_type` (`RULE-PKG-033`).
 
@@ -334,8 +334,8 @@ tz-aware `Timestamp` forms, and the bare container markers `Object` / `List`
 (see "Schemaless / JSON-shaped natives" — API sources hand them over as
 literal canonicals).
 
-Run the validator and reconcile every family its `type-map-write-coverage`
-warning names. A gap is legitimate only where the connector's dialect renders
+Run the validator and reconcile every family its `RULE-TMAP-017` warning
+names. A gap is legitimate only where the connector's dialect renders
 that family itself (`RULE-TMAP-019`) — BigQuery ships no Decimal rule because
 NUMERIC/BIGNUMERIC selection needs precision-range arithmetic rules cannot
 express.
@@ -394,7 +394,8 @@ is wrong — `Timestamp` requires a unit).
 
 ## Worked example: Postgres (read)
 
-See the reference read map, `examples/postgresql/type-map-read.json` —
+See the reference read map, the `read` section of
+`examples/postgresql/type-map.json` —
 uppercase patterns, the width-tiered `NUMERIC`/`DECIMAL` captures
 (`Decimal128` ≤ 38, `Decimal256` above, plus precision-only `(p)`→scale-0
 tiers, over a bare fallback), the timestamp precision ladder (digit
@@ -403,7 +404,8 @@ count → Arrow unit, there instantiated to Postgres's 0–6 range), and a
 
 ## Worked example: Postgres (write)
 
-See the reference write map, `examples/postgresql/type-map-write.json` —
+See the reference write map, the `write` section of
+`examples/postgresql/type-map.json` —
 `arrow_type` is the matcher (note the regexes over the `arrow_type` string
 with lowercase capture names), and `native_type` is the rendered DDL.
 

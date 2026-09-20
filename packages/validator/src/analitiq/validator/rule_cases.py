@@ -6,7 +6,7 @@ The entry file at the case root decides how the case is validated, and a case
 root holds exactly one:
 
 - ``connector.json`` — a connector package, validated at its path so its
-  sibling type maps and ``endpoints/*.json`` are read beside it;
+  sibling type map and ``endpoints/*.json`` are read beside it;
 - ``bundle.json`` — a pipeline bundle, validated as the CLI validates one,
   and the only file its case root holds: a bundle carries its documents inline.
 

@@ -48,7 +48,7 @@ def _roots() -> dict[str, tuple[type, ...]]:
         "database-endpoint": (endpoints.DatabaseEndpointDoc,),
         "stream": (stream.StreamInput,),
         "pipeline": (config.PipelineInput,),
-        "type-map": (type_map.TypeMapReadDoc, type_map.TypeMapWriteDoc),
+        "type-map": (type_map.TypeMapDoc,),
     }
 
 

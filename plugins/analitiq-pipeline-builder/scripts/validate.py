@@ -28,7 +28,7 @@ entry point. This adapter routes each entity as follows:
     "unrecognized artifact" finding. Routing by the caller-supplied ``--entity``,
     which is already known here, guarantees the right model runs and yields
     per-field findings instead.
-  * ``type-map`` -> ``analitiq.validator.type_map_findings_as_declared`` at
+  * ``type-map`` -> ``analitiq.validator.type_map_findings`` at
     ``scope="connection"``. ``scope`` is how the gap-only nature of a connection
     map (``RULE-TMAP-018``) reaches the published check, which otherwise holds a
     write map to a connector's full vocabulary (``RULE-TMAP-017``).
@@ -39,9 +39,9 @@ entry point. This adapter routes each entity as follows:
     authoring error); an ``active`` pipeline is held to full runnability. The
     published bundle validator receives assembled documents, never a
     connection's directory, so the bundle pass also hands each connection's
-    ``definition/`` to ``analitiq.validator.collect_type_maps`` — the collection
-    a connector's siblings go through — roots every finding at the entry it
-    concerns, and grades each map it kept as the ``type-map`` entity.
+    ``definition/`` to ``analitiq.validator.load_type_map`` — the loading a
+    connector's map goes through — roots every finding at the entry it
+    concerns, and grades the map it read as the ``type-map`` entity.
 
 One check is the adapter's own, because it reads files the published
 validator never receives:
@@ -60,7 +60,7 @@ validator never receives:
 Validation is offline — no schema is fetched. Usage::
 
     python3 plugins/analitiq-pipeline-builder/scripts/validate.py --entity pipeline --document path/to/pipeline.json --bundle-root .
-    python3 plugins/analitiq-pipeline-builder/scripts/validate.py --entity type-map --document path/to/type-map-write.json
+    python3 plugins/analitiq-pipeline-builder/scripts/validate.py --entity type-map --document path/to/type-map.json
 
 Exit status is ``0`` iff ``passed`` (``finding_costs_a_pass`` owns the full
 predicate — a ``fail`` finding at ``severity: "error"``, or an unchecked
@@ -87,8 +87,7 @@ from _bootstrap import ensure_deps_or_reexec
 # `test_pipeline_entities_are_a_document_artifact_kind_subset` pins this tuple
 # to `DOCUMENT_ARTIFACT_KINDS` so the two cannot drift apart member by member.
 # `connector` and `api-endpoint` are authored by the connector-builder plugin's
-# own validator route, not this one; the vocabulary keeps one `type-map` kind
-# (`analitiq.contracts`), so a map's direction is not a member of it.
+# own validator route, not this one.
 PIPELINE_ENTITIES = ("connection", "stream", "pipeline", "database-endpoint", "type-map")
 
 
@@ -187,29 +186,30 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
 
 
 def _type_map_findings(doc) -> list[dict]:
-    """Grade a connection-scoped type-map document as the direction it declares."""
-    from analitiq.validator import type_map_findings_as_declared
-    return type_map_findings_as_declared(doc, scope="connection")
+    """Grade a connection-scoped type-map document."""
+    from analitiq.validator import type_map_findings
+    return type_map_findings(doc, scope="connection")
 
 
 def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
-    """The published validator's collection of the type maps beside one
+    """The published validator's loading of the type map beside one
     connection.json, each finding rooted at the entry it concerns (the
-    `definition` directory itself for one about the directory), and every map
-    it kept graded at connection scope. The collection cites no rule: the
-    record it cites beside a connector binds a connector package.
+    `definition` directory itself for one about the directory), and the map it
+    read graded at connection scope. The loading cites no rule: the record it
+    cites beside a connector binds a connector package.
 
     Appends to the caller's list rather than returning one so that a crash
-    grading one map costs only that map's finding, never the findings already
+    grading the map costs only that map's finding, never the findings already
     decided."""
-    from analitiq.validator import collect_type_maps
+    from analitiq.validator import TYPE_MAP_FILENAME, load_type_map
     site = f"connections/{conn_dir.name}/definition"
-    collection = collect_type_maps(conn_dir / "definition", rule=None)
-    for entry, f in collection.findings:
+    load = load_type_map(conn_dir / "definition", rule=None)
+    for entry, f in load.findings:
         findings.extend(_at_site(str(PurePosixPath(site, entry)), [f]))
-    for name, doc in collection.maps.values():
-        with _contained(findings, f"{site}/{name}"):
-            findings.extend(_at_site(f"{site}/{name}", _type_map_findings(doc)))
+    if load.loaded:
+        map_site = f"{site}/{TYPE_MAP_FILENAME}"
+        with _contained(findings, map_site):
+            findings.extend(_at_site(map_site, _type_map_findings(load.document)))
 
 
 def _at_site(site: str, findings: list[dict]) -> list[dict]:
@@ -381,10 +381,10 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                 crashed = True
             if outcome.crashed or conn is None:
                 complete = False
-            # Connection-scoped type maps are files the engine loads beside the
-            # connection, invisible to the assembled-document bundle, and depend
+            # A connection-scoped type map is a file beside the connection,
+            # invisible to the assembled-document bundle, and depends
             # only on conn_json.parent — never on whether connection.json itself
-            # parsed — so they are checked unconditionally, and a crash inside
+            # parsed — so it is checked unconditionally, and a crash inside
             # never costs the bundle's completeness (which would otherwise
             # misreport a live connection as unresolved).
             with _contained(findings, f"connections/{conn_json.parent.name}"):

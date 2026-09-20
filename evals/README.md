@@ -35,7 +35,7 @@ and each extra assertion on a run that has already happened is nearly free.
 | `pipeline-api-to-new-table` | connection routing by declared storage, secret pointers, CA material for a verifying TLS mode, and the defaults an agent copies from a worked example |
 | `pipeline-db-incremental-upsert` | the incremental and upsert block shapes, cursor and conflict keys, endpoint handles reused rather than recomputed |
 | `connector-refuses-storage-kind` | the decline path, which leaves nothing on disk for any validator to grade |
-| `connector-database-package` | the package files — entry points, driver, both type maps — which the validator explicitly does not cover |
+| `connector-database-package` | the package files — entry points, driver — which the validator explicitly does not cover |
 | `connector-api-oauth2` | value expressions, ref paths and function names, plus the endpoint fan-out |
 
 ## Running them

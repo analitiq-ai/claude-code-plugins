@@ -10,8 +10,7 @@ its row names below.
 | Stream | `pipelines/<slug>/streams/<stream-slug>.json` | `https://schemas.analitiq.ai/stream/latest.json` |
 | Connection | `connections/<slug>/connection.json` | `https://schemas.analitiq.ai/connection/latest.json` |
 | Database endpoint | `connections/<slug>/definition/endpoints/<endpoint_id>.json` | `https://schemas.analitiq.ai/database-endpoint/latest.json` |
-| Connection type map (read) | `connections/<slug>/definition/type-map-read.json` | `https://schemas.analitiq.ai/type-map-read/latest.json` |
-| Connection type map (write) | `connections/<slug>/definition/type-map-write.json` | `https://schemas.analitiq.ai/type-map-write/latest.json` |
+| Connection type map | `connections/<slug>/definition/type-map.json` | `https://schemas.analitiq.ai/type-map/latest.json` |
 <!-- END GENERATED: schema-urls -->
 
 <!-- PROBE: pipeline-schema-pinned-url-rejected -->

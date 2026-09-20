@@ -1,6 +1,6 @@
 ---
 name: connector-spec-db
-description: Database connector authoring vocabulary — driver selection, DSN URL templates with bindings and encoding, TLS declarations, resource discovery, read/write type maps, the SQL write path (sql_capabilities + the dialect renderers), and the Python package files. Loaded by db-connector-creator only. Not invoked directly by users.
+description: Database connector authoring vocabulary — driver selection, DSN URL templates with bindings and encoding, TLS declarations, resource discovery, the read/write type map, the SQL write path (sql_capabilities + the dialect renderers), and the Python package files. Loaded by db-connector-creator only. Not invoked directly by users.
 user-invocable: false
 ---
 
@@ -11,7 +11,7 @@ connector. It carries the DB-specific vocabulary and examples needed to
 populate `transports`, `auth`, `connection_contract`,
 `resource_discovery`, and `sql_capabilities` for `kind: "database"`,
 plus the standalone
-`type-map-read.json` / `type-map-write.json` shipped alongside the
+`type-map.json` shipped alongside the
 connector and the package files (`connector.py`, `__init__.py`,
 `requirements.txt`, `pyproject.toml`) that make the connector an
 installable Python package.
@@ -25,10 +25,9 @@ installable Python package.
 - This skill's `spec-tls.md` — TLS declaration mechanics.
 - This skill's `spec-resource-discovery.md` — schema/table enumeration at
   connection time.
-- This skill's `spec-type-maps.md` — the read map (native → Arrow,
-  `type-map-read.json`) and the write map (Arrow → native DDL,
-  `type-map-write.json`, covering the canonical vocabulary —
-  `RULE-TMAP-017`), incl. the uppercase-pattern rule and the direction
+- This skill's `spec-type-maps.md` — `type-map.json`: its `read` section
+  (native → Arrow) and its `write` section (Arrow → native DDL, covering the
+  canonical vocabulary — `RULE-TMAP-017`), incl. the uppercase-pattern rule and the direction
   inversion.
 - This skill's `spec-connector-package.md` — package layout,
   `pyproject.toml` + entry points, dialect hooks, CDK import rules.
@@ -40,9 +39,9 @@ installable Python package.
   connection contract is
   `connector-builder/references/connection-contract.md`.
 - The closest transport archetype under `examples/<name>/`: `postgresql`
-  (sqlalchemy + `tls` block, with the full kitchen-sink `type-map-read.json` /
-  `type-map-write.json`) or `postgresql-adbc` (adbc + `db_kwargs` TLS, maps
-  trimmed to an illustrative stub). The per-provider type map is **derived
+  (sqlalchemy + `tls` block, with the full kitchen-sink `type-map.json`) or
+  `postgresql-adbc` (adbc + `db_kwargs` TLS, map trimmed to an illustrative
+  stub). The per-provider type map is **derived
   from research** (`spec-type-maps.md`), not copied per provider.
 
 ## What this skill does NOT cover

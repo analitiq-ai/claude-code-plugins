@@ -14,7 +14,7 @@
       "glob": "xero/definition/endpoints/*.json"
     },
     {
-      "glob": "xero/definition/type-map-read.json"
+      "glob": "xero/definition/type-map.json"
     }
   ],
   "docs": {

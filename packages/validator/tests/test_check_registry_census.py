@@ -129,7 +129,7 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "the crash is not attributable to any one rule; a guarded check "
         "bound to exactly one rule instead passes it through _run_guarded's "
         "own rule= parameter, which keeps that crash off this table"),
-    ("analitiq.validator.connectors::type_map_findings", "check-crashed"): (
+    ("analitiq.validator.connectors::_graded_type_map", "check-crashed"): (
         "grading a type map crashed, leaving its model errors and every "
         "advisory type-map rule unevaluated together, so the crash is "
         "attributable to no one of them"),

@@ -9,7 +9,7 @@ validator: null
 enforcement_location: unenforced
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
-  Resolution stops at the first matching rule in both directions, and for a
+  Resolution stops at the first matching rule in every direction, and for a
   connection-scoped endpoint the two scopes' rule lists are concatenated into
   one such list, so a rule placed under a broader sibling does not merely fail
   to fire — the broader rule renders its arrow_type instead, for exactly the

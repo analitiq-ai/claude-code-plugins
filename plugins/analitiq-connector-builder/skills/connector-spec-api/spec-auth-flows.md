@@ -25,7 +25,7 @@ transport's `headers` block, e.g.
 `"Authorization": { "template": "Bearer ${secrets.api_key}" }`.
 
 Example: `examples/api-key/api-key.example.json` (with sibling
-`examples/api-key/type-map-read.json`). For a templated / post-auth-discovered
+`examples/api-key/type-map.json`). For a templated / post-auth-discovered
 host, see the multi-origin transport pattern in `spec-transport.md`.
 
 ## `basic_auth`
@@ -81,7 +81,7 @@ concerns. There is no place to encode a TTL or a refresh policy.
 
 Example: `examples/oauth2-authorization-code/oauth2-authorization-code.example.json`
 (multi-origin provider with post-auth discovery; sibling
-`examples/oauth2-authorization-code/type-map-read.json`).
+`examples/oauth2-authorization-code/type-map.json`).
 
 ## `oauth2_client_credentials`
 

@@ -25,7 +25,7 @@ phase states its own halt conditions.
   versioning baseline, never the working copy — they are not edited.
   Runs inside a VCS checkout so the regeneration is reviewable.
 - **`validate`** — read-only. Skip phases 1–3 and 5–7; run phase 4
-  (validation) over the on-disk documents (connector, type maps, and all
+  (validation) over the on-disk documents (connector, type map, and all
   endpoint files) and report the diagnostics. To fix findings, re-run in
   `update` mode.
 
@@ -67,8 +67,7 @@ NOT exist there is nothing to update: fall back to `build` semantics and
 tell the user.
 
 **`validate`** — read the on-disk documents under `connector_path`
-(`definition/connector.json`, `definition/type-map-read.json`,
-`definition/type-map-write.json` when present, and
+(`definition/connector.json`, `definition/type-map.json`, and
 `definition/endpoints/*.json`) and skip directly to phase 4; do no
 research, authoring, or writing. If `connector_path` does NOT exist, halt
 and tell the user there is nothing to validate.
@@ -77,7 +76,7 @@ and tell the user there is nothing to validate.
 
 Invoke `connector-provider-researcher` at `scope: domain`, handing it the
 **live contract schema URLs** as its mission spec (`connector` +
-`type-map-read`, plus `type-map-write` for databases). The schema defines
+`type-map`). The schema defines
 *what to research*; the researcher walks it and grounds every fact in the
 provider's docs. Pass `provider`, optional `kind_hint`, and the
 official-docs URL when the user supplied one (when omitted, the researcher
@@ -106,7 +105,7 @@ A `kind` the mapper routes to the storage stub (`enum-mappers.md`
 structured refusal (`RULE-CTOR-037`). Dispatch there only if the user
 explicitly asked for one; otherwise fail closed and ask.
 
-### 3. Dispatch creator (domain body + type maps)
+### 3. Dispatch creator (domain body + type map)
 
 Based on `kind`:
 
@@ -118,11 +117,11 @@ Based on `kind`:
 
 Always pass `provider_facts`. The creator's **hard gate** refuses an
 initial authoring dispatch without it — research cannot be skipped. The
-creator authors the connector body and type map(s); it does **not** author
+creator authors the connector body and type map; it does **not** author
 endpoints (that is the phase-5 fan-out).
 
 Receive a `CreatorOutput` JSON object containing the assembled connector
-body and type map(s). For `kind = database` it additionally carries the
+body and type map. For `kind = database` it additionally carries the
 `package_files` block (`io-contracts.md` §CreatorOutput) — the creator
 owns every Python file in the package; the README is the orchestrator's
 to write at phase 7 (`RULE-PKG-025`), from the researched facts, for
@@ -131,27 +130,25 @@ either kind.
 ### 4. Validate the domain (barrier)
 
 Invoke `connector-schema-validator` over the connector body and type
-map(s); it detects each document's kind from its own shape.
-<!-- PROBE: type-map-direction-from-document, type-map-coverage-counts-declarations -->
-A map is graded as the direction the map itself declares, whether it is
-validated on its own or as a connector's sibling. Ship a map for each direction
-the connector's `kind` calls for (`RULE-PKG-030`), under the conventional
-filename for that direction — the name is what a reader navigates by, and the
-direction the package is counted as covering comes from the document.
+map; it detects each document's kind from its own shape.
+<!-- PROBE: type-map-section-missing, type-map-stray-name-refused -->
+The map is one `type-map.json` carrying a section for each direction the
+connector's `kind` calls for (`RULE-PKG-030`); a section the kind needs and the
+map lacks, or any other `type-map-*.json` beside it, fails the connector.
 
 Validation covers the JSON documents above; the package files are
 governed by rules of their own (`RULE-PKG-007`, `RULE-PKG-009`,
 `RULE-PKG-025`).
 
 This is a **barrier**. In `build` / `update` mode the connector body and
-type maps MUST validate clean before the phase-5 endpoint fan-out, because
+type map MUST validate clean before the phase-5 endpoint fan-out, because
 every endpoint references the connector's transports/auth and resolves its
-field types through `type-map-read`. For `kind = database` this completes
+field types through the read map. For `kind = database` this completes
 validation — a connector release ships no database endpoint documents
 (`RULE-DBEP-006`), so phase 5 is skipped.
 
 In `validate` mode, run the validator once over **every** on-disk document
-— the connector, every type map present, and all
+— the connector, `type-map.json`, and all
 `definition/endpoints/*.json` — report the resulting `Diagnostics`, and
 stop. There is no fix loop and no creator re-dispatch (phases 1–3 and 5
 were skipped, so there is no `CreatorOutput` to revise). The fix loop
@@ -201,7 +198,7 @@ Database connectors skip this phase entirely.
    siblings. The orchestrator reports partial results rather than silently
    dropping the endpoint.
 4. **Join, then validate the package.** When the worklist is drained (no
-   `pending` / `running`), stage `connector.json`, the type map(s) and every
+   `pending` / `running`), stage `connector.json`, the type map and every
    authored endpoint at their release paths and validate the **connector**,
    not the endpoint documents on their own. Coverage is connector-anchored:
    the per-branch pass in step 2 grades one endpoint against the endpoint
@@ -216,7 +213,7 @@ Database connectors skip this phase entirely.
    the same finding returns on the next pass.
 
 **Type vocabulary stays connector-level.** If a resource exposes a native
-not covered by `type-map-read`, that is a **domain-level** type-map
+not covered by the read map, that is a **domain-level** type-map
 addition — re-author and re-validate the domain (phases 3–4), never patch
 the map per endpoint. This keeps canonical types consistent across
 endpoints. A write mode's `input.schema` is graded the same way and against
@@ -251,7 +248,7 @@ In `update` mode the regenerated files replace the existing connector
 tree — the prior files were read as the drift baseline in phase 6 and
 are never edited in place. Report that the tree was regenerated and
 recommend the user review `git diff` before committing. Otherwise write
-the connector document, type map(s), package files (database only), any
+the connector document, type map, package files (database only), any
 endpoint files, and the README (`RULE-PKG-025`) to disk at predictable
 paths. The connector root IS the Python package for database connectors:
 
@@ -259,8 +256,7 @@ paths. The connector root IS the Python package for database connectors:
 {connector_id}/
 ├── definition/
 │   ├── connector.json
-│   ├── type-map-read.json          # native → Arrow; which kinds ship which map: RULE-PKG-030
-│   ├── type-map-write.json         # Arrow → native DDL render rules; RULE-PKG-030
+│   ├── type-map.json               # `read`: native → Arrow; `write`: Arrow → native DDL; which kinds carry which: RULE-PKG-030
 │   └── endpoints/
 │       └── {endpoint_id}.json      # api connectors only — one file per endpoint; RULE-PKG-031
 ├── __init__.py                     # database only — see RULE-PKG-009
@@ -274,8 +270,9 @@ paths. The connector root IS the Python package for database connectors:
 `ProviderFacts` + creator logic, so hand edits to a connector are not
 preserved.
 
-Never write a `type-map.json` — it is the pre-split name, collected as no
-direction's map (`RULE-PKG-030`). Each direction ships as its own document.
+Write the creator's type map as the one `type-map.json`, carrying a section
+for each direction the connector's `kind` calls for; never write another
+`type-map-*.json` beside it (`RULE-PKG-030`).
 
 Write each endpoint to `endpoints/{endpoint_id}.json` (`RULE-PKG-031`) —
 never renamed, aliased, or nested. The engine resolves an endpoint by id

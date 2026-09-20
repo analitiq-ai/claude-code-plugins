@@ -1,13 +1,13 @@
 # Connection-scoped type maps (gap authoring)
 
 A connector ships a *documented base vocabulary* in its
-`definition/type-map-read.json` / `type-map-write.json`, not every type a live
+`definition/type-map.json`, not every type a live
 deployment can surface — extension types (`citext`, `ltree`, `hstore`,
 `vector(N)`, PostGIS geometries), custom domains/enums, parameterized variants.
 The engine composes a **connection-scoped** map as primary over the connector
 map in each direction, and hard-errors on a type neither covers — which is why a
 connection rule may only close a gap the connector leaves (`RULE-TMAP-018`). Discovery is when the gap is visible and fixable: this file governs
-authoring the connection-scoped maps that close it.
+authoring the connection-scoped map that closes it.
 
 ## Contents
 
@@ -19,22 +19,19 @@ authoring the connection-scoped maps that close it.
 
 ## Files
 
-| `direction` | File |
-|---|---|
-| `read` (native → Arrow) | `connections/<connection-slug>/definition/type-map-read.json` |
-| `write` (Arrow → native DDL) | `connections/<connection-slug>/definition/type-map-write.json` |
-
-Each file is a whole `{$schema, direction, rules}` document, not a bare rules
-array, and validates as entity `type-map`. Its own `direction` is what says
-which row of the table it is; the `$schema` value for each is in this skill's
-own `SKILL.md` schema-URL table.
+The connection's map is `connections/<connection-slug>/definition/type-map.json`:
+a whole `{$schema, read, write}` document, not a bare rules array, validated as
+entity `type-map`. The section a rule sits under is its direction — `read`
+rules map native → Arrow, `write` rules map Arrow → native DDL — and a map
+carries only the sections it has rules for. The `$schema` value is in this
+skill's own `SKILL.md` schema-URL table.
 
 The rule shape (exact/regex `match`, matcher vs rendered key per direction,
-`${name}` captures) is identical to the connector's own maps — the connector
-files you resolve against during gap detection are the live reference for it;
+`${name}` captures) is identical to the connector's own map — the connector
+`type-map.json` you resolve against during gap detection is the live reference for it;
 do not restate their vocabulary here.
 
-Author only the names in the table above; the pre-split `type-map.json` is dead.
+Author no other `type-map-*.json` name beside it.
 
 ## Gap detection
 
@@ -45,8 +42,8 @@ maps in precedence order (connection first, when one exists, then connector):
 ```bash
 printf '%s' '["citext", "vector(3)"]' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/type_map_gaps.py" \
   --direction read \
-  --map connections/<slug>/definition/type-map-read.json \
-  --map connectors/<connector-slug>/definition/type-map-read.json
+  --map connections/<slug>/definition/type-map.json \
+  --map connectors/<connector-slug>/definition/type-map.json
 ```
 
 - **Read probes** — the distinct `native_type` strings introspected across the
@@ -55,7 +52,9 @@ printf '%s' '["citext", "vector(3)"]' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/t
   documents, after read-side resolution and judgment are complete.
 
 `--direction` names the probes' vocabulary — `read` for native types, `write`
-for `arrow_type` strings — and every `--map` must declare that direction.
+for `arrow_type` strings — and each `--map` contributes its section for that
+direction. A run where no `--map` carries that section is refused as an input
+error (exit 2).
 `resolved` gives the rendered value per covered probe; `gaps` lists the
 uncovered ones. Pass only map files that exist.
 
@@ -76,8 +75,8 @@ connect or run time.
   anything the connector already covers *overrides* the connector for every
   stream on this connection — never shadow. A write-coverage warning is not a
   reason to add one.
-- **No gaps → no file.** Never write a document with an empty `rules` array;
-  when a direction has no gaps, write nothing.
+- **No gaps → no section.** Never write an empty rule list; a direction with no
+  gaps gets no section, and a map with no gaps in any direction is not written.
 - **Extend, never rewrite** (`RULE-TMAP-012`). Append after the rules a
   connection map already carries — they are prior authored behavior on this
   connection.
@@ -97,7 +96,7 @@ connect or run time.
   leaves unrendered may be one its dialect renders in code (`RULE-TMAP-019`);
   no map rule is consulted for such a family, so a connection rule for it is
   dead weight. If the connector's package files show that override, record the
-  gap in `type_maps.notes` instead of authoring a rule.
+  gap in `type_map.notes` instead of authoring a rule.
 
 ## What a clean result does not prove
 

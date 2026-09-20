@@ -22,7 +22,7 @@ where `RULE-CTOR-037` resolves.
 ```json
 {
   "connector": null,
-  "type_map_read": null,
+  "type_map": null,
   "notes": [
     "Connector kind '<kind>' is accepted by the contract but not executed by the engine, so this plugin declines to author one (RULE-CTOR-037)."
   ]

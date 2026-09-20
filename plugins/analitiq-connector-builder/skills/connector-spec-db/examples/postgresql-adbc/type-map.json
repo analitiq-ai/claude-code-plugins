@@ -1,7 +1,6 @@
 {
-  "$schema": "https://schemas.analitiq.ai/type-map-read/latest.json",
-  "direction": "read",
-  "rules": [
+  "$schema": "https://schemas.analitiq.ai/type-map/latest.json",
+  "read": [
     { "match": "exact", "native_type": "BOOLEAN",                                  "arrow_type": "Boolean" },
     { "match": "exact", "native_type": "INTEGER",                                  "arrow_type": "Int32" },
     { "match": "exact", "native_type": "BIGINT",                                   "arrow_type": "Int64" },
@@ -10,5 +9,15 @@
     { "match": "regex", "native_type": "^TIMESTAMP\\([1-3]\\)( WITHOUT TIME ZONE)?$",   "arrow_type": "Timestamp(MILLISECOND)" },
     { "match": "regex", "native_type": "^TIMESTAMP(\\([4-6]\\))?( WITHOUT TIME ZONE)?$","arrow_type": "Timestamp(MICROSECOND)" },
     { "match": "exact", "native_type": "JSONB",                                    "arrow_type": "Json" }
+  ],
+  "write": [
+    { "match": "exact", "arrow_type": "Boolean",                  "native_type": "BOOLEAN" },
+    { "match": "exact", "arrow_type": "Int32",                    "native_type": "INTEGER" },
+    { "match": "exact", "arrow_type": "Int64",                    "native_type": "BIGINT" },
+    { "match": "exact", "arrow_type": "Utf8",                     "native_type": "TEXT" },
+    { "match": "regex", "arrow_type": "^Timestamp\\(MICROSECOND\\)$", "native_type": "TIMESTAMP" },
+    { "match": "exact", "arrow_type": "Json",                     "native_type": "JSONB" },
+    { "match": "exact", "arrow_type": "Object",                   "native_type": "JSONB" },
+    { "match": "exact", "arrow_type": "List",                     "native_type": "JSONB" }
   ]
 }

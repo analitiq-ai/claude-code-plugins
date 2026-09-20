@@ -17,6 +17,8 @@ from types import ModuleType
 import pytest
 
 from analitiq.contracts.shared.rules import all_rules
+from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
+from analitiq.validator import TYPE_MAP_FILENAME
 import analitiq.validator.rule_cases as corpus
 from analitiq.validator.rule_cases import RuleCase, case_mismatch, rule_cases
 
@@ -93,13 +95,12 @@ def _connector_package(root: Path, *, covered: bool) -> Path:
     }
     native = "STRING" if covered else "TEXT"
     type_map = {
-        "$schema": "https://schemas.analitiq.ai/type-map-read/latest.json",
-        "direction": "read",
-        "rules": [{"match": "exact", "native_type": native, "arrow_type": "Utf8"}],
+        "$schema": TYPE_MAP_SCHEMA_URL,
+        "read": [{"match": "exact", "native_type": native, "arrow_type": "Utf8"}],
     }
     (root / "endpoints").mkdir(parents=True)
     (root / "connector.json").write_text(json.dumps(connector))
-    (root / "type-map-read.json").write_text(json.dumps(type_map))
+    (root / TYPE_MAP_FILENAME).write_text(json.dumps(type_map))
     (root / "endpoints" / f"{endpoint['endpoint_id']}.json").write_text(json.dumps(endpoint))
     return root
 

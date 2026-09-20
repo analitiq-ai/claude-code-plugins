@@ -27,18 +27,18 @@ def _endpoint(native="STRING", arrow="Utf8", endpoint_id="v1__records", path="/v
     return endpoint
 
 
-def _read_map(rules=None):
-    return {"$schema": f"{_H}/type-map-read/latest.json", "direction": "read",
-            "rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
-            if rules is None else rules}
+def _type_map(**sections):
+    return {"$schema": f"{_H}/type-map/latest.json",
+            **(sections or {"read": [
+                {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]})}
 
 
-def _package(root: Path, *, read_map=None, endpoints=None) -> dict:
-    """A clean api connector package on disk, with `read_map` / `endpoints`
+def _package(root: Path, *, type_map=None, endpoints=None) -> dict:
+    """A clean api connector package on disk, with `type_map` / `endpoints`
     (name → document, or text written as is) replacing the clean ones."""
     connector = json.loads((CORPUS / "valid_connector.json").read_text())
     files = {"connector.json": connector,
-             "type-map-read.json": _read_map() if read_map is None else read_map}
+             "type-map.json": _type_map() if type_map is None else type_map}
     for name, doc in (endpoints or {"v1__records.json": _endpoint()}).items():
         files[f"endpoints/{name}"] = doc
     for key, doc in files.items():
@@ -60,11 +60,11 @@ def _graded(validator, root: Path, message_id: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def test_a_type_map_model_finding_is_located_in_the_map(tmp_path, validator):
-    _package(tmp_path, read_map={**_read_map(), "rules": "not a list"})
+    _package(tmp_path, type_map=_type_map(read="not a list"))
     [found] = _graded(validator, tmp_path, "list_type")
-    assert found["path"] == "type-map-read.json#/rules", found
+    assert found["path"] == "type-map.json#/read", found
     # The file is named by `path`; the message does not repeat it.
-    assert "type-map-read.json" not in found["message"], found
+    assert "type-map.json" not in found["message"], found
 
 
 def test_an_endpoint_model_finding_is_located_in_the_endpoint(tmp_path, validator):
@@ -86,9 +86,9 @@ def test_an_uncovered_native_type_is_located_at_the_declaring_column(tmp_path, v
     _package(tmp_path, endpoints={"v1__records.json": _endpoint("BIGINT", "Int64")})
     [found] = _graded(validator, tmp_path, "native-type-unresolved")
     assert found["path"] == f"endpoints/v1__records.json#{_PROPERTY}", found
-    # The read map the native failed to resolve through is part of the
+    # The read section the native failed to resolve through is part of the
     # complaint, so it stays in the message.
-    assert "type-map-read.json" in found["message"], found
+    assert "type-map.json" in found["message"], found
 
 
 def test_an_arrow_mismatch_is_located_at_the_declaring_column(tmp_path, validator):
@@ -111,30 +111,30 @@ def test_a_nested_endpoint_is_located_at_the_whole_file(tmp_path, validator):
 
 
 def test_an_unparseable_type_map_is_located_at_the_whole_file(tmp_path, validator):
-    _package(tmp_path, read_map="{not json")
+    _package(tmp_path, type_map="{not json")
     [found] = _graded(validator, tmp_path, "type-map-unparseable")
-    assert found["path"] == "type-map-read.json#", found
+    assert found["path"] == "type-map.json#", found
 
 
-def test_two_maps_declaring_one_direction_locate_the_second_declaration(tmp_path, validator):
+def test_a_stray_type_map_name_is_located_at_the_whole_file(tmp_path, validator):
     _package(tmp_path)
-    (tmp_path / "type-map-zz.json").write_text(json.dumps(_read_map()))
-    [found] = _graded(validator, tmp_path, "type-map-direction-duplicated")
-    assert found["path"] == "type-map-zz.json#/direction", found
+    (tmp_path / "type-map-zz.json").write_text(json.dumps(_type_map()))
+    [found] = _graded(validator, tmp_path, "stray-type-map-document")
+    assert found["path"] == "type-map-zz.json#", found
 
 
-def test_an_api_write_map_is_located_at_its_declared_direction(tmp_path, validator):
-    _package(tmp_path)
-    (tmp_path / "type-map-write.json").write_text(json.dumps({
-        "$schema": f"{_H}/type-map-write/latest.json", "direction": "write", "rules": []}))
+def test_an_api_write_section_is_located_at_the_section(tmp_path, validator):
+    _package(tmp_path, type_map=_type_map(
+        read=[{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        write=[{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]))
     [found] = _graded(validator, tmp_path, "write-map-not-allowed")
-    assert found["path"] == "type-map-write.json#/direction", found
+    assert found["path"] == "type-map.json#/write", found
 
 
 def test_a_package_shape_finding_stays_on_the_validated_document(tmp_path, validator):
     # No sibling to point at: the obligation is the connector's own.
     _package(tmp_path)
-    (tmp_path / "type-map-read.json").unlink()
+    (tmp_path / "type-map.json").unlink()
     [found] = _graded(validator, tmp_path, "read-map-missing")
     assert found["path"] == "", found
 
@@ -180,9 +180,9 @@ def test_a_standalone_endpoint_locates_its_unreadable_connector(tmp_path, valida
 @pytest.mark.parametrize("graded,message_id", [
     (lambda v: v.validate_document(42), "unrecognized-document"),
     # A model error at the document root: pydantic's `loc` is empty.
-    (lambda v: v.type_map_findings_as_declared(
+    (lambda v: v.type_map_findings(
         [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
-     "model_attributes_type"),
+     "model_type"),
     (lambda v: v.validate_pipeline_bundle(["not", "a", "bundle"]), "bundle-not-a-mapping"),
 ])
 def test_a_whole_document_finding_has_the_empty_pointer(validator, graded, message_id):
