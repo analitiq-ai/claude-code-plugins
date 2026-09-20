@@ -9,8 +9,9 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="ConnectorPackage",
         prose_hash="3f8cbd28cd13",
         structural=(
-            "the published schema's `patternProperties` pin each of the three "
-            "locations to the published schema its document is written against"
+            "`_DOCUMENT_LOCATIONS` pins each location to the published schema its "
+            "document is written against, and `_locate_documents` publishes that "
+            "table into the schema"
         ),
         waiver=(
             "that each key is a path from the connector's own directory and each "

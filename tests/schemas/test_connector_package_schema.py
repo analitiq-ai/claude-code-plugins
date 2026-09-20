@@ -43,7 +43,7 @@ def test_each_authored_document_is_located_and_pointed_at_its_published_schema()
         schema_url_for("api-endpoint")}
 
 
-def test_a_location_outside_the_three_is_written_against_nothing():
+def test_a_location_outside_the_table_is_written_against_nothing():
     for key in (
         "definition/type-map-read.json",
         "definition/type-map-write.json",
