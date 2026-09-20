@@ -509,9 +509,10 @@ def test_type_map_is_graded_as_validate_document_grades_it(validator, section):
       "rules": [{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}]}, "type-map"),
 ], ids=["a map sent as a connector", "a split-shape map"])
 def test_a_type_map_entity_mismatch_is_reported(validator, document, sent_as):
-    """A map sent under another kind's name is reported, and so is a
-    split-shape document: the `$schema` it names is no document schema the
-    contract registers, so nothing grades it as a map."""
+    """A map sent under another kind's name is reported — its `$schema` names
+    the type map, not the kind the caller declared. So is a split-shape
+    document, whose `$schema` is no document schema the contract registers, so
+    nothing grades it as a map either."""
     result = validator.validate_single_document(_document_request(document, sent_as))
     assert result["passed"] is False
     assert [f["message_id"] for f in result["findings"]] == ["entity-mismatch"], result
