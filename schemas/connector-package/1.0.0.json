@@ -1,0 +1,20 @@
+{
+  "$id": "https://schemas.analitiq.ai/connector-package/1.0.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "description": "Public JSON Schema contract for where each authored document of a connector package sits, read from the package root, and the published schema a document at that location is written against: `definition/connector.json`, `definition/type-map.json` and `definition/endpoints/{endpoint_id}.json`. It holds locations only; each document's shape is the schema it points at. Source of truth: analitiq.contracts.connector_package.ConnectorPackage (Pydantic).",
+  "patternProperties": {
+    "^definition/connector\\.json(?![\\s\\S])": {
+      "$ref": "https://schemas.analitiq.ai/connector/latest.json"
+    },
+    "^definition/endpoints/[^/]+\\.json(?![\\s\\S])": {
+      "$ref": "https://schemas.analitiq.ai/api-endpoint/latest.json"
+    },
+    "^definition/type-map\\.json(?![\\s\\S])": {
+      "$ref": "https://schemas.analitiq.ai/type-map/latest.json"
+    }
+  },
+  "title": "Analitiq Connector Package",
+  "type": "object",
+  "version": "1.0.0"
+}
