@@ -1325,10 +1325,11 @@ def test_a_refused_write_section_is_not_held_to_the_write_vocabulary(tmp_path, v
     (None, f"no {TYPE_MAP_FILENAME} was read"),
     (("write",), f"{TYPE_MAP_FILENAME} carries no 'read' section"),
 ])
-def test_a_missing_section_says_whether_the_map_or_the_section_is_absent(
+def test_a_missing_section_says_whether_the_map_was_read_or_lacks_the_section(
         tmp_path, validator, sections, reason):
-    # The two causes ask for different edits — ship the document, or add a
-    # section to the one that ships — so the message names which one it is.
+    # A map that was not read at all — absent, or present and not loadable,
+    # which its own finding reports — asks for a different edit than one read
+    # without the section, so the message says which it is.
     _plant_map(tmp_path, sections)
     findings = validator.check_coverage(_min_connector("database"), tmp_path / "connector.json")
     [missing] = [f for f in findings if f["message_id"] == "read-map-missing"]
