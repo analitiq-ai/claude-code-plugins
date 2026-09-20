@@ -1770,8 +1770,10 @@ def test_a_document_declaring_no_type_map_schema_is_not_a_map(validator, doc):
     # A section is not a claim. `read` and `write` are words other kinds nest,
     # so a document carrying one and no type-map `$schema` is unidentified —
     # which is what the model requiring the field means at the dispatch.
-    assert [f["message_id"] for f in _errors(validator.validate_document(doc))] == [
-        "unrecognized-document"], doc
+    [unrecognized] = _errors(validator.validate_document(doc))
+    assert unrecognized["message_id"] == "unrecognized-document", doc
+    # The only diagnostic these get, so it names the key they lack.
+    assert "$schema" in unrecognized["message"], unrecognized
 
 
 @pytest.mark.parametrize("doc,stray,own", [
