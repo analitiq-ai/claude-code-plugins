@@ -67,6 +67,12 @@ def test_the_schema_holds_locations_and_references_only():
     assert "properties" not in rendered
 
 
+def test_no_location_beyond_the_table_is_admitted():
+    rendered = render_schemas.render_latest(
+        render_schemas.get_resource(RESOURCE), "1.0.0")
+    assert rendered["additionalProperties"] is False
+
+
 def test_every_reference_names_a_registered_schema():
     published = {schema_url_for(name) for name in render_schemas.RESOURCES_BY_NAME}
     assert set(_table().values()) <= published

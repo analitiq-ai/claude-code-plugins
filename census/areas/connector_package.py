@@ -10,8 +10,9 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="3f8cbd28cd13",
         structural=(
             "`_DOCUMENT_LOCATIONS` pins each location to the published schema its "
-            "document is written against, and `_locate_documents` publishes that "
-            "table into the schema"
+            "document is written against, `_locate_documents` publishes that "
+            "table into the schema, and `closed_true_end_keys` refuses every "
+            "other key"
         ),
         waiver=(
             "that each key is a path from the connector's own directory and each "
