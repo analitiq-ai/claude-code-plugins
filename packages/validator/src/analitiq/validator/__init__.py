@@ -20,7 +20,7 @@ Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 check — a new kind is a new module registering the same way, without touching
 `_core`.
 """
-from ._core import finding, finding_costs_a_pass, main, validate_document
+from ._core import finding, finding_costs_a_pass, is_bare_pointer, main, validate_document
 from .document_set import (
     Finding,
     ValidationEnvelope,
@@ -44,14 +44,15 @@ from . import streams  # noqa: F401  — imported for its self-registration side
 # NOT in __all__ — that would widen the published star-import surface.
 from .connectors import (  # skipcq: PY-W2000
     endpoint_filename_findings,
+    first_match_render,
+    render_arrow_type,
     _arrow_type_eq,
     _collect_native_arrow_pairs,
     _database_endpoint_locator_findings,
     _endpoint_locator_findings,
     _flatten_api_locator,
-    _render_arrow_type,
 )
-from .pipelines import validate_pipeline_bundle
+from .pipelines import base_id, iter_endpoint_refs, validate_pipeline_bundle
 
 __all__ = [
     "finding",
@@ -70,6 +71,11 @@ __all__ = [
     "validate_package",
     "validate_package_at",
     "validate_single_document",
+    "is_bare_pointer",
     "endpoint_filename_findings",
+    "first_match_render",
+    "render_arrow_type",
+    "base_id",
+    "iter_endpoint_refs",
     "validate_pipeline_bundle",
 ]

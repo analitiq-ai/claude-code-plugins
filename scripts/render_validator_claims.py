@@ -137,7 +137,8 @@ def _validate(doc: Any, kind: str) -> list[dict]:
     return validate_document(doc, kind)
 
 
-def _validate_connector_package(documents: dict[str, Any]) -> list[dict]:
+def graded_package(documents: dict[str, Any]) -> list[dict]:
+    """The findings for `documents` graded as a connector package."""
     from analitiq.contracts.validation_requests import ValidatePackageRequest
     from analitiq.validator import validate_package
 
@@ -244,7 +245,7 @@ def _staged_connector(mutate: Callable[[dict], dict], example_dir: Path,
     for direction, override in (("read", read_map), ("write", write_map)):
         if override is not None:
             documents[_type_map_key()][direction] = override
-    return _validate_connector_package(documents)
+    return graded_package(documents)
 
 
 def _staged_type_map(**sections: list) -> list[dict]:
@@ -559,7 +560,7 @@ def _staged_api_endpoint(endpoint: dict) -> list[dict]:
     documents = example_package(API_EXAMPLE)
     [key] = [k for k in documents if ConnectorPackage.kind_at(k) == "api-endpoint"]
     documents[key] = endpoint
-    return _validate_connector_package(documents)
+    return graded_package(documents)
 
 
 def _p_endpoint_pair_unresolved() -> list[dict]:
@@ -628,7 +629,7 @@ def _p_type_map_schema_required() -> list[dict]:
     documents = example_package(DB_EXAMPLE)
     documents[_type_map_key()] = {direction: _example_rules(DB_EXAMPLE, direction)
                                   for direction in ("read", "write")}
-    return _validate_connector_package(documents)
+    return graded_package(documents)
 
 
 def _p_type_map_rule_graded_by_section() -> list[dict]:
@@ -645,7 +646,7 @@ def _p_type_map_section_missing() -> list[dict]:
     # A database connector whose map carries no `write` section.
     documents = example_package(DB_EXAMPLE)
     documents[_type_map_key()] = _wrap_type_map(read=_example_rules(DB_EXAMPLE, "read"))
-    return _validate_connector_package(documents)
+    return graded_package(documents)
 
 
 def _p_type_map_standalone_no_package_check() -> list[dict]:

@@ -24,7 +24,6 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -33,11 +32,8 @@ from _pins import require_contract_models
 require_contract_models("analitiq.contracts", "analitiq.validator")
 
 from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL  # noqa: E402
-from analitiq.contracts.validation_requests import (  # noqa: E402
-    ConnectorPackage,
-    ValidatePackageRequest,
-)
-from analitiq.validator import validate_document, validate_package  # noqa: E402
+from analitiq.contracts.validation_requests import ConnectorPackage  # noqa: E402
+from analitiq.validator import validate_document  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / "plugins" / "analitiq-connector-builder" / "skills"
@@ -66,14 +62,9 @@ def _load_claims():
     return module
 
 
-example_package = _load_claims().example_package
-
-
-def graded_package(documents: dict[str, Any]) -> list[dict]:
-    """The findings for `documents` graded as a connector package."""
-    return validate_package(ValidatePackageRequest(
-        package="connector-package",
-        documents={key: json.dumps(doc) for key, doc in documents.items()}))["findings"]
+_claims = _load_claims()
+example_package = _claims.example_package
+graded_package = _claims.graded_package
 
 
 def test_an_example_file_no_package_location_matches_is_not_part_of_it(tmp_path: Path) -> None:

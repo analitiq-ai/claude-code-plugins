@@ -70,7 +70,7 @@ _PIPELINE_ADAPTER = TypeAdapter(PipelineInput)
 _VERSION_SUFFIX_RE = re.compile(r"_v\d+$")
 
 
-def _base_id(ref: Any) -> Any:
+def base_id(ref: Any) -> Any:
     """Strip a trailing `_v{n}` version suffix; pass non-strings through."""
     if not isinstance(ref, str):
         return ref
@@ -87,7 +87,7 @@ def _pipeline_connection_ids(pipeline: dict) -> set[str]:
     if not isinstance(conns, dict):
         return set()
     refs = (conns.get("source"), *(conns.get("destinations") or ()))
-    return {_base_id(r) for r in refs if isinstance(r, str) and r}
+    return {base_id(r) for r in refs if isinstance(r, str) and r}
 
 
 def _connector_ids(connectors: Any) -> set[str]:
@@ -115,7 +115,7 @@ def _connector_ids(connectors: Any) -> set[str]:
     return ids
 
 
-def _iter_endpoint_refs(streams: Any):
+def iter_endpoint_refs(streams: Any):
     """Yield `(json_path, endpoint_ref)` for each stream's source and destinations."""
     if not isinstance(streams, list):
         return
@@ -204,7 +204,7 @@ def _check_pipeline_active_gate(pipeline: dict, streams: Any) -> list[dict]:
     if pipeline.get("status") != "active":
         return []
     refs = pipeline.get("streams")
-    referenced = {_base_id(r) for r in refs if isinstance(r, str) and r} if isinstance(refs, list) else set()
+    referenced = {base_id(r) for r in refs if isinstance(r, str) and r} if isinstance(refs, list) else set()
     if not referenced:
         return [finding(
             rule="RULE-PIPE-014",
@@ -216,7 +216,7 @@ def _check_pipeline_active_gate(pipeline: dict, streams: Any) -> list[dict]:
         isinstance(s, dict)
         and s.get("status") == "active"
         and isinstance(s.get("stream_id"), str)
-        and _base_id(s["stream_id"]) in referenced
+        and base_id(s["stream_id"]) in referenced
         for s in (streams if isinstance(streams, list) else [])
     )
     if not runnable:
@@ -247,7 +247,7 @@ def _check_stream_refs(pipeline: dict, streams: Any) -> list[dict]:
                 message="bundled stream document has no stream_id; no pipeline ref can resolve to it.",
             ))
             continue
-        base = _base_id(stream_id)
+        base = base_id(stream_id)
         if base in declared:
             findings.append(finding(
                 rule="RULE-PIPE-011",
@@ -274,7 +274,7 @@ def _check_stream_refs(pipeline: dict, streams: Any) -> list[dict]:
     for j, ref in enumerate(refs):
         if not isinstance(ref, str) or not ref:
             continue  # ref shape is the pipeline model's job
-        base = _base_id(ref)
+        base = base_id(ref)
         if base in seen:
             findings.append(finding(
                 rule="RULE-PIPE-011",
@@ -309,7 +309,7 @@ def _check_stream_parent_pipeline(pipeline: dict, streams: Any) -> list[dict]:
     pipeline_id = pipeline.get("pipeline_id")
     if not isinstance(pipeline_id, str) or not pipeline_id:
         return []  # a missing pipeline id is already flagged by _check_pipeline_id
-    parent = _base_id(pipeline_id)
+    parent = base_id(pipeline_id)
     findings: list[dict] = []
     for i, stream in enumerate(streams if isinstance(streams, list) else []):
         if not isinstance(stream, dict):
@@ -317,7 +317,7 @@ def _check_stream_parent_pipeline(pipeline: dict, streams: Any) -> list[dict]:
         stream_parent = stream.get("pipeline_id")
         if not isinstance(stream_parent, str) or not stream_parent:
             continue  # shape is the stream model's job
-        if _base_id(stream_parent) != parent:
+        if base_id(stream_parent) != parent:
             findings.append(finding(
                 rule="RULE-STRM-032",
                 message_id="stream-wrong-parent-pipeline", kind="fail",
@@ -345,7 +345,7 @@ def _check_connection_version_conflicts(pipeline: dict) -> list[dict]:
     for ref in refs:
         if not isinstance(ref, str) or not ref:
             continue
-        base = _base_id(ref)
+        base = base_id(ref)
         prior = by_base.get(base)
         if prior is not None and prior != ref:
             findings.append(finding(
@@ -373,7 +373,7 @@ def _check_connections_present(pipeline: dict, connections: Any) -> list[dict]:
     for i, conn in enumerate(connections):
         if not (isinstance(conn, dict) and isinstance(conn.get("connection_id"), str) and conn["connection_id"]):
             continue
-        base = _base_id(conn["connection_id"])
+        base = base_id(conn["connection_id"])
         if base in present:
             findings.append(finding(
                 rule="RULE-PIPE-012",
@@ -407,8 +407,8 @@ def _check_stream_connection_roles(pipeline: dict, streams: Any) -> list[dict]:
     conns = pipeline.get("connections")
     conns = conns if isinstance(conns, dict) else {}
     src = conns.get("source")
-    source_base = _base_id(src) if isinstance(src, str) and src else None
-    dest_bases = {_base_id(d) for d in (conns.get("destinations") or []) if isinstance(d, str) and d}
+    source_base = base_id(src) if isinstance(src, str) and src else None
+    dest_bases = {base_id(d) for d in (conns.get("destinations") or []) if isinstance(d, str) and d}
 
     findings: list[dict] = []
 
@@ -429,7 +429,7 @@ def _check_stream_connection_roles(pipeline: dict, streams: Any) -> list[dict]:
                     rule="RULE-STRM-033",
                     message_id="stream-source-no-connection-id", kind="fail", path=path,
                     message="source endpoint_ref names no connection_id."))
-            elif source_base is None or _base_id(cid) != source_base:
+            elif source_base is None or base_id(cid) != source_base:
                 findings.append(finding(
                     rule="RULE-STRM-033",
                     message_id="stream-source-wrong-connection", kind="fail", path=path,
@@ -447,7 +447,7 @@ def _check_stream_connection_roles(pipeline: dict, streams: Any) -> list[dict]:
                     rule="RULE-STRM-033",
                     message_id="stream-destination-no-connection-id", kind="fail", path=path,
                     message="destination endpoint_ref names no connection_id."))
-            elif _base_id(cid) not in dest_bases:
+            elif base_id(cid) not in dest_bases:
                 findings.append(finding(
                     rule="RULE-STRM-033",
                     message_id="stream-destination-wrong-connection", kind="fail", path=path,
@@ -512,7 +512,7 @@ def _check_connection_scoped_endpoints(streams: Any, endpoints: Any) -> list[dic
         cid, eid = endpoint.get("connection_id"), endpoint.get("endpoint_id")
         if not (isinstance(cid, str) and isinstance(eid, str)):
             continue
-        key = (_base_id(cid), eid)
+        key = (base_id(cid), eid)
         if key in present:
             findings.append(finding(
                 rule="RULE-STRM-034",
@@ -524,7 +524,7 @@ def _check_connection_scoped_endpoints(streams: Any, endpoints: Any) -> list[dic
         else:
             present.add(key)
 
-    for path, ref in _iter_endpoint_refs(streams):
+    for path, ref in iter_endpoint_refs(streams):
         if ref.get("scope") != "connection":
             continue
         cid, eid = ref.get("connection_id"), ref.get("endpoint_id")
@@ -539,12 +539,12 @@ def _check_connection_scoped_endpoints(streams: Any, endpoints: Any) -> list[dic
                     "cannot be resolved."),
             ))
             continue
-        if (_base_id(cid), eid) not in present:
+        if (base_id(cid), eid) not in present:
             findings.append(finding(
                 rule="RULE-STRM-034",
                 message_id="endpoint-ref-unresolved", kind="fail", path=path,
                 message=(
-                    f"connection-scoped endpoint_ref (connection {_base_id(cid)!r}, endpoint "
+                    f"connection-scoped endpoint_ref (connection {base_id(cid)!r}, endpoint "
                     f"{eid!r}) has no matching bundled endpoint document."),
             ))
     return findings

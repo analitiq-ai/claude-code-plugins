@@ -3,13 +3,10 @@
 
 This is the gap-detection half of connection-scoped type-map authoring
 (`endpoint-spec/spec-type-map-gaps.md`). It holds no matching logic of its
-own — resolution dispatches to the pinned `analitiq-validator`'s resolution
-internals (the same first-match-wins, `${name}`-substituting,
+own — resolution dispatches to the pinned `analitiq-validator`'s public
+resolution helpers (the same first-match-wins, `${name}`-substituting,
 read-side-normalizing semantics the engine and the validator use), so a probe
-resolves here exactly as it will at runtime. Those helpers are private API,
-not a published surface — this repo's tests exercise them against the in-repo
-source, which moves in lockstep with the pin, so a pin bump that renames them
-fails here first.
+resolves here exactly as it will at runtime.
 
 Maps are passed in precedence order (connection-scoped first, connector
 second) and concatenated into one rule list — mirroring the engine's
@@ -107,12 +104,9 @@ def _load_rules(path: Path, direction: str) -> list | None:
 
 def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
     """Resolve every probe through the concatenated rule lists, primary first."""
-    # The pinned validator's internal resolution helpers (private API — see the
-    # module docstring). `_render_arrow_type` bundles the read-side native_type
-    # normalization; write matchers compare the arrow_type as authored
-    # (case-preserving).
-    from analitiq.validator import _render_arrow_type
-    from analitiq.validator.connectors import _first_match_render
+    # `render_arrow_type` bundles the read-side native_type normalization;
+    # write matchers compare the arrow_type as authored (case-preserving).
+    from analitiq.validator import first_match_render, render_arrow_type
 
     sections = [_load_rules(path, direction) for path in rule_files]
     # One map lacking the section is expected (a connection map is gap-only);
@@ -128,9 +122,9 @@ def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
 
     probes = list(dict.fromkeys(probes))  # dedupe, order-preserving — one verdict per probe
     if direction == "read":
-        resolved = {p: _render_arrow_type(p, rules) for p in probes}
+        resolved = {p: render_arrow_type(p, rules) for p in probes}
     else:
-        resolved = {p: _first_match_render(p, rules, "arrow_type", "native_type") for p in probes}
+        resolved = {p: first_match_render(p, rules, "arrow_type", "native_type") for p in probes}
     return {
         "direction": direction,
         "resolved": resolved,

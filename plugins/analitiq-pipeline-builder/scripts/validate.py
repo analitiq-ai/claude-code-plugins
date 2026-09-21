@@ -147,7 +147,7 @@ def _rooted(site: str, path: str) -> str:
     A bare pointer is into the entry itself. Any other path names another
     document, as `<reference>#<pointer>` with the percent-encoded reference
     relative to the entry's directory (`rules/SCHEMA.md`, "Findings")."""
-    from analitiq.validator._core import is_bare_pointer
+    from analitiq.validator import is_bare_pointer
     if is_bare_pointer(path):
         target, pointer = site, path
     else:
@@ -376,12 +376,12 @@ def _check_connector_endpoint_refs(streams, connections,
 
     Appends directly to the caller's shared `findings` list: each ref is its own
     independently-decidable unit, contained on its own, so a crash checking one
-    ref (a validator regression in `_base_id`, say) costs only that ref's
+    ref (a validator regression in `base_id`, say) costs only that ref's
     warning — never the warnings already decided for refs checked earlier in
     this same loop, which building a local list and returning it once at the
     end would risk losing entirely."""
     import difflib
-    from analitiq.validator.pipelines import _base_id, _iter_endpoint_refs
+    from analitiq.validator import base_id, iter_endpoint_refs
 
     conn_to_connector: dict = {}
     with _contained(findings, "connector-endpoint-refs"):
@@ -390,16 +390,16 @@ def _check_connector_endpoint_refs(streams, connections,
                 continue
             cid, connector = conn.get("connection_id"), conn.get("connector_id")
             if isinstance(cid, str) and isinstance(connector, str):
-                conn_to_connector[_base_id(cid)] = connector
+                conn_to_connector[base_id(cid)] = connector
 
-    for path, ref in _iter_endpoint_refs(streams):
+    for path, ref in iter_endpoint_refs(streams):
         with _contained(findings, path):
             if ref.get("scope") != "connector":
                 continue
             cid, eid = ref.get("connection_id"), ref.get("endpoint_id")
             if not (isinstance(cid, str) and cid and isinstance(eid, str) and eid):
                 continue  # missing ids are the contract model's concern, or RULE-STRM-033/034's
-            connector = conn_to_connector.get(_base_id(cid))
+            connector = conn_to_connector.get(base_id(cid))
             if connector is None:
                 continue  # unresolved connection — already flagged by the connection check
             endpoint_ids = connector_endpoint_sets.get(connector)

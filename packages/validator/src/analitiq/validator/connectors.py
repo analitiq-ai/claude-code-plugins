@@ -125,7 +125,7 @@ _DATABASE_KINDS = ("database", "nosql", "document")
 _NARROWING_ARROW_TYPES = {"Object", "List"}
 
 
-def _first_match_render(value: str, rules: list, matcher_key: str, render_key: str,
+def first_match_render(value: str, rules: list, matcher_key: str, render_key: str,
                         normalize: Callable[[str], str] | None = None) -> str | None:
     """First-match-wins render; substitutes `${name}` from regex captures.
 
@@ -167,8 +167,8 @@ def _first_match_render(value: str, rules: list, matcher_key: str, render_key: s
     return None
 
 
-def _render_arrow_type(native_type: str, rules: list) -> str | None:
-    return _first_match_render(native_type, rules, "native_type", "arrow_type",
+def render_arrow_type(native_type: str, rules: list) -> str | None:
+    return first_match_render(native_type, rules, "native_type", "arrow_type",
                                normalize=_normalize_native)
 
 
@@ -542,7 +542,7 @@ def _write_vocabulary_findings(rules: list) -> list[dict]:
     """Warn when a write map renders no rule for an Arrow family."""
     missing = [
         probe for probe in _WRITE_VOCABULARY_PROBES
-        if _first_match_render(probe, rules, "arrow_type", "native_type") is None
+        if first_match_render(probe, rules, "arrow_type", "native_type") is None
     ]
     if not missing:
         return []
@@ -911,7 +911,7 @@ def _coverage_findings(ep_doc: dict, read_rules: list) -> list[dict]:
     renders through the connector's read rules to the Arrow type it declares."""
     findings: list[dict] = []
     for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
-        rendered = _render_arrow_type(native, read_rules)
+        rendered = render_arrow_type(native, read_rules)
         if rendered is None:
             findings.append(finding(
                 rule="RULE-PKG-033",
