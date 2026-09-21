@@ -1544,3 +1544,22 @@ def test_scripts_borrow_private_names_that_still_exist():
         assert hasattr(importlib.import_module(module), name), f"{module}.{name}"
 
 
+
+
+def test_a_document_is_read_as_utf8_whatever_the_locale(tmp_path):
+    # The adapter reads the document the way the validator reads a package's,
+    # so a non-ASCII value is not unreadable under a C locale.
+    import os
+    import subprocess
+    import sys
+
+    doc = {**CONN_WISE, "display_name": "Wisé"}
+    path = tmp_path / "connection.json"
+    path.write_bytes(json.dumps(doc, ensure_ascii=False).encode("utf-8"))
+    env = {**os.environ, "LC_ALL": "C", "LANG": "C", "PYTHONUTF8": "0",
+           "PYTHONPATH": os.pathsep.join(sys.path)}
+    done = subprocess.run(
+        [sys.executable, V.__file__, "--entity", "connection", "--document", str(path)],
+        env=env, capture_output=True, text=True, encoding="utf-8", timeout=120)
+    findings = json.loads(done.stdout)["findings"]
+    assert not [f for f in findings if f.get("message_id") == "unreadable-document"], findings

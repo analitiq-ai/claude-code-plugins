@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import errno
 import json
 import os
 import posixpath
@@ -204,7 +205,8 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
     from analitiq.contracts.connection_package import ConnectionPackage
     from analitiq.contracts.connector_package import ConnectorPackage
     from analitiq.contracts.pipeline_package import PipelinePackage
-    from analitiq.validator import grade_package, read_document, read_package, validate_document
+    from analitiq.validator import (
+        grade_package, keys_of, read_document, read_package, validate_document)
     from analitiq.validator._core import _unreadable_document_finding
     findings: list[dict] = []
     complete = True
@@ -218,7 +220,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
     streams: list[dict] = []
     with _contained(findings, "streams") as section:
         texts = read_package(document_path.parent, "pipeline-package")
-        for key in sorted(k for k in texts if PipelinePackage.kind_at(k) == "stream"):
+        for key in keys_of(PipelinePackage, texts, "stream"):
             # One stream is one independently-decidable unit, same as one
             # connection or one connector below: a crash grading it (e.g. a
             # pathologically deep document) must not discard the streams
@@ -268,7 +270,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
                 complete = False
                 continue
             connections.append(conn)
-            for key in sorted(k for k in texts if ConnectionPackage.kind_at(k) == "database-endpoint"):
+            for key in keys_of(ConnectionPackage, texts, "database-endpoint"):
                 endpoint, _ = _member(texts[key])
                 if endpoint is None:
                     complete = False
@@ -365,8 +367,9 @@ def _connector_endpoint_ids(texts: dict[str, str | Exception]) -> set[str]:
     connectors — both are recorded to stay correct even if a malformed
     connector let them diverge."""
     from analitiq.contracts.connector_package import ConnectorPackage
+    from analitiq.validator import keys_of
     ids: set[str] = set()
-    for key in (k for k in texts if ConnectorPackage.kind_at(k) == "api-endpoint"):
+    for key in keys_of(ConnectorPackage, texts, "api-endpoint"):
         ids.add(PurePosixPath(key).stem)
         endpoint, _ = _member(texts[key])
         eid = endpoint.get("endpoint_id") if endpoint is not None else None
@@ -498,12 +501,14 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     """Validate one document and return the Diagnostics envelope. Raises nothing
     for validation failures — those become findings; only a genuinely unreadable
     document short-circuits."""
-    from analitiq.validator import validate_document
-    from analitiq.validator._core import _JSON_READ_ERRORS, _unreadable_document_finding
-    try:
-        doc = _read_json(document_path)
-    except _JSON_READ_ERRORS as exc:
-        return _diagnostics([_unreadable_document_finding(exc)])
+    from analitiq.validator import read_document, validate_document
+    from analitiq.validator._core import _unreadable_document_finding
+    text = read_document(document_path.parent, document_path.name)
+    if text is None:
+        text = FileNotFoundError(errno.ENOENT, "no regular file", str(document_path))
+    doc, error = _parsed(text)
+    if error is not None:
+        return _diagnostics([_unreadable_document_finding(error)])
 
     findings = validate_document(doc, entity)
     if entity == "pipeline" and bundle_root is not None:
@@ -516,10 +521,6 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
         with _contained(findings, "pipeline-bundle"):
             findings.extend(_bundle_findings(doc, document_path, bundle_root))
     return _diagnostics(findings)
-
-
-def _read_json(path: Path):
-    return json.loads(Path(path).read_text())
 
 
 # ---------------------------------------------------------------------------
