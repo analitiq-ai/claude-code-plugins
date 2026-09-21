@@ -8,8 +8,9 @@ from pydantic import ConfigDict, RootModel
 from analitiq.contracts.shared.common import ParseOnly, document_locations
 
 # Paths are read from the pipeline's own directory, the one holding `pipeline.json`.
+PIPELINE_DOCUMENT_PATH = r"pipeline\.json"
 _DOCUMENT_LOCATIONS = {
-    r"^pipeline\.json$": "pipeline",
+    rf"^{PIPELINE_DOCUMENT_PATH}$": "pipeline",
     r"^streams/[^/]+\.json$": "stream",
 }
 

@@ -108,22 +108,25 @@ ARTIFACT_KINDS = (
     "stream",
     "pipeline",
     "connection",
-    # A server-side response shape, in the registry because it is part of the
-    # published contract surface even though neither plugin authors one.
+    # Published contract surface neither plugin authors: a server-side response
+    # shape, and the pipelines index of a workspace.
     "data-sync-run-status",
+    "pipeline-manifest",
     "any",
 )
 
 #: `ARTIFACT_KINDS`, restricted to members that denote one concrete, authorable
 #: document. A rule record legitimately needs the wider vocabulary above —
 #: `any` binds every document at once, `connector-package` grades a directory
-#: layout rather than a single document, `data-sync-run-status` is a server
-#: response neither plugin authors — but a call site naming exactly one kind of
+#: layout rather than a single document, `data-sync-run-status` and
+#: `pipeline-manifest` are documents neither plugin authors — but a call site naming exactly one kind of
 #: document a plugin dispatches on (the pipeline-builder's validation adapter,
 #: for instance) never means one of those. Derived rather than a second
 #: hand-typed tuple, so the two cannot drift apart member by member.
 DOCUMENT_ARTIFACT_KINDS = tuple(
-    kind for kind in ARTIFACT_KINDS if kind not in ("any", "connector-package", "data-sync-run-status")
+    kind
+    for kind in ARTIFACT_KINDS
+    if kind not in ("any", "connector-package", "data-sync-run-status", "pipeline-manifest")
 )
 
 #: Which shape device a shape rule is ABOUT — not merely which one the

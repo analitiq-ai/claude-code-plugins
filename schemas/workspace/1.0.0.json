@@ -1,0 +1,23 @@
+{
+  "$id": "https://schemas.analitiq.ai/workspace/1.0.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public JSON Schema contract for where each package of a workspace sits, read from the workspace root, and the published schema it is written against: a key ending in `/` is a package's own directory whose value is that package's documents, checked by its package schema; any other key is a document the workspace holds directly. It holds locations only. Other files a workspace carries are outside this schema. Source of truth: analitiq.contracts.workspace.Workspace (Pydantic).",
+  "patternProperties": {
+    "^connections/(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+)/(?![\\s\\S])": {
+      "$ref": "https://schemas.analitiq.ai/connection-package/latest.json"
+    },
+    "^connectors/(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+)/(?![\\s\\S])": {
+      "$ref": "https://schemas.analitiq.ai/connector-package/latest.json"
+    },
+    "^pipelines/(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+)/(?![\\s\\S])": {
+      "$ref": "https://schemas.analitiq.ai/pipeline-package/latest.json"
+    },
+    "^pipelines/manifest\\.json(?![\\s\\S])": {
+      "$ref": "https://schemas.analitiq.ai/pipeline-manifest/latest.json"
+    }
+  },
+  "title": "Analitiq Workspace",
+  "type": "object",
+  "version": "1.0.0"
+}

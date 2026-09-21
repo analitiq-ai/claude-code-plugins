@@ -86,6 +86,30 @@ PACKAGES = {
             "README.md",
         ),
     },
+    "workspace": {
+        "located": {
+            "pipelines/manifest.json": "pipeline-manifest",
+            "pipelines/orders/": "pipeline-package",
+            "connections/0b1f0c9e-2c7a-4d1e-9b6a-3f5e8d2c1a47/": "connection-package",
+            "connectors/postgres/": "connector-package",
+        },
+        "outside": (
+            "pipelines/manifest.json\n",
+            "pipelines/orders/\n",
+            "connectors/postgres/\n",
+            "pipelines/orders/pipeline.json",
+            "pipelines/orders",
+            "pipelines/",
+            "pipelines/../",
+            "pipelines/./",
+            "connections/a/b/",
+            "connectors/",
+            "vendor/connectors/postgres/",
+            "vendor/pipelines/manifest.json",
+            "manifest.json",
+            "README.md",
+        ),
+    },
 }
 
 package = pytest.mark.parametrize("resource", sorted(PACKAGES))

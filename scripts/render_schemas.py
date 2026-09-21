@@ -104,7 +104,9 @@ from analitiq.contracts.shared.json_schema import (  # noqa: E402
 )
 from analitiq.contracts.connection_package import ConnectionPackage  # noqa: E402
 from analitiq.contracts.connector_package import ConnectorPackage  # noqa: E402
+from analitiq.contracts.pipeline_manifest import PipelineManifest  # noqa: E402
 from analitiq.contracts.pipeline_package import PipelinePackage  # noqa: E402
+from analitiq.contracts.workspace import Workspace  # noqa: E402
 from analitiq.contracts.type_map import TypeMapDoc  # noqa: E402
 from analitiq.contracts.pipelines.config import PipelineInput  # noqa: E402
 from analitiq.contracts.pipelines.data_sync import (  # noqa: E402
@@ -1092,6 +1094,19 @@ RESOURCES: tuple[Resource, ...] = (
         source_paths=(f"{_CONTRACTS_PREFIX}/connection_package.py",),
     ),
     Resource(
+        name="pipeline-manifest",
+        title="Analitiq Pipeline Manifest",
+        description=(
+            "Public JSON Schema contract for the index of the pipelines a "
+            "workspace holds: each pipeline's identifier, lifecycle status and "
+            "the path of its `pipeline.json` from the index's directory. "
+            "Source of truth: analitiq.contracts.pipeline_manifest.PipelineManifest "
+            "(Pydantic)."
+        ),
+        adapter=TypeAdapter(PipelineManifest),
+        source_paths=(f"{_CONTRACTS_PREFIX}/pipeline_manifest.py",),
+    ),
+    Resource(
         name="pipeline-package",
         title="Analitiq Pipeline Package",
         description=(
@@ -1106,6 +1121,22 @@ RESOURCES: tuple[Resource, ...] = (
         ),
         adapter=TypeAdapter(PipelinePackage),
         source_paths=(f"{_CONTRACTS_PREFIX}/pipeline_package.py",),
+    ),
+    Resource(
+        name="workspace",
+        title="Analitiq Workspace",
+        description=(
+            "Public JSON Schema contract for where each package of a workspace "
+            "sits, read from the workspace root, and the published schema it is "
+            "written against: a key ending in `/` is a package's own directory "
+            "whose value is that package's documents, checked by its package "
+            "schema; any other key is a document the workspace holds directly. "
+            "It holds locations only. Other files a workspace carries are "
+            "outside this schema. "
+            "Source of truth: analitiq.contracts.workspace.Workspace (Pydantic)."
+        ),
+        adapter=TypeAdapter(Workspace),
+        source_paths=(f"{_CONTRACTS_PREFIX}/workspace.py",),
     ),
     Resource(
         name="validate-package-request",
