@@ -175,6 +175,16 @@ def _parsed(text: str | Exception) -> tuple[object, Exception | None]:
         return None, exc
 
 
+def _member(text: str | Exception) -> tuple[dict | None, Exception | None]:
+    """The bundle member `text` holds, or the error that keeps it from being
+    one. Every section of `_assemble_bundle` loads its members through this,
+    and a member it cannot load marks the bundle incomplete."""
+    doc, error = _parsed(text)
+    if error is None and not isinstance(doc, dict):
+        error = ValueError("not a JSON object")
+    return (None, error) if error is not None else (doc, None)
+
+
 def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
                      ) -> tuple[dict, list[dict], bool, bool, dict[str, set[str]]]:
     """Gather the on-disk pipeline bundle the way the engine resolves it at load:
@@ -223,10 +233,11 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
             # Whatever grading did: the referential checks read a stream's
             # refs, never its shape, so a crash grading it must not cost it its
             # place in the bundle.
-            if isinstance(doc, dict):
-                streams.append(doc)
-            else:
+            stream, _ = _member(texts[key])
+            if stream is None:
                 complete = False
+            else:
+                streams.append(stream)
     if section.crashed:
         crashed = True
         complete = False
@@ -252,15 +263,15 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
             with _contained(findings, site):
                 findings.extend(_at_site(f"{site}/{ConnectionPackage.ROOT}",
                                          grade_package("connection-package", texts)["findings"]))
-            conn, _ = _parsed(texts[ConnectionPackage.ROOT]) \
-                if ConnectionPackage.ROOT in texts else (None, None)
-            if not isinstance(conn, dict):
+            conn, _ = _member(texts.get(ConnectionPackage.ROOT,
+                                        FileNotFoundError(ConnectionPackage.ROOT)))
+            if conn is None:
                 complete = False
                 continue
             connections.append(conn)
             for key in sorted(k for k in texts if ConnectionPackage.kind_at(k) == "database-endpoint"):
-                endpoint, _ = _parsed(texts[key])
-                if not isinstance(endpoint, dict):
+                endpoint, _ = _member(texts[key])
+                if endpoint is None:
                     complete = False
                     continue
                 # Endpoint documents omit connection_id (server-managed); supply the
@@ -276,13 +287,14 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
     # A connector's identity is decided from its root alone. A directory
     # holding no connector.json is not a connector; a connection naming it is
     # the bundle validator's finding. One holding a connector.json counts by
-    # its slug even when that root cannot be read, parsed or looked up — the
-    # slug is the identity — and by the root's `connector_id` too where it
-    # declares one. A crash deciding that alias costs the alias, and since a
-    # connection may name it rather than the slug, marks the bundle
-    # incomplete. Endpoint ids are read after identity is settled, in a unit
-    # of their own: they feed only the advisory connector-endpoint-ref check,
-    # so failing to read them drops only that connector's set.
+    # its slug — the slug is the identity — and by the root's `connector_id`
+    # too where it declares one. A root that cannot be loaded, or a crash
+    # deciding its alias, leaves that alias unknown; a connection may name it
+    # rather than the slug, so either marks the bundle incomplete. Nothing
+    # else grades a downloaded connector, so an unloadable root is reported
+    # here. Endpoint ids are read after identity is settled, in a unit of
+    # their own: they feed only the advisory connector-endpoint-ref check, so
+    # failing to read them drops only that connector's set.
     connectors: set[str] = set()
     endpoint_ids: dict[str, set[str]] = {}
     with _contained(findings, "connectors") as section:
@@ -294,7 +306,13 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
                 if root_text is not None:
                     names.add(connector_dir.name)
                     connectors.add(connector_dir.name)
-                    names |= {_connector_id(root_text)} - {None}
+                    connector, error = _member(root_text)
+                    if connector is None:
+                        findings.extend(_at_site(f"{site}/{ConnectorPackage.ROOT}",
+                                                 [_unreadable_document_finding(error)]))
+                        complete = False
+                    else:
+                        names |= {_connector_id(connector)} - {None}
                     connectors |= names
             if outcome.crashed:
                 crashed = True
@@ -339,11 +357,10 @@ def _package_dirs(parent: Path) -> list[Path]:
     return dirs
 
 
-def _connector_id(text: str | Exception) -> str | None:
+def _connector_id(connector: dict) -> str | None:
     """The `connector_id` a downloaded connector's root document declares, or
-    `None` when it declares none it can be read for."""
-    connector, _ = _parsed(text)
-    cid = connector.get("connector_id") if isinstance(connector, dict) else None
+    `None` when it declares none."""
+    cid = connector.get("connector_id")
     return cid if isinstance(cid, str) and cid else None
 
 
@@ -357,8 +374,8 @@ def _connector_endpoint_ids(texts: dict[str, str | Exception]) -> set[str]:
     ids: set[str] = set()
     for key in (k for k in texts if ConnectorPackage.kind_at(k) == "api-endpoint"):
         ids.add(PurePosixPath(key).stem)
-        endpoint, _ = _parsed(texts[key])
-        eid = endpoint.get("endpoint_id") if isinstance(endpoint, dict) else None
+        endpoint, _ = _member(texts[key])
+        eid = endpoint.get("endpoint_id") if endpoint is not None else None
         if isinstance(eid, str) and eid:
             ids.add(eid)
     return ids

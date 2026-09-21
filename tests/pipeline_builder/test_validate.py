@@ -710,7 +710,9 @@ def test_a_connector_whose_root_lookup_is_refused_still_names_its_slug(tmp_path,
     bundle, findings, complete, crashed, _ = V._assemble_bundle(
         json.loads(doc.read_text()), doc, tmp_path)
     assert "wise" in bundle["connectors"], (bundle["connectors"], findings)
-    assert (complete, crashed) == (True, False), findings
+    assert [(f["message_id"], f["path"]) for f in findings] == [
+        ("unreadable-document", "connectors/wise/definition/connector.json")], findings
+    assert (complete, crashed) == (False, False)
 
 
 def test_a_stray_file_under_connections_is_not_a_connection(tmp_path):
@@ -731,13 +733,36 @@ def test_a_connector_directory_without_its_root_is_not_a_connector(tmp_path):
     assert (findings, complete, crashed) == ([], True, False)
 
 
-def test_an_unreadable_connector_root_still_names_its_slug(tmp_path):
+def test_a_connection_endpoint_that_cannot_be_loaded_costs_completeness(tmp_path):
+    # Its grading reports it; left out, it would make every ref to it read
+    # as dangling, so the referential pass is withheld.
     doc = _build_bundle(tmp_path)
-    (tmp_path / "connectors/wise/definition/connector.json").write_bytes(b"\xff{")
+    (tmp_path / f"{PG_DEFINITION}/endpoints/{EID}.json").write_text("[1]")
+    bundle, findings, complete, crashed, _ = V._assemble_bundle(
+        json.loads(doc.read_text()), doc, tmp_path)
+    assert bundle["endpoints"] == [], bundle["endpoints"]
+    assert [f["path"] for f in findings] == [f"{PG_DEFINITION}/endpoints/{EID}.json"], findings
+    assert (complete, crashed) == (False, False)
+
+
+_WISE_ROOT = "connectors/wise/definition/connector.json"
+
+
+@pytest.mark.parametrize("content", [b"\xff{", b"{", b"[1]"],
+                         ids=["not-utf8", "unparseable", "not-an-object"])
+def test_a_connector_root_that_cannot_be_loaded_is_reported_and_costs_completeness(
+        tmp_path, content):
+    # The slug still counts; the alias it may declare is unknown, and a
+    # connection naming that alias would read as dangling, so the root is
+    # reported and the referential pass is withheld.
+    doc = _build_bundle(tmp_path)
+    (tmp_path / _WISE_ROOT).write_bytes(content)
     bundle, findings, complete, crashed, _ = V._assemble_bundle(
         json.loads(doc.read_text()), doc, tmp_path)
     assert "wise" in bundle["connectors"], bundle["connectors"]
-    assert (findings, complete, crashed) == ([], True, False)
+    assert [(f["message_id"], f["path"]) for f in findings] == [
+        ("unreadable-document", _WISE_ROOT)], findings
+    assert (complete, crashed) == (False, False)
 
 
 def test_unlistable_connector_endpoints_cost_only_its_endpoint_ids(tmp_path, refuse):
