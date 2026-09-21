@@ -26,6 +26,6 @@ def _locate_documents(schema: dict[str, Any]) -> None:
 
 
 class ConnectorPackage(ParseOnly, RootModel[dict[str, Any]]):
-    """A connector package's authored documents, keyed by path from the connector's own directory."""
+    """The inventory of a connector package's artifacts, keyed by path from the connector's own directory."""
 
     model_config = ConfigDict(json_schema_extra=_locate_documents)
