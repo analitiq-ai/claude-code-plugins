@@ -150,8 +150,9 @@ def finding(
     through the same `rule_by_id` a rejection raised via `rules.violation`
     resolves through, so the two never disagree about what an id names. A
     `fail` finding's `severity` is derived from that record — never accepted
-    as a literal — and is `error` for the two framework cases that fail with
-    no rule to name (`rule=None`). A `notApplicable` or `informational`
+    as a literal — and is `error` for a framework case that fails with no
+    rule to name (`rule=None`), the cases `rules/SCHEMA.md`'s "Findings"
+    section tables. A `notApplicable` or `informational`
     finding carries no `severity` at all.
     """
     if kind not in _KINDS:

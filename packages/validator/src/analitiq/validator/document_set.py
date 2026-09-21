@@ -97,9 +97,8 @@ def envelope(findings: list[Finding]) -> ValidationEnvelope:
 # One document's text
 # ---------------------------------------------------------------------------
 
-#: What `json.loads` raises for text it will not parse. `JSONDecodeError`, an
-#: integer past the interpreter's digit limit and a `UnicodeDecodeError` on the
-#: read are all `ValueError`; nesting past the recursion limit is a
+#: What `json.loads` raises for text it will not parse. `JSONDecodeError` and
+#: an integer past the interpreter's digit limit are both `ValueError`; nesting past the recursion limit is a
 #: `RecursionError`, which is a `RuntimeError` and escapes a `ValueError` arm.
 _JSON_TEXT_REFUSALS = (ValueError, RecursionError)
 
@@ -122,10 +121,15 @@ def parse_document(text: str | Exception) -> tuple[Any, Finding | None]:
 
 
 def load_document(path: Path) -> tuple[Any, Finding | None]:
-    """`parse_document` over the file at `path`, as `read_document` reads it;
-    a path leading to no regular file is unreadable."""
+    """`parse_document` over the regular file `path` leads to, read as
+    `read_document` reads one; a path leading to no regular file is
+    unreadable. The caller named `path`, so unlike a package member it is
+    followed wherever it leads."""
     path = Path(path)
-    text = read_document(path.parent, path.name)
+    try:
+        text = _read_regular(path, os.stat(path).st_mode)
+    except OSError as exc:
+        text = exc
     if text is None:
         text = FileNotFoundError(errno.ENOENT, "no regular file", str(path))
     return parse_document(text)
@@ -244,6 +248,12 @@ def read_document(directory: Path, key: str) -> str | Exception | None:
         mode = _mode_within(Path(directory), path)
     except OSError as exc:
         return exc
+    return _read_regular(path, mode)
+
+
+def _read_regular(path: Path, mode: int | None) -> str | Exception | None:
+    """The UTF-8 text at `path`, whose mode is `mode`, the exception reading it
+    raised, or `None` where it is no regular file."""
     if mode is None or not stat.S_ISREG(mode):
         return None
     try:

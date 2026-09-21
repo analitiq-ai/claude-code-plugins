@@ -1584,3 +1584,18 @@ def test_every_way_to_validate_one_document_reports_it_alike(tmp_path, monkeypat
         reported.append(validate_single_document(
             ValidateSingleDocumentRequest(entity="connection", document=content)))
     assert all(envelope == reported[0] for envelope in reported), reported
+
+
+def test_a_named_document_is_read_through_a_symlink(tmp_path, monkeypatch, capsys):
+    # Containment guards what a package's links make the validator read; a
+    # document the caller names is read wherever its path leads.
+    store = tmp_path / "store"
+    store.mkdir()
+    (store / "connection.json").write_text(json.dumps(CONN_WISE), encoding="utf-8")
+    link = tmp_path / "work" / "connection.json"
+    link.parent.mkdir()
+    link.symlink_to(store / "connection.json")
+    monkeypatch.setattr("sys.argv", ["validator", "--document", str(link), "--kind", "connection"])
+    _core.main()
+    for envelope in (json.loads(capsys.readouterr().out), V.diagnostics_for("connection", link)):
+        assert "unreadable-document" not in [f.get("message_id") for f in envelope["findings"]], envelope

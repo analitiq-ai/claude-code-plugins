@@ -125,8 +125,12 @@ def _at(findings: list, message_id: str) -> list[str]:
 def test_the_graded_kinds_are_the_kinds_packages_locate(validator):
     from analitiq.validator._core import document_kinds
 
+    from analitiq.contracts.validation_requests import DOCUMENT_SCHEMA_NAMES
+
     located = {kind for model in PACKAGE_MODELS.values() for kind in model.LOCATIONS.values()}
     assert document_kinds() == located
+    # A single-document request may name only a kind the validator grades.
+    assert set(DOCUMENT_SCHEMA_NAMES) <= document_kinds()
 
 
 def test_every_package_has_a_package_check(validator):
