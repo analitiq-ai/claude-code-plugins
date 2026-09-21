@@ -4,6 +4,9 @@
   "additionalProperties": false,
   "description": "Public JSON Schema contract for the authored documents of a connection package: where each sits, read from the connection's own directory (the one holding `connection.json`), and the published schema it is written against. It holds locations only; each document's shape is the schema it points at. Other files a package carries are outside this schema. Source of truth: analitiq.contracts.connection_package.ConnectionPackage (Pydantic).",
   "patternProperties": {
+    "^\\.secrets/credentials\\.json(?![\\s\\S])": {
+      "$ref": "https://schemas.analitiq.ai/credentials/latest.json"
+    },
     "^connection\\.json(?![\\s\\S])": {
       "$ref": "https://schemas.analitiq.ai/connection/latest.json"
     },

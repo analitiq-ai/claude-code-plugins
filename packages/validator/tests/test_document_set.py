@@ -503,17 +503,11 @@ def test_type_map_is_graded_as_validate_document_grades_it(validator, section):
         assert (only_that_section_reports in ids) == (direction == section), result
 
 
-@pytest.mark.parametrize("document,sent_as", [
-    (_CONNECTOR_PG_TYPE_MAP, "connector"),
-    ({"$schema": f"{_H}/type-map-read/latest.json", "direction": "read",
-      "rules": [{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}]}, "type-map"),
-], ids=["a map sent as a connector", "a split-shape map"])
-def test_a_type_map_entity_mismatch_is_reported(validator, document, sent_as):
+def test_a_type_map_entity_mismatch_is_reported(validator):
     """A map sent under another kind's name is reported — its `$schema` names
-    the type map, not the kind the caller declared. So is a split-shape
-    document, whose `$schema` is no document schema the contract registers, so
-    nothing grades it as a map either."""
-    result = validator.validate_single_document(_document_request(document, sent_as))
+    the type map, not the kind the caller declared."""
+    result = validator.validate_single_document(
+        _document_request(_CONNECTOR_PG_TYPE_MAP, "connector"))
     assert result["passed"] is False
     assert [f["message_id"] for f in result["findings"]] == ["entity-mismatch"], result
 
@@ -748,9 +742,6 @@ _PACKAGES_WITH_FINDINGS = {
     "endpoint nested": {**_without(_connector_package_documents(), "endpoints/v1__records.json"),
                         "endpoints/sub/v1__records.json":
                             _connector_package_documents()["endpoints/v1__records.json"]},
-    "stray map name": {**_connector_package_documents(),
-                       "type-map-other.json":
-                           _connector_package_documents()["type-map.json"]},
     "database write section missing": {
         "connector.json": _CONNECTOR_PG,
         "type-map.json": _type_map_doc(

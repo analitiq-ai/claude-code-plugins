@@ -12,6 +12,7 @@ _DOCUMENT_LOCATIONS = {
     r"^connection\.json$": "connection",
     r"^definition/type-map\.json$": "type-map",
     r"^definition/endpoints/[^/]+\.json$": "database-endpoint",
+    r"^\.secrets/credentials\.json$": "credentials",
 }
 
 

@@ -163,7 +163,7 @@ def test_rules_graded_by_the_section_they_sit_under():
 
 def test_schema_url_must_be_the_type_map_url():
     doc = _wrap(READ, _ONE_READ_RULE)
-    doc["$schema"] = TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/")
+    doc["$schema"] = TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/connector/")
     with pytest.raises(ValidationError):
         MAP.validate_python(doc)
 

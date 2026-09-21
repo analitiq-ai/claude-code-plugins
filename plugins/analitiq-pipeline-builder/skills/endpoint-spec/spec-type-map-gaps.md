@@ -31,8 +31,6 @@ The rule shape (exact/regex `match`, matcher vs rendered key per direction,
 `type-map.json` you resolve against during gap detection is the live reference for it;
 do not restate their vocabulary here.
 
-Author no other `type-map-*.json` name beside it.
-
 ## Gap detection
 
 Resolution semantics (normalization, first-match-wins, `${name}` substitution)

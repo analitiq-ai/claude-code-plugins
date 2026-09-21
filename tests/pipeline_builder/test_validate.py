@@ -465,8 +465,17 @@ def _tm(**sections) -> dict:
     return {"$schema": TYPE_MAP_SCHEMA_URL, **sections}
 
 
-def _stray_name_reported(findings) -> bool:
-    return any(f.get("message_id") == "stray-type-map-document" for f in findings)
+def _plant_unparseable_map(root) -> None:
+    """The connection's type map, unreadable — a finding the connections loop
+    decides on its own, so its presence shows the loop ran."""
+    path = root / PG_MAP
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{not json")
+
+
+def _unparseable_map_reported(findings) -> bool:
+    return any(f.get("message_id") == "type-map-unparseable" and f["path"] == PG_MAP
+               for f in findings)
 
 
 @pytest.mark.parametrize("doc", [
@@ -533,30 +542,6 @@ def test_bundle_with_valid_connection_type_map(tmp_path):
     _write(tmp_path, PG_MAP, _tm(read=TYPE_MAP_READ, write=TYPE_MAP_WRITE))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert diag["passed"], diag["findings"]
-
-
-@pytest.mark.parametrize("shape", ["regular file", "directory", "dangling symlink"])
-def test_bundle_refuses_a_stray_type_map_name(tmp_path, shape):
-    # nothing reads a `type-map-*.json` beside the map, so rules authored there
-    # are silently inert — the bundle pass refuses the name. What carries the
-    # name decides nothing, and what a stray file holds is never graded: both
-    # scopes refuse it through the one published loader.
-    doc = _build_bundle(tmp_path)
-    stray = tmp_path / PG_DEFINITION / "type-map-natives.json"
-    stray.parent.mkdir(parents=True, exist_ok=True)
-    if shape == "regular file":
-        _write(tmp_path, f"{PG_DEFINITION}/type-map-natives.json", _tm(read=[LOWERCASE_RULE]))
-    elif shape == "directory":
-        stray.mkdir()
-    else:
-        stray.symlink_to(stray.parent / "nothing-here.json")
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert not diag["passed"]
-    at_stray = [f for f in diag["findings"]
-                if f["path"].startswith(f"{PG_DEFINITION}/type-map-natives.json")]
-    assert [f.get("message_id") for f in at_stray] == ["stray-type-map-document"], diag["findings"]
-    assert at_stray[0]["severity"] == "error"
-    assert TYPE_MAP_FILENAME in at_stray[0]["message"]  # where the rules belong
 
 
 def test_bundle_flags_invalid_connection_type_map(tmp_path):
@@ -652,18 +637,10 @@ _PARSER_REFUSALS = {
 
 def _plant(definition: Path, scenario: str) -> None:
     """Lay out one way a connection's or a connector's type-map siblings can be."""
-    valid = json.dumps(_tm(read=TYPE_MAP_READ))
     definition.mkdir(parents=True, exist_ok=True)
     target = definition / TYPE_MAP_FILENAME
-    if scenario.startswith("stray"):
-        target.write_text(valid)
-        target = definition / "type-map-natives.json"
-        scenario = scenario.removeprefix("stray ")
-    if scenario == "strays":
-        for name in ("type-map-natives.json", "type-map-ddl.json"):
-            (definition / name).write_text(valid)
-    elif scenario == "file":
-        target.write_text(valid)
+    if scenario == "file":
+        target.write_text(json.dumps(_tm(read=TYPE_MAP_READ)))
     elif scenario == "unparseable":
         target.write_text("[ not valid json")
     elif scenario == "not utf-8":
@@ -682,7 +659,6 @@ def _plant(definition: Path, scenario: str) -> None:
 
 @pytest.mark.parametrize("scenario", [
     "unparseable", "not utf-8", *_PARSER_REFUSALS, "directory", "dangling symlink", "fifo",
-    "strays", "stray file", "stray directory", "stray dangling symlink",
 ])
 def test_connection_type_map_is_loaded_as_a_connector_loads_its_own(tmp_path, scenario):
     # One directory, one answer: the findings loading the map beside a
@@ -830,7 +806,7 @@ def test_bundle_per_connection_crash_preserves_earlier_findings(tmp_path, monkey
     # crash mid-processing and confirm postgresql's already-decided finding
     # survives instead of being discarded by one shared try/except.
     doc = _build_bundle(tmp_path)
-    _write(tmp_path, f"{PG_DEFINITION}/type-map-natives.json", TYPE_MAP_READ)  # a stray name
+    _plant_unparseable_map(tmp_path)
 
     original = V._connection_type_map_findings
 
@@ -842,7 +818,7 @@ def test_bundle_per_connection_crash_preserves_earlier_findings(tmp_path, monkey
     monkeypatch.setattr(V, "_connection_type_map_findings", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    assert _stray_name_reported(diag["findings"]), diag["findings"]  # postgresql's, decided first
+    assert _unparseable_map_reported(diag["findings"]), diag["findings"]  # postgresql's, decided first
     crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"]
     assert len(crash) == 1, diag["findings"]
     assert crash[0]["path"] == "connections/wise"
@@ -985,12 +961,8 @@ def test_bundle_type_map_crash_does_not_orphan_connection_from_referential_check
     assert not _BUNDLE_ENDPOINT_REF_RULES & set(validators), diag["findings"]
 
 
-def test_type_map_grading_crash_preserves_the_loading_findings(tmp_path, monkeypatch):
-    # grading the map is its own independently-decidable unit inside
-    # _connection_type_map_findings — a crash there must not discard the
-    # stray-name finding the loader already decided
+def test_a_crash_grading_the_type_map_is_reported_at_the_map(tmp_path, monkeypatch):
     doc = _build_bundle(tmp_path)
-    _write(tmp_path, f"{PG_DEFINITION}/type-map-natives.json", TYPE_MAP_READ)  # a stray name
     _write(tmp_path, PG_MAP, _tm(read=TYPE_MAP_READ))
 
     def boom(doc_):
@@ -1000,21 +972,18 @@ def test_type_map_grading_crash_preserves_the_loading_findings(tmp_path, monkeyp
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"]
     assert [f["path"] for f in crash] == [PG_MAP], diag["findings"]
-    assert _stray_name_reported(diag["findings"]), diag["findings"]
 
 
 @pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
 def test_type_map_the_parser_refuses_is_unreadable_and_costs_no_crash(tmp_path, text):
     # A map the parser refuses is an unreadable map like any other: it is
-    # reported at the map and costs the stray-name finding beside it nothing.
+    # reported at the map and costs no crash.
     doc = _build_bundle(tmp_path)
-    _write(tmp_path, f"{PG_DEFINITION}/type-map-natives.json", TYPE_MAP_READ)  # a stray name
     (tmp_path / PG_MAP).write_text(text)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not any(f.get("validator") == "adapter-crash" for f in diag["findings"]), diag["findings"]
     assert any(f.get("message_id") == "type-map-unparseable" and f["path"] == PG_MAP
                for f in diag["findings"]), diag["findings"]
-    assert _stray_name_reported(diag["findings"]), diag["findings"]
 
 
 @pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
@@ -1075,7 +1044,7 @@ def test_bundle_endpoint_grading_crash_preserves_endpoint_and_siblings(tmp_path,
     # endpoints and the connection's trailing type-map check the per-connection
     # guard would otherwise discard as one shared unit
     doc = _build_bundle(tmp_path)
-    _write(tmp_path, f"{PG_DEFINITION}/type-map-natives.json", TYPE_MAP_READ)  # a stray name
+    _plant_unparseable_map(tmp_path)
     second_eid = derive_db_endpoint_id(None, "public", "customers")
     second_endpoint = {**DB_ENDPOINT, "endpoint_id": second_eid,
                         "database_object": build_database_object(None, "public", "customers")}
@@ -1097,7 +1066,7 @@ def test_bundle_endpoint_grading_crash_preserves_endpoint_and_siblings(tmp_path,
     assert not _BUNDLE_ENDPOINT_REF_RULES & set(validators), diag["findings"]
     # the connection's trailing type-map check still ran despite the earlier
     # crash in this same per-connection unit
-    assert _stray_name_reported(diag["findings"]), diag["findings"]
+    assert _unparseable_map_reported(diag["findings"]), diag["findings"]
 
 
 def test_bundle_connector_loop_crash_preserves_other_connector_identity(tmp_path, monkeypatch):
@@ -1251,7 +1220,7 @@ def test_bundle_stream_read_crash_preserves_sibling_stream_and_continues_assembl
     doc = _build_bundle(tmp_path)
     second_stream = {**STREAM, "stream_id": "55555555-5555-4555-8555-555555555555"}
     _write(tmp_path, "pipelines/p/streams/second.json", second_stream)
-    _write(tmp_path, f"{PG_DEFINITION}/type-map-natives.json", TYPE_MAP_READ)  # a stray name
+    _plant_unparseable_map(tmp_path)
 
     original = V._read_json
 
@@ -1268,7 +1237,7 @@ def test_bundle_stream_read_crash_preserves_sibling_stream_and_continues_assembl
     assert crash["path"] == "streams/orders.json"
     # the connections loop, which runs after the crashed streams loop, still
     # ran and decided its own finding
-    assert _stray_name_reported(diag["findings"]), diag["findings"]
+    assert _unparseable_map_reported(diag["findings"]), diag["findings"]
     # PIPELINE.streams still names the crashed stream's id (it was never
     # re-authored to drop the reference) — the bundle is short that very
     # document, so the referential pass that would call this ref unresolved
@@ -1310,14 +1279,14 @@ def test_bundle_endpoint_read_crash_preserves_sibling_endpoint(tmp_path, monkeyp
 def test_bundle_type_map_validated_when_connection_json_unreadable(tmp_path):
     # the type-map check depends only on the connection's directory, never on
     # whether connection.json itself parsed — an unreadable connection.json
-    # must not hide a genuinely malformed or stray type-map file beside it
+    # must not hide a genuinely malformed type-map file beside it
     doc = _build_bundle(tmp_path)
-    _write(tmp_path, f"{PG_DEFINITION}/type-map-natives.json", TYPE_MAP_READ)  # a stray name
+    _plant_unparseable_map(tmp_path)
     (tmp_path / "connections/postgresql/connection.json").write_text("{not valid json")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
     assert "document" in validators, diag["findings"]  # connection.json itself unreadable
-    assert _stray_name_reported(diag["findings"]), diag["findings"]
+    assert _unparseable_map_reported(diag["findings"]), diag["findings"]
 
 
 def test_bundle_unrelated_malformed_stream_skips_referential_pass_without_crash_label(tmp_path):

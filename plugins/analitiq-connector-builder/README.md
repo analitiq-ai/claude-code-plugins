@@ -81,12 +81,11 @@ Schemas are generated from — so there is no schema fetch. It runs:
 
 1. **Contract-model validation** — structure, plus the cross-field rules the
    models themselves apply.
-   <!-- PROBE: type-map-rule-graded-by-section, type-map-stray-name-refused, type-map-section-missing -->
+   <!-- PROBE: type-map-rule-graded-by-section, type-map-section-missing -->
    Discriminating keys in the document body select the model, and inside a type
    map the section a rule sits under — `read` or `write` — is its direction. A
    connector package's map is its one `definition/type-map.json`, which carries
-   the sections its `kind` calls for; any other `type-map-*.json` beside it is
-   refused (`RULE-PKG-030`). Each kind is graded against the model behind this
+   the sections its `kind` calls for (`RULE-PKG-030`). Each kind is graded against the model behind this
    schema:
    - Connector → `https://schemas.analitiq.ai/connector/latest.json`
    - Type map → `https://schemas.analitiq.ai/type-map/latest.json`

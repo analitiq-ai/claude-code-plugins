@@ -27,7 +27,6 @@ from analitiq.validator._location import DiskTree
 from analitiq.validator.connectors import (
     _DATABASE_KINDS,
     _STORAGE_KINDS,
-    _STRAY_TYPE_MAP_GLOB,
     TYPE_MAP_FILENAME,
 )
 
@@ -1355,43 +1354,6 @@ def test_a_map_finding_names_the_file_it_was_read_from(tmp_path, validator, payl
     assert named[0]["path"].startswith(f"{TYPE_MAP_FILENAME}#/"), named[0]
 
 
-def _plant_stray(parent: Path, name: str, shape: str) -> None:
-    """Put a type-map-shaped name at `parent` as one of the things a name can be.
-    The regular file is a well-formed split read map carrying a defect, so a
-    loader that read it would report that defect."""
-    stray = parent / name
-    if shape == "regular file":
-        stray.write_text(json.dumps({
-            "$schema": _TM_SCHEMA.replace("/type-map/", "/type-map-read/"),
-            "direction": "read",
-            "rules": [{"match": "exact", "native_type": "X", "arrow_type": "NotAnArrowFamily"}]}))
-    elif shape == "directory":
-        stray.mkdir()
-    elif shape == "dangling symlink":
-        stray.symlink_to(parent / "nothing-here.json")
-    else:  # pragma: no cover - a shape the parametrization does not carry
-        raise AssertionError(shape)
-
-
-@pytest.mark.parametrize("shape", ["regular file", "directory", "dangling symlink"])
-@pytest.mark.parametrize("kind,sections", [
-    ("api", ("read",)), ("database", ("read", "write")), ("file", None)])
-def test_a_stray_type_map_name_is_refused_and_not_read(tmp_path, validator, kind, sections, shape):
-    # One document carries the whole vocabulary, so a second file under a
-    # type-map name holds rules nothing grades while reading as part of the
-    # package. It is refused for carrying the name, whatever sits under it —
-    # reading it as "a regular file with this name" would let an author keep
-    # the name by making it something else.
-    _plant_map(tmp_path, sections)
-    _plant_stray(tmp_path, "type-map-natives.json", shape)
-    (tmp_path / "endpoints").mkdir()
-    findings = validator.check_coverage(_min_connector(kind), tmp_path / "connector.json")
-    stray = [f for f in findings if f["message_id"] == "stray-type-map-document"]
-    assert [(f.get("rule"), f["kind"]) for f in stray] == [("RULE-PKG-030", "fail")], findings
-    assert "type-map-natives.json" in stray[0]["message"], stray[0]
-    assert not any("NotAnArrowFamily" in f["message"] for f in findings), findings
-
-
 @pytest.mark.parametrize("kind", (*_DATABASE_KINDS, *_STORAGE_KINDS))
 def test_coverage_holds_a_connector_write_map_to_the_whole_vocabulary(tmp_path, kind, validator):
     # The package route grades at connector scope: a connector that renders
@@ -1651,16 +1613,6 @@ def test_an_endpoint_the_kernel_will_not_open_is_reported_unread(tmp_path, valid
     assert "widgets.json" in findings[0]["message"]
 
 
-@pytest.mark.parametrize("shape", ["regular file", "directory", "dangling symlink"])
-def test_a_stray_name_is_found_where_the_package_lists_but_cannot_be_searched(
-        tmp_path, validator, refuse, shape):
-    _plant_stray(tmp_path, "type-map-read.json", shape)
-    refuse(tmp_path, 0o400)
-    load = validator.load_type_map(tmp_path, rule="RULE-PKG-030")
-    assert [(name, f["message_id"]) for name, f in load.findings] == [
-        ("type-map-read.json", "stray-type-map-document")], load.findings
-
-
 def test_database_endpoint_filename_not_checked_for_snapshot(validator, tmp_path):
     # The hash-addressed materialized snapshot lives at
     # `.../endpoints/{endpoint_id}/schemas/{schema_hash}.json` — its basename is a
@@ -1764,8 +1716,8 @@ def test_a_map_declaring_the_type_map_schema_is_graded_as_a_map(validator, doc):
 @pytest.mark.parametrize("doc", [
     {"read": _read_rules()},
     {"write": _write_rules()},
-    {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"), "read": _read_rules()},
-], ids=["no-schema", "write-only-no-schema", "stale-schema"])
+    {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/connector/"), "read": _read_rules()},
+], ids=["no-schema", "write-only-no-schema", "other-schema"])
 def test_a_document_declaring_no_type_map_schema_is_not_a_map(validator, doc):
     # A section is not a claim. `read` and `write` are words other kinds nest,
     # so a document whose `$schema` does not name the type map — omitted here,
@@ -1794,15 +1746,11 @@ def test_a_stray_section_key_does_not_claim_another_kind(validator, doc, stray, 
 
 @pytest.mark.parametrize("doc", [
     [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
-    {"$schema": TYPE_MAP_SCHEMA_URL.replace("/type-map/", "/type-map-read/"),
-     "direction": "read",
-     "rules": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]},
     {},
-], ids=["bare-array", "split-shape", "empty"])
+], ids=["bare-array", "empty"])
 def test_a_document_in_no_type_map_shape_is_not_recognized(validator, tmp_path, doc):
     # None of these names the type map: a bare rule array has nowhere to put a
-    # `$schema`, the split shape's names another resource, and an empty object
-    # declares nothing. Each fails loud as an unrecognized document rather than
+    # `$schema`, and an empty object declares nothing. Each fails loud as an unrecognized document rather than
     # passing under some other detector.
     findings = validator.validate_document(doc, doc_path=tmp_path / TYPE_MAP_FILENAME)
     assert [f["message_id"] for f in _errors(findings)] == ["unrecognized-document"], findings
@@ -2409,16 +2357,14 @@ def test_type_map_findings_reports_its_own_crash_as_unchecked(validator, monkeyp
 
 # --- the loader, shared with every caller holding a `definition/` directory ---
 
-def test_load_type_map_reads_the_one_name_and_refuses_the_rest(validator, tmp_path):
-    # The connector beside the map is not one, and a type-map-shaped name that
-    # is not `type-map.json` is refused rather than read.
+def test_load_type_map_reads_the_one_name(validator, tmp_path):
+    # The connector beside the map is not one.
     doc = _type_map_doc(read=_read_rules())
-    for name in (TYPE_MAP_FILENAME, "connector.json", "type-map-extra.json"):
+    for name in (TYPE_MAP_FILENAME, "connector.json"):
         (tmp_path / name).write_text(json.dumps(doc))
     load = validator.load_type_map(tmp_path, rule=None)
     assert load.loaded and load.document == doc
-    assert [(name, f["message_id"], f.get("rule")) for name, f in load.findings] == [
-        ("type-map-extra.json", "stray-type-map-document", None)]
+    assert load.findings == []
 
 
 def test_load_type_map_reports_nothing_for_a_directory_without_one(validator, tmp_path):
@@ -2435,27 +2381,8 @@ def test_load_type_map_reports_nothing_for_a_directory_without_one(validator, tm
 
 def test_load_type_map_attributes_every_finding_to_the_rule_given(validator, tmp_path):
     (tmp_path / TYPE_MAP_FILENAME).write_text("[ not json")
-    (tmp_path / "type-map-b.json").mkdir()
-    (tmp_path / "type-map-a.json").write_text(json.dumps(_type_map_doc(read=_read_rules())))
     load = validator.load_type_map(tmp_path, rule="RULE-PKG-030")
     assert not load.loaded
     assert [(name, f["message_id"], f.get("rule")) for name, f in load.findings] == [
-        (TYPE_MAP_FILENAME, "type-map-unparseable", "RULE-PKG-030"),
-        ("type-map-a.json", "stray-type-map-document", "RULE-PKG-030"),
-        ("type-map-b.json", "stray-type-map-document", "RULE-PKG-030")]
+        (TYPE_MAP_FILENAME, "type-map-unparseable", "RULE-PKG-030")]
 
-
-def test_stray_type_map_paths_orders_what_the_directory_hands_back():
-    # Directory order is the filesystem's, and it is not sorted: two runs taking
-    # it as given would report the same strays in different orders. A stub
-    # stands in for the directory because a real one cannot be made to hand back
-    # an unsorted listing on demand.
-    from analitiq.validator.connectors import _stray_type_map_paths
-
-    class _Scrambled:
-        def glob(self, pattern):
-            assert pattern == _STRAY_TYPE_MAP_GLOB
-            return iter(Path(f"/d/type-map-{c}.json") for c in "cabd")
-
-    assert [p.name for p in _stray_type_map_paths(_Scrambled())] == [
-        f"type-map-{c}.json" for c in "abcd"]

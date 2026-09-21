@@ -1152,9 +1152,7 @@ def get_resource(name: str) -> Resource:
 # key spelling the contract no longer accepts. Retiring it is a delete on the
 # serving side, which this repo cannot perform and no check here can observe;
 # until it happens the stale object stays reachable. Renaming this document
-# again inherits the same debt. The `type-map-read` and `type-map-write`
-# resources, which `type-map` replaces, carry it too: their pinned objects and
-# pointers stay served.
+# again inherits the same debt.
 
 from analitiq.contracts import arrow_grammar  # noqa: E402
 
