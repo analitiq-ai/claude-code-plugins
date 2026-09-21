@@ -13,8 +13,12 @@ from typing import Annotated, Literal
 
 from pydantic import Field, RootModel, StringConstraints, model_validator
 
+from analitiq.contracts.connection_package import ConnectionPackage
+from analitiq.contracts.connector_package import ConnectorPackage
+from analitiq.contracts.pipeline_package import PipelinePackage
 from analitiq.contracts.shared.common import (
     DOCUMENT_KEY_MAX_LENGTH,
+    DocumentPackage,
     DocumentText,
     ParseOnly,
     StrictModel,
@@ -75,10 +79,19 @@ class DocumentSet(
         return self
 
 
-class ValidatePackageRequest(StrictModel):
-    """A request to validate one connector or pipeline package, supplied as its
-    documents."""
+#: Each published package schema's name, and the model it renders from.
+PACKAGE_MODELS: dict[str, type[DocumentPackage]] = {
+    "connector-package": ConnectorPackage,
+    "connection-package": ConnectionPackage,
+    "pipeline-package": PipelinePackage,
+}
 
+
+class ValidatePackageRequest(StrictModel):
+    """A request to validate one package, supplied as its documents."""
+
+    package: Literal[tuple(PACKAGE_MODELS)] = Field(  # type: ignore[valid-type]
+        ..., description="Name of the published package schema the documents form.")
     documents: DocumentSet
 
 

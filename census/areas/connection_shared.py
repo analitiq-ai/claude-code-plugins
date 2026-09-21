@@ -161,6 +161,19 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
+        model="DocumentPackage",
+        prose_hash="66b70fbca23c",
+        structural=(
+            "`_located` refuses a key `kind_at` places outside every `LOCATIONS` "
+            "pattern and a package with no document at `ROOT`"
+        ),
+        waiver=(
+            "that each key is a path from the directory holding the root document "
+            "and each value the document at that path is the caller's content, "
+            "which this model does not judge"
+        ),
+    ),
+    ProseObligation(
         model="RetryErrorHandlingBase",
         prose_hash="df7e8cd3fe85",
         waiver=(

@@ -294,6 +294,11 @@ EXEMPT_MODEL_VALIDATORS = {
         "document and a directory is a malformed request refused at "
         "construction, which no artifact author can violate or a finding cite"
     ),
+    ("analitiq.contracts.shared.common", "DocumentPackage", "_located"): (
+        "structural, not an obligation a record names: it is the runtime form of "
+        "the package schema's own `required` and `additionalProperties: false`, "
+        "which reject the same package from the published document alone"
+    ),
 }
 
 

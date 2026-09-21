@@ -134,3 +134,59 @@ def test_no_location_beyond_the_table_is_admitted(resource):
 def test_every_reference_names_a_registered_schema(resource):
     published = {schema_url_for(name) for name in render_schemas.RESOURCES_BY_NAME}
     assert set(_table(resource).values()) <= published
+
+
+ROOTS = {
+    "connector-package": "definition/connector.json",
+    "connection-package": "connection.json",
+    "pipeline-package": "pipeline.json",
+}
+
+
+def _model(resource: str):
+    from analitiq.contracts.validation_requests import PACKAGE_MODELS
+    return PACKAGE_MODELS[resource]
+
+
+def test_the_package_models_are_the_registered_package_schemas():
+    from analitiq.contracts.validation_requests import PACKAGE_MODELS
+    assert set(PACKAGE_MODELS) == set(PACKAGES)
+    for name, model in PACKAGE_MODELS.items():
+        assert render_schemas.get_resource(name).adapter._type is model  # skipcq: PYL-W0212
+
+
+@package
+def test_the_root_document_is_required(resource):
+    assert _rendered(resource)["required"] == [ROOTS[resource]]
+
+
+@package
+def test_the_model_names_the_kind_at_each_location_and_none_outside(resource):
+    model = _model(resource)
+    for key, kind in PACKAGES[resource]["located"].items():
+        assert model.kind_at(key) == kind, key
+    for key in PACKAGES[resource]["outside"]:
+        assert model.kind_at(key) is None, key
+
+
+@package
+def test_the_model_admits_a_package_holding_its_root(resource):
+    model = _model(resource)
+    model.model_validate(dict.fromkeys(PACKAGES[resource]["located"], {}))
+
+
+@package
+def test_the_model_refuses_a_package_without_its_root(resource):
+    from pydantic import ValidationError
+    located = dict.fromkeys(PACKAGES[resource]["located"], {})
+    del located[ROOTS[resource]]
+    with pytest.raises(ValidationError, match=re.escape(repr(ROOTS[resource]))):
+        _model(resource).model_validate(located)
+
+
+@package
+def test_the_model_refuses_a_key_outside_the_table(resource):
+    from pydantic import ValidationError
+    key = PACKAGES[resource]["outside"][0]
+    with pytest.raises(ValidationError, match=re.escape(repr(key))):
+        _model(resource).model_validate({ROOTS[resource]: {}, key: {}})

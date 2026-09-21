@@ -58,6 +58,7 @@ def _package_request(documents: dict) -> ValidatePackageRequest:
     """A package request over `documents`, each serialized to the file text a
     request actually carries."""
     return ValidatePackageRequest(
+        package="connector-package",
         documents={key: json.dumps(doc) for key, doc in documents.items()})
 
 
@@ -605,7 +606,7 @@ def test_unparseable_document_in_a_package_is_a_finding_not_a_raise(validator):
                  for key, doc in _connector_package_documents().items()}
     documents["endpoints/v2__widgets.json"] = "{not json"
     result = validator.validate_connector_package(
-        ValidatePackageRequest(documents=documents))
+        ValidatePackageRequest(package="connector-package", documents=documents))
     assert result["passed"] is False
     # Naming the document, not merely failing: the rest of this package is
     # clean, so a bare `any(kind == "fail")` cannot tell "reported as
@@ -692,7 +693,7 @@ def test_a_connector_package_without_a_connector_document_fails(validator):
 def test_a_connector_document_that_does_not_parse_is_a_finding(validator):
     documents = {key: json.dumps(doc) for key, doc in _connector_package_documents().items()}
     documents["connector.json"] = "{not json"
-    result = validator.validate_connector_package(ValidatePackageRequest(documents=documents))
+    result = validator.validate_connector_package(ValidatePackageRequest(package="connector-package", documents=documents))
     assert result["passed"] is False
     assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
         ("unreadable-document", "connector.json#")], result
@@ -773,7 +774,7 @@ def _assert_every_path_names_a_submitted_document(findings: list, keys: set) -> 
 @pytest.mark.parametrize("texts", _PACKAGE_TEXTS_WITH_FINDINGS.values(),
                          ids=_PACKAGE_TEXTS_WITH_FINDINGS.keys())
 def test_every_package_finding_names_a_submitted_document(validator, texts):
-    result = validator.validate_connector_package(ValidatePackageRequest(documents=texts))
+    result = validator.validate_connector_package(ValidatePackageRequest(package="connector-package", documents=texts))
     _assert_every_path_names_a_submitted_document(result["findings"], set(texts))
 
 

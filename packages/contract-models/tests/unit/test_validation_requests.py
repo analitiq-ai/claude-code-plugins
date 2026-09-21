@@ -53,11 +53,12 @@ MALFORMED_KEYS = {
 
 
 def _validate(documents: dict) -> ValidatePackageRequest:
-    return ValidatePackageRequest.model_validate({"documents": documents})
+    return ValidatePackageRequest.model_validate(
+        {"package": "connector-package", "documents": documents})
 
 
 def _publish_validate(documents: dict) -> None:
-    jsonschema.validate({"documents": documents}, PUBLISHED_SCHEMA)
+    jsonschema.validate({"package": "connector-package", "documents": documents}, PUBLISHED_SCHEMA)
 
 
 def test_accepts_relative_posix_keys():
@@ -130,7 +131,7 @@ def test_directory_conflict_check_is_not_quadratic_in_key_depth():
 def test_rejects_non_string_value(value):
     with pytest.raises(ValidationError):
         ValidatePackageRequest.model_validate_json(
-            f'{{"documents": {{"connector.json": {value}}}}}')
+            f'{{"package": "connector-package", "documents": {{"connector.json": {value}}}}}')
 
 
 @pytest.mark.parametrize("cast", [bytes, bytearray])
@@ -145,7 +146,7 @@ def test_bytes_like_value_is_coerced_to_text_with_its_byte_order_mark_intact(cas
     """
     text = "\ufeff{}"
     request = ValidatePackageRequest(
-        documents={"connector.json": cast(text.encode())})
+        package="connector-package", documents={"connector.json": cast(text.encode())})
     assert request.documents.root["connector.json"] == text
 
     single = ValidateSingleDocumentRequest(document=cast(b"{}"), entity="connector")
@@ -158,17 +159,30 @@ def test_other_buffer_shapes_are_still_refused():
     over the same bytes is refused.
     """
     with pytest.raises(ValidationError):
-        ValidatePackageRequest(documents={"connector.json": memoryview(b"{}")})
+        ValidatePackageRequest(
+            package="connector-package", documents={"connector.json": memoryview(b"{}")})
 
 
 def test_rejects_unknown_field():
     with pytest.raises(ValidationError):
-        ValidatePackageRequest.model_validate({"documents": {}, "entity": "connector"})
+        ValidatePackageRequest.model_validate(
+            {"package": "connector-package", "documents": {}, "entity": "connector"})
 
 
 def test_rejects_missing_documents():
     with pytest.raises(ValidationError):
-        ValidatePackageRequest.model_validate({})
+        ValidatePackageRequest.model_validate({"package": "connector-package"})
+
+
+def test_rejects_missing_package():
+    with pytest.raises(ValidationError):
+        ValidatePackageRequest.model_validate({"documents": {}})
+
+
+def test_package_is_a_published_package_name():
+    ValidatePackageRequest.model_validate({"package": "pipeline-package", "documents": {}})
+    with pytest.raises(ValidationError):
+        ValidatePackageRequest.model_validate({"package": "connector", "documents": {}})
 
 
 def test_document_count_ceiling():
