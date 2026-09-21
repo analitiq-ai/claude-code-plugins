@@ -19,9 +19,12 @@ packages are absent, hard-failed in CI via `DRIFT_REQUIRE_CONTRACT_MODELS=1`.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
+import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -51,24 +54,35 @@ def _example_dirs() -> list[Path]:
 _TYPE_MAP = "type-map.json"
 
 
-def example_package(example_dir: Path) -> dict[str, str]:
-    """The example's documents by connector package key."""
-    body = next(example_dir.glob("*.example.json"), None)  # skipcq: PTC-W0063
-    if body is None:  # _example_dirs() filters for this, but fail usefully if handed one directly
-        raise FileNotFoundError(f"{example_dir} has no *.example.json")
-    documents = {ConnectorPackage.ROOT: body.read_text(encoding="utf-8")}
-    type_map = example_dir / _TYPE_MAP
-    if type_map.exists():
-        documents[f"definition/{_TYPE_MAP}"] = type_map.read_text(encoding="utf-8")
-    for endpoint in sorted((example_dir / "endpoints").glob("*.json")):
-        documents[f"definition/endpoints/{endpoint.name}"] = endpoint.read_text(encoding="utf-8")
-    return documents
+def _load_claims():
+    """Import the claims registry by path — `scripts/` is not an installed package."""
+    spec = importlib.util.spec_from_file_location(
+        "render_validator_claims", REPO_ROOT / "scripts" / "render_validator_claims.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    # dataclass processing resolves the defining module through sys.modules.
+    sys.modules.setdefault(spec.name, module)
+    spec.loader.exec_module(module)
+    return module
 
 
-def graded_package(documents: dict[str, str]) -> list[dict]:
+example_package = _load_claims().example_package
+
+
+def graded_package(documents: dict[str, Any]) -> list[dict]:
     """The findings for `documents` graded as a connector package."""
     return validate_package(ValidatePackageRequest(
-        package="connector-package", documents=documents))["findings"]
+        package="connector-package",
+        documents={key: json.dumps(doc) for key, doc in documents.items()}))["findings"]
+
+
+def test_an_example_file_no_package_location_matches_is_not_part_of_it(tmp_path: Path) -> None:
+    (tmp_path / "x.example.json").write_text("{}")
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "notes" / "draft.json").write_text("{}")
+    (tmp_path / "type-map.json").write_text("{}")
+    assert sorted(example_package(tmp_path)) == sorted(
+        [ConnectorPackage.ROOT, "definition/type-map.json"])
 
 
 def _errors(findings: list[dict]) -> list[dict]:

@@ -202,24 +202,26 @@ def example_package(example_dir: Path) -> dict[str, Any]:
 
     An example is laid out for readability — `<name>.example.json` beside the
     rest of its `definition/` directory — so its body becomes the package root
-    and every other JSON file sits at its own path beside the root.
+    and every other JSON file sits at its own path beside the root, where the
+    package locates one there.
     """
     from analitiq.contracts.connector_package import ConnectorPackage
 
     definition = PurePosixPath(ConnectorPackage.ROOT).parent
     documents = {ConnectorPackage.ROOT: _example_body(example_dir)}
     for path in sorted(example_dir.rglob("*.json")):
-        if not path.name.endswith(".example.json"):
-            key = str(definition / path.relative_to(example_dir).as_posix())
-            documents[key] = json.loads(path.read_text())
+        key = str(definition / path.relative_to(example_dir).as_posix())
+        if not path.name.endswith(".example.json") and ConnectorPackage.kind_at(key) is not None:
+            documents[key] = json.loads(path.read_text(encoding="utf-8"))
     return documents
 
 
 def _type_map_key() -> str:
     """The key the connector package holds its type map at."""
     from analitiq.contracts.connector_package import ConnectorPackage
+    from analitiq.validator import keys_of
 
-    [key] = [k for k in example_package(DB_EXAMPLE) if ConnectorPackage.kind_at(k) == "type-map"]
+    [key] = keys_of(ConnectorPackage, example_package(DB_EXAMPLE), "type-map")
     return key
 
 

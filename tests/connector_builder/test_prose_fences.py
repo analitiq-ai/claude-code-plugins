@@ -614,7 +614,7 @@ def _findings(entity: str, document: Any, host: Path | None) -> list[dict]:
     if entity == "connector":
         assert host is not None, "a connector is graded inside its host example's package"
         documents = ev.example_package(host.parent)
-        documents[ConnectorPackage.ROOT] = json.dumps(document)
+        documents[ConnectorPackage.ROOT] = document
         return ev._errors(ev.graded_package(documents))
     return ev._errors(validate_document(document, entity))
 
