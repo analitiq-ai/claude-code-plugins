@@ -1,7 +1,7 @@
-"""The connector-package schema states where each artifact of a connector package
-sits and which published schema it is written against — and nothing else.
+"""The connector-package schema states where each authored document of a connector
+package sits and which published schema it is written against — and nothing else.
 
-It is an inventory of locations. An artifact's shape is the published schema its
+It is a table of locations. A document's shape is the published schema its
 location points at, so this schema holds no shape of its own.
 """
 from __future__ import annotations
