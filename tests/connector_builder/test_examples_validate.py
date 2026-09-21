@@ -32,7 +32,6 @@ require_contract_models("analitiq.contracts", "analitiq.validator")
 
 from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL  # noqa: E402
 from analitiq.validator import TYPE_MAP_FILENAME, validate_document  # noqa: E402
-from analitiq.validator.connectors import _stray_type_map_paths  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / "plugins" / "analitiq-connector-builder" / "skills"
@@ -55,10 +54,9 @@ def _stage(example_dir: Path, dest_root: Path) -> Path:
     if body is None:  # _example_dirs() filters for this, but fail usefully if staged directly
         raise FileNotFoundError(f"{example_dir} has no *.example.json to stage")
     shutil.copy(body, definition / "connector.json")
-    # Strays are staged too, so the connector's own check refuses them.
-    for src in [example_dir / TYPE_MAP_FILENAME, *_stray_type_map_paths(example_dir)]:
-        if src.exists():
-            shutil.copy(src, definition / src.name)
+    type_map = example_dir / TYPE_MAP_FILENAME
+    if type_map.exists():
+        shutil.copy(type_map, definition / TYPE_MAP_FILENAME)
     endpoints = example_dir / "endpoints"
     if endpoints.is_dir():
         shutil.copytree(endpoints, definition / "endpoints")

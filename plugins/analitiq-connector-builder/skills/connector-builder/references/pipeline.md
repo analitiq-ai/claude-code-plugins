@@ -131,10 +131,10 @@ either kind.
 
 Invoke `connector-schema-validator` over the connector body and type
 map; it detects each document's kind from its own shape.
-<!-- PROBE: type-map-section-missing, type-map-stray-name-refused -->
+<!-- PROBE: type-map-section-missing -->
 The map is one `type-map.json` carrying a section for each direction the
 connector's `kind` calls for (`RULE-PKG-030`); a section the kind needs and the
-map lacks, or any other `type-map-*.json` beside it, fails the connector.
+map lacks fails the connector.
 
 Validation covers the JSON documents above; the package files are
 governed by rules of their own (`RULE-PKG-007`, `RULE-PKG-009`,
@@ -271,8 +271,7 @@ paths. The connector root IS the Python package for database connectors:
 preserved.
 
 Write the creator's type map as the one `type-map.json`, carrying a section
-for each direction the connector's `kind` calls for; never write another
-`type-map-*.json` beside it (`RULE-PKG-030`).
+for each direction the connector's `kind` calls for (`RULE-PKG-030`).
 
 Write each endpoint to `endpoints/{endpoint_id}.json` (`RULE-PKG-031`) —
 never renamed, aliased, or nested. The engine resolves an endpoint by id

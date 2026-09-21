@@ -63,6 +63,3 @@ connector's rendering for every stream on that connection (`RULE-TMAP-018`).
 - **An empty rule list** — never ship one at either scope; the contract
   requires at least one rule in a present section, so an empty one is a
   rejected document rather than the fallthrough an absent section gives you.
-- **Any other `type-map-*.json`** — never ship one beside `type-map.json`. A
-  connector's map carries a section for each direction its `kind` calls for
-  (`RULE-PKG-030`).

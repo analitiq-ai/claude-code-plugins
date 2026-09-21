@@ -102,6 +102,7 @@ from analitiq.contracts.shared.json_schema import (  # noqa: E402
     JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
     JSON_SCHEMA_SUBSCHEMA_KEYS,
 )
+from analitiq.contracts.connection_package import ConnectionPackage  # noqa: E402
 from analitiq.contracts.connector_package import ConnectorPackage  # noqa: E402
 from analitiq.contracts.type_map import TypeMapDoc  # noqa: E402
 from analitiq.contracts.pipelines.config import PipelineInput  # noqa: E402
@@ -1074,6 +1075,22 @@ RESOURCES: tuple[Resource, ...] = (
         source_paths=(f"{_CONTRACTS_PREFIX}/connector_package.py",),
     ),
     Resource(
+        name="connection-package",
+        title="Analitiq Connection Package",
+        description=(
+            "Public JSON Schema contract for the authored documents of a "
+            "connection package: where each sits, read from the connection's own "
+            "directory (the one holding `connection.json`), and the published "
+            "schema it is written against. It holds locations only; each "
+            "document's shape is the schema it points at. Other files a package "
+            "carries are outside this schema. "
+            "Source of truth: analitiq.contracts.connection_package.ConnectionPackage "
+            "(Pydantic)."
+        ),
+        adapter=TypeAdapter(ConnectionPackage),
+        source_paths=(f"{_CONTRACTS_PREFIX}/connection_package.py",),
+    ),
+    Resource(
         name="validate-package-request",
         title="Analitiq Validate Package Request",
         description=(
@@ -1135,9 +1152,7 @@ def get_resource(name: str) -> Resource:
 # key spelling the contract no longer accepts. Retiring it is a delete on the
 # serving side, which this repo cannot perform and no check here can observe;
 # until it happens the stale object stays reachable. Renaming this document
-# again inherits the same debt. The `type-map-read` and `type-map-write`
-# resources, which `type-map` replaces, carry it too: their pinned objects and
-# pointers stay served.
+# again inherits the same debt.
 
 from analitiq.contracts import arrow_grammar  # noqa: E402
 

@@ -116,10 +116,6 @@ except ImportError as exc:  # pragma: no cover - dependency guard
 
 
 TYPE_MAP_FILENAME = "type-map.json"
-# Names that read as a type map and are not the one a `definition/` directory
-# holds. A file under one carries rules nothing grades, beside a package that
-# looks as though it ships them.
-_STRAY_TYPE_MAP_GLOB = "type-map-*.json"
 
 _CONNECTOR_SENTINELS = ("transports", "connection_contract", "default_transport", "auth")
 _STORAGE_KINDS = ("file", "s3", "stdout")
@@ -1134,19 +1130,6 @@ def _about(sibling: Location, findings: list[dict], *, seen_from: Location) -> l
     return [qualified(f, at) for f in findings]
 
 
-def _stray_type_map_paths(parent: Location) -> list[Location]:
-    """The entries in `parent` carrying a type-map name that is not the map's.
-
-    The name is what is refused, so a directory or a broken link carrying it
-    counts: answering only for a regular file would let an author keep the name
-    by making it something else. Read off the listing, which names every entry
-    without looking any of them up. Sorted because a tree lists its entries in
-    no particular order, and the same directory has to report its strays in the
-    same order on every listing.
-    """
-    return sorted(parent.glob(_STRAY_TYPE_MAP_GLOB))
-
-
 @dataclass(frozen=True)
 class TypeMapLoad:
     """The type map one `definition/` directory holds.
@@ -1193,7 +1176,7 @@ class TypeMapLoad:
 
 
 def load_type_map(parent: Path | Location, *, rule: str | None) -> TypeMapLoad:
-    """Load the type map in `parent`, refusing every other type-map name there.
+    """Load the type map in `parent`.
 
     Published because a connector's map and a connection's are loaded by one
     rule, and any second implementation of it answers differently at the
@@ -1201,24 +1184,19 @@ def load_type_map(parent: Path | Location, *, rule: str | None) -> TypeMapLoad:
     directory being loaded, which differs by scope, so it is the caller's to
     name — `None` where no record binds it.
 
-    A stray name is refused whatever sits under it — a directory or a broken
-    link included — because the name is what reads as a type map.
-
     A `parent` that `located` refuses raises its refusal.
     """
     parent = located(parent)
-    listed = _asked(_Operation.LISTING, lambda: (
-        any(True for _ in parent.glob(TYPE_MAP_FILENAME)), _stray_type_map_paths(parent)))
+    listed = _asked(_Operation.LISTING, lambda: any(True for _ in parent.glob(TYPE_MAP_FILENAME)))
     if isinstance(listed, _Failed):
         return TypeMapLoad(None, [(".", finding(
             rule=rule,
             message_id="type-map-dir-unlisted", kind="notApplicable", path="",
             message=f"type map not loaded: the directory {listed.why}."))], unread=["."])
-    listed_map, strays = listed
     read: _Read | None = None
     findings: list[tuple[str, dict]] = []
     unread: list[str] = []
-    if listed_map:
+    if listed:
         path = parent / TYPE_MAP_FILENAME
         sibling = _read_sibling(path)
         if isinstance(sibling, _Read):
@@ -1232,14 +1210,6 @@ def load_type_map(parent: Path | Location, *, rule: str | None) -> TypeMapLoad:
             findings.append((TYPE_MAP_FILENAME, finding(
                 rule=rule, message_id="type-map-unparseable", kind="fail", path="",
                 message=_unread(path, sibling))))
-    for stray in strays:
-        findings.append((stray.name, finding(
-            rule=rule,
-            message_id="stray-type-map-document", kind="fail", path="",
-            message=(
-                f"sibling {stray.name} is not read as a type map: one "
-                f"{TYPE_MAP_FILENAME} carries the rules for every direction the map covers, "
-                f"so nothing grades what {stray.name} holds."))))
     return TypeMapLoad(read, findings, unread)
 
 

@@ -101,8 +101,6 @@ LAYOUTS = {
         **_API_PACKAGE, "type-map.json": '{\r  "read": [,]\r}'}),
     "api package, write section in the map": ("connector.json", {
         **_API_PACKAGE, "type-map.json": _map("read", "write")}),
-    "api package, stray type-map name": ("connector.json", {
-        **_API_PACKAGE, "type-map-natives.json": _map("read")}),
     "api package, no endpoints": ("connector.json", {
         "connector.json": _API, "type-map.json": _map("read")}),
     "api package, endpoints holding no json": ("connector.json", {
@@ -112,8 +110,6 @@ LAYOUTS = {
         "connector.json": _API, "type-map.json": _map("read"), "endpoints": "notes"}),
     "api package, map name on a directory": ("connector.json", {
         **_API_PACKAGE_WITHOUT_MAP, "type-map.json/x.json": _map("read")}),
-    "api package, stray type-map name on a directory": ("connector.json", {
-        **_API_PACKAGE, "type-map-extra.json/x.json": _map("read")}),
     # Every other layout sits at the root, where a key's name and the key are
     # the same string; below it they are not.
     "api package below the root": ("connectors/c/definition/connector.json", {

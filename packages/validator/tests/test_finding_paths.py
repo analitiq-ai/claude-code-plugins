@@ -116,13 +116,6 @@ def test_an_unparseable_type_map_is_located_at_the_whole_file(tmp_path, validato
     assert found["path"] == "type-map.json#", found
 
 
-def test_a_stray_type_map_name_is_located_at_the_whole_file(tmp_path, validator):
-    _package(tmp_path)
-    (tmp_path / "type-map-zz.json").write_text(json.dumps(_type_map()))
-    [found] = _graded(validator, tmp_path, "stray-type-map-document")
-    assert found["path"] == "type-map-zz.json#", found
-
-
 def test_an_api_write_section_is_located_at_the_section(tmp_path, validator):
     _package(tmp_path, type_map=_type_map(
         read=[{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],

@@ -628,19 +628,6 @@ def _p_type_map_rule_graded_by_section() -> list[dict]:
         "native_type": "NUMERIC(${p}, ${s})"}])
 
 
-def _p_type_map_stray_name() -> list[dict]:
-    # The example package's map staged under its one accepted name, and the same
-    # map again under a second type-map name beside it.
-    doc = _example_body(DB_EXAMPLE)
-    with tempfile.TemporaryDirectory() as tmp:
-        definition = Path(tmp) / "definition"
-        definition.mkdir()
-        (definition / "connector.json").write_text(json.dumps(doc))
-        shutil.copy(DB_EXAMPLE / TYPE_MAP_FILENAME, definition / TYPE_MAP_FILENAME)
-        shutil.copy(DB_EXAMPLE / TYPE_MAP_FILENAME, definition / "type-map-natives.json")
-        return _validate(doc, doc_path=definition / "connector.json")
-
-
 def _p_type_map_section_missing() -> list[dict]:
     # A database connector whose map carries no `write` section.
     doc = _example_body(DB_EXAMPLE)
@@ -1044,8 +1031,6 @@ PROBES: tuple[Probe, ...] = (
           message_re=r"Field required"),
     Probe("type-map-rule-graded-by-section", "error", _p_type_map_rule_graded_by_section,
           message_re=r"read rule's arrow_type"),
-    Probe("type-map-stray-name-refused", "error", _p_type_map_stray_name,
-          message_re=r"type-map-natives\.json is not read as a type map"),
     Probe("type-map-section-missing", "error", _p_type_map_section_missing,
           message_re=r"carries no 'write' section"),
     Probe("type-map-standalone-no-package-check", "clean", _p_type_map_standalone_no_package_check,

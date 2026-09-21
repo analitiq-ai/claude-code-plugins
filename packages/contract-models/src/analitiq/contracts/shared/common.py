@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
@@ -280,6 +281,22 @@ def closed_true_end_keys(schema: dict[str, Any]) -> None:
             for key, value in pattern_props.items()
         }
     schema["additionalProperties"] = False
+
+
+# A package schema is a closed table of locations: each pattern names where one
+# authored document sits and points at the kind's `latest.json`, the URL every
+# document declares as its own `$schema`, so a location keeps its kind across that
+# schema's versions. `locations` maps a key pattern to the resource its document
+# is written against.
+def document_locations(locations: dict[str, str]) -> Callable[[dict[str, Any]], None]:
+    def locate(schema: dict[str, Any]) -> None:
+        schema["patternProperties"] = {
+            pattern: {"$ref": schema_url_for(resource)}
+            for pattern, resource in locations.items()
+        }
+        closed_true_end_keys(schema)
+
+    return locate
 
 
 class StrictModel(ParseOnly, BaseModel):

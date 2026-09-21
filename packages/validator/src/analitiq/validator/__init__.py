@@ -15,7 +15,7 @@ holding an unidentified document. A caller holding a type map grades it with
 `type_map_findings(doc, scope)`, where `scope` says whether it is a connector's
 map or a connection's. A caller holding a `definition/` *directory* calls
 `load_type_map(parent, rule=...)`, which reads the directory's
-`TYPE_MAP_FILENAME` and refuses every other type-map name beside it; where each caller roots those
+`TYPE_MAP_FILENAME`; where each caller roots the
 findings is its own.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
