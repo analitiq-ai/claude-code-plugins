@@ -102,6 +102,7 @@ from analitiq.contracts.shared.json_schema import (  # noqa: E402
     JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
     JSON_SCHEMA_SUBSCHEMA_KEYS,
 )
+from analitiq.contracts.connector_package import ConnectorPackage  # noqa: E402
 from analitiq.contracts.type_map import TypeMapDoc  # noqa: E402
 from analitiq.contracts.pipelines.config import PipelineInput  # noqa: E402
 from analitiq.contracts.pipelines.data_sync import (  # noqa: E402
@@ -1055,6 +1056,22 @@ RESOURCES: tuple[Resource, ...] = (
         mode="serialization",
         post_process=_data_sync_response_post_process,
         source_paths=(f"{_CONTRACTS_PREFIX}/pipelines/data_sync.py",),
+    ),
+    Resource(
+        name="connector-package",
+        title="Analitiq Connector Package",
+        description=(
+            "Public JSON Schema contract for the authored documents of a "
+            "connector package: where each sits, read from the connector's own "
+            "directory (the one holding `definition/`), and the published schema "
+            "it is written against. It holds locations only; each document's "
+            "shape is the schema it points at. Other files a package carries are "
+            "outside this schema. "
+            "Source of truth: analitiq.contracts.connector_package.ConnectorPackage "
+            "(Pydantic)."
+        ),
+        adapter=TypeAdapter(ConnectorPackage),
+        source_paths=(f"{_CONTRACTS_PREFIX}/connector_package.py",),
     ),
     Resource(
         name="validate-package-request",
