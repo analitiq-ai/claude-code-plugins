@@ -76,6 +76,7 @@ from _pins import require_contract_models
 
 require_contract_models("analitiq.contracts", "analitiq.validator")
 
+from analitiq.contracts.validation_requests import ConnectorPackage  # noqa: E402
 from analitiq.validator import validate_document  # noqa: E402
 
 import test_examples_validate as ev  # noqa: E402  (sibling suite; pytest puts this dir on sys.path)
@@ -607,27 +608,16 @@ def _grading_entity(marker: Marker, label: str) -> str:
     return entity
 
 
-def _findings(entity: str, document: Any, tmp_path: Path,
-              host: Path | None) -> list[dict]:
-    """Lay the document out the way the validator reads it, and grade it.
-
-    Path and filename are inputs to the contract, not bookkeeping: a connector
-    is validated from `definition/connector.json` so the sibling walk reaches
-    its endpoints and type map, and an endpoint is named by the id it derives.
-    A type map is graded on its body alone, so the `{entity}.json` it is
-    written under is layout rather than an input to the verdict.
-    """
+def _findings(entity: str, document: Any, host: Path | None) -> list[dict]:
+    """Grade the document as `entity`: a connector inside its host example's
+    package, so its endpoints and type map are graded with it; any other
+    entity on its own."""
     if entity == "connector":
-        assert host is not None, "a connector is graded inside its staged package"
-        path = ev._stage(host.parent, tmp_path)  # siblings; the graded body wins
-    elif entity == "api-endpoint":
-        endpoints = tmp_path / "definition" / "endpoints"
-        endpoints.mkdir(parents=True, exist_ok=True)
-        path = endpoints / f"{document.get('endpoint_id', 'endpoint')}.json"
-    else:
-        path = tmp_path / f"{entity}.json"
-    path.write_text(json.dumps(document, indent=2), encoding="utf-8")
-    return ev._errors(validate_document(document, doc_path=path.resolve()))
+        assert host is not None, "a connector is graded inside its host example's package"
+        documents = ev.example_package(host.parent)
+        documents[ConnectorPackage.ROOT] = json.dumps(document)
+        return ev._errors(ev.graded_package(documents))
+    return ev._errors(validate_document(document, entity))
 
 
 def _graded_document(marker: Marker, body: str, label: str,
@@ -659,10 +649,10 @@ def _graded_document(marker: Marker, body: str, label: str,
 
 
 def _assert_block_upholds_marker(marker: Marker, body: str, label: str,
-                                 host_ref: str, tmp_path: Path) -> None:
+                                 host_ref: str) -> None:
     """Grade one validate/invalid block: splice, validate, judge per marker."""
     entity, document, host = _graded_document(marker, body, label, host_ref)
-    errors = _findings(entity, document, tmp_path, host)
+    errors = _findings(entity, document, host)
     where = "standalone" if host is None else f"spliced into {host.name}"
     if marker.kind == "validate":
         assert not errors, (
@@ -724,23 +714,23 @@ def _host_entities() -> dict[str, set[str]]:
 
 @pytest.mark.parametrize("host_ref", sorted(
     {ref for ref in HOSTS.values() if ref != STANDALONE}))
-def test_host_validates_clean(host_ref, tmp_path):
+def test_host_validates_clean(host_ref):
     """The premise every splice rests on: a post-splice failure indicts the
     fragment only because the host was clean before it."""
     host = REPO_ROOT / host_ref
     document = json.loads(host.read_text(encoding="utf-8"))
     entities = _host_entities()[host_ref]
     for entity in sorted(entities):
-        errors = _findings(entity, document, tmp_path / entity, host)
+        errors = _findings(entity, document, host)
         assert not errors, f"{host_ref} as {entity}\n" + "\n".join(
             f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors)
 
 
 @pytest.mark.parametrize("key,marker", GRADED)
-def test_block_upholds_its_marker(key, marker, tmp_path):
+def test_block_upholds_its_marker(key, marker):
     _assert_block_upholds_marker(
         marker, DISCOVERED[key].body, f"{key[0]} block {key[1]}",
-        HOSTS[(key[0], marker.target)], tmp_path)
+        HOSTS[(key[0], marker.target)])
 
 
 # ---------------------------------------------------------------------------
@@ -753,7 +743,7 @@ _ENDPOINT_HOST = HOSTS[("skills/connector-spec-api/spec-request-binding.md",
                         "api-endpoint#/operations/read")]
 
 
-def test_validate_disposition_catches_a_shape_the_contract_refuses(tmp_path):
+def test_validate_disposition_catches_a_shape_the_contract_refuses():
     """The property the whole gate rests on: a block the contract rejects
     fails, and the failure names the prose block."""
     from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
@@ -762,7 +752,7 @@ def test_validate_disposition_catches_a_shape_the_contract_refuses(tmp_path):
             _parse_marker("<!-- validate: type-map -->"),
             json.dumps({"$schema": TYPE_MAP_SCHEMA_URL,  # a write rule with no `native_type`
                         "write": [{"match": "exact", "arrow_type": "Object"}]}),
-            "synthetic", _TYPE_MAP_HOST, tmp_path)
+            "synthetic", _TYPE_MAP_HOST)
 
 
 def _endpoint_rule() -> str:
@@ -778,7 +768,7 @@ def _endpoint_rule() -> str:
     )
 
 
-def test_invalid_disposition_requires_the_failure(tmp_path):
+def test_invalid_disposition_requires_the_failure():
     """An `invalid:` block carries no pointer, so the registry's scope names
     the resource and the merge places its keys in the host."""
     marker = _parse_marker(f"<!-- invalid: {_endpoint_rule()} -->")
@@ -786,19 +776,19 @@ def test_invalid_disposition_requires_the_failure(tmp_path):
     # An id no path derives is what `RULE-ENDP-046` refuses...
     _assert_block_upholds_marker(
         marker, '{"endpoint_id": "not__the__derived__handle"}',
-        "synthetic", _ENDPOINT_HOST, tmp_path)
+        "synthetic", _ENDPOINT_HOST)
     # ...and a block marked invalid that VALIDATES is itself the defect.
     with pytest.raises(AssertionError, match="rots into valid"):
         _assert_block_upholds_marker(
             marker, '{"endpoint_id": "v1__accounts__invoices"}',
-            "synthetic", _ENDPOINT_HOST, tmp_path)
+            "synthetic", _ENDPOINT_HOST)
 
 
-def test_invalid_disposition_rejects_a_dangling_rule_id(tmp_path):
+def test_invalid_disposition_rejects_a_dangling_rule_id():
     with pytest.raises(AssertionError, match="no rule in the rule registry"):
         _assert_block_upholds_marker(
             _parse_marker("<!-- invalid: RULE-ENDP-999 -->"), "{}",
-            "synthetic", _ENDPOINT_HOST, tmp_path)
+            "synthetic", _ENDPOINT_HOST)
 
 
 def test_invalid_disposition_rejects_a_resource_with_no_document():

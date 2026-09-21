@@ -73,15 +73,6 @@ def test_valid_bundle_has_no_findings(validator):
     assert validator.validate_pipeline_bundle(_valid_bundle()) == []
 
 
-def test_valid_bundle_detected_and_dispatched(validator):
-    """The bundle is a recognized kind: `validate_document` routes it here and it
-    passes (no error findings), exercising the registry seam end to end."""
-    bundle = _valid_bundle()
-    assert validator.is_pipeline_bundle(bundle) is True
-    findings = validator.validate_document(bundle)
-    assert [f for f in findings if f["severity"] == "error"] == []
-
-
 # --- pipeline runnable (RULE-PIPE-018/019/014) ------------------------------
 
 def test_missing_pipeline_id_flagged(validator):

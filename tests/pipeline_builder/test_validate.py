@@ -29,7 +29,7 @@ from analitiq.contracts.endpoint_identity import (  # noqa: E402
     build_database_object, derive_db_endpoint_id,
 )
 from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL  # noqa: E402
-from analitiq.validator import TYPE_MAP_FILENAME  # noqa: E402
+from analitiq.validator import _core  # noqa: E402
 
 SRC = "22222222-2222-4222-8222-222222222222"
 DST = "33333333-3333-4333-8333-333333333333"
@@ -108,33 +108,31 @@ def test_valid_single_document(tmp_path, entity, doc):
     assert diag["passed"], diag["findings"]
 
 
-@pytest.mark.parametrize("entity,doc,validator_id", [
+@pytest.mark.parametrize("entity,doc,identity", [
     # legacy connection carrying a `values` envelope — no longer part of the contract
     ("connection",
      {"$schema": f"{H}/connection/latest.json", "connector_id": "postgresql", "values": {"host": "x"}},
-     "contract-model"),
+     "extra_forbidden"),
     # legacy stream: flat endpoint_ref (missing database_object) + list-of-lists conflict_keys
     ("stream",
      {"$schema": f"{H}/stream/latest.json", "pipeline_id": PID,
       "source": {"endpoint_ref": {"scope": "connection", "connection_id": SRC, "endpoint_id": "orders"}},
       "destinations": [{"endpoint_ref": {"scope": "connection", "connection_id": DST, "endpoint_id": "orders"},
                         "write": {"mode": "upsert", "conflict_keys": [["id"]]}}]},
-     "contract-model"),
+     "missing"),
     # database endpoint whose id is not the derived handle
     ("database-endpoint",
      {"$schema": f"{H}/database-endpoint/latest.json", "endpoint_id": "public_orders",
       "database_object": DBOBJ, "columns": [{"name": "id", "native_type": "bigint", "arrow_type": "Int64"}]},
      "RULE-DBEP-011"),
 ])
-def test_invalid_single_document(tmp_path, entity, doc, validator_id):
-    # `connection`/`stream` route through this adapter's own local model check
-    # (a `validator` category); `database-endpoint` is forwarded unchanged from
-    # the published `analitiq.validator` (a `rule` id) — one assertion covers
-    # both without the test needing to know which.
+def test_invalid_single_document(tmp_path, entity, doc, identity):
+    # A model error names no rule, so it is identified by its `message_id`; a
+    # rule the validator checks is identified by its `rule`.
     diag = V.diagnostics_for(entity, _write(tmp_path, f"{entity}.json", doc))
     assert not diag["passed"]
     assert any(
-        f.get("validator") == validator_id or f.get("rule") == validator_id
+        f.get("message_id") == identity or f.get("rule") == identity
         for f in diag["findings"]
     ), diag["findings"]
 
@@ -159,7 +157,7 @@ def test_active_pipeline_requires_stream_single_document(tmp_path):
     doc = {**PIPELINE, "status": "active", "streams": []}
     diag = V.diagnostics_for("pipeline", _write(tmp_path, "pipeline.json", doc))
     assert not diag["passed"]
-    assert any(f.get("validator") == "contract-model" and "stream" in f["message"].lower()
+    assert any(f.get("kind") == "fail" and "stream" in f["message"].lower()
                for f in diag["findings"]), diag["findings"]
 
 
@@ -353,7 +351,7 @@ def test_bundle_connector_endpoint_unknown_set_skips(tmp_path):
 def test_unreadable_document(tmp_path):
     diag = V.diagnostics_for("pipeline", tmp_path / "does_not_exist.json")
     assert not diag["passed"]
-    assert diag["findings"][0]["validator"] == "document"
+    assert diag["findings"][0]["message_id"] == "unreadable-document"
 
 
 def test_cli_main_valid(tmp_path, capsys):
@@ -420,16 +418,19 @@ def test_bundle_malformed_sibling(tmp_path):
     (tmp_path / "pipelines/p/streams/orders.json").write_text("{ not valid json")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    assert any(f.get("validator") == "document" for f in diag["findings"]), diag["findings"]
+    assert any(f.get("message_id") == "unreadable-document"
+               and f["path"] == "streams/orders.json"
+               for f in diag["findings"]), diag["findings"]
 
 
 def test_bundle_non_dict_sibling(tmp_path):
     doc = _build_bundle(tmp_path)
-    # valid JSON but not an object → the "is not a JSON object" branch (connection path)
+    # valid JSON but not an object: graded as a connection, the model refuses it whole
     (tmp_path / "connections/postgresql/connection.json").write_text("[]")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    assert any(f.get("validator") == "document" and "not a JSON object" in f["message"]
+    assert any(f.get("message_id") == "model_type"
+               and f["path"] == "connections/postgresql/connection.json"
                for f in diag["findings"]), diag["findings"]
 
 
@@ -456,7 +457,7 @@ TYPE_MAP_WRITE = [
      "native_type": "NUMERIC(${p}, ${s})"},
 ]
 PG_DEFINITION = "connections/postgresql/definition"
-PG_MAP = f"{PG_DEFINITION}/{TYPE_MAP_FILENAME}"
+PG_MAP = f"{PG_DEFINITION}/type-map.json"
 # A lowercase canonical fails the Arrow pattern in every section.
 LOWERCASE_RULE = {"match": "exact", "native_type": "citext", "arrow_type": "utf8"}
 
@@ -474,7 +475,7 @@ def _plant_unparseable_map(root) -> None:
 
 
 def _unparseable_map_reported(findings) -> bool:
-    return any(f.get("message_id") == "type-map-unparseable" and f["path"] == PG_MAP
+    return any(f.get("message_id") == "unreadable-document" and f["path"] == PG_MAP
                for f in findings)
 
 
@@ -483,22 +484,22 @@ def _unparseable_map_reported(findings) -> bool:
     _tm(read=TYPE_MAP_READ, write=TYPE_MAP_WRITE),
 ], ids=["read", "write", "both"])
 def test_valid_type_map_entity(tmp_path, doc):
-    diag = V.diagnostics_for("type-map", _write(tmp_path, TYPE_MAP_FILENAME, doc))
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", doc))
     assert diag["passed"], diag["findings"]
 
 
 def test_type_map_entity_forwards_the_published_findings_verbatim(tmp_path):
     # the adapter holds no type-map judgment of its own: what the published
-    # grader says at connection scope IS the output. A reintroduced filter,
-    # re-shape or scope drift fails here.
-    from analitiq.validator import type_map_findings
-    # The map earns a finding at connection scope, so the equality has content:
-    # over a clean document both sides are empty and a reintroduced filter passes.
+    # validator says of the document IS the output. A reintroduced filter or
+    # re-shape fails here.
+    from analitiq.validator import validate_document
+    # The map earns a finding, so the equality has content: over a clean
+    # document both sides are empty and a reintroduced filter passes.
     doc = _tm(write=TYPE_MAP_WRITE + [{"match": "exact", "arrow_type": "Json",
                                        "native_type": "JSON"}])
-    published = type_map_findings(doc, scope="connection")
+    published = validate_document(doc, "type-map")
     assert published, "the document must earn a finding or this asserts nothing"
-    diag = V.diagnostics_for("type-map", _write(tmp_path, TYPE_MAP_FILENAME, doc))
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", doc))
     assert diag["findings"] == published
 
 
@@ -514,7 +515,7 @@ def test_write_shaped_rules_under_the_read_section_fail_the_read_model(tmp_path)
     # fail it as content — the write rules' regex renders a matcher pattern
     # where a read rule reads a canonical
     diag = V.diagnostics_for(
-        "type-map", _write(tmp_path, TYPE_MAP_FILENAME, _tm(read=TYPE_MAP_WRITE)))
+        "type-map", _write(tmp_path, "type-map.json", _tm(read=TYPE_MAP_WRITE)))
     assert not diag["passed"]
     assert any(f.get("rule") == "RULE-TMAP-006" and f.get("path") == "/read/1"
                for f in diag["findings"]), diag["findings"]
@@ -530,7 +531,7 @@ def test_invalid_type_map_content(tmp_path, doc, rule, path, message_id):
     # the defect each fixture carries, not merely that something failed: an
     # envelope finding alone (`/$schema`) would satisfy a `kind == "fail"`
     # assertion without the model ever reaching the sections
-    diag = V.diagnostics_for("type-map", _write(tmp_path, TYPE_MAP_FILENAME, doc))
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", doc))
     assert not diag["passed"]
     assert any(f.get("rule") == rule and f.get("kind") == "fail"
                and f.get("path") == path and f.get("message_id") == message_id
@@ -578,22 +579,10 @@ def test_bundle_grades_a_connection_type_map_carrying_no_rules(tmp_path, content
                for f in diag["findings"]), diag["findings"]
 
 
-def test_bundle_unreadable_connection_type_map(tmp_path):
-    doc = _build_bundle(tmp_path)
-    p = tmp_path / PG_MAP
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text("[ not valid json")
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert not diag["passed"]
-    assert any(f.get("message_id") == "type-map-unparseable" and f["path"].startswith(PG_MAP)
-               for f in diag["findings"]), diag["findings"]
-
-
 def test_type_map_entity_rejects_another_kinds_document(tmp_path):
-    # The entity routing is what makes this fail. Handed to kind detection a
-    # stray connection document matches the connection detector and passes
-    # clean; held to the type-map model, its `$schema` names another resource.
-    diag = V.diagnostics_for("type-map", _write(tmp_path, TYPE_MAP_FILENAME, CONN_PG))
+    # Held to the type-map model, a connection's `$schema` names another
+    # resource.
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", CONN_PG))
     assert not diag["passed"]
     assert any(f.get("message_id") == "literal_error" and f.get("path") == "/$schema"
                for f in diag["findings"]), diag["findings"]
@@ -601,9 +590,8 @@ def test_type_map_entity_rejects_another_kinds_document(tmp_path):
 
 def test_type_map_entity_rejects_bare_array(tmp_path):
     # a bare rules array with no `{$schema, read, write}` wrapper is no object,
-    # so it is refused as an envelope rather than sent back out to kind
-    # detection to be called unrecognized.
-    diag = V.diagnostics_for("type-map", _write(tmp_path, TYPE_MAP_FILENAME, TYPE_MAP_READ))
+    # so the model refuses it whole.
+    diag = V.diagnostics_for("type-map", _write(tmp_path, "type-map.json", TYPE_MAP_READ))
     assert not diag["passed"]
     assert any(f.get("message_id") == "model_type" and f.get("path") == ""
                for f in diag["findings"]), diag["findings"]
@@ -611,11 +599,11 @@ def test_type_map_entity_rejects_bare_array(tmp_path):
 
 def test_connection_write_section_is_not_held_to_the_connector_vocabulary(tmp_path):
     # RULE-TMAP-017 presumes a connector's full-vocabulary write section; a
-    # gap-only connection map never satisfies it by design, so the adapter says
-    # which scope it holds rather than filtering the finding back out — for the
-    # entity run and the bundle alike
+    # gap-only connection map never satisfies it by design, so it is checked by
+    # the connector package alone — neither the entity run nor the bundle's
+    # connection package reports it
     diag = V.diagnostics_for(
-        "type-map", _write(tmp_path, TYPE_MAP_FILENAME, _tm(write=TYPE_MAP_WRITE)))
+        "type-map", _write(tmp_path, "type-map.json", _tm(write=TYPE_MAP_WRITE)))
     assert diag["passed"], diag["findings"]
     assert not any(f.get("rule") == "RULE-TMAP-017" for f in diag["findings"])
 
@@ -635,64 +623,47 @@ _PARSER_REFUSALS = {
 }
 
 
-def _plant(definition: Path, scenario: str) -> None:
-    """Lay out one way a connection's or a connector's type-map siblings can be."""
-    definition.mkdir(parents=True, exist_ok=True)
-    target = definition / TYPE_MAP_FILENAME
-    if scenario == "file":
-        target.write_text(json.dumps(_tm(read=TYPE_MAP_READ)))
-    elif scenario == "unparseable":
+def _plant(target: Path, scenario: str) -> None:
+    """Write `target` as one way a document can be unreadable."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if scenario == "unparseable":
         target.write_text("[ not valid json")
     elif scenario == "not utf-8":
         target.write_bytes(b"\xff\xfe")
-    elif scenario in _PARSER_REFUSALS:
+    else:
         target.write_text(_PARSER_REFUSALS[scenario])
-    elif scenario == "directory":
-        target.mkdir()
-    elif scenario == "dangling symlink":
-        target.symlink_to(definition / "nothing-here.json")
-    elif scenario == "fifo":
-        os.mkfifo(target)
-    else:  # pragma: no cover - a scenario the parametrization does not carry
-        raise AssertionError(scenario)
 
 
-@pytest.mark.parametrize("scenario", [
-    "unparseable", "not utf-8", *_PARSER_REFUSALS, "directory", "dangling symlink", "fifo",
-])
-def test_connection_type_map_is_loaded_as_a_connector_loads_its_own(tmp_path, scenario):
-    # One directory, one answer: the findings loading the map beside a
-    # connection are the ones the published validator reports beside a
-    # connector, each rooted at the file it concerns. A storage connector is
-    # the connector side because it requires no section, so every finding it
-    # reports here is about the siblings themselves.
-    from analitiq.validator import check_coverage
-    definition = tmp_path / "connections/pg/definition"
-    _plant(definition, scenario)
-    connector = check_coverage({"kind": "file", "transports": {}}, definition / "connector.json")
-    connection: list[dict] = []
-    V._connection_type_map_findings(definition.parent, connection)
-    assert connector, scenario
-    site = "connections/pg/definition/type-map"
-    assert all(f["path"].startswith(site) for f in connection), connection
-    # The rule a finding cites is the scope's: the record binding a connector
-    # package binds no connection.
-    assert not any("rule" in f for f in connection), connection
-    assert [{k: v for k, v in f.items() if k not in ("rule", "path")} for f in connection] == [
-        {k: v for k, v in f.items() if k not in ("rule", "path")} for f in connector]
-    # A finding about a whole file is addressed at the file: the pointer to a
-    # document's root joined onto it would name a key "" inside it.
-    assert not any(f["path"].endswith("/") for f in connection), connection
-    # The connector's finding names the file from the directory both share,
-    # so rooting it at the connection's directory is the adapter's whole job.
-    assert [f["path"] for f in connection] == [
-        _rooted_at("connections/pg/definition", f["path"]) for f in connector]
+@pytest.mark.parametrize("scenario", ["unparseable", "not utf-8", *_PARSER_REFUSALS])
+def test_an_unreadable_connection_type_map_is_reported_at_the_map(tmp_path, scenario):
+    doc = _build_bundle(tmp_path)
+    _plant(tmp_path / PG_MAP, scenario)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"]
+    assert _unparseable_map_reported(diag["findings"]), diag["findings"]
+    assert "adapter-crash" not in _ids(diag["findings"]), diag["findings"]
 
 
-def _rooted_at(site: str, path: str) -> str:
-    """A `<reference>#<pointer>` path as the adapter addresses it beside `site`."""
-    reference, _, pointer = path.partition("#")
-    return f"{site}/{reference}{pointer}"
+def test_a_map_that_cannot_be_read_is_reported_at_the_map(tmp_path, refuse):
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, PG_MAP, _tm(read=TYPE_MAP_READ))
+    refuse(tmp_path / PG_MAP, 0o000)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"]
+    assert _unparseable_map_reported(diag["findings"]), diag["findings"]
+
+
+def test_a_definition_directory_that_cannot_be_listed_is_reported_at_the_connection(tmp_path, refuse):
+    # What an unlisted directory holds is unknown, so the connection is not
+    # graded on what the walk never saw: the refusal is a crash of the unit
+    # reading that connection, addressed at it.
+    doc = _build_bundle(tmp_path)
+    refuse(tmp_path / PG_DEFINITION, 0o300)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"]
+    crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"
+             and f["path"] == "connections/postgresql"]
+    assert crash and "PermissionError" in crash[0]["message"], diag["findings"]
 
 
 @pytest.mark.parametrize("path, rooted", [
@@ -704,75 +675,11 @@ def _rooted_at(site: str, path: str) -> str:
     ("b%23c.json#/x#y", "connections/pg/definition/endpoints/b#c.json/x#y"),
 ])
 def test_a_finding_is_rooted_at_the_document_it_names(path, rooted):
-    # A bare pointer is into the entry graded; a `<reference>#<pointer>` names
+    # A bare pointer is into the entry graded; a `<key>#<pointer>` names
     # another document, relative to the entry's directory.
     [found] = V._at_site("connections/pg/definition/endpoints/a.json",
                          [{"message_id": "m", "kind": "fail", "path": path, "message": "x"}])
     assert found["path"] == rooted
-
-
-def test_a_model_finding_escapes_the_keys_on_its_pointer():
-    # A `secret_refs` key is the author's own name, so it may hold `/`; left
-    # raw, the pointer would name a key `a` holding a key `b`.
-    findings = V._model_findings("connection", {"secret_refs": {"a/b": "raw secret"}})
-    assert "/secret_refs/a~1b" in [f["path"] for f in findings], findings
-
-
-def test_a_model_finding_names_no_union_tag_on_its_pointer():
-    # A stream's endpoint reference is a tagged union; the tag is where the
-    # model walk went, not a member of the stream.
-    stream = copy.deepcopy(STREAM)
-    stream["source"]["endpoint_ref"]["connection_id"] = 7
-    assert "/source/endpoint_ref/connection_id" in [
-        f["path"] for f in V._model_findings("stream", stream)]
-
-
-def test_a_model_finding_about_the_whole_document_has_the_empty_pointer():
-    [found] = V._model_findings("connection", [1])
-    assert found["path"] == ""
-
-
-def test_a_definition_directory_that_cannot_be_listed_is_reported_at_the_directory(tmp_path, refuse):
-    # The finding is about the directory, not a file in it, so it is addressed
-    # at the directory; otherwise it is the one a connector's loading reports.
-    from analitiq.validator import check_coverage
-    definition = tmp_path / "connections/pg/definition"
-    _plant(definition, "file")
-    refuse(definition, 0o300)
-    connector = check_coverage({"kind": "file", "transports": {}}, definition / "connector.json")
-    connection: list[dict] = []
-    V._connection_type_map_findings(definition.parent, connection)
-    assert [f["message_id"] for f in connector] == ["type-map-dir-unlisted"], connector
-    assert [{k: v for k, v in f.items() if k not in ("rule", "path")} for f in connection] == [
-        {k: v for k, v in f.items() if k not in ("rule", "path")} for f in connector]
-    assert [f["path"] for f in connection] == ["connections/pg/definition"], connection
-
-
-def test_a_map_that_cannot_be_read_is_reported_at_the_map(tmp_path, refuse):
-    from analitiq.validator import check_coverage
-    from analitiq.validator._core import _passed
-    definition = tmp_path / "connections/pg/definition"
-    _plant(definition, "file")
-    refuse(definition / TYPE_MAP_FILENAME, 0o000)
-    connector = check_coverage({"kind": "file", "transports": {}}, definition / "connector.json")
-    connection: list[dict] = []
-    V._connection_type_map_findings(definition.parent, connection)
-    assert [f["message_id"] for f in connector] == ["type-map-unreadable"], connector
-    assert [{k: v for k, v in f.items() if k not in ("rule", "path")} for f in connection] == [
-        {k: v for k, v in f.items() if k not in ("rule", "path")} for f in connector]
-    assert [f["path"] for f in connection] == [f"connections/pg/definition/{TYPE_MAP_FILENAME}"]
-    assert not _passed(connection), connection
-
-
-def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
-    # a directory under the map's name holds no rules to grade, so the bundle
-    # pass reports it rather than validating nothing clean
-    doc = _build_bundle(tmp_path)
-    (tmp_path / PG_MAP).mkdir(parents=True)
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert not diag["passed"]
-    assert any(f.get("message_id") == "type-map-unparseable" and "not a regular file" in f["message"]
-               for f in diag["findings"]), diag["findings"]
 
 
 # ---------------------------------------------------------------------------
@@ -781,16 +688,15 @@ def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
 # than a bare traceback with an empty stdout.
 # ---------------------------------------------------------------------------
 
-def test_model_findings_crash_becomes_adapter_crash_finding(tmp_path, monkeypatch, capsys):
-    # an exception type pydantic never converts to ValidationError (a bug in a
-    # custom validator, a typo'd attribute access, ...) must not escape as a
-    # bare traceback — it is contained at the CLI's outermost guard
-    import analitiq.contracts.connection as connection_module
+def test_a_validator_crash_becomes_an_adapter_crash_finding(tmp_path, monkeypatch, capsys):
+    # a crash out of the published validator must not escape as a bare
+    # traceback — it is contained at the CLI's outermost guard
+    import analitiq.validator as validator_module
 
-    def boom(cls, *a, **kw):
+    def boom(*a, **kw):
         raise TypeError("simulated crash")
 
-    monkeypatch.setattr(connection_module.ConnectionInput, "model_validate", classmethod(boom))
+    monkeypatch.setattr(validator_module, "validate_document", boom)
     p = _write(tmp_path, "connection.json", CONN_PG)
     rc = V.main(["--entity", "connection", "--document", str(p)])
     out = json.loads(capsys.readouterr().out)
@@ -808,14 +714,15 @@ def test_bundle_per_connection_crash_preserves_earlier_findings(tmp_path, monkey
     doc = _build_bundle(tmp_path)
     _plant_unparseable_map(tmp_path)
 
-    original = V._connection_type_map_findings
+    import analitiq.validator as validator_module
+    original = validator_module.validate_package_at
 
-    def boom(conn_dir, findings):
+    def boom(conn_dir, package):
         if conn_dir.name == "wise":
             raise TypeError("simulated crash")
-        return original(conn_dir, findings)
+        return original(conn_dir, package)
 
-    monkeypatch.setattr(V, "_connection_type_map_findings", boom)
+    monkeypatch.setattr(validator_module, "validate_package_at", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
     assert _unparseable_map_reported(diag["findings"]), diag["findings"]  # postgresql's, decided first
@@ -892,11 +799,12 @@ def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, m
     # in-progress unit — and a bare MemoryError() (empty str()) must not leave
     # the message ending in a dangling ": ".
     doc = _build_bundle(tmp_path)
+    import analitiq.validator as validator_module
 
-    def boom(conn_dir, findings):
+    def boom(conn_dir, package):
         raise MemoryError()
 
-    monkeypatch.setattr(V, "_connection_type_map_findings", boom)
+    monkeypatch.setattr(validator_module, "validate_package_at", boom)
     rc = V.main(["--entity", "pipeline", "--document", str(doc), "--bundle-root", str(tmp_path)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
@@ -924,36 +832,20 @@ def test_main_contains_a_crash_that_leaves_the_validator_unimportable(monkeypatc
     assert _ids(out["findings"]) == ["adapter-crash"], out["findings"]
 
 
-def test_endpoint_route_crash_before_validate_document_contained(tmp_path, capsys):
-    # the validator refuses a path it cannot locate by raising, ahead of
-    # validate_document's own internal guard, so the adapter must still produce
-    # Diagnostics on stdout. `link/..` is such a path: POSIX steps up from where
-    # the link leads, so the document opened is not the one the names spell
-    real = tmp_path / "real" / "inner"
-    real.mkdir(parents=True)
-    _write(tmp_path / "real", "database-endpoint.json", DB_ENDPOINT)
-    (tmp_path / "spelled").mkdir()
-    (tmp_path / "spelled" / "link").symlink_to(real)
-    rc = V.main(["--entity", "database-endpoint", "--document",
-                 str(tmp_path / "spelled" / "link" / ".." / "database-endpoint.json")])
-    out = json.loads(capsys.readouterr().out)
-    assert rc == 1
-    assert any(f.get("validator") == "adapter-crash" for f in out["findings"]), out["findings"]
-
-
-def test_bundle_type_map_crash_does_not_orphan_connection_from_referential_check(tmp_path, monkeypatch):
-    # a crash in the type-map check for one connection must not cost that
-    # connection its place in the bundle passed to the referential check —
+def test_bundle_connection_grading_crash_does_not_orphan_connection_from_referential_check(tmp_path, monkeypatch):
+    # a crash grading one connection package must not cost that connection
+    # its place in the bundle passed to the referential check —
     # otherwise a live, correctly-referenced connection reads as unresolved
     # and the adapter-crash finding is joined by false bundle-connection-ref /
     # bundle-endpoint-ref findings that would send the orchestrator chasing a
     # reference that was never actually broken
     doc = _build_bundle(tmp_path)
+    import analitiq.validator as validator_module
 
-    def boom(conn_dir, findings):
+    def boom(conn_dir, package):
         raise TypeError("simulated crash")
 
-    monkeypatch.setattr(V, "_connection_type_map_findings", boom)
+    monkeypatch.setattr(validator_module, "validate_package_at", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
@@ -968,30 +860,18 @@ def test_a_crash_grading_the_type_map_is_reported_at_the_map(tmp_path, monkeypat
     def boom(doc_):
         raise TypeError("simulated crash")
 
-    monkeypatch.setattr(V, "_type_map_findings", boom)
+    monkeypatch.setitem(_core._KIND_VALIDATORS, "type-map", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"]
+    crash = [f for f in diag["findings"] if f.get("message_id") == "check-crashed"]
     assert [f["path"] for f in crash] == [PG_MAP], diag["findings"]
-
-
-@pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
-def test_type_map_the_parser_refuses_is_unreadable_and_costs_no_crash(tmp_path, text):
-    # A map the parser refuses is an unreadable map like any other: it is
-    # reported at the map and costs no crash.
-    doc = _build_bundle(tmp_path)
-    (tmp_path / PG_MAP).write_text(text)
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert not any(f.get("validator") == "adapter-crash" for f in diag["findings"]), diag["findings"]
-    assert any(f.get("message_id") == "type-map-unparseable" and f["path"] == PG_MAP
-               for f in diag["findings"]), diag["findings"]
 
 
 @pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
 def test_a_document_the_parser_refuses_is_reported_as_unreadable(tmp_path, text):
     (tmp_path / "connection.json").write_text(text)
     diag = V.diagnostics_for("connection", tmp_path / "connection.json")
-    assert [(f["validator"], f["message"].split(":")[0]) for f in diag["findings"]] == [
-        ("document", "Cannot read document")], diag["findings"]
+    assert [(f["message_id"], f["message"].split(":")[0]) for f in diag["findings"]] == [
+        ("unreadable-document", "Cannot read document")], diag["findings"]
 
 
 @pytest.mark.parametrize("text", list(_PARSER_REFUSALS.values()), ids=list(_PARSER_REFUSALS))
@@ -1014,23 +894,24 @@ def test_a_bundle_member_the_parser_refuses_costs_no_crash(tmp_path, text, membe
 def test_bundle_findings_crash_unrelated_to_exclusion_does_not_mislabel_it(tmp_path, monkeypatch):
     # an ordinary, already-reported read error (no guard fired) can exclude a
     # bundle member in the same run a completely unrelated guard elsewhere
-    # (grading the type map beside a connection) genuinely crashes in. The exclusion and
+    # (grading a connection package) genuinely crashes in. The exclusion and
     # the crash are unrelated: `crashed` must reflect only the four
     # bundle-assembly sites that can actually exclude a member, not "any
     # adapter-crash finding anywhere", or the ordinary exclusion gets
     # mislabeled as caused by a containment guard that never touched it
     doc = _build_bundle(tmp_path)
     (tmp_path / "pipelines/p/streams/orphan.json").write_text("{not valid json")  # ordinary error
-    _write(tmp_path, PG_MAP, _tm(read=TYPE_MAP_READ))
+    import analitiq.validator as validator_module
 
-    def boom(doc_):
+    def boom(conn_dir, package):
         raise TypeError("simulated crash")
 
-    monkeypatch.setattr(V, "_type_map_findings", boom)
+    monkeypatch.setattr(validator_module, "validate_package_at", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
-    assert "document" in validators, diag["findings"]  # the orphaned malformed stream
-    assert "adapter-crash" in validators, diag["findings"]  # the unrelated type-map crash
+    assert any(f.get("message_id") == "unreadable-document"
+               for f in diag["findings"]), diag["findings"]  # the orphaned malformed stream
+    assert "adapter-crash" in validators, diag["findings"]  # the unrelated grading crash
     assert not any(
         f.get("validator") == "adapter-crash"
         and "containment guard excluded" in f["message"]
@@ -1040,9 +921,8 @@ def test_bundle_findings_crash_unrelated_to_exclusion_does_not_mislabel_it(tmp_p
 
 def test_bundle_endpoint_grading_crash_preserves_endpoint_and_siblings(tmp_path, monkeypatch):
     # a crash grading one endpoint document must not cost that endpoint its
-    # place in the bundle passed to the referential check, nor the remaining
-    # endpoints and the connection's trailing type-map check the per-connection
-    # guard would otherwise discard as one shared unit
+    # place in the bundle passed to the referential check, nor the grading of
+    # the documents beside it
     doc = _build_bundle(tmp_path)
     _plant_unparseable_map(tmp_path)
     second_eid = derive_db_endpoint_id(None, "public", "customers")
@@ -1050,22 +930,22 @@ def test_bundle_endpoint_grading_crash_preserves_endpoint_and_siblings(tmp_path,
                         "database_object": build_database_object(None, "public", "customers")}
     _write(tmp_path, f"connections/postgresql/definition/endpoints/{second_eid}.json", second_endpoint)
 
-    original = V._endpoint_findings
+    original = _core._KIND_VALIDATORS["database-endpoint"]
 
-    def boom(endpoint, document_path):
-        if document_path.name == f"{EID}.json":
+    def boom(endpoint):
+        if endpoint.get("endpoint_id") == EID:
             raise TypeError("simulated crash")
-        return original(endpoint, document_path)
+        return original(endpoint)
 
-    monkeypatch.setattr(V, "_endpoint_findings", boom)
+    monkeypatch.setitem(_core._KIND_VALIDATORS, "database-endpoint", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
-    assert "adapter-crash" in validators, diag["findings"]
+    assert [f["path"] for f in diag["findings"] if f.get("message_id") == "check-crashed"] == [
+        f"{PG_DEFINITION}/endpoints/{EID}.json"], diag["findings"]
     # the crashed endpoint still holds its place in the bundle -> no false
     # bundle-endpoint-ref for the stream's legitimate reference to it
     assert not _BUNDLE_ENDPOINT_REF_RULES & set(validators), diag["findings"]
-    # the connection's trailing type-map check still ran despite the earlier
-    # crash in this same per-connection unit
+    # the map beside it is still graded
     assert _unparseable_map_reported(diag["findings"]), diag["findings"]
 
 
@@ -1103,39 +983,8 @@ def test_bundle_connector_loop_crash_preserves_other_connector_identity(tmp_path
     assert "wise-live" in bundle["connectors"], bundle["connectors"]
 
 
-def test_connector_endpoint_sets_directory_probe_crash_isolated_to_one_connector(tmp_path, monkeypatch):
-    # the is_dir() probe is inside the per-connector guard, not before it — a
-    # crash there must cost only that connector's endpoint set, not every
-    # connector processed after it in the same loop, and not (by extension)
-    # every other connector's connector-endpoint-ref check
-    doc = _build_bundle(tmp_path)
-    _add_wise_endpoint(tmp_path, "transfers")
-    # give postgresql a downloaded connector endpoint set too, so its
-    # directory is actually globbed and its is_dir() probe actually runs
-    _write(tmp_path, "connectors/postgresql/definition/endpoints/realid.json", {"endpoint_id": "realid"})
-    stream_path = tmp_path / "pipelines/p/streams/orders.json"
-    stream = json.loads(stream_path.read_text())
-    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # typo -> warning if wise's set survives
-    stream_path.write_text(json.dumps(stream))
-
-    original_is_dir = Path.is_dir
-
-    def boom(self):
-        if self.parent.parent.name == "postgresql":
-            raise TypeError("simulated crash")
-        return original_is_dir(self)
-
-    monkeypatch.setattr(Path, "is_dir", boom)
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = _ids(diag["findings"])
-    assert "adapter-crash" in validators, diag["findings"]
-    # wise, sorted after postgresql, still gets its endpoint set built and warns
-    assert any(f.get("validator") == "connector-endpoint-ref" and "transfers" in f["message"]
-               for f in diag["findings"]), diag["findings"]
-
-
 def test_connector_endpoint_sets_enumeration_crash_returns_partial_result(tmp_path, monkeypatch):
-    # the top-level enumeration (sorted(root.glob(...))) is its own guarded
+    # the top-level enumeration of connectors/ is its own guarded
     # unit, same as _assemble_bundle's sections — a filesystem failure there
     # must not escape every per-connector guard below it and abort the whole
     # function; it should return whatever it has (nothing, if the enumeration
@@ -1145,7 +994,7 @@ def test_connector_endpoint_sets_enumeration_crash_returns_partial_result(tmp_pa
     original_glob = Path.glob
 
     def boom(self, pattern):
-        if pattern == "connectors/*/definition/endpoints":
+        if self.name == "connectors" and pattern == "*":
             raise TypeError("simulated crash")
         return original_glob(self, pattern)
 
@@ -1173,7 +1022,7 @@ def test_bundle_connections_section_crash_preserves_streams_and_reaches_connecto
     original_glob = Path.glob
 
     def boom(self, pattern):
-        if self.name == "connections" and pattern == "*/connection.json":
+        if self.name == "connections" and pattern == "*":
             raise TypeError("simulated crash")
         return original_glob(self, pattern)
 
@@ -1212,68 +1061,33 @@ def test_bundle_pipeline_validator_crash_preserves_other_unit_result(tmp_path, m
     assert "connector-endpoint-ref" in validators, diag["findings"]  # the other unit's result
 
 
-def test_bundle_stream_read_crash_preserves_sibling_stream_and_continues_assembly(tmp_path, monkeypatch):
-    # one stream file is its own independently-decidable unit, same as one
-    # connection or connector below it — a crash reading it must not discard a
-    # sibling stream already appended, nor abort bundle assembly before the
-    # connections loop that runs after it
+def test_bundle_streams_section_crash_continues_assembly(tmp_path, monkeypatch):
+    # a crash reading the pipeline's package must not abort bundle assembly
+    # before the connections loop that runs after it
     doc = _build_bundle(tmp_path)
-    second_stream = {**STREAM, "stream_id": "55555555-5555-4555-8555-555555555555"}
-    _write(tmp_path, "pipelines/p/streams/second.json", second_stream)
     _plant_unparseable_map(tmp_path)
 
-    original = V._read_json
+    import analitiq.validator as validator_module
+    original = validator_module.read_package
 
-    def boom(path):
-        if path.name == "orders.json":
+    def boom(directory, package):
+        if package == "pipeline-package":
             raise TypeError("simulated crash")
-        return original(path)
+        return original(directory, package)
 
-    monkeypatch.setattr(V, "_read_json", boom)
+    monkeypatch.setattr(validator_module, "read_package", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
-    assert "adapter-crash" in validators, diag["findings"]
     crash = [f for f in diag["findings"] if f.get("validator") == "adapter-crash"][0]
-    assert crash["path"] == "streams/orders.json"
-    # the connections loop, which runs after the crashed streams loop, still
-    # ran and decided its own finding
+    assert crash["path"] == "streams"
+    # the connections loop, which runs after the crashed streams section,
+    # still ran and decided its own finding
     assert _unparseable_map_reported(diag["findings"]), diag["findings"]
-    # PIPELINE.streams still names the crashed stream's id (it was never
-    # re-authored to drop the reference) — the bundle is short that very
-    # document, so the referential pass that would call this ref unresolved
-    # is skipped rather than blame a reference that was never actually broken
+    # PIPELINE.streams still names the stream the crash kept out of the
+    # bundle, so the referential pass that would call this ref unresolved is
+    # skipped rather than blame a reference that was never actually broken
     assert "RULE-PIPE-011" not in validators, diag["findings"]
     assert sum(1 for v in validators if v == "adapter-crash") == 2, diag["findings"]
-
-
-def test_bundle_endpoint_read_crash_preserves_sibling_endpoint(tmp_path, monkeypatch):
-    # a crash reading one endpoint file (e.g. pathologically deep JSON) is its
-    # own per-endpoint unit — it must not abort the endpoints loop before an
-    # independently-readable sibling endpoint reaches the bundle
-    doc = _build_bundle(tmp_path)
-    second_eid = derive_db_endpoint_id(None, "public", "customers")
-    second_endpoint = {**DB_ENDPOINT, "endpoint_id": second_eid,
-                        "database_object": build_database_object(None, "public", "customers")}
-    _write(tmp_path, f"connections/postgresql/definition/endpoints/{second_eid}.json", second_endpoint)
-
-    original = V._read_json
-
-    def boom(path):
-        if path.name == f"{EID}.json":
-            raise TypeError("simulated crash")
-        return original(path)
-
-    monkeypatch.setattr(V, "_read_json", boom)
-    pipeline_doc = json.loads(doc.read_text())
-    bundle, findings, complete, crashed = V._assemble_bundle(pipeline_doc, doc, tmp_path)
-    assert not complete
-    assert crashed
-    endpoint_ids = {e["endpoint_id"] for e in bundle["endpoints"]}
-    assert second_eid in endpoint_ids, bundle["endpoints"]  # sibling survived the crash
-    assert EID not in endpoint_ids, bundle["endpoints"]  # the crashed one did not
-    crash = [f for f in findings if f.get("validator") == "adapter-crash"]
-    assert len(crash) == 1, findings
-    assert crash[0]["path"] == f"connections/postgresql/definition/endpoints/{EID}.json"
 
 
 def test_bundle_type_map_validated_when_connection_json_unreadable(tmp_path):
@@ -1284,8 +1098,9 @@ def test_bundle_type_map_validated_when_connection_json_unreadable(tmp_path):
     _plant_unparseable_map(tmp_path)
     (tmp_path / "connections/postgresql/connection.json").write_text("{not valid json")
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = _ids(diag["findings"])
-    assert "document" in validators, diag["findings"]  # connection.json itself unreadable
+    assert any(f.get("message_id") == "unreadable-document"
+               and f["path"] == "connections/postgresql/connection.json"
+               for f in diag["findings"]), diag["findings"]
     assert _unparseable_map_reported(diag["findings"]), diag["findings"]
 
 
@@ -1296,8 +1111,8 @@ def test_bundle_unrelated_malformed_stream_skips_referential_pass_without_crash_
     # published validator's own reference resolution locally), so the whole
     # referential pass is skipped, even though this particular defect could
     # not have been the cause of any bundle-*-ref finding. Nothing crashed —
-    # _read_bundle_member handled the bad JSON normally — so no adapter-crash
-    # finding is added on top of the "document" finding that already names it.
+    # the bad JSON is an ordinary unreadable document — so no adapter-crash
+    # finding is added on top of the finding that already names it.
     doc = _build_bundle(tmp_path)
     (tmp_path / "pipelines/p/streams/orphan.json").write_text("{not valid json")
     # a second, referenced stream wired to the WRONG source connection — a
@@ -1312,27 +1127,29 @@ def test_bundle_unrelated_malformed_stream_skips_referential_pass_without_crash_
 
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
-    assert "document" in validators, diag["findings"]  # the orphaned malformed stream
+    assert any(f.get("message_id") == "unreadable-document"
+               for f in diag["findings"]), diag["findings"]  # the orphaned malformed stream
     assert not _BUNDLE_CONNECTION_REF_RULES & set(validators), diag["findings"]  # referential pass skipped
     assert "adapter-crash" not in validators, diag["findings"]  # nothing actually crashed
 
 
 def test_connector_endpoint_sets_crash_isolated_to_one_connector(tmp_path, monkeypatch):
-    # a crash reading one connector's endpoint file must cost only that
-    # connector's endpoint set — every OTHER connector's set, and the
+    # a crash reading one connector's package must cost only that connector's
+    # endpoint set — every OTHER connector's set, and the
     # connector-endpoint-ref checks it feeds, must still be computed
     doc = _build_bundle(tmp_path)
     _add_wise_endpoint(tmp_path, "transfers")
     _write(tmp_path, "connectors/postgresql/definition/endpoints/orders.json", {"endpoint_id": "orders"})
 
-    original = V._read_json
+    import analitiq.validator as validator_module
+    original = validator_module.read_package
 
-    def boom(path):
-        if path.parent.name == "endpoints" and path.parent.parent.parent.name == "postgresql":
+    def boom(directory, package):
+        if package == "connector-package" and directory.name == "postgresql":
             raise TypeError("simulated crash")
-        return original(path)
+        return original(directory, package)
 
-    monkeypatch.setattr(V, "_read_json", boom)
+    monkeypatch.setattr(validator_module, "read_package", boom)
     stream_path = tmp_path / "pipelines/p/streams/orders.json"
     stream = json.loads(stream_path.read_text())
     stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # typo against wise's real "transfers"
@@ -1348,7 +1165,7 @@ def test_connector_endpoint_sets_crash_isolated_to_one_connector(tmp_path, monke
 
 def test_pipeline_document_error_survives_non_dict_bundle_enrichment(tmp_path):
     # a pipeline document that is not even an object earns its precise
-    # contract-model finding at the single-document stage; require_runnable's
+    # model finding at the single-document stage; require_runnable's
     # own field access on that non-dict document must not crash and discard
     # it — isinstance-guarded rather than raising AttributeError, so bundle
     # enrichment runs through cleanly and the published validator gets to add
@@ -1356,14 +1173,13 @@ def test_pipeline_document_error_survives_non_dict_bundle_enrichment(tmp_path):
     # opaque adapter-crash
     doc = _write(tmp_path, "pipelines/p/pipeline.json", [1, 2, 3])
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = _ids(diag["findings"])
-    assert "contract-model" in validators, diag["findings"]
-    assert "adapter-crash" not in validators, diag["findings"]
+    assert any(f.get("message_id") == "model_type" for f in diag["findings"]), diag["findings"]
+    assert "adapter-crash" not in _ids(diag["findings"]), diag["findings"]
 
 
 def test_pipeline_document_error_preserved_when_bundle_enrichment_crashes(tmp_path, monkeypatch):
     # a genuine crash enriching the bundle (not just a non-dict pipeline_doc,
-    # which no longer crashes) must not discard the precise contract-model
+    # which no longer crashes) must not discard the precise model
     # finding the single-document pass already produced
     doc = _write(tmp_path, "pipelines/p/pipeline.json", [1, 2, 3])
 
@@ -1372,9 +1188,8 @@ def test_pipeline_document_error_preserved_when_bundle_enrichment_crashes(tmp_pa
 
     monkeypatch.setattr(V, "_assemble_bundle", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = _ids(diag["findings"])
-    assert "contract-model" in validators, diag["findings"]
-    assert "adapter-crash" in validators, diag["findings"]
+    assert any(f.get("message_id") == "model_type" for f in diag["findings"]), diag["findings"]
+    assert "adapter-crash" in _ids(diag["findings"]), diag["findings"]
 
 
 def test_crash_finding_handles_broken_exception_str():
@@ -1398,7 +1213,7 @@ def test_main_serializes_within_the_outer_guard(tmp_path, monkeypatch, capsys):
     p = _write(tmp_path, "connection.json", CONN_PG)
 
     def bad_diagnostics_for(entity, document_path, bundle_root=None):
-        return {"passed": False, "findings": [{"validator": "contract-model", "severity": "error",
+        return {"passed": False, "findings": [{"validator": "adapter-crash", "severity": "error",
                                                 "path": "", "message": object()}]}
 
     monkeypatch.setattr(V, "diagnostics_for", bad_diagnostics_for)
@@ -1475,7 +1290,7 @@ def test_cli_main_type_map_entities(tmp_path, capsys):
     # the agents drive the CLI: only this pins that PIPELINE_ENTITIES exposes
     # the entity and that the invocation names no direction, the document's
     # sections deciding
-    path = _write(tmp_path, TYPE_MAP_FILENAME, _tm(write=TYPE_MAP_WRITE))
+    path = _write(tmp_path, "type-map.json", _tm(write=TYPE_MAP_WRITE))
     rc = V.main(["--entity", "type-map", "--document", str(path)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 0 and out["passed"], out
@@ -1547,22 +1362,19 @@ def test_bundle_grades_an_endpoint_under_a_symlinked_directory(tmp_path, link):
 @pytest.mark.parametrize("member", ["connection", "stream"])
 def test_a_crash_grading_a_member_does_not_cost_it_its_place_in_the_bundle(
         tmp_path, monkeypatch, member):
-    # `_model_findings` catches only ValidationError. Anything else escaping it
-    # must cost its own findings and nothing more: a member excluded from the
-    # bundle marks assembly incomplete, and the whole cross-document referential
-    # pass is then skipped — so a crash grading one document's shape would
-    # silently stop grading every reference in the bundle.
+    # A crash grading one document must cost its own findings and nothing
+    # more: a member excluded from the bundle marks assembly incomplete, and
+    # the whole cross-document referential pass is then skipped — so a crash
+    # grading one document's shape would silently stop grading every
+    # reference in the bundle.
     doc = _build_bundle(tmp_path)
-    original = V._model_findings
 
-    def boom(entity, body):
-        if entity == member:
-            raise RecursionError("too deep")
-        return original(entity, body)
+    def boom(body):
+        raise RecursionError("too deep")
 
-    monkeypatch.setattr(V, "_model_findings", boom)
+    monkeypatch.setitem(_core._KIND_VALIDATORS, member, boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert any(f.get("validator") == "adapter-crash" for f in diag["findings"]), \
+    assert any(f.get("message_id") == "check-crashed" for f in diag["findings"]), \
         diag["findings"]
     assert not any("referential integrity was not evaluated" in f.get("message", "")
                    for f in diag["findings"]), diag["findings"]

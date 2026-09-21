@@ -10,8 +10,8 @@ authoring agents reach first — so the templated pairs in the spec text are run
 through the same models as the files under `examples/`.
 
 Examples are laid out for readability (`<name>/<name>.example.json` beside its
-type map and `endpoints/`), not as an on-disk connector, so each is staged into
-a `definition/` directory first — the layout the cross-file coverage checks walk.
+type map and `endpoints/`), not as a connector package, so each is mapped onto
+the connector package's keys before it is graded as one.
 
 Same environment contract as the other drift guards: skipped when the pinned
 packages are absent, hard-failed in CI via `DRIFT_REQUIRE_CONTRACT_MODELS=1`.
@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from pathlib import Path
 
 import pytest
@@ -31,7 +30,11 @@ from _pins import require_contract_models
 require_contract_models("analitiq.contracts", "analitiq.validator")
 
 from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL  # noqa: E402
-from analitiq.validator import TYPE_MAP_FILENAME, validate_document  # noqa: E402
+from analitiq.contracts.validation_requests import (  # noqa: E402
+    ConnectorPackage,
+    ValidatePackageRequest,
+)
+from analitiq.validator import validate_document, validate_package  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / "plugins" / "analitiq-connector-builder" / "skills"
@@ -45,22 +48,27 @@ def _example_dirs() -> list[Path]:
     )
 
 
-def _stage(example_dir: Path, dest_root: Path) -> Path:
-    """Copy an example into the `definition/` layout the sibling walks expect."""
-    definition = dest_root / "definition"
-    definition.mkdir(parents=True)
+_TYPE_MAP = "type-map.json"
 
+
+def example_package(example_dir: Path) -> dict[str, str]:
+    """The example's documents by connector package key."""
     body = next(example_dir.glob("*.example.json"), None)  # skipcq: PTC-W0063
-    if body is None:  # _example_dirs() filters for this, but fail usefully if staged directly
-        raise FileNotFoundError(f"{example_dir} has no *.example.json to stage")
-    shutil.copy(body, definition / "connector.json")
-    type_map = example_dir / TYPE_MAP_FILENAME
+    if body is None:  # _example_dirs() filters for this, but fail usefully if handed one directly
+        raise FileNotFoundError(f"{example_dir} has no *.example.json")
+    documents = {ConnectorPackage.ROOT: body.read_text(encoding="utf-8")}
+    type_map = example_dir / _TYPE_MAP
     if type_map.exists():
-        shutil.copy(type_map, definition / TYPE_MAP_FILENAME)
-    endpoints = example_dir / "endpoints"
-    if endpoints.is_dir():
-        shutil.copytree(endpoints, definition / "endpoints")
-    return definition / "connector.json"
+        documents[f"definition/{_TYPE_MAP}"] = type_map.read_text(encoding="utf-8")
+    for endpoint in sorted((example_dir / "endpoints").glob("*.json")):
+        documents[f"definition/endpoints/{endpoint.name}"] = endpoint.read_text(encoding="utf-8")
+    return documents
+
+
+def graded_package(documents: dict[str, str]) -> list[dict]:
+    """The findings for `documents` graded as a connector package."""
+    return validate_package(ValidatePackageRequest(
+        package="connector-package", documents=documents))["findings"]
 
 
 def _errors(findings: list[dict]) -> list[dict]:
@@ -122,7 +130,7 @@ def _prose_type_map_rules() -> list[tuple[Path, int, str, dict]]:
     return found
 
 
-def test_prose_type_map_rules_validate(tmp_path: Path) -> None:
+def test_prose_type_map_rules_validate() -> None:
     """A rule taught in prose must survive the model that judges the real one.
 
     Prose is copied verbatim by authoring agents, so an example the contract
@@ -148,9 +156,7 @@ def test_prose_type_map_rules_validate(tmp_path: Path) -> None:
         if direction == "unquotable":
             continue
         doc = {"$schema": TYPE_MAP_SCHEMA_URL, direction: [rule]}
-        map_path = tmp_path / TYPE_MAP_FILENAME
-        map_path.write_text(json.dumps(doc), encoding="utf-8")
-        findings = validate_document(doc, doc_path=map_path.resolve())
+        findings = validate_document(doc, "type-map")
         failures += [
             f"{path.relative_to(REPO_ROOT)}:{lineno} ({direction}) "
             f"{f.get('rule')}: {f['message']}"
@@ -181,36 +187,29 @@ def test_every_example_dir_is_covered() -> None:
 
 
 @pytest.mark.parametrize("example_dir", _example_dirs(), ids=lambda d: d.name)
-def test_example_connector_validates(example_dir: Path, tmp_path: Path) -> None:
-    doc_path = _stage(example_dir, tmp_path)
-    document = json.loads(doc_path.read_text(encoding="utf-8"))
-
-    findings = validate_document(document, doc_path=doc_path.resolve())
-    errors = _errors(findings)
+def test_example_package_validates(example_dir: Path) -> None:
+    errors = _errors(graded_package(example_package(example_dir)))
     assert not errors, "\n".join(
         f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors
     )
 
 
 @pytest.mark.parametrize("example_dir", _example_dirs(), ids=lambda d: d.name)
-def test_example_type_map_validates(example_dir: Path, tmp_path: Path) -> None:
+def test_example_type_map_validates(example_dir: Path) -> None:
     """Validate the type map as a standalone document.
 
     This is the invocation `connector-schema-validator` documents, so it
-    should be exercised directly
-    rather than only through the connector's sibling walk. It also localizes a
-    failure to the map instead of surfacing it on the connector.
+    should be exercised directly rather than only inside the package.
 
-    It does NOT close the database read-map gap: rule-shape errors are already
-    caught by the sibling walk, and neither level probes natives on a DB
-    connector, so a wrong-case `exact` native still ships silently. That gap is
-    documented in `spec-type-maps.md`, not covered here.
+    It does NOT close the database read-map gap: neither level probes natives
+    on a DB connector, so a wrong-case `exact` native still ships silently.
+    That gap is documented in `spec-type-maps.md`, not covered here.
     """
-    map_path = _stage(example_dir, tmp_path).parent / TYPE_MAP_FILENAME
-    assert map_path.exists(), f"{example_dir.name} ships no {TYPE_MAP_FILENAME}"
+    map_path = example_dir / _TYPE_MAP
+    assert map_path.exists(), f"{example_dir.name} ships no {_TYPE_MAP}"
 
     document = json.loads(map_path.read_text(encoding="utf-8"))
-    findings = validate_document(document, doc_path=map_path.resolve())
+    findings = validate_document(document, "type-map")
     errors = _errors(findings)
     assert not errors, "\n".join(
         f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors
@@ -226,7 +225,7 @@ def test_example_type_map_validates(example_dir: Path, tmp_path: Path) -> None:
 
 
 def _has_write_map(example_dir: Path) -> bool:
-    path = example_dir / TYPE_MAP_FILENAME
+    path = example_dir / _TYPE_MAP
     return path.exists() and "write" in json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -235,9 +234,7 @@ def _has_write_map(example_dir: Path) -> bool:
     [d for d in _example_dirs() if _has_write_map(d)],
     ids=lambda d: d.name,
 )
-def test_example_write_maps_render_bare_container_markers(
-    example_dir: Path, tmp_path: Path
-) -> None:
+def test_example_write_maps_render_bare_container_markers(example_dir: Path) -> None:
     """Every example write map must render the bare `Object`/`List` markers.
 
     The engine probes the write map with a destination column's `arrow_type`
@@ -246,11 +243,10 @@ def test_example_write_maps_render_bare_container_markers(
     coverage finding is warning-severity, so the error-only checks above would
     stay green if the rules were dropped; assert on the warning *naming* the
     markers instead of on warning absence, because an abbreviated example
-    legitimately still warns about other families.
+    legitimately still warns about other families. The write vocabulary is
+    the connector package's check, so the example is graded as a package.
     """
-    map_path = _stage(example_dir, tmp_path).parent / TYPE_MAP_FILENAME
-    document = json.loads(map_path.read_text(encoding="utf-8"))
-    findings = validate_document(document, doc_path=map_path.resolve())
+    findings = graded_package(example_package(example_dir))
     named = [
         f["message"]
         for f in findings
@@ -265,21 +261,16 @@ def test_example_write_maps_render_bare_container_markers(
 
 
 @pytest.mark.parametrize("example_dir", _example_dirs(), ids=lambda d: d.name)
-def test_example_endpoints_validate(example_dir: Path, tmp_path: Path) -> None:
-    """Endpoints must also hold up standalone.
-
-    Validating from the connector walks siblings, but `RULE-PKG-031` and
-    `RULE-ENDP-046` are most direct here — and an endpoint is authored and
-    validated on its own during the fan-out.
-    """
-    definition = _stage(example_dir, tmp_path).parent
-    endpoint_files = sorted((definition / "endpoints").glob("*.json"))
+def test_example_endpoints_validate(example_dir: Path) -> None:
+    """Endpoints must also hold up standalone: an endpoint is authored and
+    validated on its own during the fan-out."""
+    endpoint_files = sorted((example_dir / "endpoints").glob("*.json"))
     if not endpoint_files:
         pytest.skip(f"{example_dir.name} ships no endpoints")
 
     for endpoint_path in endpoint_files:
         document = json.loads(endpoint_path.read_text(encoding="utf-8"))
-        findings = validate_document(document, doc_path=endpoint_path.resolve())
+        findings = validate_document(document, "api-endpoint")
         errors = _errors(findings)
         assert not errors, f"{endpoint_path.name}\n" + "\n".join(
             f"{f.get('rule')} {f['path']}: {f['message']}" for f in errors

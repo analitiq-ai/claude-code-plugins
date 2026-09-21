@@ -367,10 +367,14 @@ def _scenario_problems(scenario: dict, path: Path) -> list[str]:
             problems.append(f"text_assert on {item.get('file')!r}: {item[named[0]]!r} does not "
                             f"compile as a regex")
     for spec in scenario.get("validate", []):
-        unknown = sorted(set(spec) - {"glob", "entity", "bundle_root"})
+        unknown = sorted(set(spec) - {"glob", "entity", "bundle_root", "kind", "package"})
         if unknown:
             problems.append(f"validate spec {spec.get('glob')!r} names unknown keys "
-                            f"{unknown}; expected a subset of glob/entity/bundle_root")
+                            f"{unknown}; expected a subset of glob/entity/bundle_root/kind/package")
+        routes = sorted({"entity", "kind", "package"} & set(spec))
+        if len(routes) != 1:
+            problems.append(f"validate spec {spec.get('glob')!r} names {routes}; it names "
+                            f"exactly one of entity/kind/package")
         if "glob" not in spec:
             problems.append(f"validate spec {spec!r} is missing required key 'glob'")
         if "bundle_root" in spec and "entity" not in spec:
@@ -472,11 +476,13 @@ def run_validator(workdir: Path, spec: dict, timeout: int) -> list[str]:
             if spec.get("bundle_root"):
                 cmd += ["--bundle-root", str(workdir / spec["bundle_root"])]
         else:
+            mode, kind = ("--package", spec["package"]) if "package" in spec \
+                else ("--document", spec["kind"])
             cmd = [sys.executable, "-c",
                    "import sys;from analitiq.validator import main;"
-                   "sys.argv=['analitiq-validate','--document',sys.argv[1]];"
+                   "sys.argv=['analitiq-validate',*sys.argv[1:]];"
                    "sys.exit(main())",
-                   str(doc)]
+                   mode, str(doc), "--kind", kind]
         try:
             proc = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True,
                                   timeout=timeout, env={**os.environ, **GRADER_ENV})

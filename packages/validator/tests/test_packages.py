@@ -162,6 +162,86 @@ def test_single_document_request_grades_as_its_entity(validator):
     assert result["findings"] == validator.validate_document(_stream(), "connector")
 
 
+def test_single_document_text_the_parser_refuses_is_a_finding_not_a_raise(
+        validator, text_refused_outside_jsondecodeerror):
+    """Document content is what this API judges, so text the parser refuses —
+    with a `JSONDecodeError` or otherwise — comes back as a finding; a raise is
+    reserved for a defect in this package."""
+    for text in ("{not json", text_refused_outside_jsondecodeerror):
+        result = validator.validate_single_document(
+            ValidateSingleDocumentRequest(document=text, entity="connector"))
+        assert [f["message_id"] for f in result["findings"]] == ["unreadable-document"], result
+
+
+def test_entry_points_are_annotated_with_their_request_models(validator):
+    """The request models are imported under `TYPE_CHECKING` and no type
+    checker runs over this repo, so a misspelled model, a deferred import of a
+    module that does not exist, or a parameter beside `request` would otherwise
+    reach a release unnoticed."""
+    import ast
+    import importlib
+    import inspect
+    from typing import get_type_hints
+
+    document_set = validator.document_set
+    # The namespace is built by executing the module's OWN deferred imports:
+    # a namespace this test chose would resolve the annotations whatever that
+    # block says.
+    source = Path(document_set.__file__).read_text(encoding="utf-8")
+    deferred = [statement
+                for node in ast.parse(source).body
+                if isinstance(node, ast.If)
+                and isinstance(node.test, ast.Name) and node.test.id == "TYPE_CHECKING"
+                for statement in node.body if isinstance(statement, ast.ImportFrom)]
+    assert deferred, "no `if TYPE_CHECKING:` import resolves these annotations"
+    namespace = {}
+    for statement in deferred:
+        module = importlib.import_module(statement.module)
+        for alias in statement.names:
+            namespace[alias.asname or alias.name] = getattr(module, alias.name)
+
+    for entry_point, request_model in (
+        (document_set.validate_single_document, ValidateSingleDocumentRequest),
+        (document_set.validate_package, ValidatePackageRequest),
+    ):
+        hints = get_type_hints(entry_point, localns=namespace)
+        assert hints["request"] is request_model, entry_point.__name__
+        assert hints["return"] is document_set.ValidationEnvelope, entry_point.__name__
+        assert tuple(inspect.signature(entry_point).parameters) == ("request",), entry_point.__name__
+
+
+def test_finding_matches_the_keys_finding_builder_produces(validator):
+    from typing import get_args, get_type_hints
+
+    from analitiq.validator._core import _KINDS
+    from analitiq.validator.document_set import Finding
+
+    # Every call `finding()` admits — each kind, with no rule and with rules of
+    # each severity a `fail` finding can report — rather than sampled calls: a
+    # key set only on a branch no sample visits would be invisible below.
+    produced = [validator.finding(rule=rule, message_id="m", kind=kind, path="p", message="msg")
+                for kind in _KINDS for rule in (None, "RULE-PKG-030", "RULE-CTOR-043")]
+    possible_keys = set().union(*(set(f) for f in produced))
+    always_present = set.intersection(*(set(f) for f in produced))
+    hints = get_type_hints(Finding)
+    assert set(hints) == possible_keys
+    assert Finding.__required_keys__ == always_present
+    assert Finding.__optional_keys__ == possible_keys - always_present
+
+    assert set(get_args(hints["kind"])) == set(_KINDS)
+    with pytest.raises(ValueError):
+        validator.finding(message_id="m", kind="not-a-real-kind", path="p", message="msg")
+
+    # `severity` is set only on a `fail` finding, from the named rule's own
+    # severity: RULE-PKG-030 is error-tier, RULE-CTOR-043 warning-tier, and an
+    # info-tier rule (RULE-CTOR-032) is refused as `kind: fail` altogether.
+    observed = {validator.finding(rule=rule, message_id="m", kind="fail", path="p", message="msg")["severity"]
+                for rule in ("RULE-PKG-030", "RULE-CTOR-043")}
+    assert observed == set(get_args(hints["severity"]))
+    with pytest.raises(ValueError):
+        validator.finding(rule="RULE-CTOR-032", message_id="m", kind="fail", path="p", message="msg")
+
+
 # ---------------------------------------------------------------------------
 # Packages: the published model decides root and locations.
 # ---------------------------------------------------------------------------
@@ -223,6 +303,80 @@ def test_an_unknown_package_on_disk_is_the_callers_error(validator, tmp_path):
         validator.validate_package_at(tmp_path, "pipeline-bundle")
 
 
+@pytest.mark.parametrize("unlisted", ["definition", "definition/endpoints"])
+def test_a_directory_the_walk_cannot_list_raises(validator, tmp_path, refuse, unlisted):
+    """What an unlisted directory holds is unknown, and no finding about a
+    document can say so: grading on would pass a package on the strength of
+    what the walk never saw."""
+    _write(tmp_path, _connector_package())
+    refuse(tmp_path / unlisted, 0o300)
+    with pytest.raises(PermissionError):
+        validator.validate_package_at(tmp_path, "connector-package")
+
+
+def test_a_located_name_that_is_not_a_regular_file_is_not_read(validator, tmp_path):
+    """A FIFO at a document's location would block a read forever; a name that
+    holds no file holds no document."""
+    import os
+    import signal
+
+    documents = _connector_package()
+    del documents["definition/type-map.json"]
+    _write(tmp_path, documents)
+    os.mkfifo(tmp_path / "definition/type-map.json")
+
+    def _stalled(_signum, _frame):
+        raise AssertionError("the walk opened a FIFO")
+
+    previous = signal.signal(signal.SIGALRM, _stalled)
+    signal.alarm(10)
+    try:
+        findings = validator.validate_package_at(tmp_path, "connector-package")["findings"]
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+    assert _at(findings, "read-map-missing") == ["definition/connector.json#"], findings
+
+
+@pytest.mark.parametrize("linked", ["definition", "definition/endpoints"])
+def test_a_symlinked_directory_is_read_under_the_path_the_package_gives_it(
+        validator, tmp_path, linked):
+    """Where a document sits is its path from the package root, whatever the
+    filesystem stores behind a directory on that path."""
+    documents = _connector_package()
+    package = tmp_path / "package"
+    _write(package, documents)
+    moved = tmp_path / "elsewhere"
+    (package / linked).rename(moved)
+    (package / linked).symlink_to(moved, target_is_directory=True)
+    assert set(validator.read_package(package, "connector-package")) == set(documents)
+
+
+def test_a_symlink_cycle_ends_the_walk(validator, tmp_path):
+    """A directory reached again through a link holds nothing the walk has not
+    already read. Two links back to one ancestor double the paths at every
+    level, so a walk that followed them would not finish."""
+    import signal
+
+    documents = _connector_package()
+    _write(tmp_path, documents)
+    for name in ("a", "b"):
+        (tmp_path / "definition/endpoints" / name).symlink_to(
+            tmp_path / "definition", target_is_directory=True)
+
+    def _stalled(_signum, _frame):
+        raise AssertionError("the walk followed a symlink cycle")
+
+    previous = signal.signal(signal.SIGALRM, _stalled)
+    signal.alarm(10)
+    try:
+        keys = set(validator.read_package(tmp_path, "connector-package"))
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+    assert keys == set(documents)
+
+
 # ---------------------------------------------------------------------------
 # Connector package checks, each at the document it is about.
 # ---------------------------------------------------------------------------
@@ -279,6 +433,52 @@ def test_an_uncovered_native_type_is_reported_at_the_endpoint(validator):
                  "definition/endpoints/v2__w.json": _api_endpoint("v2__w", "/v2/w", "BOOLEAN", "Boolean")}
     assert _at(_connector_findings(validator, documents), "native-type-unresolved") == [
         "definition/endpoints/v2__w.json#/operations/read/response/schema/items/properties/a"]
+
+
+def _broken_connector_packages() -> dict:
+    """Connector packages each carrying at least one finding, between them
+    about the connector, the map, an endpoint, a key that needs encoding, and a
+    document that never parsed. Values are documents, or text sent verbatim."""
+    base = _connector_package()
+    uncovered = _api_endpoint("v2__widgets", "/v2/widgets", native="BOOLEAN", arrow="Boolean")
+    return {
+        "mistyped connector, uncovered endpoint": {
+            **base, "definition/connector.json": {**base["definition/connector.json"], "display_name": 7},
+            "definition/endpoints/v2__widgets.json": uncovered},
+        "key needing encoding": {**base, "definition/endpoints/v2 widgets.json": uncovered},
+        "map missing": {k: v for k, v in base.items() if k != "definition/type-map.json"},
+        "endpoints missing": {k: v for k, v in base.items() if not k.startswith("definition/endpoints/")},
+        "map unparseable": {**base, "definition/type-map.json": "{not json"},
+        "connector unparseable": {**base, "definition/connector.json": "{not json"},
+    }
+
+
+def _texts(documents: dict) -> dict:
+    return {key: doc if isinstance(doc, str) else json.dumps(doc) for key, doc in documents.items()}
+
+
+@pytest.mark.parametrize("name", sorted(_broken_connector_packages()))
+def test_every_package_finding_names_a_submitted_document_or_the_package(validator, name):
+    from urllib.parse import unquote
+
+    texts = _texts(_broken_connector_packages()[name])
+    findings = validator.validate_package(
+        ValidatePackageRequest(package="connector-package", documents=texts))["findings"]
+    assert findings, "no findings: nothing was measured"
+    for f in findings:
+        reference, sep, pointer = f["path"].partition("#")
+        assert (not sep and not reference) or unquote(reference) in texts, f
+        assert pointer == "" or (pointer.startswith("/") and pointer != "/"), f
+
+
+@pytest.mark.parametrize("name", sorted(_broken_connector_packages()))
+def test_findings_do_not_depend_on_the_order_documents_arrive_in(validator, name):
+    texts = _texts(_broken_connector_packages()[name])
+    forward = validator.validate_package(
+        ValidatePackageRequest(package="connector-package", documents=texts))
+    backward = validator.validate_package(ValidatePackageRequest(
+        package="connector-package", documents=dict(reversed(list(texts.items())))))
+    assert forward == backward
 
 
 # ---------------------------------------------------------------------------

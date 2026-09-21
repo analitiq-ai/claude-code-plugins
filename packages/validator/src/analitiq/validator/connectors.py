@@ -9,9 +9,9 @@ contract defines — offline, no schema fetch, no drift. On top of the models th
 module adds only what a single-document model cannot express:
 
 - **cross-file coverage** (`RULE-PKG-030`/`RULE-PKG-033`/`RULE-PKG-035`): a
-  connector's sibling `type-map.json` must carry a rule list for each direction
-  its kind needs, and an API connector's read rules must cover every
-  `(native_type, arrow_type)` its endpoint files declare;
+  connector package's type map must carry a rule list for each direction its
+  kind needs, and an API connector's read rules must cover every
+  `(native_type, arrow_type)` its endpoints declare;
 - **filename ↔ id** (`RULE-PKG-031`): an endpoint file must be named
   `{endpoint_id}.json`;
 - **endpoint id uniqueness** (`RULE-PKG-032`): each `endpoint_id` is unique
@@ -27,18 +27,18 @@ module adds only what a single-document model cannot express:
   `database_object` (`slug(schema)__slug(table)[__slug(catalog)]__hash8`, via the
   shared `analitiq.contracts.endpoint_identity`);
 - **endpoint → transport** (`RULE-ENDP-047`): an endpoint's
-  `request.transport_ref` must name a transport the sibling connector.json
+  `request.transport_ref` must name a transport the package's connector
   declares. `ConnectorBase._transport_refs_resolvable` enforces the same rule for
-  every connector-internal ref site, but an endpoint document is a separate file
-  and structurally invisible to that model validator — so the cross-file half of
+  every connector-internal ref site, but an endpoint is a separate document and
+  structurally invisible to that model validator — so the cross-document half of
   the rule lives here;
 - **advisory quality warnings** the contract tolerates: duplicate type-map
   rules, read patterns spelling a lowercase literal, regex natives spelling a
   container that renders a scalar, and write-rule vocabulary gaps
   (`RULE-TMAP-022`/`RULE-TMAP-014`/`RULE-TMAP-002`/`RULE-TMAP-017`).
 
-At import this module registers its detector→validator pairs with the core
-dispatch registry, so `_core` never hard-codes connector branches.
+At import this module registers its kinds and the connector package's check,
+so `_core` never hard-codes connector branches.
 """
 from __future__ import annotations
 
@@ -324,7 +324,7 @@ def _embedded_schema_example_findings(ep_doc: dict) -> list[dict]:
 
     This is the only check over an endpoint that reads a value rather than
     another declaration. Every other one compares `native_type` to `arrow_type`
-    to the sibling type map to the canonical vocabulary, and they agree because
+    to the package's type map to the canonical vocabulary, and they agree because
     each reads the same claim restated — so a field declared boolean whose
     provider sends the strings `"0"` and `"1"` passes all of them and fails on
     the first batch, where the cast is attempted for real. A recorded sample is
@@ -717,13 +717,13 @@ def _api_operation_transport_refs(ep_doc: dict) -> list[tuple[str, Any]]:
 
 def _endpoint_transport_ref_findings(ep_doc: Any, transports: Any) -> list[dict]:
     """Cross-file gate: every `request.transport_ref` an endpoint declares must
-    name a transport the sibling connector.json declares in `transports`.
+    name a transport the package's connector declares in `transports`.
 
     This is the cross-file half of the contract's §Transport Selection rule.
     `ConnectorBase._transport_refs_resolvable` already enforces it for every
     connector-INTERNAL ref site (auth ops, post-auth requests, resource
     discovery), but an endpoint lives in its own document, so no single-document
-    model validator can see both sides — only a connector-anchored walk can.
+    model validator can see both sides — only the connector package check can.
     The wording mirrors that model validator's so one rule reads the same
     wherever it fires.
 
@@ -741,8 +741,8 @@ def _endpoint_transport_ref_findings(ep_doc: Any, transports: Any) -> list[dict]
             rule="RULE-ENDP-047",
             message_id="transport-ref-undeclared", kind="fail", path=pointer,
             message=(
-                f"{pointer} transport_ref={ref!r} is not declared in the sibling "
-                f"connector.json `transports` (declared: {sorted(transports)!r}; "
+                f"{pointer} transport_ref={ref!r} is not declared in the "
+                f"connector's `transports` (declared: {sorted(transports)!r}; "
                 "spec: §Transport Selection). A request dispatches only through a "
                 "transport the connector declares.")))
     return findings

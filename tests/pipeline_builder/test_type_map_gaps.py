@@ -24,7 +24,7 @@ pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
 from analitiq.contracts.type_map import TYPE_MAP_DIRECTIONS, TYPE_MAP_SCHEMA_URL  # noqa: E402
 from analitiq.validator import (  # noqa: E402
-    finding_costs_a_pass, type_map_findings,
+    finding_costs_a_pass, validate_document,
 )
 
 CONNECTOR_READ = [
@@ -143,9 +143,12 @@ def test_a_crashed_check_is_not_reported_as_an_authoring_defect(tmp_path, monkey
     # a crash stops the probe for the same reason a defect does — nothing graded
     # the map — but telling the author to fix their map would send them after a
     # defect it does not have
-    from analitiq.validator import connectors
-    monkeypatch.setattr(connectors, "_type_map_rule_warnings",
-                        lambda *a, **k: (_ for _ in ()).throw(TypeError("boom")))
+    from analitiq.validator import _core
+
+    def boom(doc):
+        raise TypeError("boom")
+
+    monkeypatch.setitem(_core._KIND_VALIDATORS, "type-map", boom)
     m = _map(tmp_path, "type-map.json", CONNECTOR_READ)
     with pytest.raises(ValueError, match=r"could not be graded") as exc:
         G.resolve("read", ["citext"], [m])
@@ -250,7 +253,7 @@ def test_advisory_finding_does_not_block_probing(tmp_path):
     # resolves and its uncovered probe is a gap, not a refusal.
     dead = {"match": "regex", "native_type": "^vector\\(\\d+\\)$", "arrow_type": "Utf8"}
     m = _map(tmp_path, "r.json", [*CONNECTOR_READ, dead])
-    findings = type_map_findings(json.loads(m.read_text()))
+    findings = validate_document(json.loads(m.read_text()), "type-map")
     assert [f.get("rule") for f in findings] == ["RULE-TMAP-014"]
     assert not any(finding_costs_a_pass(f) for f in findings)
 
@@ -280,16 +283,11 @@ def test_a_non_fatal_finding_reaches_stderr_beside_the_gap_it_explains(tmp_path,
 
 def test_connection_scoped_write_map_probes_without_the_full_vocabulary(tmp_path, monkeypatch):
     # a connection-scoped map fills the gaps its connector map leaves, so the
-    # connector scope's write vocabulary is coverage it can never reach.
+    # connector package's write vocabulary is coverage it can never reach. The
+    # prober grades the map as a document, so no finding's severity is what
+    # keeps it probeable: hold every finding fatal and it still resolves.
     gap_only = [{"match": "exact", "arrow_type": "Duration(SECOND)", "native_type": "INTERVAL"}]
     m = _map(tmp_path, "w.json", gap_only, "write")
-    assert [f.get("rule") for f in
-            type_map_findings(json.loads(m.read_text()), scope="connector")] \
-        == ["RULE-TMAP-017"]
-
-    # the scope the prober grades at is what keeps such a map probeable, not the
-    # coverage finding's severity: hold every finding fatal and a map graded at
-    # the connector scope is refused, while this one still resolves.
     monkeypatch.setattr("analitiq.validator.finding_costs_a_pass", lambda f: True)
     result = G.resolve("write", ["Duration(SECOND)", "Utf8"], [m])
     assert result["resolved"] == {"Duration(SECOND)": "INTERVAL", "Utf8": None}

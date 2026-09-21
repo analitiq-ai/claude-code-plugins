@@ -233,10 +233,49 @@ def test_a_validate_spec_rejects_unknown_keys():
     assert any("unknown keys" in p for p in _problems({"validate": [unknown]}))
 
 
-def test_a_validate_spec_entity_is_optional():
-    # No `entity`: the plain validator detects the document's kind from its
-    # own shape instead of the pipeline plugin's `--entity`-selected adapter.
-    assert _problems({"validate": [{"glob": "a.json"}]}) == []
+@pytest.mark.parametrize("spec", [
+    {"glob": "a.json"},
+    {"glob": "a.json", "entity": "pipeline", "kind": "connector"},
+    {"glob": "a", "kind": "connector", "package": "connector-package"},
+])
+def test_a_validate_spec_names_exactly_one_route(spec):
+    # Nothing detects what a document is, so a spec naming no route grades
+    # nothing, and one naming several leaves which one ran to the runner.
+    assert any("exactly one of" in p for p in _problems({"validate": [spec]}))
+
+
+@pytest.mark.parametrize("spec", [
+    {"glob": "a.json", "kind": "connector"},
+    {"glob": "a", "package": "connector-package"},
+])
+def test_a_validate_spec_may_route_to_the_published_validator(spec):
+    assert _problems({"validate": [spec]}) == []
+
+
+@pytest.mark.parametrize(("spec", "arguments"), [
+    ({"glob": "a", "kind": "type-map"}, ["--document", "a", "--kind", "type-map"]),
+    ({"glob": "a", "package": "connector-package"},
+     ["--package", "a", "--kind", "connector-package"]),
+])
+def test_run_validator_hands_the_published_validator_what_the_spec_names(
+        tmp_path, monkeypatch, spec, arguments):
+    seen = []
+
+    class Result:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(cmd, **kwargs):
+        seen.append(cmd)
+        return Result()
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    (tmp_path / "a").write_text("{}")
+    assert runner.run_validator(tmp_path, spec, 5) == []
+    [cmd] = seen
+    tail = cmd[cmd.index("-c") + 2:]
+    assert tail == [str(tmp_path / "a") if a == "a" else a for a in arguments]
 
 
 def test_a_validate_spec_must_name_a_glob():

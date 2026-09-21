@@ -339,6 +339,7 @@ def measured_reachable_connectors_ids() -> set[str]:
     import json
     import tempfile
 
+    from analitiq.contracts.shared.rules import all_rules
     from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
 
     adapter = _pipeline_validate_adapter()
@@ -372,11 +373,11 @@ def measured_reachable_connectors_ids() -> set[str]:
             "type-map", path)["findings"]}
 
         # RULE-TMAP-017 (write-vocabulary coverage) fires in the published
-        # validator on a CONNECTOR write map covering too little — reachable at that layer
-        # — but the adapter grades a connection map at connection scope, where
-        # the check does not apply, so this measures whether the id survives to
-        # the adapter's own output. It does not: excluded below by what this
-        # probe observes, not by name.
+        # validator on a connector package whose write map covers too little —
+        # reachable at that layer — but the adapter grades a map as a document
+        # and grades no connector package, so this measures whether the id
+        # survives to the adapter's own output. It does not: excluded below by
+        # what this probe observes, not by name.
         path = root / "write-map.json"
         path.write_text(json.dumps({
             "$schema": TYPE_MAP_SCHEMA_URL,
@@ -387,21 +388,25 @@ def measured_reachable_connectors_ids() -> set[str]:
 
         # RULE-PKG-031: an endpoint document under a connection's
         # `definition/endpoints/` whose filename does not carry its
-        # endpoint_id. Laid out on disk rather than calling the gate directly,
-        # because the gate only applies to a document the adapter reached at
-        # that address — probing it out of place would record an id the
-        # adapter's own routing might not surface.
-        ep_dir = root / "connections" / "pg" / "definition" / "endpoints"
-        ep_dir.mkdir(parents=True)
-        path = ep_dir / "wrong-name.json"
-        path.write_text(json.dumps({
+        # endpoint_id. It is the connection package's check, so it is probed
+        # through the one route that grades a connection package: a pipeline
+        # validated against its bundle.
+        connection = root / "connections" / "pg"
+        (connection / "definition" / "endpoints").mkdir(parents=True)
+        (connection / "connection.json").write_text("{}")
+        (connection / "definition" / "endpoints" / "wrong-name.json").write_text(json.dumps({
             "endpoint_id": "public__orders__aaaaaaaa",
             "database_object": {"schema": "public", "name": "orders", "object_type": "table"},
         }))
+        pipeline = root / "pipelines" / "p" / "pipeline.json"
+        pipeline.parent.mkdir(parents=True)
+        pipeline.write_text("{}")
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
-            "database-endpoint", path)["findings"]}
+            "pipeline", pipeline, bundle_root=root)["findings"]}
 
-    return {rule_id for rule_id in observed if rule_id is not None}
+    # The bundle probe surfaces other modules' ids beside the one it is for.
+    return {rule.id for rule in all_rules()
+            if rule.validator_module == "analitiq.validator.connectors" and rule.id in observed}
 
 
 def _require_runnable_gated_pipelines_ids() -> set[str]:

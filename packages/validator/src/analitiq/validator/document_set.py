@@ -153,13 +153,21 @@ def read_package(directory: Path, package: str) -> dict[str, str | Exception]:
 
     A file that cannot be read maps to the exception reading it raised. A
     directory the walk cannot list raises its `OSError`: what it holds is
-    unknown, and no finding about a document can say so. Raises `ValueError`
-    for a package name outside the published ones — the caller's error, not
-    the package's.
+    unknown, and no finding about a document can say so. A symlinked directory
+    is walked under the path that reaches it, and a directory reached a second
+    time is not walked again, which is what ends a symlink cycle. Raises
+    `ValueError` for a package name outside the published ones — the caller's
+    error, not the package's.
     """
     model = _package_model(package)
     texts: dict[str, str | Exception] = {}
-    for parent, _, names in os.walk(directory, onerror=_raise):
+    walked: set[tuple[int, int]] = set()
+    for parent, subdirectories, names in os.walk(directory, onerror=_raise, followlinks=True):
+        identity = os.stat(parent)
+        if (identity.st_dev, identity.st_ino) in walked:
+            subdirectories.clear()
+            continue
+        walked.add((identity.st_dev, identity.st_ino))
         for name in names:
             path = Path(parent, name)
             key = path.relative_to(directory).as_posix()

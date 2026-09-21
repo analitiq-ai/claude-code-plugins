@@ -3,8 +3,8 @@
 The registry's enforcer→registry census lives in the contract-models suite and
 walks contract classes, so it sees `@model_validator` methods and nothing else.
 That covers one of the two enforcement homes. The other is here: a rule needing
-a second document in hand — a sibling type map, the connector an endpoint ships
-beside, the streams an assembled run pins — is a function in
+a second document in hand — the package's type map, the connector an endpoint
+ships beside, the streams an assembled run pins — is a function in
 `analitiq.validator`, and until this file existed such a check could be added
 with no record and nothing would notice. The registry would then describe less
 than the tool enforces, which is the failure the census exists to prevent: an
@@ -69,12 +69,11 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
     carries to the line it sits on.
 
     A call is ruleless when its `rule` keyword is absent or the literal
-    `None`. `_run_guarded` threads `rule` through from its caller, and
-    `_load_json_sibling` takes none, so a call to either is tracked the way a
-    direct `finding()` call would be, attributed to whichever function made
-    it. Their own internal `finding()` calls are not counted: `_run_guarded`'s
-    passes `rule` as a variable, and `_load_json_sibling`'s passes
-    `message_id` as one — their callers decide, and are what this counts.
+    `None`. `_run_guarded` threads `rule` through from its caller, so a call
+    to it is tracked the way a direct `finding()` call would be, attributed to
+    whichever function made it. Its own internal `finding()` call is not
+    counted: it passes `rule` as a variable — its callers decide, and are what
+    this counts.
     """
     found: dict[tuple[str, str], int] = {}
 
@@ -84,7 +83,7 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
                 walk(child, module, owner or child.name)
                 continue
             if isinstance(child, ast.Call) and getattr(child.func, "id", None) in (
-                "finding", "_load_json_sibling", "_run_guarded",
+                "finding", "_run_guarded",
             ):
                 callee = child.func.id
                 kwargs = {kw.arg: kw.value for kw in child.keywords}
@@ -94,7 +93,7 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
                 )
                 # `_run_guarded`'s own `message_id="check-crashed"` is fixed inside
                 # its body, never passed by a caller — the same literal every call
-                # site shares, unlike `finding`/`_load_json_sibling`'s caller-given one.
+                # site shares, unlike `finding`'s caller-given one.
                 mid = ast.Constant("check-crashed") if callee == "_run_guarded" else kwargs.get("message_id")
                 if is_ruleless and isinstance(mid, ast.Constant) and isinstance(mid.value, str):
                     found[(f"{module}::{owner or '<module>'}", mid.value)] = child.lineno
@@ -112,43 +111,21 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
 #: this table does not name fails the build — the only way a check earns the
 #: right to omit `rule` is stating which documented case it is.
 RULELESS_SITES: dict[tuple[str, str], str] = {
-    ("analitiq.validator._core::_dispatch", "unrecognized-document"): (
-        "no registered kind's detector claimed the document"),
     ("analitiq.validator._core::_unreadable_document_finding", "unreadable-document"): (
         "the document could not be read or parsed at all, before any kind "
         "was even identified"),
-    ("analitiq.validator.document_set::_entity_mismatch_findings", "entity-mismatch"): (
-        "a structural precondition — the caller's declared entity disagrees "
-        "with, or nothing recognises, the document's own content — rejected "
-        "before any rule-specific check could run"),
-    ("analitiq.validator.document_set::validate_connector_package", "connector-document-missing"): (
-        "a structural precondition — the package carries no connector "
-        "document to grade — rejected before any rule-specific check could run"),
+    ("analitiq.validator.document_set::_graded_package", "check-crashed"): (
+        "a package's cross-document check crashed, leaving every rule it "
+        "evaluates unevaluated together, so the crash is attributable to no "
+        "one of them"),
     ("analitiq.validator._core::validate_document", "check-crashed"): (
         "top-level dispatch crashed before any kind was even identified, so "
         "the crash is not attributable to any one rule; a guarded check "
         "bound to exactly one rule instead passes it through _run_guarded's "
         "own rule= parameter, which keeps that crash off this table"),
-    ("analitiq.validator.connectors::_graded_type_map", "check-crashed"): (
-        "grading a type map crashed, leaving its model errors and every "
-        "advisory type-map rule unevaluated together, so the crash is "
-        "attributable to no one of them"),
     ("analitiq.validator.connectors::<module>", "missing-contract-models-dependency"): (
         "the contract-models dependency is missing; no rule was even "
         "reachable to ask about"),
-    ("analitiq.validator.connectors::check_coverage", "coverage-check-skipped-no-path"): (
-        "coverage needs a filesystem-anchored document path this call did "
-        "not have"),
-    ("analitiq.validator.connectors::check_coverage", "coverage-check-skipped-bad-kind"): (
-        "the connector's kind is outside the closed enum the model already "
-        "rejects, so coverage was never asked"),
-    ("analitiq.validator.connectors::check_coverage", "endpoint-file-unreadable"): (
-        "a sibling endpoint file's read/parse failure precedes any rule "
-        "evaluation of its content"),
-    ("analitiq.validator.connectors::_validate_api_endpoint", "sibling-connector-unreadable"): (
-        "a read/parse failure has not evaluated RULE-ENDP-047 one way or "
-        "the other; which rule went unchecked is the sibling notApplicable "
-        "branch's to name, not this one's"),
     ("analitiq.validator.pipelines::validate_pipeline_bundle", "bundle-not-a-mapping"): (
         "rejects before any referential check the registry binds could even "
         "begin"),
@@ -167,8 +144,8 @@ def test_every_ruleless_finding_is_a_named_framework_case():
     found = _ruleless_emitters()
     unaccounted = sorted(set(found) - set(RULELESS_SITES))
     assert not unaccounted, (
-        "finding() (or _run_guarded, which threads rule through from its caller, "
-        "or _load_json_sibling, which takes none) emits a ruleless finding "
+        "finding() (or _run_guarded, which threads rule through from its caller) "
+        "emits a ruleless finding "
         "RULELESS_SITES does not name — add it with the framework case it is, "
         "or attribute an actual rule instead: "
         + ", ".join(f"{site} (line {found[site]})" for site in unaccounted)

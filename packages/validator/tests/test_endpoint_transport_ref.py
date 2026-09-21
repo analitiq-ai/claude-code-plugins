@@ -1,14 +1,11 @@
 """RULE-ENDP-047 — an endpoint's `request.transport_ref` must name a
-transport the sibling connector.json declares.
+transport the package's connector declares.
 
 The connector model's `_transport_refs_resolvable` already gates every
 connector-INTERNAL ref site, but an endpoint is a separate document: no
-single-document validator can see both sides, so the rule is checkable only
-where both documents are in hand: the connector-anchored walk in
-`check_coverage`, and the standalone endpoint route's lookup of its sibling
-`connector.json`. Most tests here drive the first, through
-`validate_document(connector, doc_path=...)` over a real on-disk connector
-package; `TestStandaloneEndpointValidation` drives the second.
+single-document validator can see both sides, so the rule is checked by the
+connector package check, where both documents are in hand. The tests here
+grade connector packages through `validate_package`.
 """
 import json
 from pathlib import Path
@@ -17,6 +14,7 @@ from urllib.parse import urlsplit
 import pytest
 
 from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
+from analitiq.contracts.validation_requests import ConnectorPackage, ValidatePackageRequest
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 
@@ -111,21 +109,18 @@ def _write_endpoint(transport_ref=..., endpoint_id="widgets", path="/widgets"):
         }}}}
 
 
-def _write_tree(root: Path, connector: dict, endpoints: dict):
-    (root / "endpoints").mkdir(parents=True)
-    (root / "connector.json").write_text(json.dumps(connector))
-    (root / "type-map.json").write_text(json.dumps({
-        "$schema": TYPE_MAP_SCHEMA_URL,
-        "read": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
-    }))
-    for name, ep in endpoints.items():
-        (root / "endpoints" / name).write_text(
-            ep if isinstance(ep, str) else json.dumps(ep))
-
-
-def _run(tmp_path, connector, endpoints, validator):
-    _write_tree(tmp_path, connector, endpoints)
-    return validator.validate_document(connector, doc_path=tmp_path / "connector.json")
+def _run(connector, endpoints, validator):
+    documents = {
+        ConnectorPackage.ROOT: json.dumps(connector),
+        "definition/type-map.json": json.dumps({
+            "$schema": TYPE_MAP_SCHEMA_URL,
+            "read": [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
+        }),
+        **{f"definition/endpoints/{name}": ep if isinstance(ep, str) else json.dumps(ep)
+           for name, ep in endpoints.items()},
+    }
+    return validator.validate_package(ValidatePackageRequest(
+        package="connector-package", documents=documents))["findings"]
 
 
 def _ref_errors(findings):
@@ -143,65 +138,65 @@ def test_corpus_connector_declares_the_expected_transport(connector_base):
     assert list(connector_base["transports"]) == [DECLARED_TRANSPORT]
 
 
-def test_declared_transport_ref_passes(tmp_path, connector_base, validator):
-    findings = _run(tmp_path, connector_base,
+def test_declared_transport_ref_passes(connector_base, validator):
+    findings = _run(connector_base,
                     {"widgets.json": _read_endpoint(DECLARED_TRANSPORT)}, validator)
     assert not _errors(findings), [e["message"] for e in _errors(findings)]
 
 
-def test_absent_transport_ref_passes(tmp_path, connector_base, validator):
+def test_absent_transport_ref_passes(connector_base, validator):
     # No `transport_ref` at all -> the connector's default_transport; nothing to resolve.
-    findings = _run(tmp_path, connector_base,
+    findings = _run(connector_base,
                     {"widgets.json": _read_endpoint()}, validator)
     assert not _errors(findings), [e["message"] for e in _errors(findings)]
 
 
-def test_null_transport_ref_passes(tmp_path, connector_base, validator):
+def test_null_transport_ref_passes(connector_base, validator):
     # An explicit null is the same statement as omitting it.
-    findings = _run(tmp_path, connector_base,
+    findings = _run(connector_base,
                     {"widgets.json": _read_endpoint(None)}, validator)
     assert not _errors(findings), [e["message"] for e in _errors(findings)]
 
 
-def test_unknown_transport_ref_on_read_errors(tmp_path, connector_base, validator):
-    findings = _run(tmp_path, connector_base,
+def test_unknown_transport_ref_on_read_errors(connector_base, validator):
+    findings = _run(connector_base,
                     {"widgets.json": _read_endpoint("nope")}, validator)
     errors = _ref_errors(findings)
     assert len(errors) == 1, findings
     (err,) = errors
-    assert err["path"] == "endpoints/widgets.json#/operations/read/request/transport_ref"
+    assert err["path"] == "definition/endpoints/widgets.json#/operations/read/request/transport_ref"
     assert "'nope'" in err["message"]
     assert f"['{DECLARED_TRANSPORT}']" in err["message"]  # the declared set is listed
     assert "§Transport Selection" in err["message"]
 
 
-def test_unknown_transport_ref_on_write_mode_errors(tmp_path, connector_base, validator):
-    findings = _run(tmp_path, connector_base,
+def test_unknown_transport_ref_on_write_mode_errors(connector_base, validator):
+    findings = _run(connector_base,
                     {"widgets.json": _write_endpoint("nope")}, validator)
     errors = _ref_errors(findings)
     assert len(errors) == 1, findings
     (err,) = errors
-    assert err["path"] == "endpoints/widgets.json#/operations/write/insert/request/transport_ref"
+    assert err["path"] == "definition/endpoints/widgets.json#/operations/write/insert/request/transport_ref"
 
 
-def test_every_operation_is_checked_independently(tmp_path, connector_base, validator):
+def test_every_operation_is_checked_independently(connector_base, validator):
     # A doc with a good read ref and a bad write ref reports exactly the bad one.
     ep = _read_endpoint(DECLARED_TRANSPORT)
     write = _write_endpoint("nope")
     ep["operations"]["write"] = write["operations"]["write"]
-    findings = _run(tmp_path, connector_base, {"widgets.json": ep}, validator)
+    findings = _run(connector_base, {"widgets.json": ep}, validator)
     paths = [e["path"] for e in _ref_errors(findings)]
-    assert paths == ["endpoints/widgets.json#/operations/write/insert/request/transport_ref"]
+    assert paths == ["definition/endpoints/widgets.json#/operations/write/insert/request/transport_ref"]
 
 
-def test_each_endpoint_file_is_checked(tmp_path, connector_base, validator):
-    findings = _run(tmp_path, connector_base, {
+def test_each_endpoint_file_is_checked(connector_base, validator):
+    findings = _run(connector_base, {
         "widgets.json": _read_endpoint("nope", endpoint_id="widgets", path="/widgets"),
         "gadgets.json": _read_endpoint(DECLARED_TRANSPORT, endpoint_id="gadgets",
                                        path="/gadgets"),
     }, validator)
     paths = [e["path"] for e in _ref_errors(findings)]
-    assert paths == ["endpoints/widgets.json#/operations/read/request/transport_ref"], paths
+    assert paths == ["definition/endpoints/widgets.json#/operations/read/request/transport_ref"], paths
 
 
 @pytest.mark.parametrize("ep", [
@@ -218,23 +213,23 @@ def test_each_endpoint_file_is_checked(tmp_path, connector_base, validator):
                 "operations": {"write": {"insert": {"request": {
                     "transport_ref": ["not", "a", "string"]}}}}}),
 ])
-def test_malformed_endpoint_does_not_crash_the_check(tmp_path, connector_base, ep, validator):
-    """check_coverage runs over documents that may already carry model errors; a
+def test_malformed_endpoint_does_not_crash_the_check(connector_base, ep, validator):
+    """The package check runs over documents that may already carry model errors; a
     crash here would replace every actionable finding with a generic
     "validator bug". Each malformed shape must still produce findings and no
     fabricated transport-ref error."""
-    findings = _run(tmp_path, connector_base, {"widgets.json": ep}, validator)
+    findings = _run(connector_base, {"widgets.json": ep}, validator)
     assert not any("validator bug" in f["message"] for f in findings), findings
     assert not _ref_errors(findings), findings
     assert _errors(findings), "a malformed endpoint must still be reported"
 
 
 def test_malformed_connector_transports_yields_no_fabricated_finding(
-        tmp_path, connector_base, validator):
+        connector_base, validator):
     """If `transports` itself is not a map the connector's own model error is the
     real report; this check stays quiet rather than burying it."""
     connector_base["transports"] = "not-a-map"
-    findings = _run(tmp_path, connector_base,
+    findings = _run(connector_base,
                     {"widgets.json": _read_endpoint("nope")}, validator)
     assert not _ref_errors(findings), findings
     assert _errors(findings), "the malformed connector must still be reported"
@@ -250,21 +245,20 @@ class TestOriginContainmentIsAValidatorBlindSpot:
     the origin of the transport actually selected for the operation — is
     enforced by the engine at run time, on both the read and the write path,
     resolved per operation. It is enforced by neither this contract nor this
-    validator: the endpoint and the connector are separate documents, and an
-    offline, single-document-at-a-time check has no way to resolve which
-    origin a `transport_ref` names, let alone follow a response-driven
+    validator: the package check grades a `transport_ref` by name only, and an
+    offline check never sees a response, so it cannot follow a response-driven
     next-page URL to see where it lands.
 
     Each test below asserts the CURRENT behaviour of THIS validator, not of
     the engine: a document the ORIGIN half would refuse at run time still
-    validates clean here. They run through the connector-anchored walk, which
+    validates clean here. They run through the connector package check, which
     is where an origin check would have to live for the same reason the NAME
     half does — origins are declared on the connector and consumed by the
-    endpoint. Three documents, because they reach the walk by different legs
+    endpoint. Three documents, because they reach the check by different legs
     and a check need not cover all three: a read request, a write request, and
     a next-page URL the document takes from the response body.
 
-    Each asserts on EVERY error the walk emits, not on `RULE-ENDP-047`
+    Each asserts on EVERY error the package emits, not on `RULE-ENDP-047`
     alone: the NAME half already owns that id, so an origin rule arriving under
     an id of its own — the likelier shape, since each check registers one —
     would pass a scoped assertion unnoticed.
@@ -284,7 +278,7 @@ class TestOriginContainmentIsAValidatorBlindSpot:
     """
 
     def test_a_second_origin_is_accepted_because_this_validator_checks_names_not_origins(
-        self, tmp_path, connector_base, validator
+        self, connector_base, validator
     ):
         # The connector declares a second transport on its own origin, and the
         # endpoint DECLARES dispatch through it rather than through
@@ -295,7 +289,6 @@ class TestOriginContainmentIsAValidatorBlindSpot:
         # here only to grade the name.
         _declare_second_origin(connector_base)
         findings = _run(
-            tmp_path,
             connector_base,
             {"widgets.json": _read_endpoint(SECOND_TRANSPORT)},
             validator,
@@ -303,14 +296,13 @@ class TestOriginContainmentIsAValidatorBlindSpot:
         assert not _errors(findings), findings
 
     def test_a_second_origin_on_the_write_path_is_accepted_too(
-        self, tmp_path, connector_base, validator
+        self, connector_base, validator
     ):
         # This validator's blind spot is not read-path-specific — it never
         # resolves an origin on either path — so recording only the read one
         # would leave half the gap unrecorded.
         _declare_second_origin(connector_base)
         findings = _run(
-            tmp_path,
             connector_base,
             {"widgets.json": _write_endpoint(SECOND_TRANSPORT)},
             validator,
@@ -318,7 +310,7 @@ class TestOriginContainmentIsAValidatorBlindSpot:
         assert not _errors(findings), findings
 
     def test_a_response_driven_next_url_is_accepted_because_this_validator_checks_names_not_origins(
-        self, tmp_path, connector_base, validator
+        self, connector_base, validator
     ):
         # The next-page URL is read out of the response body, so this
         # validator — which never fetches a response — has no origin to check
@@ -344,153 +336,5 @@ class TestOriginContainmentIsAValidatorBlindSpot:
                 },
             },
         }
-        findings = _run(tmp_path, connector_base, {"widgets.json": endpoint}, validator)
+        findings = _run(connector_base, {"widgets.json": endpoint}, validator)
         assert not _errors(findings), findings
-
-
-class TestStandaloneEndpointValidation:
-    """`_validate_api_endpoint` — the path the connector-builder skill actually
-    takes when it validates one endpoint file at a time.
-
-    Every other test in this module drives `check_coverage` via the connector.
-    That is why two defects shipped here unnoticed: a connector whose
-    `transports` was unusable produced NO finding at all (a clean pass on an
-    endpoint whose `transport_ref` resolves to nothing), and a connector that
-    would not parse was reported as an unattributed error against an
-    otherwise-valid endpoint, naming no rule a fix loop could filter on.
-    """
-
-    def _endpoint(self, ref="api"):
-        return {
-            "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
-            "endpoint_id": "thing",
-            "operations": {
-                "read": {
-                    "request": {"method": "GET", "path": "/v1/things", "transport_ref": ref},
-                    "params": {},
-                    "response": {
-                        "records": {"ref": "response.body.data"},
-                        "schema": {
-                            "type": "object",
-                            "properties": {"data": {
-                                "type": "array",
-                                "items": {"type": "object",
-                                          "properties": {"id": {"type": "string"}}},
-                            }},
-                        },
-                    },
-                }
-            },
-        }
-
-    def _run(self, tmp_path, connector_body):
-        from analitiq.validator._location import located
-        from analitiq.validator.connectors import _validate_api_endpoint
-
-        pkg = tmp_path / "pkg"
-        (pkg / "endpoints").mkdir(parents=True)
-        if connector_body is not None:
-            (pkg / "connector.json").write_text(connector_body)
-        doc_path = pkg / "endpoints" / "thing.json"
-        doc = self._endpoint()
-        doc_path.write_text(json.dumps(doc))
-        return _validate_api_endpoint(doc, located(doc_path))
-
-    def _ids(self, findings):
-        return {(f.get("rule"), f.get("severity")) for f in findings}
-
-    def test_declared_transport_resolves_clean(self, tmp_path):
-        findings = self._run(tmp_path, '{"kind":"api","transports":{"api":{}}}')
-        assert not [f for f in findings if f.get("rule") == "RULE-ENDP-047"]
-
-    def test_undeclared_transport_is_an_error(self, tmp_path):
-        findings = self._run(tmp_path, '{"kind":"api","transports":{"other":{}}}')
-        assert ("RULE-ENDP-047", "error") in self._ids(findings)
-
-    def _not_applicable(self, findings):
-        return {
-            f.get("rule") for f in findings
-            if f.get("rule") == "RULE-ENDP-047" and f["kind"] == "notApplicable"
-        }
-
-    def test_connector_without_transports_warns_rather_than_passing_clean(self, tmp_path):
-        # The silent-clean-pass case. `_endpoint_transport_ref_findings` returns
-        # [] here, which is right when the CONNECTOR is under validation (its own
-        # model error stands) and wrong here, where that model never runs.
-        findings = self._run(tmp_path, '{"kind":"api"}')
-        assert "RULE-ENDP-047" in self._not_applicable(findings)
-
-    def test_connector_with_non_dict_transports_warns(self, tmp_path):
-        findings = self._run(tmp_path, '{"kind":"api","transports":[]}')
-        assert "RULE-ENDP-047" in self._not_applicable(findings)
-
-    def test_absent_connector_warns(self, tmp_path):
-        findings = self._run(tmp_path, None)
-        assert "RULE-ENDP-047" in self._not_applicable(findings)
-
-    def test_unparseable_connector_is_reported_under_this_checks_own_id(self, tmp_path):
-        findings = self._run(tmp_path, "{not json")
-        assert any(f.get("message_id") == "sibling-connector-unreadable" for f in findings)
-        assert not any(f.get("rule") == "RULE-PKG-030" for f in findings), (
-            "a connector-read failure surfaced under the type-map rule; a fix loop "
-            "filtering on RULE-ENDP-047 would never see it"
-        )
-
-    def test_unparseable_connector_is_not_described_as_unreachable(self, tmp_path):
-        """The file was found and read; only the parse failed. Reporting it as
-        "no sibling connector.json was reachable" contradicts the parse error
-        emitted beside it under the same id, and points the author at the wrong
-        problem."""
-        findings = self._run(tmp_path, "{not json")
-        warnings = [
-            f for f in findings
-            if f.get("rule") == "RULE-ENDP-047" and f["kind"] == "notApplicable"
-        ]
-        assert warnings, "expected a not-checked warning"
-        assert not any("was reachable" in f["message"] for f in warnings)
-        assert any("could not be parsed" in f["message"] for f in warnings)
-
-    def test_unparseable_connector_does_not_also_fail_the_rule_it_skips(self, tmp_path):
-        """The read/parse failure is a framework-level `fail` (no `rule`
-        named — nothing has evaluated RULE-ENDP-047 either way), so it must
-        not ALSO report a `fail` under that rule alongside the
-        `notApplicable` this same path reports for it — a consumer branching
-        on `rule` would otherwise see two contradictory verdicts for one
-        check that never ran."""
-        findings = self._run(tmp_path, "{not json")
-        assert not any(
-            f["kind"] == "fail" and f.get("rule") == "RULE-ENDP-047"
-            for f in findings
-        )
-        assert any(
-            f["kind"] == "notApplicable" and f.get("rule") == "RULE-ENDP-047"
-            for f in findings
-        )
-
-    @pytest.mark.parametrize("shape", ["relative", "dotdot"])
-    def test_a_non_absolute_document_path_still_finds_the_sibling(
-        self, tmp_path, monkeypatch, shape
-    ):
-        """`Path("thing.json").parent.parent` is `.`, so a lookup that did not
-        anchor a relative path would miss the connector and report a broken
-        `transport_ref` as notApplicable rather than a fail. A path through
-        `..` must find it too."""
-        from analitiq.validator._location import located
-        from analitiq.validator.connectors import _validate_api_endpoint
-
-        pkg = tmp_path / "pkg"
-        (pkg / "endpoints").mkdir(parents=True)
-        (pkg / "connector.json").write_text('{"kind":"api","transports":{"other":{}}}')
-        doc = self._endpoint()
-        (pkg / "endpoints" / "thing.json").write_text(json.dumps(doc))
-
-        monkeypatch.chdir(pkg / "endpoints")
-        doc_path = (
-            Path("thing.json") if shape == "relative"
-            else Path("..") / "endpoints" / "thing.json"
-        )
-        findings = _validate_api_endpoint(doc, located(doc_path))
-        assert ("RULE-ENDP-047", "error") in self._ids(findings), (
-            "the undeclared transport_ref was downgraded to a warning because "
-            "the sibling lookup missed"
-        )

@@ -194,20 +194,25 @@ def test_measured_reachable_connectors_ids_matches_expectation():
 def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
     """RULE-TMAP-017 is bound to `connectors.py` and genuinely fires in the
     published validator, but `measured_reachable_connectors_ids` must not
-    include it: the adapter grades a connection map at `scope="connection"`,
-    where the rule does not apply, so it never reaches this adapter's output.
+    include it: it is the connector package's check, and the adapter grades no
+    connector package, so it never reaches this adapter's output.
     This is the case a hand-typed
     allowlist got wrong once (excluded by name, correctly, but with nothing
     checking the exclusion stayed correct) — asserting both halves here means
     a future change that stops filtering it, or starts filtering something
     else the same way, has to update this test consciously rather than drift
     past it."""
-    from analitiq.validator import validate_document
+    import json
 
-    raw = validate_document(
-        {"$schema": TYPE_MAP_SCHEMA_URL,
-         "write": [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]},
-        doc_path=Path("type-map.json"))
+    from analitiq.contracts.validation_requests import ValidatePackageRequest
+    from analitiq.validator import validate_package
+
+    raw = validate_package(ValidatePackageRequest(package="connector-package", documents={
+        "definition/connector.json": json.dumps({"kind": "database", "transports": {}}),
+        "definition/type-map.json": json.dumps({
+            "$schema": TYPE_MAP_SCHEMA_URL,
+            "write": [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]}),
+    }))["findings"]
     assert "RULE-TMAP-017" in {f.get("rule") for f in raw}, (
         "probe stopped triggering the write-vocabulary check at the package "
         "level — this test no longer measures the filter it claims to"
