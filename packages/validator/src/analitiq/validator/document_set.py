@@ -32,8 +32,10 @@ inside grading one document, or inside a package check, as a `check-crashed`
 """
 from __future__ import annotations
 
+import errno
 import json
 import os
+import stat
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Literal, TypedDict
 from urllib.parse import quote
@@ -64,7 +66,7 @@ class Finding(_FindingRequired, total=False):
     """One entry of a `ValidationEnvelope`'s `findings` list — the shape
     `rules/SCHEMA.md`'s "Findings" section defines and
     `analitiq.validator.finding` constructs. Restated here only so this
-    module's signatures are checkable; `test_document_set.py::
+    module's signatures are checkable; `test_packages.py::
     test_finding_matches_the_keys_finding_builder_produces` pins the restated
     keys, and which of them are required, to what `finding()` produces."""
 
@@ -151,37 +153,62 @@ def read_package(directory: Path, package: str) -> dict[str, str | Exception]:
     """The text of every file under `directory` whose path from it is a
     location of the published package `package`, by that path.
 
-    A file that cannot be read maps to the exception reading it raised. A
-    directory the walk cannot list raises its `OSError`: what it holds is
+    A file that cannot be read, or looked up, maps to the exception that
+    raised. A directory the walk cannot list or look up raises its `OSError`,
+    and so does an unlocated entry it cannot look up: what either holds is
     unknown, and no finding about a document can say so. A symlinked directory
     is walked under the path that reaches it, and a directory reached a second
-    time is not walked again, which is what ends a symlink cycle. Raises
-    `ValueError` for a package name outside the published ones — the caller's
-    error, not the package's.
+    time is not walked again, which is what ends a symlink cycle. A dangling or
+    looping link leads to nothing and is skipped. Raises `ValueError` for a
+    package name outside the published ones — the caller's error, not the
+    package's.
     """
     model = _package_model(package)
     texts: dict[str, str | Exception] = {}
     walked: set[tuple[int, int]] = set()
-    for parent, subdirectories, names in os.walk(directory, onerror=_raise, followlinks=True):
+    pending = [Path(directory)]
+    while pending:
+        parent = pending.pop()
         identity = os.stat(parent)
         if (identity.st_dev, identity.st_ino) in walked:
-            subdirectories.clear()
             continue
         walked.add((identity.st_dev, identity.st_ino))
-        for name in names:
-            path = Path(parent, name)
-            key = path.relative_to(directory).as_posix()
-            if model.kind_at(key) is None or not path.is_file():
-                continue
-            try:
-                texts[key] = path.read_text(encoding="utf-8")
-            except (OSError, ValueError) as exc:
-                texts[key] = exc
+        # Not `os.walk` or `Path.is_file`: each answers a refused lookup as
+        # "no directory" or "no file", or raises, depending on the interpreter.
+        with os.scandir(parent) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                key = path.relative_to(directory).as_posix()
+                located = model.kind_at(key) is not None
+                try:
+                    mode = _mode(path)
+                except OSError as exc:
+                    if not located:
+                        raise
+                    texts[key] = exc
+                    continue
+                if mode is None:
+                    continue
+                if stat.S_ISDIR(mode):
+                    pending.append(path)
+                elif located and stat.S_ISREG(mode):
+                    try:
+                        texts[key] = path.read_text(encoding="utf-8")
+                    except (OSError, ValueError) as exc:
+                        texts[key] = exc
     return texts
 
 
-def _raise(error: OSError) -> None:
-    raise error
+def _mode(path: Path) -> int | None:
+    """The mode of what `path` leads to, `None` where it leads to nothing."""
+    try:
+        return os.stat(path).st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            return None
+        raise
 
 
 def _graded_package(package: str, texts: dict[str, str | Exception]) -> list[Finding]:

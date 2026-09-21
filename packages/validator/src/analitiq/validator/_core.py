@@ -7,7 +7,7 @@ This module owns the parts that are independent of any particular artifact kind:
   map each error to a finding (the single source of single-document validity,
   reused by every kind);
 - `document_pointer()` — the document location a pydantic error names, which
-  its `loc` does not spell directly; shared with the pipeline plugin's adapter;
+  its `loc` does not spell directly;
 - `contract_model_domain()` — the env guard every kind imports its contract models
   under, defined once so the DOMAIN dance is not reimplemented per kind;
 - the KIND-VALIDATOR REGISTRY and `validate_document()` — a per-kind module
@@ -519,7 +519,7 @@ def _unreadable_document_finding(exc: Exception) -> dict:
 
 def main() -> int:
     from analitiq.contracts.validation_requests import PACKAGE_MODELS
-    from analitiq.validator.document_set import validate_package_at
+    from analitiq.validator import document_set
 
     parser = argparse.ArgumentParser(description="Validate an Analitiq document or package.")
     target = parser.add_mutually_exclusive_group(required=True)
@@ -532,14 +532,16 @@ def main() -> int:
     if args.kind not in vocabulary:
         parser.error(f"--kind must be one of {vocabulary}, got {args.kind!r}")
 
+    # Only the read is caught: anything raised while grading is a defect here.
     try:
-        if args.package:
-            envelope = validate_package_at(args.package, args.kind)
-        else:
-            findings = validate_document(json.loads(args.document.read_text(encoding="utf-8")), args.kind)
-            envelope = {"passed": _passed(findings), "findings": findings}
+        read = document_set.read_package(args.package, args.kind) if args.package \
+            else json.loads(args.document.read_text(encoding="utf-8"))
     except _JSON_READ_ERRORS as exc:
         envelope = {"passed": False, "findings": [_unreadable_document_finding(exc)]}
+    else:
+        findings = document_set._graded_package(args.kind, read) if args.package \
+            else validate_document(read, args.kind)
+        envelope = {"passed": _passed(findings), "findings": findings}
     print(json.dumps(envelope, indent=2))
     return 0 if envelope["passed"] else 1
 

@@ -172,9 +172,9 @@ Rule ids this adapter's own `analitiq.validator` entry points can actually emit,
 Pass `--bundle-root` when validating the stitched pipeline; that is what runs
 the cross-document checks (the `RULE-PIPE-*`/`RULE-STRM-*`/`RULE-CONN-011`
 referential rules above) and makes their findings reachable. The same pass
-reads each connection's `definition/` through the published type-map
-loader and forwards its findings, each rooted at the file it concerns and
-naming no rule. See `endpoint-spec/spec-type-map-gaps.md`.
+grades each connection directory as a published `connection-package` and
+forwards its findings, each rooted at the file it concerns. See
+`endpoint-spec/spec-type-map-gaps.md`.
 
 The adapter adds ids of its own, for checks the published bundle validator
 structurally cannot make:
@@ -182,13 +182,6 @@ structurally cannot make:
 - `connector-endpoint-ref` — **warning-only**: a `scope: "connector"` stream ref
   naming an endpoint the downloaded connector does not publish. The message
   carries an alignment suggestion. See `stream-spec/spec-endpoint-refs.md`.
-- `contract-model` — **error**: a `connection`/`stream`/`pipeline` entity's
-  own contract-model rejection, mapped locally rather than through
-  `analitiq.validator` (that entity's model is validated directly; only
-  `database-endpoint`/`type-map` and the bundle path route through the
-  published package).
-- `document` — **error**: a sibling bundle member could not be read, parsed,
-  or was not a JSON object.
 
 One further id names not a check but a failure mode: `adapter-crash` —
 **error**: the run could not be evaluated normally. Either a containment guard

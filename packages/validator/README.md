@@ -96,8 +96,8 @@ analitiq-validate --document connection.json --kind connection
 analitiq-validate --package path/to/connector --kind connector-package
 ```
 
-`--kind` names what the document or package is; omitting it, or naming a kind
-outside the published ones, is a usage error that lists them. Validation is
+`--kind` names what the document or package is and is required; naming a kind
+outside the published ones is a usage error that lists them. Validation is
 always model-driven and offline.
 
 Output is a JSON report (`{"passed": bool, "findings": [...]}`) on stdout; the

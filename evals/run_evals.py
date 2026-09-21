@@ -63,10 +63,11 @@ that breaks any of this, before a single agent runs.
                check in the sense `.claude/rules/guards.md` requires: the id is
                resolved against the registry, and no verdict here depends on
                what the surrounding sentence means.
-    validate — `{glob, entity?, bundle_root?}` per document family. `entity`
-               selects the contract to grade against via the pipeline plugin's
-               adapter; omit it and the plain validator detects the document's
-               kind from its own shape instead.
+    validate — `{glob, entity | kind | package, bundle_root?}` per document
+               family, naming exactly one route: `entity` grades through the
+               pipeline plugin's adapter, `kind` grades each match as one
+               document of that kind and `package` grades each match as a
+               package directory, both through the published validator.
     docs     — name → `{glob, where?}`, resolving one document per name for
                assertions. `where` selects by top-level field value where a glob
                matches more than one.

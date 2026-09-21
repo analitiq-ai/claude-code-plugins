@@ -87,9 +87,8 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures" / "prose-hosts"
 
 #: The published resources a marker entity may name — the spellings are the
 #: resource slugs the convention uses, so a marker naming a resource this
-#: gate cannot validate fails loudly rather than being skipped. The validator
-#: detects each document's kind from its own shape, so nothing here routes by
-#: schema URL; only membership is asked.
+#: gate cannot validate fails loudly rather than being skipped. Each document
+#: is graded as the kind its marker names.
 KNOWN_ENTITIES = {"connector", "api-endpoint", "type-map"}
 
 

@@ -464,7 +464,7 @@ def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> lis
             "bundle; cross-document referential integrity was not evaluated against "
             "a bundle this incomplete."))
     # else: assembly is incomplete only from ordinary, already-reported read errors
-    # (no guard fired) — those findings (validator "document") already name the
+    # (no guard fired) — those `unreadable-document` findings already name the
     # defect precisely. Skipping the referential pass here is the same caution as
     # the crash case, but adding a second, adapter-crash-labeled finding would
     # claim a containment guard fired when nothing actually crashed.

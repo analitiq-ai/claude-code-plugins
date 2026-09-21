@@ -147,7 +147,6 @@ def test_a_document_is_graded_as_the_kind_its_caller_names(validator):
     as_connector = validator.validate_document(_stream(), "connector")
     assert not any(validator.finding_costs_a_pass(f) for f in as_stream), as_stream
     assert any(validator.finding_costs_a_pass(f) for f in as_connector), as_connector
-    assert not _at(as_connector, "entity-mismatch") and not _at(as_connector, "unrecognized-document")
 
 
 def test_a_single_connector_is_graded_without_siblings(validator):
@@ -298,6 +297,24 @@ def test_an_unreadable_file_is_a_finding_at_its_key(validator, tmp_path):
     assert _at(result["findings"], "unreadable-document") == ["definition/endpoints/v1__records.json#"]
 
 
+def test_a_crashed_package_check_keeps_the_document_findings(validator, monkeypatch):
+    """A package check that raises costs the pass as one `check-crashed`
+    finding about the package; the documents graded before it keep theirs."""
+    from analitiq.validator import document_set
+
+    def crashed(_documents, _unread):
+        raise TypeError("a package-check defect")
+
+    monkeypatch.setitem(document_set._PACKAGE_CHECKS, "connector-package", crashed)
+    texts = _texts(_connector_package())
+    texts["definition/endpoints/v2 x.json"] = "{not json"
+    result = validator.validate_package(
+        ValidatePackageRequest(package="connector-package", documents=texts))
+    assert not result["passed"]
+    assert _at(result["findings"], "check-crashed") == [""], result["findings"]
+    assert _at(result["findings"], "unreadable-document") == ["definition/endpoints/v2%20x.json#"]
+
+
 def test_an_unknown_package_on_disk_is_the_callers_error(validator, tmp_path):
     with pytest.raises(ValueError):
         validator.validate_package_at(tmp_path, "pipeline-bundle")
@@ -312,6 +329,26 @@ def test_a_directory_the_walk_cannot_list_raises(validator, tmp_path, refuse, un
     refuse(tmp_path / unlisted, 0o300)
     with pytest.raises(PermissionError):
         validator.validate_package_at(tmp_path, "connector-package")
+
+
+def test_a_located_document_whose_lookup_is_refused_is_unreadable(validator, tmp_path, refuse):
+    """A directory that can be listed but not searched names its entries and
+    refuses every lookup of them. A refused lookup is not an absent file: the
+    document is there and cannot be read."""
+    _write(tmp_path, _connector_package())
+    refuse(tmp_path / "definition/endpoints", 0o600)
+    findings = validator.validate_package_at(tmp_path, "connector-package")["findings"]
+    assert _at(findings, "unreadable-document") == ["definition/endpoints/v1__records.json#"]
+
+
+def test_an_entry_whose_lookup_is_refused_raises_where_it_could_hold_documents(
+        validator, tmp_path, refuse):
+    """An unlocated entry the walk cannot look up may be a directory holding
+    documents, and no finding about a document can say what it holds."""
+    _write(tmp_path, _connector_package())
+    refuse(tmp_path / "definition", 0o600)
+    with pytest.raises(PermissionError):
+        validator.read_package(tmp_path, "connector-package")
 
 
 def test_a_located_name_that_is_not_a_regular_file_is_not_read(validator, tmp_path):
@@ -533,3 +570,26 @@ def test_cli_grades_a_package(validator_cli, tmp_path):
 def test_cli_refuses_a_kind_outside_the_vocabulary(validator_cli, argv):
     result = validator_cli.run(*argv)
     assert result.returncode == 2, result
+
+
+@pytest.mark.parametrize("target", ["document", "package"])
+def test_cli_reports_only_the_read_as_unreadable(validator, tmp_path, monkeypatch, target):
+    """A defect raised while grading is this package's own, and propagates:
+    caught beside the read, it would tell the author their document cannot be
+    read."""
+    from analitiq.validator import _core, document_set
+
+    def defect(*_args, **_kwargs):
+        raise ValueError("a grading defect")
+
+    if target == "document":
+        (tmp_path / "stream.json").write_text(json.dumps(_stream()))
+        argv = ["--document", str(tmp_path / "stream.json"), "--kind", "stream"]
+        monkeypatch.setattr(_core, "validate_document", defect)
+    else:
+        _write(tmp_path, _connector_package())
+        argv = ["--package", str(tmp_path), "--kind", "connector-package"]
+        monkeypatch.setattr(document_set, "_graded_package", defect)
+    monkeypatch.setattr("sys.argv", ["analitiq-validate", *argv])
+    with pytest.raises(ValueError, match="a grading defect"):
+        _core.main()
