@@ -118,12 +118,36 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
         "the document could not be read or parsed at all, before any kind "
         "was even identified"),
     ("analitiq.validator.document_set::_entity_mismatch_findings", "entity-mismatch"): (
-        "a structural precondition — the caller's declared entity disagrees "
-        "with, or nothing recognises, the document's own content — rejected "
-        "before any rule-specific check could run"),
-    ("analitiq.validator.document_set::validate_connector_package", "connector-document-missing"): (
+        "a structural precondition — a detector claimed the document for a "
+        "kind the declared entity does not name — rejected before any "
+        "rule-specific check could run"),
+    ("analitiq.validator.document_set::_graded_connector_package", "connector-document-missing"): (
         "a structural precondition — the package carries no connector "
         "document to grade — rejected before any rule-specific check could run"),
+    ("analitiq.validator.document_set::validate_pipeline_package", "pipeline-document-missing"): (
+        "a structural precondition — the workspace carries no pipeline "
+        "document to grade — rejected before any rule-specific check could run"),
+    ("analitiq.validator.document_set::validate_pipeline_package", "pipeline-document-ambiguous"): (
+        "a structural precondition — the workspace carries more than one "
+        "pipeline document, so which one the rest of it is about is undecided "
+        "— rejected before any rule-specific check could run"),
+    ("analitiq.validator.document_set::validate_pipeline_package", "owning-document-missing"): (
+        "a structural precondition — the workspace carries no document the "
+        "published locations read this one under, so nothing says which "
+        "pipeline or connection it belongs to — kept it out of the bundle "
+        "before any cross-document rule could be evaluated over it; the "
+        "document's own rule-specific checks run either way, against the "
+        "document alone"),
+    ("analitiq.validator.document_set::validate_pipeline_package",
+     "owning-document-unidentified"): (
+        "a structural precondition — the document the workspace reads these "
+        "ones under declares no identity a reference can name — kept them "
+        "out of the bundle before any cross-document rule could be evaluated "
+        "over them"),
+    ("analitiq.validator.document_set::validate_pipeline_package", "referential-check-skipped"): (
+        "the referential pass covers every cross-document rule at once and "
+        "did not run, so no one of them is what went unevaluated: a check "
+        "that failed before it identified which rule applies"),
     ("analitiq.validator._core::validate_document", "check-crashed"): (
         "top-level dispatch crashed before any kind was even identified, so "
         "the crash is not attributable to any one rule; a guarded check "

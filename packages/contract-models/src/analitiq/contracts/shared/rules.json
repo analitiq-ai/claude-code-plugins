@@ -5844,6 +5844,30 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-PKG-036",
+   "statement": "A connection or connector package in a workspace MUST sit in a directory named by the id its own document declares: a connection's `connection_id`, a connector's `connector_id`.\n",
+   "tier": "reference",
+   "severity": "error",
+   "artifact_kinds": [
+    "connector-package",
+    "connection"
+   ],
+   "validator": "analitiq.validator.document_set::_directory_mismatch_findings",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "A workspace addresses these packages by directory: a reference names an id, and the package is found in the directory named by it. As the engine reads a workspace today, it finds a connection that way and refuses one whose own `connection_id` differs from its directory name. The document and its directory are each valid alone, so the disagreement is invisible to anything grading one document; it surfaces only when the workspace is read as a whole, which is where it is graded. Were the engine to stop addressing packages by directory, this check would refuse a workspace the engine runs — the direction it errs in, since the id a document declares and the directory it sits in still name two things that can drift apart.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-RETRY-001",
    "statement": "A block that allows no retry attempts MUST NOT declare a non-zero retry delay.\n",
    "tier": "coherence",

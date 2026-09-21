@@ -1585,6 +1585,26 @@ def test_bundle_grades_a_connection_scoped_endpoint_document(tmp_path):
                for f in diag["findings"]), diag["findings"]
 
 
+def test_a_bundle_stamp_the_endpoint_declares_itself_does_not_place_it(tmp_path):
+    # The connection an endpoint sits under is what says which connection it
+    # belongs to. An endpoint declaring that answer itself has just been
+    # refused for declaring it, so the value is the author's error and nothing
+    # else: were it left to stand, the endpoint would be attached under
+    # whatever it names, and the stream referencing it would come back
+    # unresolved — blaming a document whose reference is correct, and never
+    # naming the one that is wrong.
+    doc = _build_bundle(tmp_path)
+    ep_path = tmp_path / f"connections/postgresql/definition/endpoints/{EID}.json"
+    ep = json.loads(ep_path.read_text())
+    ep["connection_id"] = "somebody-else"
+    ep_path.write_text(json.dumps(ep))
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"], diag["findings"]
+    site = f"connections/postgresql/definition/endpoints/{EID}.json"
+    assert {f.get("path") for f in diag["findings"] if f.get("severity") == "error"} == {site}, \
+        diag["findings"]
+
+
 # ---------------------------------------------------------------------------
 # What the scripts borrow from the pinned validator
 

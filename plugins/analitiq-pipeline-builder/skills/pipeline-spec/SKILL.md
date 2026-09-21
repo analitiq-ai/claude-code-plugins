@@ -30,11 +30,11 @@ This skill is loaded by `pipeline-creator` when authoring a pipeline document.
 <!-- BEGIN GENERATED: schema-urls -->
 | Entity | Authored file | `$schema` value |
 |---|---|---|
-| Pipeline | `pipelines/<slug>/pipeline.json` | `https://schemas.analitiq.ai/pipeline/latest.json` |
-| Stream | `pipelines/<slug>/streams/<stream-slug>.json` | `https://schemas.analitiq.ai/stream/latest.json` |
-| Connection | `connections/<slug>/connection.json` | `https://schemas.analitiq.ai/connection/latest.json` |
-| Database endpoint | `connections/<slug>/definition/endpoints/<endpoint_id>.json` | `https://schemas.analitiq.ai/database-endpoint/latest.json` |
-| Connection type map | `connections/<slug>/definition/type-map.json` | `https://schemas.analitiq.ai/type-map/latest.json` |
+| pipeline | `pipelines/<dir>/pipeline.json` | `https://schemas.analitiq.ai/pipeline/latest.json` |
+| stream | `pipelines/<dir>/streams/<name>.json` | `https://schemas.analitiq.ai/stream/latest.json` |
+| connection | `connections/<dir>/connection.json` | `https://schemas.analitiq.ai/connection/latest.json` |
+| type-map | `connections/<dir>/definition/type-map.json` | `https://schemas.analitiq.ai/type-map/latest.json` |
+| database-endpoint | `connections/<dir>/definition/endpoints/<name>.json` | `https://schemas.analitiq.ai/database-endpoint/latest.json` |
 <!-- END GENERATED: schema-urls -->
 
 ## What this skill covers

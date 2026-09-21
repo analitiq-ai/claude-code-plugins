@@ -23,9 +23,10 @@ Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 pairs with the core dispatch registry — a new kind is a new module registering
 the same way, without touching `_core`. The public surface is re-exported here.
 
-`document_set` declares the path-free document-set API;
-`validate_pipeline_package` raises `NotImplementedError`. See that module's docstring and
-`__all__` below for what it contributes to this package's surface. Its entry
+`document_set` carries the path-free document-set API, and `workspace` reads
+where each document a package carries sits off the published location tables.
+See that module's docstring and `__all__` below for what it contributes to
+this package's surface. Its entry
 points take the request models in `analitiq.contracts.validation_requests`,
 which own the document-set shape and are where a malformed argument is
 refused.
@@ -65,7 +66,12 @@ from .connectors import (  # skipcq: PY-W2000
     _flatten_api_locator,
     _render_arrow_type,
 )
-from .pipelines import is_pipeline_bundle, is_pipeline_doc, validate_pipeline_bundle
+from .pipelines import (
+    is_pipeline_bundle,
+    is_pipeline_doc,
+    is_runnable_required,
+    validate_pipeline_bundle,
+)
 from .connections import is_connection_doc
 from .streams import is_stream_doc
 
@@ -95,5 +101,6 @@ __all__ = [
     "is_stream_doc",
     "is_pipeline_doc",
     "is_pipeline_bundle",
+    "is_runnable_required",
     "validate_pipeline_bundle",
 ]

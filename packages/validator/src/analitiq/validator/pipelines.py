@@ -584,6 +584,18 @@ def _check_connection_scoped_endpoints(streams: Any, endpoints: Any) -> list[dic
 # Aggregate + registration
 # ---------------------------------------------------------------------------
 
+def is_runnable_required(pipeline_doc: Any) -> bool:
+    """Whether a bundle carrying `pipeline_doc` is held to runnability.
+
+    A draft is not yet runnable — that is the state it is authored in, not a
+    defect — so the runnability gate applies once the pipeline is authored
+    `active`. A `pipeline_doc` that is not a mapping earned its own
+    contract-model finding wherever it was graded as a document; it reads as
+    not yet active here rather than raising.
+    """
+    return isinstance(pipeline_doc, dict) and pipeline_doc.get("status") == "active"
+
+
 def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> list[dict]:
     """Validate referential integrity across an assembled pipeline bundle.
 

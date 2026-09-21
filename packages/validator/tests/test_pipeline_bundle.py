@@ -130,6 +130,16 @@ def test_active_pipeline_with_no_runnable_stream_flagged(validator):
     )
 
 
+@pytest.mark.parametrize("pipeline, required", [
+    ({"status": "active"}, True),
+    ({"status": "draft"}, False),
+    ({}, False),
+    (["status", "active"], False),
+])
+def test_runnability_is_required_of_an_active_pipeline_only(validator, pipeline, required):
+    assert validator.is_runnable_required(pipeline) is required
+
+
 # --- stream refs (RULE-PIPE-011/RULE-STRM-032) ------------------------------
 
 def test_pipeline_stream_ref_without_document_flagged(validator):

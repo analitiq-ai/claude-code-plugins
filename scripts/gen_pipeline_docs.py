@@ -113,25 +113,39 @@ def _unwrap_alternation(pattern: str) -> str:
     return pattern[len("^(?:"):-len(")$")]
 
 
-def render_schema_urls() -> str:
-    from analitiq.contracts.connection import CONNECTION_SCHEMA_URL
-    from analitiq.contracts.endpoints import DATABASE_ENDPOINT_SCHEMA_URL
-    from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
-    from analitiq.contracts.stream import STREAM_SCHEMA_URL
-    from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
-    from analitiq.validator import TYPE_MAP_FILENAME
+def _path_template(pattern: str) -> str:
+    """The published location `pattern`, anchors stripped, as the path an
+    author writes: each directory segment a `<dir>`, each file stem a `<name>`."""
+    from analitiq.contracts.shared.common import PATH_SEGMENT
 
-    rows = [
-        ("Pipeline", "pipelines/<slug>/pipeline.json", PIPELINE_SCHEMA_URL),
-        ("Stream", "pipelines/<slug>/streams/<stream-slug>.json", STREAM_SCHEMA_URL),
-        ("Connection", "connections/<slug>/connection.json", CONNECTION_SCHEMA_URL),
-        ("Database endpoint", "connections/<slug>/definition/endpoints/<endpoint_id>.json",
-         DATABASE_ENDPOINT_SCHEMA_URL),
-        ("Connection type map", f"connections/<slug>/definition/{TYPE_MAP_FILENAME}",
-         TYPE_MAP_SCHEMA_URL),
-    ]
+    if not (pattern.startswith("^") and pattern.endswith("$")):
+        raise RuntimeError(f"expected an anchored location pattern, got {pattern!r}")
+    template = (pattern[1:-1].replace(PATH_SEGMENT, "<dir>")
+                .replace("[^/]+", "<name>").replace(r"\.", "."))
+    if re.search(r"[\\^$\[\](){}*+?|]", template):
+        raise RuntimeError(
+            f"location {pattern!r} renders as {template!r}, which still holds regex "
+            "syntax; the contract changed shape and this renderer needs updating")
+    return template
+
+
+def render_schema_urls() -> str:
+    from analitiq.contracts import connection_package, pipeline_package
+    from analitiq.contracts.shared.common import schema_url_for
+    from analitiq.contracts.validation_requests import DOCUMENT_SCHEMA_NAMES
+    from analitiq.contracts.workspace import PACKAGE_LOCATIONS
+
+    # The packages this plugin authors, each placed by the workspace table and
+    # each document by its package's own; only a kind with a published document
+    # schema carries a `$schema` to set.
+    authored = {"pipeline-package": pipeline_package.DOCUMENT_LOCATIONS,
+                "connection-package": connection_package.DOCUMENT_LOCATIONS}
     out = ["| Entity | Authored file | `$schema` value |", "|---|---|---|"]
-    out += [f"| {e} | {_code(f)} | {_code(u)} |" for e, f, u in rows]
+    for package_pattern, package in PACKAGE_LOCATIONS.items():
+        for document_pattern, kind in authored.get(package, {}).items():
+            if kind in DOCUMENT_SCHEMA_NAMES:
+                path = _path_template(package_pattern) + _path_template(document_pattern)
+                out.append(f"| {kind} | {_code(path)} | {_code(schema_url_for(kind))} |")
     return "\n".join(out) + "\n"
 
 

@@ -9,15 +9,14 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="Workspace",
         prose_hash="8a44caeeaeb5",
         structural=(
-            "`_PACKAGE_LOCATIONS` pins each location to the published schema of "
+            "`PACKAGE_LOCATIONS` pins each location to the published schema of "
             "the package or document at it, and `document_locations` publishes "
             "that table and refuses every other key"
         ),
+        rule_ids=("RULE-PKG-036",),
         waiver=(
             "that each key is a path from the workspace root and each value the "
-            "caller's content, which this model does not judge; and that a "
-            "connection or connector directory's name equals the id its document "
-            "declares, which needs that document"
+            "caller's content, which this model does not judge"
         ),
     ),
 )

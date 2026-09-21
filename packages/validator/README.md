@@ -67,11 +67,11 @@ document content directly — cannot use either route: it has the documents'
 content in hand, never a directory they can be read from.
 
 `analitiq.validator.document_set` fixes the contract such a consumer calls
-instead. `validate_pipeline_package` raises `NotImplementedError`.
+instead, and `analitiq.validator.workspace` reads where each document a
+package carries sits off the published location tables.
 `packages/validator/tests/test_document_set.py` is the fixture corpus that
-fixes what an implementation must satisfy, a case `xfail` while the function
-it exercises raises. Read that module and that test file for the contract itself — it is
-not restated here.
+fixes what the entry points satisfy. Read that module and that test file for
+the contract itself — it is not restated here.
 
 The contract is deliberately narrow. Each entry point takes the request model
 that names the unit being submitted — `ValidateSingleDocumentRequest` or

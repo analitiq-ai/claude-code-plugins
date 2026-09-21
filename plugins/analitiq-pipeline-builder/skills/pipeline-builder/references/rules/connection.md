@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Covers: every rule this plugin owns that binds a **`connection`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 13 of the 23 below have no validator, so nothing rejects
+all hold: 13 of the 24 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **8** shape · **2** coherence · **8** reference · **3** process · **2** choice.
+In this file: **8** shape · **2** coherence · **9** reference · **3** process · **2** choice.
 
 ## Contents
 
@@ -74,6 +74,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-CONN-009 | A connection MUST NOT carry a secret value; an input the connector routes to secret storage is authored as a pointer in `secret_refs`. | `connection` | error | — |
 | RULE-CONN-010 | A `sidecar:` pointer MUST name an entry in a credentials file keyed by connection-contract input name, never a key of the env-var-keyed template the plugin emits. | `connection` | error | — |
 | RULE-CONN-011 | A connection's `connector_id` MUST resolve to a connector present in the run the connection is assembled into. | `connection` | error | validator |
+| RULE-PKG-036 | A connection or connector package in a workspace MUST sit in a directory named by the id its own document declares: a connection's `connection_id`, a connector's `connector_id`. | `connector-package` `connection` | error | validator |
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 
