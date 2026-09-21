@@ -680,15 +680,18 @@ def test_a_connection_directory_that_cannot_be_looked_into_costs_only_that_conne
 
 
 @pytest.mark.parametrize("mode", [0o300, 0o600], ids=["unlisted", "unsearchable"])
-def test_connections_that_cannot_be_listed_or_looked_up_crash_the_section(tmp_path, refuse, mode):
+def test_connections_that_cannot_be_listed_or_looked_up_crash(tmp_path, refuse, mode):
     # What an unlisted directory holds is unknown, and each entry whose lookup
-    # is refused may be a connection, so neither reads as absent.
+    # is refused may be a connection, so neither reads as absent. The listing
+    # can name an entry a directory without looking it up, so a refused lookup
+    # crashes that connection's read rather than the listing.
     doc = _build_bundle(tmp_path)
     refuse(tmp_path / "connections", mode)
     bundle, findings, complete, crashed, _ = V._assemble_bundle(
         json.loads(doc.read_text()), doc, tmp_path)
-    assert [f["path"] for f in findings if f.get("validator") == "adapter-crash"] == [
-        "connections"], findings
+    crashes = [f["path"] for f in findings if f.get("validator") == "adapter-crash"]
+    assert crashes and all(p.split("/")[0] == "connections" for p in crashes), findings
+    assert bundle["connections"] == [], bundle
     assert (complete, crashed) == (False, True)
 
 
@@ -1403,7 +1406,7 @@ def test_bundle_grades_a_symlinked_endpoint_by_its_authored_name(tmp_path):
     doc = _build_bundle(tmp_path)
     ep_dir = tmp_path / "connections/postgresql/definition/endpoints"
     ep_path = ep_dir / f"{EID}.json"
-    store = tmp_path / "shared"
+    store = tmp_path / "connections/postgresql/shared"
     store.mkdir()
     target = store / f"{EID}.json"
     target.write_text(ep_path.read_text())
@@ -1444,7 +1447,7 @@ def test_bundle_grades_an_endpoint_under_a_symlinked_directory(tmp_path, link):
     # failed under the wrong name.
     doc = _build_bundle(tmp_path)
     definition = tmp_path / "connections/postgresql/definition"
-    moved = tmp_path / f"elsewhere-{link}"
+    moved = tmp_path / f"connections/postgresql/elsewhere-{link}"
     (definition / link if link == "endpoints" else definition).rename(moved)
     if link == "endpoints":
         (definition / "endpoints").symlink_to(moved, target_is_directory=True)

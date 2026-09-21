@@ -9,7 +9,7 @@ not part of the package and is not graded.
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -302,17 +302,48 @@ def test_a_crashed_package_check_keeps_the_document_findings(validator, monkeypa
     finding about the package; the documents graded before it keep theirs."""
     from analitiq.validator import document_set
 
-    def crashed(_documents, _unread):
+    def crashed(_documents):
         raise TypeError("a package-check defect")
 
     monkeypatch.setitem(document_set._PACKAGE_CHECKS, "connector-package", crashed)
     texts = _texts(_connector_package())
-    texts["definition/endpoints/v2 x.json"] = "{not json"
+    texts["definition/endpoints/v2 x.json"] = "{}"
     result = validator.validate_package(
         ValidatePackageRequest(package="connector-package", documents=texts))
     assert not result["passed"]
     assert _at(result["findings"], "check-crashed") == [""], result["findings"]
-    assert _at(result["findings"], "unreadable-document") == ["definition/endpoints/v2%20x.json#"]
+    assert any(f["path"].startswith("definition/endpoints/v2%20x.json#")
+               for f in result["findings"]), result["findings"]
+
+
+def _package_violating_its_check(package: str) -> dict:
+    """A package its cross-document check reports, and no document's own
+    grading does."""
+    documents = _PACKAGES[package]()
+    if package == "pipeline-package":
+        documents["pipeline.json"]["streams"].append("55555555-5555-4555-8555-555555555555_v1")
+    else:
+        [endpoint] = [key for key in documents if "/endpoints/" in key]
+        documents[endpoint.replace(PurePosixPath(endpoint).stem, "other")] = documents.pop(endpoint)
+    return documents
+
+
+@pytest.mark.parametrize("package", sorted(_PACKAGES))
+def test_a_package_check_is_withheld_while_a_document_went_unread(validator, package):
+    """Over a partial set, a check would report references into the unread
+    document as missing; its unreadable finding already costs the pass."""
+    documents = _package_violating_its_check(package)
+    graded = validator.validate_package(_request(package, documents))["findings"]
+    checked = {f["message_id"] for f in graded}
+    assert checked, graded
+    texts = _texts(documents)
+    unread = {"connector-package": "definition/endpoints/v9__x.json",
+              "connection-package": "definition/endpoints/x.json",
+              "pipeline-package": "streams/x.json"}[package]
+    texts[unread] = "{not json"
+    findings = validator.validate_package(
+        ValidatePackageRequest(package=package, documents=texts))["findings"]
+    assert [f["message_id"] for f in findings] == ["unreadable-document"], findings
 
 
 def test_an_unknown_package_on_disk_is_the_callers_error(validator, tmp_path):
@@ -389,14 +420,39 @@ def test_a_located_name_that_is_not_a_regular_file_is_not_read(validator, tmp_pa
 def test_a_symlinked_directory_is_read_under_the_path_the_package_gives_it(
         validator, tmp_path, linked):
     """Where a document sits is its path from the package root, whatever the
-    filesystem stores behind a directory on that path."""
+    filesystem stores behind a directory on that path. The store is walked
+    too, under its own unlocated path, and reaching it there first does not
+    hide it from the path that locates its documents."""
+    documents = _connector_package()
+    _write(tmp_path, documents)
+    moved = tmp_path / "store"
+    (tmp_path / linked).rename(moved)
+    (tmp_path / linked).symlink_to(moved, target_is_directory=True)
+    assert set(validator.read_package(tmp_path, "connector-package")) == set(documents)
+
+
+def test_a_located_link_leading_outside_the_package_is_unreadable(validator, tmp_path):
+    """The package is untrusted input: its links do not make the validator
+    read the machine it runs on."""
+    documents = _connector_package()
+    package = tmp_path / "package"
+    _write(package, documents)
+    outside = tmp_path / "outside.json"
+    (package / "definition/type-map.json").rename(outside)
+    (package / "definition/type-map.json").symlink_to(outside)
+    findings = validator.validate_package_at(package, "connector-package")["findings"]
+    assert _at(findings, "unreadable-document") == ["definition/type-map.json#"], findings
+
+
+def test_an_unlocated_link_leading_outside_the_package_raises(validator, tmp_path):
     documents = _connector_package()
     package = tmp_path / "package"
     _write(package, documents)
     moved = tmp_path / "elsewhere"
-    (package / linked).rename(moved)
-    (package / linked).symlink_to(moved, target_is_directory=True)
-    assert set(validator.read_package(package, "connector-package")) == set(documents)
+    (package / "definition/endpoints").rename(moved)
+    (package / "definition/endpoints").symlink_to(moved, target_is_directory=True)
+    with pytest.raises(PermissionError):
+        validator.read_package(package, "connector-package")
 
 
 def test_a_symlink_cycle_ends_the_walk(validator, tmp_path):

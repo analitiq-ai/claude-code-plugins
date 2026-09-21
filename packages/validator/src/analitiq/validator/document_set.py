@@ -10,8 +10,9 @@ which kind each located key holds, and a key no location matches is not part
 of the package and is not graded.
 
 A package is graded in one order whatever order its documents arrive in: the
-root's presence, then each located document in key order as its kind, then the
-package's own cross-document check (`register_package_check`). Every finding
+root's presence, then each located document in key order as its kind, then —
+when every located document parsed — the package's own cross-document check
+(`register_package_check`). Every finding
 about a document names it by its percent-encoded key; a finding about the
 package as a whole has an empty `path`.
 
@@ -94,10 +95,10 @@ def _envelope(findings: list[Finding]) -> ValidationEnvelope:
 # Package checks
 # ---------------------------------------------------------------------------
 
-#: A package's cross-document check: handed every located document that parsed,
-#: by key, and the located keys that did not, it returns `(key, finding)` pairs
-#: whose pointer is into the document at `key`.
-PackageCheck = Callable[[dict[str, Any], frozenset[str]], list[tuple[str, dict]]]
+#: A package's cross-document check: handed every located document, parsed, by
+#: key, it returns `(key, finding)` pairs whose pointer is into the document at
+#: `key`. `grade_package` runs it only when every located document parsed.
+PackageCheck = Callable[[dict[str, Any]], list[tuple[str, dict]]]
 _PACKAGE_CHECKS: dict[str, PackageCheck] = {}
 
 
@@ -158,46 +159,51 @@ def read_package(directory: Path, package: str) -> dict[str, str | Exception]:
     A file that cannot be read, or looked up, maps to the exception that
     raised. A directory the walk cannot list or look up raises its `OSError`,
     and so does an unlocated entry it cannot look up: what either holds is
-    unknown, and no finding about a document can say so. A symlinked directory
-    is walked under the path that reaches it, and a directory reached a second
-    time is not walked again, which is what ends a symlink cycle. A dangling or
-    looping link leads to nothing and is skipped. Raises `ValueError` for a
-    package name outside the published ones — the caller's error, not the
-    package's.
+    unknown, and no finding about a document can say so. A path leading
+    outside `directory` is refused like a lookup the OS refuses, because the
+    package is untrusted input and its links may not make the walk read the
+    machine it runs on. A symlinked directory inside it is walked under the
+    path that reaches it, and never again beneath itself, which is what ends a
+    symlink cycle. A dangling or looping link leads to nothing and is skipped.
+    Raises `ValueError` for a package name outside the published ones — the
+    caller's error, not the package's.
     """
     model = _package_model(package)
+    root = Path(directory)
     texts: dict[str, str | Exception] = {}
-    walked: set[tuple[int, int]] = set()
-    pending = [Path(directory)]
+    pending: list[tuple[Path, frozenset[tuple[int, int]]]] = [(root, frozenset())]
     while pending:
-        parent = pending.pop()
+        parent, ancestors = pending.pop()
         identity = os.stat(parent)
-        if (identity.st_dev, identity.st_ino) in walked:
+        if (identity.st_dev, identity.st_ino) in ancestors:
             continue
-        walked.add((identity.st_dev, identity.st_ino))
+        ancestors |= {(identity.st_dev, identity.st_ino)}
         # Not `os.walk` or `Path.is_file`: each answers a refused lookup as
         # "no directory" or "no file", or raises, depending on the interpreter.
+        # Sorted, so the walk is the same on every filesystem.
         with os.scandir(parent) as entries:
-            for entry in entries:
+            for entry in sorted(entries, key=lambda entry: entry.name):
                 path = Path(entry.path)
-                key = path.relative_to(directory).as_posix()
+                key = path.relative_to(root).as_posix()
                 if model.kind_at(key) is not None:
-                    text = read_document(path)
+                    text = read_document(root, key)
                     if text is not None:
                         texts[key] = text
                     continue
-                mode = _mode(path)
+                mode = _mode_within(root, path)
                 if mode is not None and stat.S_ISDIR(mode):
-                    pending.append(path)
+                    pending.append((path, ancestors))
     return texts
 
 
-def read_document(path: Path) -> str | Exception | None:
-    """The text of the regular file `path` leads to, the exception that kept
-    it from being read or looked up, or `None` where it leads to no regular
-    file."""
+def read_document(directory: Path, key: str) -> str | Exception | None:
+    """The text of the regular file `key` leads to from `directory`, the
+    exception that kept it from being read or looked up, or `None` where it
+    leads to no regular file. A path leading outside `directory` is refused,
+    as `read_package` refuses it."""
+    path = Path(directory) / key
     try:
-        mode = _mode(path)
+        mode = _mode_within(Path(directory), path)
     except OSError as exc:
         return exc
     if mode is None or not stat.S_ISREG(mode):
@@ -208,16 +214,20 @@ def read_document(path: Path) -> str | Exception | None:
         return exc
 
 
-def _mode(path: Path) -> int | None:
-    """The mode of what `path` leads to, `None` where it leads to nothing."""
+def _mode_within(root: Path, path: Path) -> int | None:
+    """The mode of what `path` leads to, `None` where it leads to nothing.
+    Raises `PermissionError` where it leads outside `root`."""
     try:
-        return os.stat(path).st_mode
+        mode = os.stat(path).st_mode
     except (FileNotFoundError, NotADirectoryError):
         return None
     except OSError as exc:
         if exc.errno == errno.ELOOP:
             return None
         raise
+    if not Path(os.path.realpath(path)).is_relative_to(os.path.realpath(root)):
+        raise PermissionError(errno.EACCES, "leads outside the package", str(path))
+    return mode
 
 
 def grade_package(package: str, texts: dict[str, str | Exception]) -> ValidationEnvelope:
@@ -237,7 +247,6 @@ def grade_package(package: str, texts: dict[str, str | Exception]) -> Validation
     # is located, so the root is all it can refuse here.
     findings = _model_findings(dict.fromkeys(located), TypeAdapter(model))
     documents: dict[str, Any] = {}
-    unread: set[str] = set()
     for key in located:
         text = texts[key]
         error = text if isinstance(text, Exception) else None
@@ -247,13 +256,15 @@ def grade_package(package: str, texts: dict[str, str | Exception]) -> Validation
             except _JSON_TEXT_REFUSALS as exc:
                 error = exc
         if error is not None:
-            unread.add(key)
             findings.append(qualified(_unreadable_document_finding(error), quote(key)))
             continue
         findings += [qualified(f, quote(key))
                      for f in validate_document(documents[key], model.kind_at(key))]
-    check = _PACKAGE_CHECKS[package]
-    findings += _run_guarded(
-        lambda: [qualified(f, quote(key)) for key, f in check(documents, frozenset(unread))],
-        crash_label=f"{package} check")
+    # Over a partial set a check would report references into an unread
+    # document as missing; that document's own finding already costs the pass.
+    if len(documents) == len(located):
+        check = _PACKAGE_CHECKS[package]
+        findings += _run_guarded(
+            lambda: [qualified(f, quote(key)) for key, f in check(documents)],
+            crash_label=f"{package} check")
     return _envelope(findings)

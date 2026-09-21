@@ -1157,7 +1157,7 @@ def _mapped(kind: str, sections) -> dict:
 
 def _checked(documents: dict) -> list:
     """What the connector package check alone reports over `documents`."""
-    return [f for _, f in _connector_package_findings(documents, frozenset())]
+    return [f for _, f in _connector_package_findings(documents)]
 
 
 def _at_map(findings: list) -> list:
@@ -1586,7 +1586,6 @@ _BROKEN_READ_MAPS = (
     ("not-an-object",
      json.dumps([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
      "Input should be a valid dictionary"),
-    ("unparseable", "{ not json", "Cannot read document"),
 )
 
 # What the defective endpoints below provoke: a rule id, and a fragment
@@ -1643,14 +1642,6 @@ def _assert_endpoint_checks_survive(connector, validator, read_map_text, reporte
 @pytest.mark.parametrize("state,text,reported", _BROKEN_READ_MAPS, ids=[s for s, _, _ in _BROKEN_READ_MAPS])
 def test_endpoint_checks_run_when_read_map_is_broken(connector_base, validator, state, text, reported):
     _assert_endpoint_checks_survive(connector_base, validator, text, reported)
-
-
-def test_endpoint_checks_run_when_read_map_text_is_refused_outside_jsondecodeerror(
-        connector_base, validator, text_refused_outside_jsondecodeerror):
-    # Reported as unreadable like any other bad text, never as a crash of the
-    # package's grading, which would replace every endpoint verdict with one finding.
-    _assert_endpoint_checks_survive(connector_base, validator,
-                                    text_refused_outside_jsondecodeerror, "Cannot read document")
 
 
 @pytest.mark.parametrize("text", [t for _, t, _ in _BROKEN_READ_MAPS], ids=[s for s, _, _ in _BROKEN_READ_MAPS])

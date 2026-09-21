@@ -626,13 +626,10 @@ def _in_package(f: dict, stream_keys: list[str]) -> tuple[str, dict]:
     return key, {**f, "path": f"/{rest}" if rest else ""}
 
 
-def _pipeline_package_findings(documents: dict[str, Any], unread: frozenset[str]) -> list[tuple[str, dict]]:
-    """The pipeline package's referential checks. Withheld while any of its
-    documents went unread: a stream that did not parse would read as a
-    reference that resolves to nothing, and its unreadable finding already
-    costs the pass."""
+def _pipeline_package_findings(documents: dict[str, Any]) -> list[tuple[str, dict]]:
+    """The pipeline package's referential checks."""
     pipeline = documents.get(PipelinePackage.ROOT)
-    if unread or not isinstance(pipeline, dict):
+    if not isinstance(pipeline, dict):
         return []
     stream_keys = keys_of(PipelinePackage, documents, "stream")
     streams = [documents[key] for key in stream_keys]

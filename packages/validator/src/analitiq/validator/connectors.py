@@ -927,7 +927,7 @@ def _coverage_findings(ep_doc: dict, read_rules: list) -> list[dict]:
     return findings
 
 
-def _connector_package_findings(documents: dict[str, Any], unread: frozenset[str]) -> list[tuple[str, dict]]:
+def _connector_package_findings(documents: dict[str, Any]) -> list[tuple[str, dict]]:
     """The checks a connector package needs beyond each document's own: the
     type-map sections its connector's kind requires (RULE-PKG-030), the write
     vocabulary (RULE-TMAP-017), and for an api connector its endpoints —
@@ -953,13 +953,10 @@ def _connector_package_findings(documents: dict[str, Any], unread: frozenset[str
     if kind in _STORAGE_KINDS:
         return findings
 
-    # While the map went unread, what it carries is unknown: no section is missing.
-    map_unread = any(ConnectorPackage.kind_at(key) == "type-map" for key in unread)
-    if not map_unread:
-        if "read" not in sections:
-            findings.append((root, _missing_section(kind, "read", "native → Arrow", map_key is not None)))
-        if kind in _DATABASE_KINDS and "write" not in sections:
-            findings.append((root, _missing_section(kind, "write", "Arrow → native DDL", map_key is not None)))
+    if "read" not in sections:
+        findings.append((root, _missing_section(kind, "read", "native → Arrow", map_key is not None)))
+    if kind in _DATABASE_KINDS and "write" not in sections:
+        findings.append((root, _missing_section(kind, "write", "Arrow → native DDL", map_key is not None)))
     if kind in _DATABASE_KINDS:
         return findings
 
@@ -970,7 +967,7 @@ def _connector_package_findings(documents: dict[str, Any], unread: frozenset[str
             message="an api connector's type map must not carry a 'write' rule list; it has no write direction.")))
     read_rules = type_map["read"] if "read" in sections else None
     if not isinstance(read_rules, list):
-        # notApplicable: the read rules are missing, unread or malformed, which
+        # notApplicable: the read rules are missing or malformed, which
         # is reported under its own rule; this says the coverage question went
         # unanswered.
         findings.append((root, finding(
@@ -978,10 +975,10 @@ def _connector_package_findings(documents: dict[str, Any], unread: frozenset[str
             message_id="native-type-coverage-skipped", kind="notApplicable", path="",
             message=(
                 "native_type coverage against the read rules was not rendered: the package's "
-                "type map is absent or unread, or its 'read' section is absent or not a list. "
+                "type map is absent, or its 'read' section is absent or not a list. "
                 "Endpoint native_type/arrow_type agreement is unverified until it is fixed."))))
     endpoint_keys = keys_of(ConnectorPackage, documents, "api-endpoint")
-    if not endpoint_keys and not any(ConnectorPackage.kind_at(key) == "api-endpoint" for key in unread):
+    if not endpoint_keys:
         findings.append((root, finding(
             rule="RULE-PKG-035",
             message_id="endpoints-missing", kind="fail", path="",

@@ -55,7 +55,6 @@ import contextlib
 import json
 import os
 import posixpath
-import stat
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote
 
@@ -302,7 +301,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
             site = f"connectors/{connector_dir.name}"
             names: set[str] = set()
             with _contained(findings, site) as outcome:
-                root_text = read_document(connector_dir / ConnectorPackage.ROOT)
+                root_text = read_document(connector_dir, ConnectorPackage.ROOT)
                 if root_text is not None:
                     names.add(connector_dir.name)
                     connectors.add(connector_dir.name)
@@ -343,18 +342,13 @@ def _package_dirs(parent: Path) -> list[Path]:
     """Every directory directly under `parent`, none where `parent` does not
     exist. An entry whose lookup is refused raises: it may be a package, and
     what it holds is unknown."""
-    from analitiq.validator.document_set import _mode
     try:
         with os.scandir(parent) as entries:
-            paths = sorted(Path(entry.path) for entry in entries)
+            # `is_dir` answers a dangling link as no directory and raises on
+            # every other failed lookup.
+            return sorted(Path(entry.path) for entry in entries if entry.is_dir())
     except FileNotFoundError:
         return []
-    dirs = []
-    for path in paths:
-        mode = _mode(path)
-        if mode is not None and stat.S_ISDIR(mode):
-            dirs.append(path)
-    return dirs
 
 
 def _connector_id(connector: dict) -> str | None:

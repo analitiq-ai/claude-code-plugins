@@ -28,7 +28,7 @@ with contract_model_domain():
 _CREDENTIALS_ADAPTER = TypeAdapter(CredentialsFile)
 
 
-def _connection_package_findings(documents: dict[str, Any], unread: frozenset[str]) -> list[tuple[str, dict]]:  # skipcq: PYL-W0613 — uniform package-check signature
+def _connection_package_findings(documents: dict[str, Any]) -> list[tuple[str, dict]]:
     return [(key, f)
             for key in keys_of(ConnectionPackage, documents, "database-endpoint")
             for f in endpoint_filename_findings(documents[key], PurePosixPath(key).name)]
