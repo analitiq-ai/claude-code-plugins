@@ -1,4 +1,4 @@
-"""`finding()` and `_passed()` — the shape and verdict every check shares.
+"""`finding()` and `envelope()` — the shape and verdict every check shares.
 
 `rules/SCHEMA.md`'s Findings section is the contract these pin: a `fail`
 finding's severity is derived from the rule it names, never accepted as a
@@ -9,7 +9,8 @@ reading silence as a pass.
 import pytest
 
 from analitiq.contracts.shared.rules import all_rules
-from analitiq.validator._core import _passed, finding
+from analitiq.validator import envelope
+from analitiq.validator._core import finding
 
 
 def _rule(severity: str, *, bound: bool = True):
@@ -78,14 +79,14 @@ def test_passed_fails_on_a_fail_finding_at_error_severity():
     rule = _rule("error")
     findings = [finding(
         rule=rule.id, message_id="m", kind="fail", path="/", message="x")]
-    assert not _passed(findings)
+    assert not envelope(findings)["passed"]
 
 
 def test_passed_holds_on_a_fail_finding_at_warning_severity():
     rule = _rule("warning")
     findings = [finding(
         rule=rule.id, message_id="m", kind="fail", path="/", message="x")]
-    assert _passed(findings)
+    assert envelope(findings)["passed"]
 
 
 def test_passed_fails_closed_on_an_unchecked_error_tier_rule():
@@ -95,7 +96,7 @@ def test_passed_fails_closed_on_an_unchecked_error_tier_rule():
     findings = [finding(
         rule=rule.id, message_id="m", kind="notApplicable",
         path="/", message="x")]
-    assert not _passed(findings)
+    assert not envelope(findings)["passed"]
 
 
 def test_passed_holds_on_an_unchecked_warning_tier_rule():
@@ -103,7 +104,7 @@ def test_passed_holds_on_an_unchecked_warning_tier_rule():
     findings = [finding(
         rule=rule.id, message_id="m", kind="notApplicable",
         path="/", message="x")]
-    assert _passed(findings)
+    assert envelope(findings)["passed"]
 
 
 def test_passed_fails_closed_on_a_notapplicable_naming_no_rule():
@@ -111,7 +112,7 @@ def test_passed_fails_closed_on_a_notapplicable_naming_no_rule():
     unchecked, so it can never clear the bar."""
     findings = [finding(
         message_id="m", kind="notApplicable", path="/", message="x")]
-    assert not _passed(findings)
+    assert not envelope(findings)["passed"]
 
 
 def test_passed_ignores_informational_findings():
@@ -119,7 +120,7 @@ def test_passed_ignores_informational_findings():
     findings = [finding(
         rule=rule.id, message_id="m", kind="informational",
         path="/", message="x")]
-    assert _passed(findings)
+    assert envelope(findings)["passed"]
 
 
 def test_a_bare_violation_and_a_multi_entry_become_the_same_finding():

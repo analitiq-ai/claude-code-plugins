@@ -52,7 +52,6 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import errno
 import json
 import os
 import posixpath
@@ -80,11 +79,6 @@ PIPELINE_ENTITIES = ("connection", "stream", "pipeline", "database-endpoint", "t
 
 def _finding(validator: str, severity: str, path: str, message: str) -> dict:
     return {"validator": validator, "severity": severity, "path": path, "message": message}
-
-
-def _diagnostics(findings: list[dict]) -> dict:
-    from analitiq.validator import finding_costs_a_pass
-    return {"passed": not any(finding_costs_a_pass(f) for f in findings), "findings": findings}
 
 
 def _crash_finding(path: str, exc: BaseException) -> dict:
@@ -163,26 +157,16 @@ def _rooted(site: str, path: str) -> str:
     return f"{target}{pointer}"
 
 
-def _parsed(text: str | Exception) -> tuple[object, Exception | None]:
-    """The document `read_package` read as `text`, or the error that kept it
-    from being one."""
-    from analitiq.validator._core import _JSON_TEXT_REFUSALS
-    if isinstance(text, Exception):
-        return None, text
-    try:
-        return json.loads(text), None
-    except _JSON_TEXT_REFUSALS as exc:
-        return None, exc
-
-
-def _member(text: str | Exception) -> tuple[dict | None, Exception | None]:
-    """The bundle member `text` holds, or the error that keeps it from being
-    one. Every section of `_assemble_bundle` loads its members through this,
-    and a member it cannot load marks the bundle incomplete."""
-    doc, error = _parsed(text)
-    if error is None and not isinstance(doc, dict):
-        error = ValueError("not a JSON object")
-    return (None, error) if error is not None else (doc, None)
+def _member(text: str | Exception) -> tuple[dict | None, dict | None]:
+    """The bundle member `text` holds, or the `unreadable-document` finding
+    that keeps it from being one. Every section of `_assemble_bundle` loads its
+    members through this, and a member it cannot load marks the bundle
+    incomplete."""
+    from analitiq.validator import parse_document
+    doc, unreadable = parse_document(text)
+    if unreadable is None and not isinstance(doc, dict):
+        _, unreadable = parse_document(ValueError("not a JSON object"))
+    return (None, unreadable) if unreadable is not None else (doc, None)
 
 
 def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
@@ -206,8 +190,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
     from analitiq.contracts.connector_package import ConnectorPackage
     from analitiq.contracts.pipeline_package import PipelinePackage
     from analitiq.validator import (
-        grade_package, keys_of, read_document, read_package, validate_document)
-    from analitiq.validator._core import _unreadable_document_finding
+        grade_package, keys_of, parse_document, read_document, read_package, validate_document)
     findings: list[dict] = []
     complete = True
     crashed = False
@@ -225,10 +208,10 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
             # connection or one connector below: a crash grading it (e.g. a
             # pathologically deep document) must not discard the streams
             # already appended above.
-            doc, error = _parsed(texts[key])
+            doc, unreadable = parse_document(texts[key])
             with _contained(findings, key):
-                if error is not None:
-                    findings.extend(_at_site(key, [_unreadable_document_finding(error)]))
+                if unreadable is not None:
+                    findings.extend(_at_site(key, [unreadable]))
                 else:
                     findings.extend(_at_site(key, validate_document(doc, "stream")))
             # Whatever grading did: the referential checks read a stream's
@@ -307,10 +290,9 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
                 if root_text is not None:
                     names.add(connector_dir.name)
                     connectors.add(connector_dir.name)
-                    connector, error = _member(root_text)
+                    connector, unreadable = _member(root_text)
                     if connector is None:
-                        findings.extend(_at_site(f"{site}/{ConnectorPackage.ROOT}",
-                                                 [_unreadable_document_finding(error)]))
+                        findings.extend(_at_site(f"{site}/{ConnectorPackage.ROOT}", [unreadable]))
                         complete = False
                     else:
                         names |= {_connector_id(connector)} - {None}
@@ -501,14 +483,10 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     """Validate one document and return the Diagnostics envelope. Raises nothing
     for validation failures — those become findings; only a genuinely unreadable
     document short-circuits."""
-    from analitiq.validator import read_document, validate_document
-    from analitiq.validator._core import _unreadable_document_finding
-    text = read_document(document_path.parent, document_path.name)
-    if text is None:
-        text = FileNotFoundError(errno.ENOENT, "no regular file", str(document_path))
-    doc, error = _parsed(text)
-    if error is not None:
-        return _diagnostics([_unreadable_document_finding(error)])
+    from analitiq.validator import envelope, load_document, validate_document
+    doc, unreadable = load_document(document_path)
+    if unreadable is not None:
+        return envelope([unreadable])
 
     findings = validate_document(doc, entity)
     if entity == "pipeline" and bundle_root is not None:
@@ -520,7 +498,7 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
         # finding, instead of being replaced by it.
         with _contained(findings, "pipeline-bundle"):
             findings.extend(_bundle_findings(doc, document_path, bundle_root))
-    return _diagnostics(findings)
+    return envelope(findings)
 
 
 # ---------------------------------------------------------------------------
@@ -557,7 +535,7 @@ def main(argv: list[str] | None = None) -> int:
         output = json.dumps(diagnostics, indent=2)
         passed = diagnostics["passed"]
     except Exception as exc:
-        # Not through `_diagnostics`: whatever crashed here may leave
+        # Not through `envelope`: whatever crashed here may leave
         # `analitiq.validator` unimportable and its `finding_costs_a_pass` out
         # of reach. A crash finding costs a pass under that predicate anyway,
         # so this states the verdict it would reach rather than risking a

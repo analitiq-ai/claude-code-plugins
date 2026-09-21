@@ -86,9 +86,49 @@ class ValidationEnvelope(TypedDict):
     findings: list[Finding]
 
 
-def _envelope(findings: list[Finding]) -> ValidationEnvelope:
-    from analitiq.validator._core import _passed
-    return {"passed": _passed(findings), "findings": findings}
+def envelope(findings: list[Finding]) -> ValidationEnvelope:
+    """`findings` with the verdict they reduce to: `passed` is false exactly
+    when one of them costs a pass (`finding_costs_a_pass`)."""
+    from analitiq.validator._core import finding_costs_a_pass
+    return {"passed": not any(finding_costs_a_pass(f) for f in findings), "findings": findings}
+
+
+# ---------------------------------------------------------------------------
+# One document's text
+# ---------------------------------------------------------------------------
+
+#: What `json.loads` raises for text it will not parse. `JSONDecodeError`, an
+#: integer past the interpreter's digit limit and a `UnicodeDecodeError` on the
+#: read are all `ValueError`; nesting past the recursion limit is a
+#: `RecursionError`, which is a `RuntimeError` and escapes a `ValueError` arm.
+_JSON_TEXT_REFUSALS = (ValueError, RecursionError)
+
+
+def parse_document(text: str | Exception) -> tuple[Any, Finding | None]:
+    """The document `text` holds and `None`, or `None` and the
+    `unreadable-document` finding for text that does not parse or for the
+    exception that kept it from being read — the value `read_document` and
+    `read_package` return."""
+    from analitiq.validator._core import finding
+
+    error = text if isinstance(text, Exception) else None
+    if error is None:
+        try:
+            return json.loads(text), None
+        except _JSON_TEXT_REFUSALS as exc:
+            error = exc
+    return None, finding(message_id="unreadable-document", kind="fail", path="",
+                         message=f"Cannot read document: {error}")
+
+
+def load_document(path: Path) -> tuple[Any, Finding | None]:
+    """`parse_document` over the file at `path`, as `read_document` reads it;
+    a path leading to no regular file is unreadable."""
+    path = Path(path)
+    text = read_document(path.parent, path.name)
+    if text is None:
+        text = FileNotFoundError(errno.ENOENT, "no regular file", str(path))
+    return parse_document(text)
 
 
 # ---------------------------------------------------------------------------
@@ -130,14 +170,12 @@ def validate_single_document(
         request: ValidateSingleDocumentRequest) -> ValidationEnvelope:
     """Grade one document's text as the published schema `request.entity`
     names. Text the JSON parser cannot read is a finding, not a raised error."""
-    from analitiq.validator._core import (
-        _JSON_TEXT_REFUSALS, _unreadable_document_finding, validate_document)
+    from analitiq.validator._core import validate_document
 
-    try:
-        document = json.loads(request.document)
-    except _JSON_TEXT_REFUSALS as exc:
-        return _envelope([_unreadable_document_finding(exc)])
-    return _envelope(validate_document(document, request.entity))
+    document, unreadable = parse_document(request.document)
+    if unreadable is not None:
+        return envelope([unreadable])
+    return envelope(validate_document(document, request.entity))
 
 
 def validate_package(request: ValidatePackageRequest) -> ValidationEnvelope:
@@ -238,8 +276,7 @@ def grade_package(package: str, texts: dict[str, str | Exception]) -> Validation
     from pydantic import TypeAdapter
 
     from analitiq.validator._core import (
-        _JSON_TEXT_REFUSALS, _model_findings, _run_guarded, _unreadable_document_finding,
-        qualified, validate_document)
+        _model_findings, _run_guarded, qualified, validate_document)
 
     model = _package_model(package)
     located = sorted(key for key in texts if model.kind_at(key) is not None)
@@ -248,18 +285,12 @@ def grade_package(package: str, texts: dict[str, str | Exception]) -> Validation
     findings = _model_findings(dict.fromkeys(located), TypeAdapter(model))
     documents: dict[str, Any] = {}
     for key in located:
-        text = texts[key]
-        error = text if isinstance(text, Exception) else None
-        if error is None:
-            try:
-                documents[key] = json.loads(text)
-            except _JSON_TEXT_REFUSALS as exc:
-                error = exc
-        if error is not None:
-            findings.append(qualified(_unreadable_document_finding(error), quote(key)))
+        document, unreadable = parse_document(texts[key])
+        if unreadable is not None:
+            findings.append(qualified(unreadable, quote(key)))
             continue
-        findings += [qualified(f, quote(key))
-                     for f in validate_document(documents[key], model.kind_at(key))]
+        documents[key] = document
+        findings += [qualified(f, quote(key)) for f in validate_document(document, model.kind_at(key))]
     # Over a partial set a check would report references into an unread
     # document as missing; that document's own finding already costs the pass.
     if len(documents) == len(located):
@@ -267,4 +298,4 @@ def grade_package(package: str, texts: dict[str, str | Exception]) -> Validation
         findings += _run_guarded(
             lambda: [qualified(f, quote(key)) for key, f in check(documents)],
             crash_label=f"{package} check")
-    return _envelope(findings)
+    return envelope(findings)

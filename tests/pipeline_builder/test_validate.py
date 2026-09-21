@@ -229,7 +229,7 @@ def test_bundle_endpoint_missing_id_warns(tmp_path):
 
 
 def test_diagnostics_fails_closed_on_a_published_notapplicable_finding():
-    """`_diagnostics` reduces published `analitiq.validator` findings through
+    """The adapter's verdict reduces published `analitiq.validator` findings through
     the published `analitiq.validator.finding_costs_a_pass`, not a second
     predicate that only ever knew about `severity`. A `notApplicable` naming an
     error-tier rule
@@ -246,9 +246,10 @@ def test_diagnostics_fails_closed_on_a_published_notapplicable_finding():
     local_ok = V._finding("adapter-crash", "warning", "/", "harmless")
     local_bad = V._finding("adapter-crash", "error", "/", "boom")
 
-    assert V._diagnostics([published])["passed"] is False
-    assert V._diagnostics([local_ok])["passed"] is True
-    assert V._diagnostics([local_bad])["passed"] is False
+    from analitiq.validator import envelope
+    assert envelope([published])["passed"] is False
+    assert envelope([local_ok])["passed"] is True
+    assert envelope([local_bad])["passed"] is False
 
 
 def _add_wise_endpoint(root: Path, endpoint_id: str = "transfers") -> None:
@@ -936,7 +937,7 @@ def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, m
 
 def test_main_contains_a_crash_that_leaves_the_validator_unimportable(monkeypatch, capsys):
     # main()'s outermost guard builds its envelope literally rather than through
-    # `_diagnostics`: a crash bootstrapping the dependencies can leave
+    # `envelope`: a crash bootstrapping the dependencies can leave
     # `finding_costs_a_pass` unimportable, so reaching for it to report that
     # failure would raise a second, uncontained one.
     def boom(_path):
@@ -1563,3 +1564,23 @@ def test_a_document_is_read_as_utf8_whatever_the_locale(tmp_path):
         env=env, capture_output=True, text=True, encoding="utf-8", timeout=120)
     findings = json.loads(done.stdout)["findings"]
     assert not [f for f in findings if f.get("message_id") == "unreadable-document"], findings
+
+
+@pytest.mark.parametrize("content", ["{", "[]", None], ids=["unparseable", "not-an-object", "a-directory"])
+def test_every_way_to_validate_one_document_reports_it_alike(tmp_path, monkeypatch, capsys, content):
+    from analitiq.contracts.validation_requests import ValidateSingleDocumentRequest
+    from analitiq.validator import validate_single_document
+
+    path = tmp_path / "connection.json"
+    if content is None:
+        path.mkdir()
+    else:
+        path.write_text(content, encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["validator", "--document", str(path), "--kind", "connection"])
+    _core.main()
+    reported = [json.loads(capsys.readouterr().out),
+                V.diagnostics_for("connection", path)]
+    if content is not None:
+        reported.append(validate_single_document(
+            ValidateSingleDocumentRequest(entity="connection", document=content)))
+    assert all(envelope == reported[0] for envelope in reported), reported

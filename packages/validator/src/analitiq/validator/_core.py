@@ -24,13 +24,11 @@ This module owns the parts that are independent of any particular artifact kind:
 - `finding_costs_a_pass()` — whether one finding, on its own, keeps a document
   from passing; exported so a caller aggregating published findings into its
   own verdict (the pipeline plugin's adapter, say) reduces over them the same
-  way `_passed()` does, rather than a second predicate that can drift from it;
-- `_passed()` — `not any(finding_costs_a_pass(f) for f in findings)`, so
-  `main()` and `analitiq.validator.document_set` answer "did this document
-  pass" identically;
+  way `analitiq.validator.envelope` does, rather than a second predicate that
+  can drift from it;
 - the `main()` CLI: grade one document (`--document PATH --kind KIND`) or one
   package (`--package DIR --kind PACKAGE`), print `{"passed", "findings"}`, exit 0
-  iff `_passed()` says so (1 on a failing or unreadable document; 2 on CLI usage
+  iff `envelope` passes it (1 on a failing or unreadable document; 2 on CLI usage
   errors).
 """
 from __future__ import annotations
@@ -216,7 +214,7 @@ def finding_costs_a_pass(f: dict) -> bool:
     `notApplicable` for a rule that is (or, naming none, might as well be)
     `error`-tier. Exported so a consumer aggregating `analitiq.validator`
     findings into its own verdict — the pipeline plugin's adapter, say —
-    reduces over them the same way `_passed` does, rather than a second
+    reduces over them the same way `envelope` does, rather than a second
     predicate that can drift from this one.
 
     A finding with no `kind` at all is a pre-`rules/SCHEMA.md` shape (a
@@ -492,28 +490,6 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
 
 
 # ---------------------------------------------------------------------------
-# Document text
-# ---------------------------------------------------------------------------
-
-#: What `json.loads` raises for text it will not parse. `JSONDecodeError`, an
-#: integer past the interpreter's digit limit and a `UnicodeDecodeError` on the
-#: read are all `ValueError`; nesting past the recursion limit is a
-#: `RecursionError`, which is a `RuntimeError` and escapes a `ValueError` arm.
-_JSON_TEXT_REFUSALS = (ValueError, RecursionError)
-
-#: What reading a JSON document off disk raises for what the path holds rather
-#: than for this package: the path's own failure, or a refusal of its text.
-_JSON_READ_ERRORS = (OSError, *_JSON_TEXT_REFUSALS)
-
-
-def _unreadable_document_finding(exc: Exception) -> dict:
-    """The finding for a document whose text could not be read or parsed."""
-    return finding(
-        message_id="unreadable-document", kind="fail", path="",
-        message=f"Cannot read document: {exc}")
-
-
-# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -532,27 +508,19 @@ def main() -> int:
     if args.kind not in vocabulary:
         parser.error(f"--kind must be one of {vocabulary}, got {args.kind!r}")
 
-    # Only the read is caught: anything raised while grading is a defect here.
-    try:
-        read = document_set.read_package(args.package, args.kind) if args.package \
-            else json.loads(args.document.read_text(encoding="utf-8"))
-    except _JSON_READ_ERRORS as exc:
-        envelope = document_set._envelope([_unreadable_document_finding(exc)])
+    if args.package:
+        # Only the read is caught: anything raised while grading is a defect here.
+        try:
+            texts = document_set.read_package(args.package, args.kind)
+        except OSError as exc:
+            result = document_set.envelope([document_set.parse_document(exc)[1]])
+        else:
+            result = document_set.grade_package(args.kind, texts)
     else:
-        envelope = document_set.grade_package(args.kind, read) if args.package \
-            else document_set._envelope(validate_document(read, args.kind))
-    print(json.dumps(envelope, indent=2))
-    return 0 if envelope["passed"] else 1
+        document, unreadable = document_set.load_document(args.document)
+        result = document_set.envelope(
+            [unreadable] if unreadable is not None else validate_document(document, args.kind))
+    print(json.dumps(result, indent=2))
+    return 0 if result["passed"] else 1
 
 
-def _passed(findings: list[dict]) -> bool:
-    """Whether `findings` clears the bar `rules/SCHEMA.md`'s Findings section
-    sets: no `fail` at `severity: error`, and no `notApplicable` for a rule
-    that is (or, naming none, might as well be) `error`-tier.
-
-    An unchecked `error`-tier rule is not a rule that held — a `notApplicable`
-    naming no `rule` at all cannot even ask the question, so it always costs,
-    same as one naming an `error`-tier rule explicitly. `informational`
-    findings never reach this reduction: nothing about them costs anything.
-    """
-    return not any(finding_costs_a_pass(f) for f in findings)

@@ -74,12 +74,10 @@ def _load_rules(path: Path, direction: str) -> list | None:
     resolves while something about it is still wrong — an advisory that is most
     often the explanation for a gap reported below it, and dropping it leaves the
     gap looking uncaused."""
-    from analitiq.validator import finding_costs_a_pass, validate_document
-    from analitiq.validator._core import _JSON_READ_ERRORS
-    try:
-        doc = json.loads(path.read_text())
-    except _JSON_READ_ERRORS as exc:
-        raise ValueError(f"{path}: {exc}") from exc
+    from analitiq.validator import finding_costs_a_pass, load_document, validate_document
+    doc, unreadable = load_document(path)
+    if unreadable is not None:
+        raise ValueError(f"{path}: {unreadable['message']}")
     # Graded as a document on its own, never against a connector's vocabulary:
     # a connection map covers only the gaps it fills.
     findings = validate_document(doc, "type-map")
@@ -159,12 +157,11 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         return _fail(str(exc))
 
-    from analitiq.validator._core import _JSON_READ_ERRORS
-    try:
-        raw = Path(args.probes_file).read_text() if args.probes_file else sys.stdin.read()
-        probes = json.loads(raw)
-    except _JSON_READ_ERRORS as exc:
-        return _fail(f"cannot read probes: {exc}")
+    from analitiq.validator import load_document, parse_document
+    probes, unreadable = (load_document(Path(args.probes_file)) if args.probes_file
+                          else parse_document(sys.stdin.read()))
+    if unreadable is not None:
+        return _fail(f"cannot read probes: {unreadable['message']}")
     if not isinstance(probes, list) or not all(isinstance(p, str) for p in probes):
         return _fail("probes must be a JSON array of strings")
 

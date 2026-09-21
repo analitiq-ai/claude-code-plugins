@@ -111,7 +111,7 @@ def _ruleless_emitters() -> dict[tuple[str, str], int]:
 #: this table does not name fails the build — the only way a check earns the
 #: right to omit `rule` is stating which documented case it is.
 RULELESS_SITES: dict[tuple[str, str], str] = {
-    ("analitiq.validator._core::_unreadable_document_finding", "unreadable-document"): (
+    ("analitiq.validator.document_set::parse_document", "unreadable-document"): (
         "the document could not be read or parsed at all, before any kind "
         "was even identified"),
     ("analitiq.validator.document_set::grade_package", "check-crashed"): (

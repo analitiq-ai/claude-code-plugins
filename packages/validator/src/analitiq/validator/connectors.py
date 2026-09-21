@@ -47,7 +47,7 @@ import re
 import reprlib
 import sys
 from pathlib import PurePosixPath
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from ._core import (
     contract_model_domain,
