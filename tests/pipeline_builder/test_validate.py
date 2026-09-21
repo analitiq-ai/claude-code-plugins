@@ -10,7 +10,6 @@ there are no committed fixtures to drift from the contract.
 from __future__ import annotations
 
 import ast
-import copy
 import json
 import os
 import re
@@ -699,7 +698,7 @@ def test_connections_that_cannot_be_listed_or_looked_up_crash(tmp_path, refuse, 
 def test_a_connection_directory_without_its_root_is_reported_at_the_root(tmp_path):
     doc = _build_bundle(tmp_path)
     _write(tmp_path, f"connections/stray/definition/endpoints/{EID}.json", DB_ENDPOINT)
-    bundle, findings, complete, crashed, _ = V._assemble_bundle(
+    _, findings, complete, crashed, _ = V._assemble_bundle(
         json.loads(doc.read_text()), doc, tmp_path)
     assert [f["kind"] for f in findings if f["path"] == "connections/stray/connection.json"] == [
         "fail"], findings
@@ -731,7 +730,7 @@ def test_a_connector_directory_without_its_root_is_not_a_connector(tmp_path):
     # A connection naming it is the bundle validator's finding to make.
     doc = _build_bundle(tmp_path)
     (tmp_path / "connectors/ghost/definition/endpoints").mkdir(parents=True)
-    bundle, findings, complete, crashed, endpoint_ids = V._assemble_bundle(
+    bundle, findings, complete, crashed, _ = V._assemble_bundle(
         json.loads(doc.read_text()), doc, tmp_path)
     assert "ghost" not in bundle["connectors"], bundle["connectors"]
     assert (findings, complete, crashed) == ([], True, False)
@@ -1550,9 +1549,7 @@ def test_scripts_borrow_private_names_that_still_exist():
 def test_a_document_is_read_as_utf8_whatever_the_locale(tmp_path):
     # The adapter reads the document the way the validator reads a package's,
     # so a non-ASCII value is not unreadable under a C locale.
-    import os
     import subprocess
-    import sys
 
     doc = {**CONN_WISE, "display_name": "Wisé"}
     path = tmp_path / "connection.json"
@@ -1561,7 +1558,7 @@ def test_a_document_is_read_as_utf8_whatever_the_locale(tmp_path):
            "PYTHONPATH": os.pathsep.join(sys.path)}
     done = subprocess.run(
         [sys.executable, V.__file__, "--entity", "connection", "--document", str(path)],
-        env=env, capture_output=True, text=True, encoding="utf-8", timeout=120)
+        env=env, capture_output=True, text=True, encoding="utf-8", timeout=120, check=False)
     findings = json.loads(done.stdout)["findings"]
     assert not [f for f in findings if f.get("message_id") == "unreadable-document"], findings
 
