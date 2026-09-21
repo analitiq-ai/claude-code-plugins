@@ -286,8 +286,8 @@ def closed_true_end_keys(schema: dict[str, Any]) -> None:
 def document_locations(schema: dict[str, Any], package: type[DocumentPackage]) -> None:
     """A package's `json_schema_extra`: publishes its `LOCATIONS` and `ROOT` into its schema."""
     schema["patternProperties"] = {
-        f"^{re.escape(directory) + '/' if directory else ''}{name}$": {"$ref": schema_url_for(resource)}
-        for (directory, name), resource in package.LOCATIONS.items()
+        pattern: {"$ref": schema_url_for(resource)}
+        for pattern, resource in package.location_patterns().items()
     }
     schema["required"] = [package.ROOT]
     closed_true_end_keys(schema)
@@ -307,12 +307,19 @@ class DocumentPackage(ParseOnly, RootModel[dict[str, Any]]):
     ROOT: ClassVar[str]
 
     @classmethod
+    def location_patterns(cls) -> dict[str, str]:
+        """Each location's key pattern -> its resource: the patterns the schema publishes."""
+        return {
+            f"^{re.escape(directory) + '/' if directory else ''}{name}$": resource
+            for (directory, name), resource in cls.LOCATIONS.items()
+        }
+
+    @classmethod
     def kind_at(cls, key: str) -> str | None:
         """The resource the document at `key` is written against, or `None` outside every location."""
-        directory, _, name = key.rpartition("/")
         # `fullmatch` holds `$` to the true end, as the published lookahead does.
-        for (located, pattern), resource in cls.LOCATIONS.items():
-            if located == directory and re.fullmatch(pattern, name):
+        for pattern, resource in cls.location_patterns().items():
+            if re.fullmatch(pattern, key):
                 return resource
         return None
 

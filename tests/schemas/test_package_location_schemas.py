@@ -27,7 +27,8 @@ from analitiq.contracts.shared.common import schema_url_for  # noqa: E402
 
 # Per package: a sample key at each location and the schema it is written against,
 # and keys that sit outside every location. The outside keys are chosen to tell an
-# anchored pattern from an unanchored one (a prefixed key, trailing newlines).
+# anchored pattern from an unanchored one (a prefixed key, trailing newlines, a
+# leading or doubled slash).
 PACKAGES = {
     "connector-package": {
         "located": {
@@ -43,6 +44,8 @@ PACKAGES = {
             "definition/type-map.json\n",
             "definition/endpoints/customers.json\n",
             "connector.json",
+            "/definition/connector.json",
+            "definition//connector.json",
             "README.md",
         ),
     },
@@ -66,6 +69,8 @@ PACKAGES = {
             "definition/type-map.json\n",
             "definition/endpoints/customers.json\n",
             "definition/connector.json",
+            "/connection.json",
+            "definition//type-map.json",
             "README.md",
         ),
     },
@@ -83,6 +88,8 @@ PACKAGES = {
             "streams/orders.json\n",
             "pipelines/x/pipeline.json",
             "connection.json",
+            "/pipeline.json",
+            "streams//orders.json",
             "README.md",
         ),
     },

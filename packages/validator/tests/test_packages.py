@@ -385,13 +385,28 @@ def test_a_location_directory_whose_lookup_is_refused_raises(validator, tmp_path
         validator.read_package(tmp_path, "connector-package")
 
 
-@pytest.mark.parametrize("link", ["definition/endpoints/v2__records.json", "definition/notes"])
 @pytest.mark.parametrize("target", ["nowhere", "self"])
-def test_a_link_that_leads_to_nothing_is_skipped(validator, tmp_path, link, target):
-    """A dangling or looping link holds nothing to grade, located or not."""
+def test_a_located_link_that_leads_to_nothing_is_skipped(validator, tmp_path, target):
+    """A dangling or looping link holds no document to grade."""
     documents = _connector_package()
     _write(tmp_path, documents)
-    (tmp_path / link).symlink_to(tmp_path / link if target == "self" else tmp_path / target)
+    link = tmp_path / "definition/endpoints/v2__records.json"
+    link.symlink_to(link if target == "self" else tmp_path / target)
+    assert sorted(validator.read_package(tmp_path, "connector-package")) == sorted(documents)
+
+
+@pytest.mark.parametrize("holder", ["file", "nowhere", "self"])
+def test_a_location_directory_that_is_no_directory_holds_nothing(validator, tmp_path, holder):
+    """A regular file, a dangling link or a looping link where a location
+    directory would be has nothing under it to read."""
+    documents = {key: doc for key, doc in _connector_package().items()
+                 if not key.startswith("definition/endpoints/")}
+    _write(tmp_path, documents)
+    path = tmp_path / "definition/endpoints"
+    if holder == "file":
+        path.write_text("{}")
+    else:
+        path.symlink_to(path if holder == "self" else tmp_path / holder)
     assert sorted(validator.read_package(tmp_path, "connector-package")) == sorted(documents)
 
 
