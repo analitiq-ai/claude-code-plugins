@@ -82,8 +82,9 @@ Schemas are generated from — so there is no schema fetch. It runs:
 1. **Contract-model validation** — structure, plus the cross-field rules the
    models themselves apply.
    <!-- PROBE: type-map-rule-graded-by-section, type-map-section-missing -->
-   Discriminating keys in the document body select the model, and inside a type
-   map the section a rule sits under — `read` or `write` — is its direction. A
+   The kind the caller names — or, in a package, the path a document sits
+   at — selects the model, and inside a type map the section a rule sits
+   under — `read` or `write` — is its direction. A
    connector package's map is its one `definition/type-map.json`, which carries
    the sections its `kind` calls for (`RULE-PKG-030`). Each kind is graded against the model behind this
    schema:
@@ -97,7 +98,7 @@ Schemas are generated from — so there is no schema fetch. It runs:
    Some rules hold only at
    connect or run time, so a clean run is not proof every rule holds.
 2. **Checks the contract models can't express** — cross-file relationships
-   (sibling type-map coverage, filename ↔ endpoint_id, endpoint id uniqueness,
+   in a package (type-map coverage, filename ↔ endpoint_id, endpoint id uniqueness,
    endpoint id ↔ locator, endpoint → transport), embedded-schema validity, a
    recorded sample against the node declaring it, and quality warnings on a
    type map.
@@ -113,7 +114,7 @@ Run directly (console entry point `analitiq-validate`):
 
 ```bash
 pip install -r requirements-dev.txt      # from the repo root
-analitiq-validate --document path/to/connector.json
+analitiq-validate --package path/to/connector --kind connector-package
 ```
 
 Output is a single `Diagnostics` JSON object. Exit 0 iff `passed: true`. The

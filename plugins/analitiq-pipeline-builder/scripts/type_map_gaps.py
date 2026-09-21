@@ -74,16 +74,15 @@ def _load_rules(path: Path, direction: str) -> list | None:
     resolves while something about it is still wrong — an advisory that is most
     often the explanation for a gap reported below it, and dropping it leaves the
     gap looking uncaused."""
-    from analitiq.validator import finding_costs_a_pass, type_map_findings
+    from analitiq.validator import finding_costs_a_pass, validate_document
     from analitiq.validator._core import _JSON_READ_ERRORS
     try:
         doc = json.loads(path.read_text())
     except _JSON_READ_ERRORS as exc:
         raise ValueError(f"{path}: {exc}") from exc
-    # The connection scope is the one either kind of map can meet: a connection
-    # map covers only the gaps it fills, and a connector map rendering the whole
-    # vocabulary clears the weaker bar too.
-    findings = type_map_findings(doc, scope="connection")
+    # Graded as a document on its own, never against a connector's vocabulary:
+    # a connection map covers only the gaps it fills.
+    findings = validate_document(doc, "type-map")
     fatal, advisory = [], []
     for f in findings:
         (fatal if finding_costs_a_pass(f) else advisory).append(f)

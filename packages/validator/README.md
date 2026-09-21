@@ -9,25 +9,25 @@ validators slot in without touching each other.
 
 Today it covers:
 
-- **authored single documents** — connector, endpoint, and type-map files, plus
-  `connection`, `stream`, and `pipeline` documents;
+- **single documents** — one document graded as the kind its caller names;
+- **packages** — the connector, connection and pipeline packages, each graded as
+  the published package schema locates its documents, plus the checks across
+  them;
 - **pipeline bundles** — the cross-document referential integrity of an assembled
   run (pipeline + streams + connections + connectors + endpoints).
 
 Single-document validity (structure **and** every cross-field rule) is delegated
 to `TypeAdapter(...).validate_python` from `analitiq-contract-models`
 (`analitiq.contracts`). It runs **offline** — no schema fetch, no network. On top
-of the models it adds only what a single-document model cannot express — the
-connection / stream / pipeline kinds are pure model validation (the model IS the
-whole contract), so `analitiq-validate --document x.json` validates every authored
-kind and emits the same uniform `{passed, findings[]}`.
+of the models it adds only what a single-document model cannot express, and
+every kind emits the same uniform `{passed, findings[]}`.
 
-**Connector-package cross-file checks:**
+**Package checks:**
 
-- **cross-file coverage** — a connector ships a sibling `type-map.json`
-  carrying the sections its kind calls for, and no other type-map name, and an API connector's read map covers every
-  `(native_type, arrow_type)` its endpoint files declare;
-- **filename ↔ id** — an endpoint file is named `{endpoint_id}.json`;
+- **coverage** — a connector package's type map carries the sections its kind
+  calls for, and an API connector's read map covers every
+  `(native_type, arrow_type)` its endpoint documents declare;
+- **filename ↔ id** — an endpoint document is named `{endpoint_id}.json`;
 - **advisory warnings** the contract tolerates — duplicate type-map rules, read
   patterns spelling a lowercase literal, regex natives spelling a container that
   renders a scalar, write-map vocabulary gaps.
@@ -57,37 +57,20 @@ reference field (a connection naming no connector, a stream slot with no
 connection refs match on their base form, so a `{id}_v{n}` versioned ref resolves
 the document that declares the bare `{id}` (connector identities match whole).
 
-## Path-free document sets
+## Packages
 
-`check_coverage` and the pipeline-builder plugin's own bundle assembly both
-resolve a document's siblings by reading real files off a filesystem path. A
-consumer with no local filesystem to put those files on — a hosted validator
-wrapping this package as a remote tool, registry CI, any caller handed
-document content directly — cannot use either route: it has the documents'
-content in hand, never a directory they can be read from.
-
-`analitiq.validator.document_set` fixes the contract such a consumer calls
-instead. `validate_pipeline_package` raises `NotImplementedError`.
-`packages/validator/tests/test_document_set.py` is the fixture corpus that
-fixes what an implementation must satisfy, a case `xfail` while the function
-it exercises raises. Read that module and that test file for the contract itself — it is
-not restated here.
-
-The contract is deliberately narrow. Each entry point takes the request model
-that names the unit being submitted — `ValidateSingleDocumentRequest` or
-`ValidatePackageRequest`, both from `analitiq.contracts.validation_requests`,
-which own the text-only document value type and, for a package, the
-document-key grammar, and are where a malformed argument is refused. A request
-never carries a directory to read from, and its keys are never resolved
-against a filesystem — the offline guarantee
-stated above for single-document validation, extended to a set of documents
-instead of one.
+`validate_package` takes a `ValidatePackageRequest` from
+`analitiq.contracts.validation_requests`: the package it names and its documents'
+text, keyed by path within the package. `validate_package_at` reads the same
+package from a directory. The package model owns which key is its root and
+which kind each located key holds; a key it does not locate is not part of the
+package and is not graded. A request never carries a directory to read from,
+and its keys are never resolved against a filesystem.
 
 ## Rule cases
 
 Some rules enforced by a cross-document check ship example document sets with
-the package, each one a directory holding a `bundle.json` or a connector package
-rooted at `connector.json`. A rule is not required to carry any, so the corpus
+the package, each one a directory holding a `bundle.json`. A rule is not required to carry any, so the corpus
 grades only the rules it holds cases for. `rule_cases()` loads them and `case_mismatch(case)`
 grades one against the installed validator, returning `None` when the
 validator agrees:
@@ -109,16 +92,13 @@ This pulls `analitiq-contract-models` (and pydantic) transitively.
 ## Use
 
 ```bash
-analitiq-validate --document definition/connector.json
-analitiq-validate --document connection.json   # connection / stream / pipeline work too
+analitiq-validate --document connection.json --kind connection
+analitiq-validate --package path/to/connector --kind connector-package
 ```
 
-The kind is detected from the document's shape — no `--kind` flag. Point
-`--document` at `definition/connector.json` to also trigger cross-file coverage:
-it discovers the sibling `type-map.json` and
-`endpoints/*.json` from the connector's directory. A `connection` / `stream` /
-`pipeline` document is validated purely against its contract model. Validation
-is always model-driven and offline — `--document` is the only flag.
+`--kind` names what the document or package is; omitting it, or naming a kind
+outside the published ones, is a usage error that lists them. Validation is
+always model-driven and offline.
 
 Output is a JSON report (`{"passed": bool, "findings": [...]}`) on stdout; the
 process exits non-zero exactly when `passed` is `false` — a `fail` finding at

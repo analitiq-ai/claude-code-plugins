@@ -1,47 +1,39 @@
-"""Connection-document validation — the `connection` authored artifact kind.
+"""The connection package's kinds and its cross-document check.
 
 A connection document is validated wholly against its contract model
 (`ConnectionInput`, the same model the published `connection` JSON Schema is
-generated from): `TypeAdapter(...).validate_python` enforces its structure *and*
-every cross-field rule (the storage-map / `secret_refs` scheme rules, the
-authored-top-level guard) offline, no schema fetch, no drift. There is no
-cross-file or referential check a connection document needs in isolation — its
-place in an assembled run is checked by the pipeline-bundle kind. The one check
-the model cannot carry is RULE-SHRD-003, which reports a `warning` — a severity
-no `@model_validator` can carry (`rules/SCHEMA.md`, `validator`) — so this kind
-registers a combined validator.
-
-At import this module registers its detector -> validator pair with the core
-dispatch registry, so `_core` never hard-codes a connection branch — a new kind
-is a new module.
+generated from), plus RULE-SHRD-003, which reports a `warning` — a severity no
+`@model_validator` can carry (`rules/SCHEMA.md`, `validator`). A credentials
+file is validated wholly against `CredentialsFile`; it declares no `$schema`.
+The package check holds each database endpoint to the file name it is located
+by (RULE-PKG-031).
 """
 from __future__ import annotations
 
+from pathlib import PurePosixPath
 from typing import Any
 
-from ._core import contract_model_domain, register_model_and_schema_kind
+from ._core import _model_findings, contract_model_domain, register_kind, register_model_and_schema_kind
+from .connectors import endpoint_filename_findings
+from .document_set import keys_of, register_package_check
 
-# Import the contract model under the shared DOMAIN guard (the model binds the
+# Import the contract models under the shared DOMAIN guard (the model binds the
 # `$schema` host at import; see `contract_model_domain`).
 with contract_model_domain():
     from pydantic import TypeAdapter
     from analitiq.contracts.connection import ConnectionInput
+    from analitiq.contracts.connection_package import ConnectionPackage
+    from analitiq.contracts.credentials_file import CredentialsFile
 
-_CONNECTION_ADAPTER = TypeAdapter(ConnectionInput)
-
-
-def is_connection_doc(doc: Any) -> bool:
-    """A connection configures a connector: it carries `connector_id` and none of
-    the connector/endpoint discriminators (`kind` / `operations`). Structurally
-    distinct from every other authored kind — the connector-family detectors run
-    first and claim their own shapes, so a `connector_id`-bearing document that is
-    not one of them is a connection."""
-    return (
-        isinstance(doc, dict)
-        and "connector_id" in doc
-        and "kind" not in doc
-        and "operations" not in doc
-    )
+_CREDENTIALS_ADAPTER = TypeAdapter(CredentialsFile)
 
 
-register_model_and_schema_kind(is_connection_doc, _CONNECTION_ADAPTER)
+def _connection_package_findings(documents: dict[str, Any], unread: frozenset[str]) -> list[tuple[str, dict]]:  # skipcq: PYL-W0613 — uniform package-check signature
+    return [(key, f)
+            for key in keys_of(ConnectionPackage, documents, "database-endpoint")
+            for f in endpoint_filename_findings(documents[key], PurePosixPath(key).name)]
+
+
+register_model_and_schema_kind("connection", TypeAdapter(ConnectionInput))
+register_kind("credentials", lambda doc: _model_findings(doc, _CREDENTIALS_ADAPTER))
+register_package_check("connection-package", _connection_package_findings)

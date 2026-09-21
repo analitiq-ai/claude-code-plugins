@@ -1,6 +1,6 @@
 ---
 name: connector-schema-validator
-description: Validate an Analitiq entity JSON document (connector, api-endpoint, database-endpoint, or type map) against the pinned contract models and the cross-file semantic checks. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Input is a document path. Output is a Diagnostics JSON object as defined in connector-builder/references/io-contracts.md.
+description: Validate an Analitiq JSON document (connector, api-endpoint, database-endpoint, or type map) against the pinned contract models, or a connector package against them and its cross-document checks. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Input is a document path and its kind, or a connector package directory. Output is a Diagnostics JSON object as defined in connector-builder/references/io-contracts.md.
 tools: Read, Bash, Grep
 color: orange
 ---
@@ -21,17 +21,25 @@ artifact.
 
 ## Inputs
 
-- `document_path` — absolute path to the draft JSON document.
-  <!-- PROBE: type-map-standalone-no-package-check, type-map-section-missing -->
-  Validating a type map on its own runs no package-level check — those run when
-  the **connector** is validated, off the `type-map.json` beside it, and a
-  direction the `kind` requires that the map carries no section for surfaces
-  there as a missing section (`RULE-PKG-030`). So validate the connector where it
-  sits in the package, not a copy re-serialized elsewhere: its package-level
-  checks read the map and endpoints beside it, and what ships is then what was graded. This agent validates
-  JSON documents only; a connector's Python package files (`connector.py`,
-  `pyproject.toml`, …) are outside its scope — report them as not validated
-  rather than passing judgment on them.
+Exactly one of:
+
+- `document_path` and `kind` — absolute path to one draft JSON document, and
+  the kind it is authored as: `connector`, `api-endpoint`, `database-endpoint`
+  or `type-map`. The document is graded on its own.
+- `package_dir` — absolute path to a connector package directory, laid out as
+  the published `connector-package` schema locates its documents. Every
+  document in it is graded as the kind its path makes it, then the
+  package-level checks run over them together.
+
+<!-- PROBE: type-map-standalone-no-package-check, type-map-section-missing -->
+Validating a type map on its own runs no package-level check — those run when
+the **package** is validated, and a direction the `kind` requires that the map
+carries no section for surfaces there as a missing section (`RULE-PKG-030`).
+So validate the package as it will ship, not a copy re-serialized elsewhere:
+what ships is then what was graded. This agent validates JSON documents only;
+a connector's Python package files (`connector.py`, `pyproject.toml`, …) are
+outside its scope — report them as not validated rather than passing judgment
+on them.
 
 ## Running the validator
 
@@ -48,19 +56,23 @@ on first use, then invoke it:
 # JSON, or a validator already present from another version would answer instead.
 { python3 -c "import sys; from importlib.metadata import version; sys.exit(0 if version('analitiq-validator') == '1.0.0rc25' else 1)" 2>/dev/null \
   || python3 -m pip install --quiet --disable-pip-version-check --pre "analitiq-validator==1.0.0rc25" 1>&2; } \
-&& python3 - "<document_path>" <<'PY'
+&& python3 - <arguments> <<'PY'
 import sys
 from analitiq.validator import main
-sys.argv = ["analitiq-validate", "--document", sys.argv[1]]
+sys.argv = ["analitiq-validate", *sys.argv[1:]]
 sys.exit(main())
 PY
 ```
+
+`<arguments>` is `--document "<document_path>" --kind <kind>` for one
+document, or `--package "<package_dir>" --kind connector-package` for a
+package.
 
 ## Findings
 
 Report every finding as the validator emits it; never re-map its `rule` id
 yourself — resolve it in the rule files per this file's header note above.
-`rule` is absent on some findings — an unrecognized document, an
+`rule` is absent on some findings — an unreadable document, an
 unattributed model rejection, a check that could not run — and that is the
 framework saying so, not a gap to fill in.
 

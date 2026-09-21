@@ -10,13 +10,12 @@ This module owns the parts that are independent of any particular artifact kind:
   its `loc` does not spell directly; shared with the pipeline plugin's adapter;
 - `contract_model_domain()` — the env guard every kind imports its contract models
   under, defined once so the DOMAIN dance is not reimplemented per kind;
-- the KIND-VALIDATOR REGISTRY and `_dispatch()`/`validate_document()` driver — a
-  per-kind module (e.g. `connectors`) contributes a `(detector, validator_fn)`
-  pair via `register_kind()`; `_dispatch` consults the registry rather than
-  hard-coding any kind's branches, so a new kind is *register, done*. A kind
-  whose validity is its contract model plus the `$schema`-omission check
-  registers via `register_model_and_schema_kind()` instead of hand-writing
-  that combination;
+- the KIND-VALIDATOR REGISTRY and `validate_document()` — a per-kind module
+  (e.g. `connectors`) binds a validator to each kind name it owns via
+  `register_kind()`, and `validate_document` looks the caller's kind up in it, so
+  a new kind is a new module registering rather than a branch here. A kind whose
+  validity is its contract model plus the `$schema`-omission check registers via
+  `register_model_and_schema_kind()` instead of hand-writing that combination;
 - `_bounded()` — the one width a diagnostic borrowed from another library, or
   a document value it echoes, is clipped to; messages the contract models write
   are not clipped;
@@ -29,9 +28,10 @@ This module owns the parts that are independent of any particular artifact kind:
 - `_passed()` — `not any(finding_costs_a_pass(f) for f in findings)`, so
   `main()` and `analitiq.validator.document_set` answer "did this document
   pass" identically;
-- the `main()` CLI: read the document, validate, print `{"passed", "findings"}`,
-  exit 0 iff `_passed()` says so (1 on a failing document / unreadable document;
-  2 on CLI usage errors).
+- the `main()` CLI: grade one document (`--document PATH --kind KIND`) or one
+  package (`--package DIR --kind PACKAGE`), print `{"passed", "findings"}`, exit 0
+  iff `_passed()` says so (1 on a failing or unreadable document; 2 on CLI usage
+  errors).
 """
 from __future__ import annotations
 
@@ -43,8 +43,6 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from pydantic import TypeAdapter, ValidationError
-
-from ._location import Location, located
 
 # `analitiq.contracts.shared.rules` (`rule_by_id`, `RuleViolation`) is
 # imported lazily, inside the functions below that need it, never at this
@@ -59,17 +57,23 @@ from ._location import Location, located
 _KINDS = ("fail", "notApplicable", "informational")
 
 
-# The kind registry: ordered `(detector, validator_fn)` pairs. `_dispatch` runs
-# each detector in registration order and hands the document to the first
-# validator whose detector matches. A validator takes `(doc, location)` and
-# returns a list of findings.
-_Validator = Callable[[Any, "Location | None"], list[dict]]
-_KIND_REGISTRY: list[tuple[Callable[[Any], bool], _Validator]] = []
+# The kind registry: each kind name a caller may submit a document under, bound
+# to the validator that grades it. A validator takes the document and returns a
+# list of findings.
+_Validator = Callable[[Any], list[dict]]
+_KIND_VALIDATORS: dict[str, _Validator] = {}
 
 
-def register_kind(detector: Callable[[Any], bool], validator: _Validator) -> None:
-    """Append a `(detector, validator_fn)` pair to the dispatch registry."""
-    _KIND_REGISTRY.append((detector, validator))
+def register_kind(kind: str, validator: _Validator) -> None:
+    """Bind `validator` to `kind`. Raises `ValueError` for a kind already bound."""
+    if kind in _KIND_VALIDATORS:
+        raise ValueError(f"kind {kind!r} is already registered")
+    _KIND_VALIDATORS[kind] = validator
+
+
+def document_kinds() -> frozenset[str]:
+    """Every kind `validate_document` grades."""
+    return frozenset(_KIND_VALIDATORS)
 
 
 # ---------------------------------------------------------------------------
@@ -428,50 +432,33 @@ def _missing_schema_url_findings(doc: Any) -> list[dict]:
     )]
 
 
-def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: TypeAdapter) -> None:
-    """Register a single-document kind whose entire validity is its contract model
-    plus the RULE-SHRD-003 `$schema`-omission check.
+def model_and_schema_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
+    """`doc` graded against its contract model, plus the RULE-SHRD-003
+    `$schema`-omission check."""
+    return _model_findings(doc, adapter) + _missing_schema_url_findings(doc)
 
-    A kind with no further cross-file or referential checks needs only
-    `_model_findings(doc, adapter) + _missing_schema_url_findings(doc)` under the
-    per-kind `(doc, location)` signature. Packaging that here lets such a
-    module supply just its detector and adapter, so the combination is
-    defined once rather than reimplemented per kind.
-    """
-    def _validate(doc: Any, location: Location | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-        return _model_findings(doc, adapter) + _missing_schema_url_findings(doc)
-    register_kind(detector, _validate)
+
+def register_model_and_schema_kind(kind: str, adapter: TypeAdapter) -> None:
+    """Register a kind whose entire validity is its contract model plus the
+    RULE-SHRD-003 `$schema`-omission check."""
+    register_kind(kind, lambda doc: model_and_schema_findings(doc, adapter))
 
 
 # ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 
-def validate_document(doc: Any, doc_path: Path | Location | None = None) -> list[dict]:
-    """Detect the document kind, validate via its model, add cross-file checks.
+def validate_document(doc: Any, kind: str) -> list[dict]:
+    """Grade `doc` as the kind its caller names.
 
-    A `doc_path` that `located` refuses raises its refusal: a finding would
-    come from the crash guard, which reports a validator bug.
+    Raises `ValueError` for a kind no module registered: which kind a document
+    is, is the caller's to say, and a name outside the vocabulary is the
+    caller's error rather than the document's.
     """
-    location = None if doc_path is None else located(doc_path)
-    return _run_guarded(_dispatch, doc, location, crash_label="document validation")
-
-
-def _dispatch(doc: Any, location: Location | None) -> list[dict]:
-    for detector, validator in _KIND_REGISTRY:
-        if detector(doc):
-            return validator(doc, location)
-    # Anything no registered kind claims is a document we were asked to validate
-    # but cannot identify — that is a validation failure, not a pass.
-    return [finding(
-        message_id="unrecognized-document", kind="fail", path="",
-        message=(
-            "document does not match any known artifact (connector / api-endpoint / "
-            "database-endpoint / type-map / connection / stream / pipeline); a connector "
-            "must declare 'kind', an api-endpoint 'operations', a type-map a "
-            "'$schema' naming the published type-map URL (a 'read' or 'write' "
-            "section does not claim one), a connection a 'connector_id', a "
-            "stream 'source' + 'destinations', a pipeline 'connections'."))]
+    validator = _KIND_VALIDATORS.get(kind)
+    if validator is None:
+        raise ValueError(f"unknown kind {kind!r}; expected one of {sorted(_KIND_VALIDATORS)}")
+    return _run_guarded(validator, doc, crash_label=f"{kind} validation")
 
 
 def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None) -> list[dict]:
@@ -488,7 +475,7 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
     crash mid-check leaves unevaluated — a caller wrapping a check bound to
     exactly one rule (`_embedded_schema_example_findings` and RULE-ENDP-063,
     say) passes it so the crash stays routable to it; a caller wrapping
-    dispatch over an unidentified document (`validate_document`, which could
+    everything one kind's grading runs (`validate_document`, which could
     crash on behalf of any rule or none) leaves it `None`, which keeps the
     finding inside the framework's own no-rule case and off the "clears the
     bar" list `passed` reduces over, so it always costs — matching what an
@@ -514,15 +501,13 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
 #: `RecursionError`, which is a `RuntimeError` and escapes a `ValueError` arm.
 _JSON_TEXT_REFUSALS = (ValueError, RecursionError)
 
-#: What reading a JSON document off disk raises for what the file holds rather
-#: than for this package: the path's own failure, a refusal of its text, or
-#: `located`'s refusal of the path.
+#: What reading a JSON document off disk raises for what the path holds rather
+#: than for this package: the path's own failure, or a refusal of its text.
 _JSON_READ_ERRORS = (OSError, *_JSON_TEXT_REFUSALS)
 
 
 def _unreadable_document_finding(exc: Exception) -> dict:
-    """The finding for a document whose text could not be read or parsed at
-    all, before any kind was even identified."""
+    """The finding for a document whose text could not be read or parsed."""
     return finding(
         message_id="unreadable-document", kind="fail", path="",
         message=f"Cannot read document: {exc}")
@@ -533,24 +518,30 @@ def _unreadable_document_finding(exc: Exception) -> dict:
 # ---------------------------------------------------------------------------
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate an Analitiq connector/endpoint/type-map document.")
-    parser.add_argument("--document", required=True, help="Path to the JSON document to validate.")
+    from analitiq.contracts.validation_requests import PACKAGE_MODELS
+    from analitiq.validator.document_set import validate_package_at
+
+    parser = argparse.ArgumentParser(description="Validate an Analitiq document or package.")
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--document", type=Path, help="Path to one JSON document.")
+    target.add_argument("--package", type=Path, help="Path to a package's directory.")
+    parser.add_argument("--kind", required=True,
+                        help="The document's kind, or the package's published name.")
     args = parser.parse_args()
+    vocabulary = sorted(PACKAGE_MODELS if args.package else _KIND_VALIDATORS)
+    if args.kind not in vocabulary:
+        parser.error(f"--kind must be one of {vocabulary}, got {args.kind!r}")
 
     try:
-        # Read as given, so a path the kernel refuses is refused for the
-        # kernel's own reason, then located, which refuses a path it would
-        # grade somewhere other than where that read opened it.
-        document = json.loads(Path(args.document).read_text())
-        location = located(Path(args.document))
+        if args.package:
+            envelope = validate_package_at(args.package, args.kind)
+        else:
+            findings = validate_document(json.loads(args.document.read_text(encoding="utf-8")), args.kind)
+            envelope = {"passed": _passed(findings), "findings": findings}
     except _JSON_READ_ERRORS as exc:
-        print(json.dumps({"passed": False, "findings": [_unreadable_document_finding(exc)]}))
-        return 1
-
-    findings = validate_document(document, doc_path=location)
-    passed = _passed(findings)
-    print(json.dumps({"passed": passed, "findings": findings}, indent=2))
-    return 0 if passed else 1
+        envelope = {"passed": False, "findings": [_unreadable_document_finding(exc)]}
+    print(json.dumps(envelope, indent=2))
+    return 0 if envelope["passed"] else 1
 
 
 def _passed(findings: list[dict]) -> bool:

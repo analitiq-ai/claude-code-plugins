@@ -5685,7 +5685,7 @@
    "artifact_kinds": [
     "connector-package"
    ],
-   "validator": "analitiq.validator.connectors::check_coverage",
+   "validator": "analitiq.validator.connectors::_connector_package_findings",
    "enforcement_location": null,
    "owners": [
     "engine",
@@ -5732,7 +5732,7 @@
    "artifact_kinds": [
     "connector-package"
    ],
-   "validator": "analitiq.validator.connectors::check_coverage",
+   "validator": "analitiq.validator.connectors::_connector_package_findings",
    "enforcement_location": null,
    "owners": [
     "engine",
@@ -5755,7 +5755,7 @@
    "artifact_kinds": [
     "connector-package"
    ],
-   "validator": "analitiq.validator.connectors::check_coverage",
+   "validator": "analitiq.validator.connectors::_connector_package_findings",
    "enforcement_location": null,
    "owners": [
     "engine",
@@ -5801,7 +5801,7 @@
    "artifact_kinds": [
     "connector-package"
    ],
-   "validator": "analitiq.validator.connectors::check_coverage",
+   "validator": "analitiq.validator.connectors::_connector_package_findings",
    "enforcement_location": null,
    "owners": [
     "engine",

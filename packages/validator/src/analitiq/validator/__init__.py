@@ -1,41 +1,32 @@
 """analitiq.validator — the Analitiq artifact validator.
 
-Validates Analitiq connector / endpoint / type-map / connection / stream /
-pipeline JSON documents against the **contract models**
-(`analitiq-contract-models`) plus the cross-file coverage and advisory checks a
-single-document model cannot express, and validates an assembled **pipeline
-bundle** for cross-document referential integrity. Output is a JSON report
+Validates Analitiq documents and packages against the **contract models**
+(`analitiq-contract-models`) plus the cross-document checks a single-document
+model cannot express, and validates an assembled **pipeline bundle** for
+cross-document referential integrity. Output is a JSON report
 (`{"passed": bool, "findings": [...]}`); the CLI exits non-zero exactly when
 `passed` is `False` — `finding_costs_a_pass` owns the full predicate, which
 also fails closed on an unchecked error-tier rule, not only a `fail` finding
 at `severity: "error"`.
 
-`validate_document` detects a document's kind from its own body, for a caller
-holding an unidentified document. A caller holding a type map grades it with
-`type_map_findings(doc, scope)`, where `scope` says whether it is a connector's
-map or a connection's. A caller holding a `definition/` *directory* calls
-`load_type_map(parent, rule=...)`, which reads the directory's
-`TYPE_MAP_FILENAME`; where each caller roots the
-findings is its own.
+The caller names what it holds. `validate_document(doc, kind)` grades one
+document as `kind`, one of the kinds the published packages locate.
+`validate_package` / `validate_package_at` grade a package as the published
+package schema it names, which says where its root and each kind of document
+sit.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
-`connections`, `streams`), each of which self-registers its detector→validator
-pairs with the core dispatch registry — a new kind is a new module registering
-the same way, without touching `_core`. The public surface is re-exported here.
-
-`document_set` declares the path-free document-set API;
-`validate_pipeline_package` raises `NotImplementedError`. See that module's docstring and
-`__all__` below for what it contributes to this package's surface. Its entry
-points take the request models in `analitiq.contracts.validation_requests`,
-which own the document-set shape and are where a malformed argument is
-refused.
+`connections`, `streams`), each of which registers its kinds and its package's
+check — a new kind is a new module registering the same way, without touching
+`_core`.
 """
 from ._core import finding, finding_costs_a_pass, main, validate_document
 from .document_set import (
     Finding,
     ValidationEnvelope,
-    validate_connector_package,
-    validate_pipeline_package,
+    read_package,
+    validate_package,
+    validate_package_at,
     validate_single_document,
 )
 from . import connectors  # noqa: F401  — imported for its self-registration side effect
@@ -46,18 +37,7 @@ from . import streams  # noqa: F401  — imported for its self-registration side
 # exercises them through the package root (see test_validation.py). Deliberately
 # NOT in __all__ — that would widen the published star-import surface.
 from .connectors import (  # skipcq: PY-W2000
-    TYPE_MAP_FILENAME,
-    TypeMapLoad,
-    check_coverage,
     endpoint_filename_findings,
-    load_type_map,
-    type_map_findings,
-    is_api_endpoint_doc,
-    is_connector_doc,
-    is_addressed_endpoint_path,
-    is_database_endpoint_doc,
-    is_stem_addressed_endpoint_path,
-    is_type_map_doc,
     _arrow_type_eq,
     _collect_native_arrow_pairs,
     _database_endpoint_locator_findings,
@@ -65,9 +45,7 @@ from .connectors import (  # skipcq: PY-W2000
     _flatten_api_locator,
     _render_arrow_type,
 )
-from .pipelines import is_pipeline_bundle, is_pipeline_doc, validate_pipeline_bundle
-from .connections import is_connection_doc
-from .streams import is_stream_doc
+from .pipelines import validate_pipeline_bundle
 
 __all__ = [
     "finding",
@@ -76,24 +54,10 @@ __all__ = [
     "validate_document",
     "Finding",
     "ValidationEnvelope",
-    "validate_connector_package",
-    "validate_pipeline_package",
+    "read_package",
+    "validate_package",
+    "validate_package_at",
     "validate_single_document",
-    "check_coverage",
     "endpoint_filename_findings",
-    "type_map_findings",
-    "load_type_map",
-    "TypeMapLoad",
-    "TYPE_MAP_FILENAME",
-    "is_stem_addressed_endpoint_path",
-    "is_addressed_endpoint_path",
-    "is_api_endpoint_doc",
-    "is_connector_doc",
-    "is_database_endpoint_doc",
-    "is_type_map_doc",
-    "is_connection_doc",
-    "is_stream_doc",
-    "is_pipeline_doc",
-    "is_pipeline_bundle",
     "validate_pipeline_bundle",
 ]

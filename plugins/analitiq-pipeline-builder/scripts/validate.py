@@ -12,36 +12,16 @@ closed over every finding — a locally minted one (`validator`, `severity`,
 (`skills/pipeline-builder/references/io-contracts.md`'s `Diagnostics` section
 owns the shape and the predicate in full).
 
-The published package exposes one single-document entry point plus one bundle
-entry point. This adapter routes each entity as follows:
-
-  * ``database-endpoint`` -> ``analitiq.validator.validate_document`` — the model
-    plus the derived-``endpoint_id`` gate and column checks (the same code the
-    ``analitiq-validate`` CLI runs).
-  * ``connection`` / ``stream`` / ``pipeline`` -> the matching ``*Input`` Pydantic
-    model's ``.model_validate`` (the source of truth the published JSON Schemas are
-    rendered from). ``validate_document`` would reach the same models, but it
-    selects them by *document shape*: its detectors key off ``connector_id``,
-    ``destinations`` and ``connections`` respectively. An authored document that
-    omits its discriminating key — precisely the broken input this adapter exists
-    to diagnose — would match no detector and collapse into a single generic
-    "unrecognized artifact" finding. Routing by the caller-supplied ``--entity``,
-    which is already known here, guarantees the right model runs and yields
-    per-field findings instead.
-  * ``type-map`` -> ``analitiq.validator.type_map_findings`` at
-    ``scope="connection"``. ``scope`` is how the gap-only nature of a connection
-    map (``RULE-TMAP-018``) reaches the published check, which otherwise holds a
-    write map to a connector's full vocabulary (``RULE-TMAP-017``).
-  * ``pipeline`` with ``--bundle-root`` -> additionally
-    ``analitiq.validator.validate_pipeline_bundle`` over the on-disk bundle, for the
-    cross-document referential integrity no single document can verify. A draft
-    bundle passes ``require_runnable=False`` (a not-yet-runnable draft is not an
-    authoring error); an ``active`` pipeline is held to full runnability. The
-    published bundle validator receives assembled documents, never a
-    connection's directory, so the bundle pass also hands each connection's
-    ``definition/`` to ``analitiq.validator.load_type_map`` — the loading a
-    connector's map goes through — roots every finding at the entry it
-    concerns, and grades the map it read as the ``type-map`` entity.
+Every entity is graded by ``analitiq.validator.validate_document`` as the kind
+``--entity`` names — the same code the ``analitiq-validate`` CLI runs. A
+``pipeline`` with ``--bundle-root`` is additionally graded as a bundle by
+``analitiq.validator.validate_pipeline_bundle``, for the cross-document
+referential integrity no single document can verify. A draft bundle passes
+``require_runnable=False`` (a not-yet-runnable draft is not an authoring
+error); an ``active`` pipeline is held to full runnability. The bundle is read
+the way each published package locates its documents: every stream the
+pipeline's package holds is graded as a stream, and every connection directory
+is graded as a connection package by ``analitiq.validator.validate_package_at``.
 
 One check is the adapter's own, because it reads files the published
 validator never receives:
@@ -153,65 +133,6 @@ def _contained(findings: list[dict], path: str):
 # importing this module never requires the validator to be installed)
 # ---------------------------------------------------------------------------
 
-def _model_findings(entity: str, doc) -> list[dict]:
-    """Validate a single connection/stream/pipeline document against its published
-    contract model, mapping each Pydantic error to a finding. The message is the
-    validator's own rendering of the error, so a document value it echoes is
-    clipped here exactly as it is there."""
-    if entity == "connection":
-        from analitiq.contracts.connection import ConnectionInput as Model
-    elif entity == "stream":
-        from analitiq.contracts.stream import StreamInput as Model
-    elif entity == "pipeline":
-        from analitiq.contracts.pipelines.config import PipelineInput as Model
-    else:  # pragma: no cover - guarded by the entity choices
-        raise ValueError(f"no contract model for entity {entity!r}")
-    from pydantic import ValidationError
-    from analitiq.validator._core import _model_error_message, document_pointer
-    try:
-        Model.model_validate(doc)
-        return []
-    except ValidationError as exc:
-        return [
-            _finding("contract-model", "error",
-                     document_pointer(err["loc"], Model.__pydantic_core_schema__),
-                     _model_error_message(err))
-            for err in exc.errors()
-        ]
-
-
-def _endpoint_findings(doc, document_path: Path) -> list[dict]:
-    from analitiq.validator import validate_document
-    return validate_document(doc, doc_path=document_path)
-
-
-def _type_map_findings(doc) -> list[dict]:
-    """Grade a connection-scoped type-map document."""
-    from analitiq.validator import type_map_findings
-    return type_map_findings(doc, scope="connection")
-
-
-def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
-    """The published validator's loading of the type map beside one
-    connection.json, each finding rooted at the entry it concerns (the
-    `definition` directory itself for one about the directory), and the map it
-    read graded at connection scope. The loading cites no rule: the record it
-    cites beside a connector binds a connector package.
-
-    Appends to the caller's list rather than returning one so that a crash
-    grading the map costs only that map's finding, never the findings already
-    decided."""
-    from analitiq.validator import TYPE_MAP_FILENAME, load_type_map
-    site = f"connections/{conn_dir.name}/definition"
-    load = load_type_map(conn_dir / "definition", rule=None)
-    for entry, f in load.findings:
-        findings.extend(_at_site(str(PurePosixPath(site, entry)), [f]))
-    if load.loaded:
-        map_site = f"{site}/{TYPE_MAP_FILENAME}"
-        with _contained(findings, map_site):
-            findings.extend(_at_site(map_site, _type_map_findings(load.document)))
-
-
 def _at_site(site: str, findings: list[dict]) -> list[dict]:
     """Re-root a member's own findings at the entry they came from.
 
@@ -239,78 +160,68 @@ def _rooted(site: str, path: str) -> str:
     return f"{target}{pointer}"
 
 
-def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:
-    """Read one sibling bundle document. On an unreadable/invalid file or a
-    non-object payload, append an error finding and return None — so a malformed
-    sibling becomes a clear diagnostic instead of an uncaught traceback or a
-    silently dropped document."""
-    from analitiq.validator._core import _JSON_READ_ERRORS
+def _parsed(text: str | Exception) -> tuple[object, Exception | None]:
+    """The document `read_package` read as `text`, or the error that kept it
+    from being one."""
+    from analitiq.validator._core import _JSON_TEXT_REFUSALS
+    if isinstance(text, Exception):
+        return None, text
     try:
-        doc = _read_json(path)
-    except _JSON_READ_ERRORS as exc:
-        findings.append(_finding("document", "error", "", f"Cannot read {path.name}: {exc}"))
-        return None
-    if not isinstance(doc, dict):
-        findings.append(_finding("document", "error", "", f"{path.name} is not a JSON object"))
-        return None
-    return doc
+        return json.loads(text), None
+    except _JSON_TEXT_REFUSALS as exc:
+        return None, exc
 
 
 def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                      root: Path) -> tuple[dict, list[dict], bool, bool]:
     """Gather the on-disk pipeline bundle the way the engine resolves it at load:
-    the pipeline plus its sibling stream documents, every connection, the
-    connection-scoped endpoint documents (stamped with their owning connection's
-    id, which endpoint documents do not carry themselves), and the downloaded
-    connector identities. Returns the bundle, any read-error findings for
-    malformed siblings, whether every member on disk actually made it into the
-    bundle, and whether a containment guard is the reason any didn't — a crash
-    or read error that excludes a member leaves the published bundle validator
-    unable to tell "genuinely missing" from "excluded here", so a caller must
-    know before trusting its referential verdicts, and separately must know
-    whether that exclusion came from an actual crash (worth its own labeled
-    finding) or an already-reported ordinary read error (which needs no second,
-    misleading one)."""
-    from analitiq.validator._core import _JSON_READ_ERRORS
-    # `validate_pipeline_bundle` takes filename-less dicts, so every check that
-    # needs a name — RULE-PKG-031, on where an endpoint document ships — is run
-    # here, per file, where the names are known.
+    the pipeline plus the streams its package holds, every connection package,
+    the connection-scoped endpoint documents (stamped with their owning
+    connection's id, which endpoint documents do not carry themselves), and the
+    downloaded connector identities. Returns the bundle, the findings grading
+    its members, whether every member on disk actually made it into the bundle,
+    and whether a containment guard is the reason any didn't — a crash or read
+    error that excludes a member leaves the published bundle validator unable
+    to tell "genuinely missing" from "excluded here", so a caller must know
+    before trusting its referential verdicts, and separately must know whether
+    that exclusion came from an actual crash (worth its own labeled finding) or
+    an already-reported ordinary read error (which needs no second, misleading
+    one)."""
+    from analitiq.contracts.connection_package import ConnectionPackage
+    from analitiq.contracts.pipeline_package import PipelinePackage
+    from analitiq.validator import read_package, validate_document, validate_package_at
+    from analitiq.validator._core import _unreadable_document_finding
     findings: list[dict] = []
     complete = True
     crashed = False
 
     # Each section below is wrapped in its own outer guard too, not just each
-    # item within it: `sorted(...glob(...))` itself materializes the whole
-    # listing before the loop even starts, so a filesystem failure enumerating
-    # it (a vanished directory, a permission error) would otherwise escape
-    # every per-item guard and abort this whole function before it could
-    # return what earlier sections already decided.
+    # item within it: reading the directory materializes the whole listing
+    # before the loop even starts, so a filesystem failure enumerating it (a
+    # vanished directory, a permission error) would otherwise escape every
+    # per-item guard and abort this whole function before it could return
+    # what earlier sections already decided.
 
     streams: list[dict] = []
     with _contained(findings, "streams") as section:
-        for p in sorted((document_path.parent / "streams").glob("*.json")):
+        texts = read_package(document_path.parent, "pipeline-package")
+        for key in sorted(k for k in texts if PipelinePackage.kind_at(k) == "stream"):
             # One stream is one independently-decidable unit, same as one
-            # connection or one connector below: a crash reading it (e.g. a
+            # connection or one connector below: a crash grading it (e.g. a
             # pathologically deep document) must not discard the streams
             # already appended above.
-            doc = None
-            with _contained(findings, f"streams/{p.name}") as outcome:
-                doc = _read_bundle_member(p, findings)
-                if doc is not None:
-                    streams.append(doc)
-                    # Grade it as the document it is, not only as a member of
-                    # the bundle: the referential checks below read a stream's
-                    # refs and never its shape, so an unbundled member would
-                    # otherwise be graded on this route and a bundled one not.
-                    # Its own guard, like the endpoint branch below: a crash
-                    # here costs these findings, never the stream's place in
-                    # the bundle, which the append above already gave it.
-                    with _contained(findings, f"streams/{p.name}"):
-                        findings.extend(_at_site(f"streams/{p.name}",
-                                                 _model_findings("stream", doc)))
-            if outcome.crashed:
-                crashed = True
-            if outcome.crashed or doc is None:
+            doc, error = _parsed(texts[key])
+            with _contained(findings, key):
+                if error is not None:
+                    findings.extend(_at_site(key, [_unreadable_document_finding(error)]))
+                else:
+                    findings.extend(_at_site(key, validate_document(doc, "stream")))
+            # Whatever grading did: the referential checks read a stream's
+            # refs, never its shape, so a crash grading it must not cost it its
+            # place in the bundle.
+            if isinstance(doc, dict):
+                streams.append(doc)
+            else:
                 complete = False
     if section.crashed:
         crashed = True
@@ -319,76 +230,41 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     connections: list[dict] = []
     endpoints: list[dict] = []
     with _contained(findings, "connections") as section:
-        for conn_json in sorted((root / "connections").glob("*/connection.json")):
-            # One connection is one independently-decidable unit: a crash
-            # processing it must not discard the findings already decided for
-            # connections processed earlier in this same loop. Reading the
-            # connection is the part that can exclude a bundle member, so only
-            # a crash here (or one from a per-endpoint guard below, which
-            # reports through its own site) marks assembly incomplete.
-            conn = None
-            with _contained(findings, f"connections/{conn_json.parent.name}") as outcome:
-                conn = _read_bundle_member(conn_json, findings)
-                if conn is not None:
-                    connections.append(conn)
-                    conn_site = f"connections/{conn_json.parent.name}/connection.json"
-                    # Own guard, same reason as the stream and endpoint
-                    # branches: a crash grading this connection's shape must
-                    # not take the connection — and every endpoint under it —
-                    # out of the bundle the referential pass reads.
-                    with _contained(findings, conn_site):
-                        findings.extend(_at_site(conn_site,
-                                                 _model_findings("connection", conn)))
-                    connection_id = conn.get("connection_id")
-                    for ep_json in sorted((conn_json.parent / "definition" / "endpoints").glob("*.json")):
-                        # One endpoint is its own independently-decidable unit, same
-                        # as one stream or connection above: a crash reading it
-                        # (e.g. a pathologically deep document) must not abort the
-                        # loop and cost its siblings their place in the bundle —
-                        # each gets its own guard rather than sharing the
-                        # connection-level one above.
-                        ep_site = f"connections/{conn_json.parent.name}/definition/endpoints/{ep_json.name}"
-                        endpoint = None
-                        with _contained(findings, ep_site) as ep_outcome:
-                            endpoint = _read_bundle_member(ep_json, findings)
-                        if ep_outcome.crashed:
-                            crashed = True
-                        if ep_outcome.crashed or endpoint is None:
-                            complete = False
-                            continue
-                        # Grade the document the same way validating this one
-                        # file on its own does — every rule it settles alone,
-                        # not just the filename. It runs BEFORE the bundle keys
-                        # below are set on it: the endpoint models forbid
-                        # unknown keys, so a `connection_id`/`scope` supplied
-                        # here would come back as the author's error. Files
-                        # here are stem-addressed by construction (globbed from
-                        # definition/endpoints/), so the filename gate inside
-                        # applies directly and is not called separately. Its own
-                        # guard: a crash costs these findings, never the
-                        # endpoint's place in the bundle, which the lines below
-                        # still give it.
-                        with _contained(findings, ep_site):
-                            findings.extend(_at_site(
-                                ep_site, _endpoint_findings(endpoint, ep_json)))
-                        # Endpoint documents omit connection_id (server-managed); supply the
-                        # owning connection's id so the bundle's endpoint-ref check can resolve
-                        # connection-scoped references.
-                        endpoint.setdefault("connection_id", connection_id)
-                        endpoint.setdefault("scope", "connection")
-                        endpoints.append(endpoint)
+        for conn_dir in sorted(d for d in (root / "connections").glob("*")
+                               if (d / ConnectionPackage.ROOT).is_file()):
+            site = f"connections/{conn_dir.name}"
+            # One connection is one independently-decidable unit: a directory
+            # it cannot be read from must not discard what was decided for
+            # connections read earlier in this same loop.
+            with _contained(findings, site) as outcome:
+                texts = read_package(conn_dir, "connection-package")
             if outcome.crashed:
                 crashed = True
-            if outcome.crashed or conn is None:
                 complete = False
-            # A connection-scoped type map is a file beside the connection,
-            # invisible to the assembled-document bundle, and depends
-            # only on conn_json.parent — never on whether connection.json itself
-            # parsed — so it is checked unconditionally, and a crash inside
-            # never costs the bundle's completeness (which would otherwise
-            # misreport a live connection as unresolved).
-            with _contained(findings, f"connections/{conn_json.parent.name}"):
-                _connection_type_map_findings(conn_json.parent, findings)
+                continue
+            # Grading is its own unit too: a crash grading a connection package
+            # must not take the connection — and every endpoint under it — out
+            # of the bundle the referential pass reads. An unreadable member
+            # needs no finding below; grading reports it.
+            with _contained(findings, site):
+                findings.extend(_at_site(f"{site}/{ConnectionPackage.ROOT}",
+                                         validate_package_at(conn_dir, "connection-package")["findings"]))
+            conn, _ = _parsed(texts[ConnectionPackage.ROOT])
+            if not isinstance(conn, dict):
+                complete = False
+                continue
+            connections.append(conn)
+            for key in sorted(k for k in texts if ConnectionPackage.kind_at(k) == "database-endpoint"):
+                endpoint, _ = _parsed(texts[key])
+                if not isinstance(endpoint, dict):
+                    complete = False
+                    continue
+                # Endpoint documents omit connection_id (server-managed); supply the
+                # owning connection's id so the bundle's endpoint-ref check can resolve
+                # connection-scoped references.
+                endpoint.setdefault("connection_id", conn.get("connection_id"))
+                endpoint.setdefault("scope", "connection")
+                endpoints.append(endpoint)
     if section.crashed:
         crashed = True
         complete = False
@@ -402,14 +278,11 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     # then wrongly read as unresolved, so it still marks the bundle incomplete.
     connectors: set[str] = set()
     with _contained(findings, "connectors") as section:
-        for conn_json in sorted((root / "connectors").glob("*/definition/connector.json")):
-            connectors.add(conn_json.parent.parent.name)  # directory slug
-            with _contained(findings, f"connectors/{conn_json.parent.parent.name}") as outcome:
-                try:
-                    cid = _read_json(conn_json).get("connector_id")
-                except (*_JSON_READ_ERRORS, AttributeError):
-                    cid = None
-                if isinstance(cid, str) and cid:
+        for connector_dir in _connector_dirs(root):
+            connectors.add(connector_dir.name)  # directory slug
+            with _contained(findings, f"connectors/{connector_dir.name}") as outcome:
+                cid = _connector_id(connector_dir)
+                if cid:
                     connectors.add(cid)
             if outcome.crashed:
                 crashed = True
@@ -428,53 +301,63 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     return bundle, findings, complete, crashed
 
 
+def _connector_dirs(root: Path) -> list[Path]:
+    """Every downloaded connector package under `root`: a directory holding a
+    connector package's root document."""
+    from analitiq.contracts.connector_package import ConnectorPackage
+    return sorted(d for d in (root / "connectors").glob("*")
+                  if (d / ConnectorPackage.ROOT).is_file())
+
+
+def _connector_id(connector_dir: Path) -> str | None:
+    """The `connector_id` a downloaded connector's root document declares, or
+    `None` when it declares none it can be read for."""
+    from analitiq.contracts.connector_package import ConnectorPackage
+    from analitiq.validator._core import _JSON_READ_ERRORS
+    try:
+        cid = _read_json(connector_dir / ConnectorPackage.ROOT).get("connector_id")
+    except (*_JSON_READ_ERRORS, AttributeError):
+        return None
+    return cid if isinstance(cid, str) and cid else None
+
+
 def _connector_endpoint_sets(root: Path, findings: list[dict]) -> dict[str, set[str]]:
     """Map each downloaded connector — by directory slug **and** its authored
     `connector_id` — to the set of endpoint ids it publishes on disk (each
-    `connectors/<slug>/definition/endpoints/*.json` contributes both its filename
-    stem and its `endpoint_id` field, which the connector's own filename gate keeps
-    equal for well-formed registry connectors — this adapter records both to stay
-    correct even if a malformed connector let them diverge).
+    endpoint document its package holds contributes both its filename stem and
+    its `endpoint_id` field, which the connector's own filename gate keeps
+    equal for well-formed registry connectors — this adapter records both to
+    stay correct even if a malformed connector let them diverge).
 
-    A connector whose `definition/endpoints/` directory is absent or empty is
-    **omitted**, not recorded as an empty set: its endpoint set is *unknown* here
-    (the plugin may not have downloaded endpoints for it), and an unknown set must
-    not read as "no endpoints", which would warn on every ref. Callers treat a
-    missing key as "cannot verify — skip" — the same treatment a crash reading
-    one connector's endpoints gets here (contained per connector, so it costs
-    only that connector's set, never every other connector's).
+    A connector whose package holds no endpoint document is **omitted**, not
+    recorded as an empty set: its endpoint set is *unknown* here (the plugin
+    may not have downloaded endpoints for it), and an unknown set must not read
+    as "no endpoints", which would warn on every ref. Callers treat a missing
+    key as "cannot verify — skip" — the same treatment a crash reading one
+    connector's endpoints gets here (contained per connector, so it costs only
+    that connector's set, never every other connector's).
 
-    The enumeration itself (`sorted(root.glob(...))`, which materializes the
-    full listing before the loop runs) is wrapped in its own outer guard too:
-    a filesystem failure there would otherwise escape every per-connector
-    guard below and return nothing at all, rather than whatever connectors
-    were already found before it."""
-    from analitiq.validator._core import _JSON_READ_ERRORS
+    The enumeration itself is wrapped in its own outer guard too: a filesystem
+    failure there would otherwise escape every per-connector guard below and
+    return nothing at all, rather than whatever connectors were already found
+    before it."""
+    from analitiq.contracts.connector_package import ConnectorPackage
+    from analitiq.validator import read_package
     sets: dict[str, set[str]] = {}
     with _contained(findings, "connectors"):
-        for ep_dir in sorted(root.glob("connectors/*/definition/endpoints")):
-            slug_dir = ep_dir.parent.parent  # connectors/<slug>
-            with _contained(findings, f"connectors/{slug_dir.name}/definition/endpoints"):
-                if not ep_dir.is_dir():
-                    continue
+        for connector_dir in _connector_dirs(root):
+            with _contained(findings, f"connectors/{connector_dir.name}"):
+                texts = read_package(connector_dir, "connector-package")
                 ids: set[str] = set()
-                for ep_json in sorted(ep_dir.glob("*.json")):
-                    ids.add(ep_json.stem)
-                    try:
-                        eid = _read_json(ep_json).get("endpoint_id")
-                    except (*_JSON_READ_ERRORS, AttributeError):
-                        eid = None
+                for key in sorted(k for k in texts
+                                  if ConnectorPackage.kind_at(k) == "api-endpoint"):
+                    ids.add(PurePosixPath(key).stem)
+                    endpoint, _ = _parsed(texts[key])
+                    eid = endpoint.get("endpoint_id") if isinstance(endpoint, dict) else None
                     if isinstance(eid, str) and eid:
                         ids.add(eid)
                 if ids:
-                    keys = {slug_dir.name}
-                    try:
-                        cid = _read_json(slug_dir / "definition" / "connector.json").get("connector_id")
-                    except (*_JSON_READ_ERRORS, AttributeError):
-                        cid = None
-                    if isinstance(cid, str) and cid:
-                        keys.add(cid)
-                    for key in keys:
+                    for key in {connector_dir.name, _connector_id(connector_dir)} - {None}:
                         sets[key] = ids
     return sets
 
@@ -601,27 +484,23 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     """Validate one document and return the Diagnostics envelope. Raises nothing
     for validation failures — those become findings; only a genuinely unreadable
     document short-circuits."""
-    from analitiq.validator._core import _JSON_READ_ERRORS
+    from analitiq.validator import validate_document
+    from analitiq.validator._core import _JSON_READ_ERRORS, _unreadable_document_finding
     try:
         doc = _read_json(document_path)
     except _JSON_READ_ERRORS as exc:
-        return _diagnostics([_finding("document", "error", "", f"Cannot read document: {exc}")])
+        return _diagnostics([_unreadable_document_finding(exc)])
 
-    if entity == "database-endpoint":
-        findings = _endpoint_findings(doc, document_path)
-    elif entity == "type-map":
-        findings = _type_map_findings(doc)
-    else:
-        findings = _model_findings(entity, doc)
-        if entity == "pipeline" and bundle_root is not None:
-            # Its own guarded unit: a crash enriching the bundle (e.g. `doc` is
-            # not an object, so `_bundle_findings`'s own field access on it
-            # raises) must not discard the single-document findings above —
-            # the precise contract-model error a malformed pipeline document
-            # already earned stays in the result alongside the adapter-crash
-            # finding, instead of being replaced by it.
-            with _contained(findings, "pipeline-bundle"):
-                findings.extend(_bundle_findings(doc, document_path, bundle_root))
+    findings = validate_document(doc, entity)
+    if entity == "pipeline" and bundle_root is not None:
+        # Its own guarded unit: a crash enriching the bundle (e.g. `doc` is
+        # not an object, so `_bundle_findings`'s own field access on it
+        # raises) must not discard the single-document findings above —
+        # the precise contract-model error a malformed pipeline document
+        # already earned stays in the result alongside the adapter-crash
+        # finding, instead of being replaced by it.
+        with _contained(findings, "pipeline-bundle"):
+            findings.extend(_bundle_findings(doc, document_path, bundle_root))
     return _diagnostics(findings)
 
 

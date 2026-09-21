@@ -115,23 +115,34 @@ def _unwrap_alternation(pattern: str) -> str:
 
 def render_schema_urls() -> str:
     from analitiq.contracts.connection import CONNECTION_SCHEMA_URL
+    from analitiq.contracts.connection_package import ConnectionPackage
     from analitiq.contracts.endpoints import DATABASE_ENDPOINT_SCHEMA_URL
+    from analitiq.contracts.pipeline_package import PipelinePackage
     from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
     from analitiq.contracts.stream import STREAM_SCHEMA_URL
     from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
-    from analitiq.validator import TYPE_MAP_FILENAME
 
+    # (entity, package directory, package, key in the package, kind, `$schema`)
     rows = [
-        ("Pipeline", "pipelines/<slug>/pipeline.json", PIPELINE_SCHEMA_URL),
-        ("Stream", "pipelines/<slug>/streams/<stream-slug>.json", STREAM_SCHEMA_URL),
-        ("Connection", "connections/<slug>/connection.json", CONNECTION_SCHEMA_URL),
-        ("Database endpoint", "connections/<slug>/definition/endpoints/<endpoint_id>.json",
+        ("Pipeline", "pipelines/<slug>", PipelinePackage, "pipeline.json", "pipeline",
+         PIPELINE_SCHEMA_URL),
+        ("Stream", "pipelines/<slug>", PipelinePackage, "streams/<stream-slug>.json", "stream",
+         STREAM_SCHEMA_URL),
+        ("Connection", "connections/<slug>", ConnectionPackage, "connection.json", "connection",
+         CONNECTION_SCHEMA_URL),
+        ("Database endpoint", "connections/<slug>", ConnectionPackage,
+         "definition/endpoints/<endpoint_id>.json", "database-endpoint",
          DATABASE_ENDPOINT_SCHEMA_URL),
-        ("Connection type map", f"connections/<slug>/definition/{TYPE_MAP_FILENAME}",
-         TYPE_MAP_SCHEMA_URL),
+        ("Connection type map", "connections/<slug>", ConnectionPackage,
+         "definition/type-map.json", "type-map", TYPE_MAP_SCHEMA_URL),
     ]
     out = ["| Entity | Authored file | `$schema` value |", "|---|---|---|"]
-    out += [f"| {e} | {_code(f)} | {_code(u)} |" for e, f, u in rows]
+    for entity, directory, package, key, kind, url in rows:
+        # The package model owns where each kind sits; a row it does not
+        # locate as its kind would teach a path the validator never grades.
+        if package.kind_at(key) != kind:
+            raise RuntimeError(f"{package.__name__} does not locate {key!r} as {kind!r}")
+        out.append(f"| {entity} | {_code(f'{directory}/{key}')} | {_code(url)} |")
     return "\n".join(out) + "\n"
 
 
@@ -320,11 +331,10 @@ def measured_reachable_connectors_ids() -> set[str]:
     naming a function this adapter's entities never route to at all (an
     api-endpoint/connector-package check — this function never constructs
     such a document, so those checks are never even probed), and separately
-    by naming one the adapter never surfaces because of the scope it grades a
-    connection map at (`_type_map_findings` in `validate.py`) — probing entity
-    `type-map` with a document carrying a write section, through the
-    adapter's own `diagnostics_for`, is what proves that exclusion instead of
-    asserting it.
+    by naming one the adapter never surfaces because a map graded on its own
+    is never held to a connector's vocabulary — probing entity `type-map`
+    with a document carrying a write section, through the adapter's own
+    `diagnostics_for`, is what proves that exclusion instead of asserting it.
     """
     import json
     import tempfile

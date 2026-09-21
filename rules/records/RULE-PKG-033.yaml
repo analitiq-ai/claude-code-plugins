@@ -6,7 +6,7 @@ statement: >
 tier: reference
 severity: error
 artifact_kinds: [connector-package]
-validator: "analitiq.validator.connectors::check_coverage"
+validator: "analitiq.validator.connectors::_connector_package_findings"
 owners: [connector-plugin, engine]
 rationale: >
   The endpoint records the pair the connector observed; the map is how every

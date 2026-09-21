@@ -6,7 +6,7 @@ statement: >
 tier: reference
 severity: error
 artifact_kinds: [connector-package]
-validator: "analitiq.validator.connectors::check_coverage"
+validator: "analitiq.validator.connectors::_connector_package_findings"
 owners: [connector-plugin, engine]
 rationale: >
   The map is a separate document from `connector.json`, so nothing about the

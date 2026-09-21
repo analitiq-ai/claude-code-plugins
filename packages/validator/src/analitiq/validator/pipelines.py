@@ -1,28 +1,21 @@
-"""Pipeline validation — the single `pipeline` document, and the assembled
+"""The `pipeline` kind, the pipeline package's check, and the assembled
 pipeline-run bundle.
 
-This module registers TWO kinds:
+A pipeline document is validated wholly against its contract model
+(`PipelineInput`, the source of the published `pipeline` JSON Schema), plus
+RULE-SHRD-003, which reports a `warning` — a severity no `@model_validator` can
+carry (`rules/SCHEMA.md`, `validator`).
 
-1. **`pipeline` document** — validated wholly against its contract model
-   (`PipelineInput`, the source of the published `pipeline` JSON Schema):
-   `TypeAdapter(...).validate_python` enforces structure and every cross-field
-   rule offline. The one check the model cannot carry is RULE-SHRD-003, which
-   reports a `warning` — a severity no `@model_validator` can carry
-   (`rules/SCHEMA.md`, `validator`) — so it registers a combined validator.
-
-2. **pipeline bundle** — cross-document referential integrity across an assembled
-   run (pipeline + streams + connections + connectors + endpoints).
-
-Per-document *shape* validity (field types, lengths, enums) is each document
-kind's own job — the connector / api-endpoint / database-endpoint / type-map kinds
-in `connectors`, and the pipeline / stream / connection contract models the
-producers validate against. The BUNDLE validator checks the referential integrity
-BETWEEN the assembled documents — the cross-document relationships no single
-document can verify in isolation. It does NOT assume each document was already
-contract-validated, so a missing *reference* field (a connection that names no
-connector, a stream slot with no endpoint_ref, an endpoint_ref with no
-connection_id / endpoint_id) is treated as an UNRESOLVED reference — a referential
-failure — not skipped. A bundle that passes here resolves cleanly at load:
+The **pipeline package** holds a pipeline and its streams. Its check is the
+referential integrity those documents settle between them
+(`_pipeline_package_checks`). The **bundle** is the assembled run —
+pipeline, streams, connections, connectors and connection-scoped endpoints —
+and `validate_pipeline_bundle` checks the same referential integrity plus what
+needs the connections and connectors in hand. Neither assumes each document
+was already contract-validated, so a missing *reference* field (a connection
+that names no connector, a stream slot with no endpoint_ref, an endpoint_ref
+with no connection_id / endpoint_id) is an UNRESOLVED reference — a referential
+failure — not skipped. A bundle that passes resolves cleanly at load:
 
 - every `pipeline.streams[]` ref resolves to exactly one bundled stream document;
 - every bundled stream declares this pipeline as its parent;
@@ -47,10 +40,6 @@ form: a `{id}_v{n}` versioned ref and the bare `{id}` it pins resolve to the sam
 object, so a pipeline that pins `{stream}_v2` resolves the stream document that
 declares the bare id. Connector identities are matched whole (their version is a
 separate field, not a `_v{n}` ref suffix).
-
-At import this module registers its detector -> validator pairs with the core
-dispatch registry, so `_core` never hard-codes pipeline branches — a new
-referential rule is a new function, a new kind is a new module.
 """
 from __future__ import annotations
 
@@ -60,15 +49,16 @@ from typing import Any
 from ._core import (
     contract_model_domain,
     finding,
-    register_kind,
     register_model_and_schema_kind,
 )
+from .document_set import keys_of, register_package_check
 
 # Import the single-document contract model under the shared DOMAIN guard (the
 # model binds the `$schema` host at import; see `contract_model_domain`).
 with contract_model_domain():
     from pydantic import TypeAdapter
     from analitiq.contracts.pipelines.config import PipelineInput
+    from analitiq.contracts.pipeline_package import PipelinePackage
 
 _PIPELINE_ADAPTER = TypeAdapter(PipelineInput)
 
@@ -85,26 +75,6 @@ def _base_id(ref: Any) -> Any:
     if not isinstance(ref, str):
         return ref
     return _VERSION_SUFFIX_RE.sub("", ref)
-
-
-def is_pipeline_bundle(doc: Any) -> bool:
-    """A bundle is a mapping carrying a `pipeline` document plus its `streams` and
-    `connections` collections — the assembled run inputs. Structurally distinct
-    from every single-document kind (connector / endpoint / type-map / pipeline)."""
-    return (
-        isinstance(doc, dict)
-        and isinstance(doc.get("pipeline"), dict)
-        and "streams" in doc
-        and "connections" in doc
-    )
-
-
-def is_pipeline_doc(doc: Any) -> bool:
-    """A single pipeline document declares its source/destination wiring under
-    `connections` and, unlike a bundle, carries no nested `pipeline` document. The
-    bundle detector (registered first) claims the assembled-run shape, so a
-    `connections`-bearing mapping that is not a bundle is a pipeline document."""
-    return isinstance(doc, dict) and "connections" in doc and "pipeline" not in doc
 
 
 # ---------------------------------------------------------------------------
@@ -584,6 +554,18 @@ def _check_connection_scoped_endpoints(streams: Any, endpoints: Any) -> list[dic
 # Aggregate + registration
 # ---------------------------------------------------------------------------
 
+def _pipeline_package_checks(pipeline: dict, streams: Any) -> list[dict]:
+    """The referential checks a pipeline and its streams settle between them,
+    in bundle coordinates (`/pipeline/...`, `/streams/{i}/...`)."""
+    findings = _check_pipeline_id(pipeline)
+    findings += _check_stream_refs(pipeline, streams)
+    findings += _check_stream_parent_pipeline(pipeline, streams)
+    findings += _check_stream_endpoint_targets(streams)
+    findings += _check_connection_version_conflicts(pipeline)
+    findings += _check_stream_connection_roles(pipeline, streams)
+    return findings
+
+
 def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> list[dict]:
     """Validate referential integrity across an assembled pipeline bundle.
 
@@ -622,32 +604,40 @@ def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> l
     streams = bundle.get("streams")
     connections = bundle.get("connections")
     findings: list[dict] = []
-    findings += _check_pipeline_id(pipeline)
     if require_runnable:
         findings += _check_pipeline_active(pipeline)
         findings += _check_pipeline_active_gate(pipeline, streams)
-    findings += _check_stream_refs(pipeline, streams)
-    findings += _check_stream_parent_pipeline(pipeline, streams)
-    findings += _check_stream_endpoint_targets(streams)
-    findings += _check_connection_version_conflicts(pipeline)
+    findings += _pipeline_package_checks(pipeline, streams)
     findings += _check_connections_present(pipeline, connections)
-    findings += _check_stream_connection_roles(pipeline, streams)
     findings += _check_connection_connector_refs(connections, bundle.get("connectors"))
     findings += _check_connection_scoped_endpoints(streams, bundle.get("endpoints"))
     return findings
 
 
-def _validate_pipeline_bundle(doc: Any, location: Any = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature; a bundle reads nothing beside itself
-    """Kind entry point: dispatch a bundle document to the referential validator.
+def _in_package(f: dict, stream_keys: list[str]) -> tuple[str, dict]:
+    """A finding in bundle coordinates, read as one about the package document
+    it points into."""
+    head, _, rest = f["path"].removeprefix("/").partition("/")
+    if head == "streams":
+        index, _, rest = rest.partition("/")
+        key = stream_keys[int(index)]
+    else:
+        key = PipelinePackage.ROOT
+    return key, {**f, "path": f"/{rest}" if rest else ""}
 
-    A bundle carries every document it references, so it reads nothing
-    beside its `location` (the registry's per-kind signature), unused here.
-    """
-    return validate_pipeline_bundle(doc)
+
+def _pipeline_package_findings(documents: dict[str, Any], unread: frozenset[str]) -> list[tuple[str, dict]]:
+    """The pipeline package's referential checks. Withheld while any of its
+    documents went unread: a stream that did not parse would read as a
+    reference that resolves to nothing, and its unreadable finding already
+    costs the pass."""
+    pipeline = documents.get(PipelinePackage.ROOT)
+    if unread or not isinstance(pipeline, dict):
+        return []
+    stream_keys = keys_of(PipelinePackage, documents, "stream")
+    streams = [documents[key] for key in stream_keys]
+    return [_in_package(f, stream_keys) for f in _pipeline_package_checks(pipeline, streams)]
 
 
-# The bundle is registered BEFORE the single-pipeline document so the bundle
-# detector claims an assembled-run mapping first; `is_pipeline_doc` then only sees
-# a `connections`-bearing mapping with no nested `pipeline` document.
-register_kind(is_pipeline_bundle, _validate_pipeline_bundle)
-register_model_and_schema_kind(is_pipeline_doc, _PIPELINE_ADAPTER)
+register_model_and_schema_kind("pipeline", _PIPELINE_ADAPTER)
+register_package_check("pipeline-package", _pipeline_package_findings)
