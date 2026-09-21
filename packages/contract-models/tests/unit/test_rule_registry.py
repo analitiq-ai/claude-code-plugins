@@ -15,7 +15,7 @@ from pydantic import BaseModel, model_validator
 
 from analitiq.contracts.shared.introspect import closed_members, contract_classes
 
-from analitiq.contracts import connection, connector, endpoints, stream, type_map
+from analitiq.contracts import connection, connector, endpoints, pipeline_manifest, stream, type_map
 from analitiq.contracts.pipelines import config as pipeline_config
 from analitiq.contracts.pipelines import data_sync
 from analitiq.contracts.shared import common
@@ -38,7 +38,7 @@ from analitiq.contracts.shared.rule_record import (
 
 _MODULES = (
     connection, connector, endpoints, stream, type_map,
-    pipeline_config, data_sync, common,
+    pipeline_config, data_sync, common, pipeline_manifest,
 )
 
 

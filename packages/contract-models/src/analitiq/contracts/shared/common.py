@@ -288,11 +288,11 @@ def closed_true_end_keys(schema: dict[str, Any]) -> None:
     schema["additionalProperties"] = False
 
 
-# A package schema is a closed table of locations: each pattern names where one
-# document, or one package's documents, sits and points at the kind's `latest.json`, the URL every
-# document declares as its own `$schema`, so a location keeps its kind across that
-# schema's versions. `locations` maps a key pattern to the resource its document
-# is written against.
+# A package or workspace schema is a closed table of locations: each pattern names
+# where one document, or one package's documents, sits and points at that
+# resource's `latest.json` rather than a pinned version, so a location keeps its
+# kind across that schema's versions. `locations` maps a key pattern to the
+# resource written at it.
 def document_locations(locations: dict[str, str]) -> Callable[[dict[str, Any]], None]:
     def locate(schema: dict[str, Any]) -> None:
         schema["patternProperties"] = {

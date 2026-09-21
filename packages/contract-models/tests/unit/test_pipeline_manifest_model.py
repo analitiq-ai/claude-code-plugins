@@ -55,3 +55,25 @@ def test_a_path_outside_one_pipeline_directory_is_rejected(path):
 def test_status_outside_the_lifecycle_vocabulary_is_rejected(status):
     with pytest.raises(ValidationError):
         PipelineManifest.model_validate({"pipelines": [{**ENTRY, "status": status}]})
+
+
+OTHER_ID = "5c2e7a10-9d3b-4f6e-8a1c-7b4d2e9f0a36"
+
+
+@pytest.mark.parametrize(
+    "second",
+    [
+        {**ENTRY, "path": "invoices/pipeline.json"},
+        {**ENTRY, "pipeline_id": OTHER_ID},
+    ],
+    ids=["same-pipeline_id", "same-path"],
+)
+def test_two_entries_listing_one_pipeline_are_rejected(second):
+    with pytest.raises(ValidationError, match="RULE-PIPE-020"):
+        PipelineManifest.model_validate({"pipelines": [ENTRY, second]})
+
+
+def test_entries_listing_distinct_pipelines_validate():
+    PipelineManifest.model_validate(
+        {"pipelines": [ENTRY, {**ENTRY, "pipeline_id": OTHER_ID, "path": "invoices/pipeline.json"}]}
+    )
