@@ -1,0 +1,35 @@
+{
+  "$id": "https://schemas.analitiq.ai/validate-single-document-request/1.0.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public JSON Schema contract for a request to validate one document supplied as its file text, together with the name of the published document schema it is written against. The schema gates the request's shape only; the document's content is not judged by it. Source of truth: analitiq.contracts.validation_requests.ValidateSingleDocumentRequest (Pydantic).",
+  "properties": {
+    "document": {
+      "description": "The document's file text, unparsed.",
+      "maxLength": 500000,
+      "title": "Document",
+      "type": "string"
+    },
+    "entity": {
+      "description": "Name of the published schema the document is written against.",
+      "enum": [
+        "connector",
+        "connection",
+        "api-endpoint",
+        "database-endpoint",
+        "type-map",
+        "pipeline",
+        "stream"
+      ],
+      "title": "Entity",
+      "type": "string"
+    }
+  },
+  "required": [
+    "document",
+    "entity"
+  ],
+  "title": "Analitiq Validate Single Document Request",
+  "type": "object",
+  "version": "1.0.0"
+}
