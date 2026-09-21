@@ -1,0 +1,20 @@
+{
+  "$id": "https://schemas.analitiq.ai/connection-package/1.0.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public JSON Schema contract for the authored documents of a connection package: where each sits, read from the connection's own directory (the one holding `connection.json`), and the published schema it is written against. It holds locations only; each document's shape is the schema it points at. Other files a package carries are outside this schema. Source of truth: analitiq.contracts.connection_package.ConnectionPackage (Pydantic).",
+  "patternProperties": {
+    "^connection\\.json(?![\\s\\S])": {
+      "$ref": "https://schemas.analitiq.ai/connection/latest.json"
+    },
+    "^definition/endpoints/[^/]+\\.json(?![\\s\\S])": {
+      "$ref": "https://schemas.analitiq.ai/database-endpoint/latest.json"
+    },
+    "^definition/type-map\\.json(?![\\s\\S])": {
+      "$ref": "https://schemas.analitiq.ai/type-map/latest.json"
+    }
+  },
+  "title": "Analitiq Connection Package",
+  "type": "object",
+  "version": "1.0.0"
+}
