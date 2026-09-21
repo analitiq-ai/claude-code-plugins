@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -190,3 +190,11 @@ def test_the_model_refuses_a_key_outside_the_table(resource):
     key = PACKAGES[resource]["outside"][0]
     with pytest.raises(ValidationError, match=re.escape(repr(key))):
         _model(resource).model_validate({ROOTS[resource]: {}, key: {}})
+
+
+@package
+def test_the_location_directories_are_the_ancestors_of_the_located_keys(resource):
+    ancestors = {parent.as_posix() for key in PACKAGES[resource]["located"]
+                 for parent in PurePosixPath(key).parents if parent != PurePosixPath(".")}
+    assert _model(resource).location_directories() == ancestors
+

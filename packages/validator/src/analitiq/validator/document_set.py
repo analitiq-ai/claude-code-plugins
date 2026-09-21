@@ -194,47 +194,41 @@ def validate_package_at(directory: Path, package: str) -> ValidationEnvelope:
 
 
 def read_package(directory: Path, package: str) -> dict[str, str | Exception]:
-    """The text of every file under `directory` whose path from it is a
-    location of the published package `package`, by that path, as
-    `read_document` reads it.
+    """The text of every file under `directory` that the published package
+    `package` locates, by its path from `directory`, as `read_document` reads
+    it.
 
-    A file that cannot be read, or looked up, maps to the exception that
-    raised. A directory the walk cannot list or look up raises its `OSError`,
-    and so does an unlocated entry it cannot look up: what either holds is
-    unknown, and no finding about a document can say so. A path leading
-    outside `directory` is refused like a lookup the OS refuses, because the
-    package is untrusted input and its links may not make the walk read the
-    machine it runs on. A symlinked directory inside it is walked under the
-    path that reaches it, and never again beneath itself, which is what ends a
-    symlink cycle. A dangling or looping link leads to nothing and is skipped.
+    The read lists `directory`, then each location directory its parent's
+    listing names, and looks up only entries the package locates, so nothing
+    else under `directory` can cost the read or fail it. A located file that
+    cannot be read, or looked up, maps to the exception that raised. A
+    location directory that is no directory holds nothing. One that leads
+    outside `directory`, or whose lookup or listing is refused, raises its
+    `OSError`: what it holds is unknown, and no finding about a document can
+    say so. Leading outside is refused because the package is untrusted
+    input, and its links may not make the read reach the machine it runs on.
     Raises `ValueError` for a package name outside the published ones — the
     caller's error, not the package's.
     """
     model = _package_model(package)
     root = Path(directory)
+    listable = model.location_directories()
     texts: dict[str, str | Exception] = {}
-    pending: list[tuple[Path, frozenset[tuple[int, int]]]] = [(root, frozenset())]
+    pending = [""]
     while pending:
-        parent, ancestors = pending.pop()
-        identity = os.stat(parent)
-        if (identity.st_dev, identity.st_ino) in ancestors:
-            continue
-        ancestors |= {(identity.st_dev, identity.st_ino)}
-        # Not `os.walk` or `Path.is_file`: each answers a refused lookup as
-        # "no directory" or "no file", or raises, depending on the interpreter.
-        # Sorted, so the walk is the same on every filesystem.
-        with os.scandir(parent) as entries:
-            for entry in sorted(entries, key=lambda entry: entry.name):
-                path = Path(entry.path)
-                key = path.relative_to(root).as_posix()
+        listed = pending.pop()
+        with os.scandir(root / listed) as entries:
+            # Sorted, so the read is the same on every filesystem.
+            for name in sorted(entry.name for entry in entries):
+                key = f"{listed}/{name}" if listed else name
                 if model.kind_at(key) is not None:
                     text = read_document(root, key)
                     if text is not None:
                         texts[key] = text
-                    continue
-                mode = _mode_within(root, path)
-                if mode is not None and stat.S_ISDIR(mode):
-                    pending.append((path, ancestors))
+                elif key in listable:
+                    mode = _mode_within(root, root / key)
+                    if mode is not None and stat.S_ISDIR(mode):
+                        pending.append(key)
     return texts
 
 

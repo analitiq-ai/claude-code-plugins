@@ -286,8 +286,8 @@ def closed_true_end_keys(schema: dict[str, Any]) -> None:
 def document_locations(schema: dict[str, Any], package: type[DocumentPackage]) -> None:
     """A package's `json_schema_extra`: publishes its `LOCATIONS` and `ROOT` into its schema."""
     schema["patternProperties"] = {
-        pattern: {"$ref": schema_url_for(resource)}
-        for pattern, resource in package.LOCATIONS.items()
+        f"^{re.escape(directory) + '/' if directory else ''}{name}$": {"$ref": schema_url_for(resource)}
+        for (directory, name), resource in package.LOCATIONS.items()
     }
     schema["required"] = [package.ROOT]
     closed_true_end_keys(schema)
@@ -296,22 +296,34 @@ def document_locations(schema: dict[str, Any], package: type[DocumentPackage]) -
 class DocumentPackage(ParseOnly, RootModel[dict[str, Any]]):
     """A package: its authored documents, keyed by path from the package's own directory."""
 
-    # Key pattern -> the resource the document at a matching key is written
-    # against. The schema points each location at the resource's `latest.json`,
-    # the URL every document declares as its own `$schema`, so a location keeps
-    # its kind across that schema's versions.
-    LOCATIONS: ClassVar[dict[str, str]]
+    # (directory, name pattern) -> the resource the document at a key in that
+    # directory, whose last segment the pattern matches, is written against.
+    # The directory is literal, so which directories can hold a document is
+    # known without reading a regex. The schema points each location at the
+    # resource's `latest.json`, the URL every document declares as its own
+    # `$schema`, so a location keeps its kind across that schema's versions.
+    LOCATIONS: ClassVar[dict[tuple[str, str], str]]
     # The one document whose presence makes a directory this package.
     ROOT: ClassVar[str]
 
     @classmethod
     def kind_at(cls, key: str) -> str | None:
         """The resource the document at `key` is written against, or `None` outside every location."""
+        directory, _, name = key.rpartition("/")
         # `fullmatch` holds `$` to the true end, as the published lookahead does.
-        for pattern, resource in cls.LOCATIONS.items():
-            if re.fullmatch(pattern, key):
+        for (located, pattern), resource in cls.LOCATIONS.items():
+            if located == directory and re.fullmatch(pattern, name):
                 return resource
         return None
+
+    @classmethod
+    def location_directories(cls) -> frozenset[str]:
+        """Every directory a location lies in, and each of its ancestors."""
+        return frozenset(
+            "/".join(parts[:depth])
+            for directory, _ in cls.LOCATIONS if directory
+            for parts in [directory.split("/")]
+            for depth in range(1, len(parts) + 1))
 
     @model_validator(mode="after")
     def _located(self) -> DocumentPackage:

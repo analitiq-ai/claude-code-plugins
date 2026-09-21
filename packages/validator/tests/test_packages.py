@@ -376,10 +376,9 @@ def test_a_located_document_whose_lookup_is_refused_is_unreadable(validator, tmp
     assert _at(findings, "unreadable-document") == ["definition/endpoints/v1__records.json#"]
 
 
-def test_an_entry_whose_lookup_is_refused_raises_where_it_could_hold_documents(
-        validator, tmp_path, refuse):
-    """An unlocated entry the walk cannot look up may be a directory holding
-    documents, and no finding about a document can say what it holds."""
+def test_a_location_directory_whose_lookup_is_refused_raises(validator, tmp_path, refuse):
+    """What a location directory the walk cannot look up holds is unknown, and
+    no finding about a document can say so."""
     _write(tmp_path, _connector_package())
     refuse(tmp_path / "definition", 0o600)
     with pytest.raises(PermissionError):
@@ -424,9 +423,7 @@ def test_a_located_name_that_is_not_a_regular_file_is_not_read(validator, tmp_pa
 def test_a_symlinked_directory_is_read_under_the_path_the_package_gives_it(
         validator, tmp_path, linked):
     """Where a document sits is its path from the package root, whatever the
-    filesystem stores behind a directory on that path. The store is walked
-    too, under its own unlocated path, and reaching it there first does not
-    hide it from the path that locates its documents."""
+    filesystem stores behind a directory on that path."""
     documents = _connector_package()
     _write(tmp_path, documents)
     moved = tmp_path / "store"
@@ -448,7 +445,7 @@ def test_a_located_link_leading_outside_the_package_is_unreadable(validator, tmp
     assert _at(findings, "unreadable-document") == ["definition/type-map.json#"], findings
 
 
-def test_an_unlocated_link_leading_outside_the_package_raises(validator, tmp_path):
+def test_a_location_directory_leading_outside_the_package_raises(validator, tmp_path):
     documents = _connector_package()
     package = tmp_path / "package"
     _write(package, documents)
@@ -459,29 +456,25 @@ def test_an_unlocated_link_leading_outside_the_package_raises(validator, tmp_pat
         validator.read_package(package, "connector-package")
 
 
-def test_a_symlink_cycle_ends_the_walk(validator, tmp_path):
-    """A directory reached again through a link holds nothing the walk has not
-    already read. Two links back to one ancestor double the paths at every
-    level, so a walk that followed them would not finish."""
-    import signal
-
+@pytest.mark.parametrize("entry", ["vendor", ".venv/bin/python", "definition/notes", "definition/extra"])
+@pytest.mark.parametrize("barrier", ["refused", "outside"])
+def test_an_entry_no_location_reaches_is_never_looked_up(
+        validator, tmp_path, refuse, entry, barrier):
+    """A connector repository carries more than its package: a `.venv`, a
+    `.git`, vendored code. None of it is the package, so none of it may cost
+    the read or fail it."""
     documents = _connector_package()
-    _write(tmp_path, documents)
-    for name in ("a", "b"):
-        (tmp_path / "definition/endpoints" / name).symlink_to(
-            tmp_path / "definition", target_is_directory=True)
-
-    def _stalled(_signum, _frame):
-        raise AssertionError("the walk followed a symlink cycle")
-
-    previous = signal.signal(signal.SIGALRM, _stalled)
-    signal.alarm(10)
-    try:
-        keys = set(validator.read_package(tmp_path, "connector-package"))
-    finally:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, previous)
-    assert keys == set(documents)
+    package = tmp_path / "package"
+    _write(package, documents)
+    path = package / entry
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if barrier == "outside":
+        (tmp_path / "outside").mkdir()
+        path.symlink_to(tmp_path / "outside", target_is_directory=True)
+    else:
+        path.mkdir()
+        refuse(path, 0o000)
+    assert sorted(validator.read_package(package, "connector-package")) == sorted(documents)
 
 
 # ---------------------------------------------------------------------------

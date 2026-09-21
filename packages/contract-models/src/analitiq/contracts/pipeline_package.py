@@ -12,7 +12,7 @@ class PipelinePackage(DocumentPackage):
     model_config = ConfigDict(json_schema_extra=document_locations)
 
     LOCATIONS = {
-        r"^pipeline\.json$": "pipeline",
-        r"^streams/[^/]+\.json$": "stream",
+        ("", r"pipeline\.json"): "pipeline",
+        ("streams", r"[^/]+\.json"): "stream",
     }
     ROOT = "pipeline.json"
