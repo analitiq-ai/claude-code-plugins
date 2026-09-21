@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "PipelineManifestEntry": {
+      "additionalProperties": false,
+      "description": "One pipeline the index lists.",
+      "properties": {
+        "path": {
+          "description": "Path of the listed pipeline's `pipeline.json`, from the directory holding this index.",
+          "pattern": "^(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+)/pipeline\\.json$",
+          "title": "Path",
+          "type": "string"
+        },
+        "pipeline_id": {
+          "description": "The listed pipeline's identifier.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Pipeline Id",
+          "type": "string"
+        },
+        "status": {
+          "description": "The listed pipeline's lifecycle status.",
+          "enum": [
+            "draft",
+            "active",
+            "inactive"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pipeline_id",
+        "status",
+        "path"
+      ],
+      "title": "PipelineManifestEntry",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.analitiq.ai/pipeline-manifest/latest.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public JSON Schema contract for the index of the pipelines a workspace holds: each pipeline's identifier, lifecycle status and the path of its `pipeline.json` from the index's directory. Source of truth: analitiq.contracts.pipeline_manifest.PipelineManifest (Pydantic).",
+  "properties": {
+    "pipelines": {
+      "description": "The pipelines the workspace holds.",
+      "items": {
+        "$ref": "#/$defs/PipelineManifestEntry"
+      },
+      "title": "Pipelines",
+      "type": "array"
+    }
+  },
+  "required": [
+    "pipelines"
+  ],
+  "title": "Analitiq Pipeline Manifest",
+  "type": "object",
+  "version": "1.0.0"
+}

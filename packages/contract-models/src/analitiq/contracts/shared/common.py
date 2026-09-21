@@ -80,6 +80,11 @@ SEMVER_PATTERN = (
 
 CRON_PATTERN = r"^cron\(.+\)$"
 
+# A path segment is any run of characters other than `/` and NUL — the two a POSIX
+# filename cannot hold — except `.` and `..`. Written without lookahead, which
+# pydantic-core's regex engine refuses.
+PATH_SEGMENT = r"(?:[^/.\x00][^/\x00]*|\.[^/.\x00][^/\x00]*|\.\.[^/\x00]+)"
+
 
 # --- Length constants -------------------------------------------------------
 
@@ -284,7 +289,7 @@ def closed_true_end_keys(schema: dict[str, Any]) -> None:
 
 
 # A package schema is a closed table of locations: each pattern names where one
-# authored document sits and points at the kind's `latest.json`, the URL every
+# document, or one package's documents, sits and points at the kind's `latest.json`, the URL every
 # document declares as its own `$schema`, so a location keeps its kind across that
 # schema's versions. `locations` maps a key pattern to the resource its document
 # is written against.

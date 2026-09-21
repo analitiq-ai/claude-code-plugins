@@ -15,6 +15,7 @@ from pydantic import Field, RootModel, StringConstraints, model_validator
 
 from analitiq.contracts.shared.common import (
     DOCUMENT_KEY_MAX_LENGTH,
+    PATH_SEGMENT,
     DocumentText,
     ParseOnly,
     StrictModel,
@@ -26,11 +27,7 @@ from analitiq.contracts.shared.common import (
 # it is a request error rather than a large package.
 MAX_DOCUMENTS = 2000
 
-# A segment is any run of characters other than `/` and NUL — the two a POSIX
-# filename cannot hold — except `.` and `..`. Written without lookahead, which
-# pydantic-core's regex engine refuses.
-_SEGMENT = r"(?:[^/.\x00][^/\x00]*|\.[^/.\x00][^/\x00]*|\.\.[^/\x00]+)"
-DOCUMENT_KEY_PATTERN = rf"^{_SEGMENT}(?:/{_SEGMENT})*$"
+DOCUMENT_KEY_PATTERN = rf"^{PATH_SEGMENT}(?:/{PATH_SEGMENT})*$"
 
 DocumentKey = Annotated[
     str, StringConstraints(pattern=DOCUMENT_KEY_PATTERN, max_length=DOCUMENT_KEY_MAX_LENGTH)
