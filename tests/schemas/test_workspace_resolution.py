@@ -85,3 +85,14 @@ def test_a_manifest_path_resolves_to_a_pipeline_document():
 
     pattern = PipelineManifestEntry.model_json_schema()["properties"]["path"]["pattern"]
     assert re.fullmatch(pattern, ENTRY_PATH)
+
+
+def test_the_published_manifest_path_refuses_a_trailing_newline():
+    """A search-mode validator matches `$` before a final newline; the
+    published pattern must end where the value does."""
+    from jsonschema import Draft202012Validator
+
+    schema = _rendered("pipeline-manifest")["$defs"]["PipelineManifestEntry"]["properties"]["path"]
+    validator = Draft202012Validator(schema)
+    assert validator.is_valid(ENTRY_PATH)
+    assert not validator.is_valid(ENTRY_PATH + "\n")

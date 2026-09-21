@@ -282,10 +282,15 @@ def closed_true_end_keys(schema: dict[str, Any]) -> None:
     pattern_props = schema.pop("patternProperties", None)
     if pattern_props:
         schema["patternProperties"] = {
-            (key[:-1] + r"(?![\s\S])" if key.endswith("$") else key): value
-            for key, value in pattern_props.items()
+            true_ended(key): value for key, value in pattern_props.items()
         }
     schema["additionalProperties"] = False
+
+
+def true_ended(pattern: str) -> str:
+    """`pattern` with its trailing `$` replaced by the true-end assertion
+    `closed_true_end_keys` explains, for publishing; unchanged without one."""
+    return pattern[:-1] + r"(?![\s\S])" if pattern.endswith("$") else pattern
 
 
 # A package or workspace schema is a closed table of locations: each pattern names

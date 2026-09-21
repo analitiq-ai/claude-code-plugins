@@ -6,7 +6,7 @@
       "properties": {
         "path": {
           "description": "Path of the listed pipeline's `pipeline.json`, from the directory holding this index.",
-          "pattern": "^(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+)/pipeline\\.json$",
+          "pattern": "^(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+)/pipeline\\.json(?![\\s\\S])",
           "title": "Path",
           "type": "string"
         },
