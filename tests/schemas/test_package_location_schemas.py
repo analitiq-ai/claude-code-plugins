@@ -69,6 +69,23 @@ PACKAGES = {
             "README.md",
         ),
     },
+    "pipeline-package": {
+        "located": {
+            "pipeline.json": "pipeline",
+            "streams/orders.json": "stream",
+        },
+        "outside": (
+            "streams/a/b.json",
+            "streams/.gitkeep",
+            "vendor/pipeline.json",
+            "vendor/streams/orders.json",
+            "pipeline.json\n",
+            "streams/orders.json\n",
+            "pipelines/x/pipeline.json",
+            "connection.json",
+            "README.md",
+        ),
+    },
 }
 
 package = pytest.mark.parametrize("resource", sorted(PACKAGES))
