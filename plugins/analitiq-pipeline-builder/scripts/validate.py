@@ -195,7 +195,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
     from analitiq.contracts.connection_package import ConnectionPackage
     from analitiq.contracts.connector_package import ConnectorPackage
     from analitiq.contracts.pipeline_package import PipelinePackage
-    from analitiq.validator import grade_package, read_package, validate_document
+    from analitiq.validator import grade_package, read_document, read_package, validate_document
     from analitiq.validator._core import _unreadable_document_finding
     findings: list[dict] = []
     complete = True
@@ -273,31 +273,40 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
         crashed = True
         complete = False
 
-    # Connectors supply identity only, and the directory slug already is that
-    # identity — so a connector.json that cannot be read or parsed is
-    # best-effort skipped (its slug still counts), not a bundle error. A
-    # directory holding no connector.json is not a connector; a connection
-    # naming it is the bundle validator's finding. A crash reading one
-    # connector is its own unit, but a connection naming its connector_id
-    # rather than its slug would then wrongly read as unresolved, so it still
-    # marks the bundle incomplete.
+    # A connector's identity is decided from its root alone. A directory
+    # holding no connector.json is not a connector; a connection naming it is
+    # the bundle validator's finding. One holding a connector.json counts by
+    # its slug even when that root cannot be read, parsed or looked up — the
+    # slug is the identity — and by the root's `connector_id` too where it
+    # declares one. A crash deciding that alias costs the alias, and since a
+    # connection may name it rather than the slug, marks the bundle
+    # incomplete. Endpoint ids are read after identity is settled, in a unit
+    # of their own: they feed only the advisory connector-endpoint-ref check,
+    # so failing to read them drops only that connector's set.
     connectors: set[str] = set()
     endpoint_ids: dict[str, set[str]] = {}
     with _contained(findings, "connectors") as section:
         for connector_dir in _package_dirs(root / "connectors"):
-            with _contained(findings, f"connectors/{connector_dir.name}") as outcome:
-                texts = read_package(connector_dir, "connector-package")
-                if ConnectorPackage.ROOT in texts:
-                    names = {connector_dir.name, _connector_id(texts[ConnectorPackage.ROOT])} - {None}
+            site = f"connectors/{connector_dir.name}"
+            names: set[str] = set()
+            with _contained(findings, site) as outcome:
+                root_text = read_document(connector_dir / ConnectorPackage.ROOT)
+                if root_text is not None:
+                    names.add(connector_dir.name)
+                    connectors.add(connector_dir.name)
+                    names |= {_connector_id(root_text)} - {None}
                     connectors |= names
-                    ids = _connector_endpoint_ids(texts)
-                    # An empty set is unknown, not "publishes nothing": the
-                    # plugin may not have downloaded this connector's endpoints.
-                    if ids:
-                        endpoint_ids.update(dict.fromkeys(names, ids))
             if outcome.crashed:
                 crashed = True
                 complete = False
+            if not names:
+                continue
+            with _contained(findings, site):
+                ids = _connector_endpoint_ids(read_package(connector_dir, "connector-package"))
+                # An empty set is unknown, not "publishes nothing": the
+                # plugin may not have downloaded this connector's endpoints.
+                if ids:
+                    endpoint_ids.update(dict.fromkeys(names, ids))
     if section.crashed:
         crashed = True
         complete = False

@@ -152,7 +152,8 @@ def validate_package_at(directory: Path, package: str) -> ValidationEnvelope:
 
 def read_package(directory: Path, package: str) -> dict[str, str | Exception]:
     """The text of every file under `directory` whose path from it is a
-    location of the published package `package`, by that path.
+    location of the published package `package`, by that path, as
+    `read_document` reads it.
 
     A file that cannot be read, or looked up, maps to the exception that
     raised. A directory the walk cannot list or look up raises its `OSError`,
@@ -180,24 +181,31 @@ def read_package(directory: Path, package: str) -> dict[str, str | Exception]:
             for entry in entries:
                 path = Path(entry.path)
                 key = path.relative_to(directory).as_posix()
-                located = model.kind_at(key) is not None
-                try:
-                    mode = _mode(path)
-                except OSError as exc:
-                    if not located:
-                        raise
-                    texts[key] = exc
+                if model.kind_at(key) is not None:
+                    text = read_document(path)
+                    if text is not None:
+                        texts[key] = text
                     continue
-                if mode is None:
-                    continue
-                if stat.S_ISDIR(mode):
+                mode = _mode(path)
+                if mode is not None and stat.S_ISDIR(mode):
                     pending.append(path)
-                elif located and stat.S_ISREG(mode):
-                    try:
-                        texts[key] = path.read_text(encoding="utf-8")
-                    except (OSError, ValueError) as exc:
-                        texts[key] = exc
     return texts
+
+
+def read_document(path: Path) -> str | Exception | None:
+    """The text of the regular file `path` leads to, the exception that kept
+    it from being read or looked up, or `None` where it leads to no regular
+    file."""
+    try:
+        mode = _mode(path)
+    except OSError as exc:
+        return exc
+    if mode is None or not stat.S_ISREG(mode):
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, ValueError) as exc:
+        return exc
 
 
 def _mode(path: Path) -> int | None:

@@ -713,6 +713,51 @@ def test_a_connector_whose_root_lookup_is_refused_still_names_its_slug(tmp_path,
     assert (complete, crashed) == (True, False), findings
 
 
+def test_a_stray_file_under_connections_is_not_a_connection(tmp_path):
+    doc = _build_bundle(tmp_path)
+    (tmp_path / "connections/.DS_Store").write_text("")
+    _, findings, complete, crashed, _ = V._assemble_bundle(
+        json.loads(doc.read_text()), doc, tmp_path)
+    assert (findings, complete, crashed) == ([], True, False)
+
+
+def test_a_connector_directory_without_its_root_is_not_a_connector(tmp_path):
+    # A connection naming it is the bundle validator's finding to make.
+    doc = _build_bundle(tmp_path)
+    (tmp_path / "connectors/ghost/definition/endpoints").mkdir(parents=True)
+    bundle, findings, complete, crashed, endpoint_ids = V._assemble_bundle(
+        json.loads(doc.read_text()), doc, tmp_path)
+    assert "ghost" not in bundle["connectors"], bundle["connectors"]
+    assert (findings, complete, crashed) == ([], True, False)
+
+
+def test_an_unreadable_connector_root_still_names_its_slug(tmp_path):
+    doc = _build_bundle(tmp_path)
+    (tmp_path / "connectors/wise/definition/connector.json").write_bytes(b"\xff{")
+    bundle, findings, complete, crashed, _ = V._assemble_bundle(
+        json.loads(doc.read_text()), doc, tmp_path)
+    assert "wise" in bundle["connectors"], bundle["connectors"]
+    assert (findings, complete, crashed) == ([], True, False)
+
+
+def test_unlistable_connector_endpoints_cost_only_its_endpoint_ids(tmp_path, refuse):
+    # The endpoint ids feed only the advisory connector-endpoint-ref check,
+    # so failing to read them costs neither the connector's identity nor the
+    # referential pass.
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, "connectors/wise/definition/connector.json",
+           {"connector_id": "wise-live", "kind": "api"})
+    _add_wise_endpoint(tmp_path, "transfers")
+    refuse(tmp_path / "connectors/wise/definition/endpoints", 0o300)
+    bundle, findings, complete, crashed, endpoint_ids = V._assemble_bundle(
+        json.loads(doc.read_text()), doc, tmp_path)
+    assert {"wise", "wise-live"} <= set(bundle["connectors"]), bundle["connectors"]
+    assert not {"wise", "wise-live"} & set(endpoint_ids), endpoint_ids
+    assert [f["path"] for f in findings if f.get("validator") == "adapter-crash"] == [
+        "connectors/wise"], findings
+    assert (complete, crashed) == (True, False)
+
+
 @pytest.mark.parametrize("path, rooted", [
     ("", "connections/pg/definition/endpoints/a.json"),
     ("/", "connections/pg/definition/endpoints/a.json/"),
@@ -997,32 +1042,27 @@ def test_bundle_endpoint_grading_crash_preserves_endpoint_and_siblings(tmp_path,
 
 
 def test_bundle_connector_loop_crash_preserves_other_connector_identity(tmp_path, monkeypatch):
-    # a crash reading one connector is its own guarded unit — it must not
-    # abort the loop before a later connector's identity is read
+    # a crash deciding one connector's alias is its own guarded unit — it
+    # costs only that alias, never its slug or a later connector's identity
     doc = _build_bundle(tmp_path)
     _write(tmp_path, "connectors/wise/definition/connector.json",
            {"connector_id": "wise-live", "kind": "api"})
+    original = V._connector_id
 
-    import analitiq.validator as validator_module
-    original = validator_module.read_package
-
-    def boom(directory, package):
-        if package == "connector-package" and directory.name == "postgresql":
+    def boom(text):
+        if "postgresql" in str(text):
             raise TypeError("simulated crash")
-        return original(directory, package)
+        return original(text)
 
-    monkeypatch.setattr(validator_module, "read_package", boom)
+    monkeypatch.setattr(V, "_connector_id", boom)
     pipeline_doc = json.loads(doc.read_text())
     bundle, findings, complete, crashed, _ = V._assemble_bundle(pipeline_doc, doc, tmp_path)
-    # a connection could name the crashed connector, so assembly is marked
-    # incomplete out of caution
-    assert not complete
-    assert crashed
+    # a connection could name the unknown alias rather than the slug, so
+    # assembly is marked incomplete out of caution
+    assert (complete, crashed) == (False, True)
     assert [f["path"] for f in findings if f.get("validator") == "adapter-crash"] == [
         "connectors/postgresql"], findings
-    # wise, processed after the crashed unit in loop order, still registers its
-    # connector_id (which here differs from its directory slug)
-    assert "wise-live" in bundle["connectors"], bundle["connectors"]
+    assert {"postgresql", "wise-live"} <= set(bundle["connectors"]), bundle["connectors"]
 
 
 def test_connector_enumeration_crash_is_contained(tmp_path, monkeypatch):
