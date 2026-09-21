@@ -295,7 +295,7 @@ def document_locations(schema: dict[str, Any], package: type[DocumentPackage]) -
 
 
 class DocumentPackage(ParseOnly, RootModel[dict[str, Any]]):
-    """A package: its authored documents, keyed by path from the directory holding its root document."""
+    """A package: its authored documents, keyed by path from the package's own directory."""
 
     # Key pattern -> the resource the document at a matching key is written
     # against. The schema points each location at the resource's `latest.json`,
