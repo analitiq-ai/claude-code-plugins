@@ -1,9 +1,10 @@
 """Grading one document, or one package, as what its caller says it is.
 
 `validate_single_document` grades a document's text as the published schema
-its request names. `validate_package` grades a package's documents as the
-published package schema its request names, and `validate_package_at` grades
-the same package as `read_package` reads it from a directory. Nothing reads
+its request names. `grade_package` grades a package's texts as the published
+package schema it is handed the name of; `validate_package` hands it a
+request's documents, and `validate_package_at` hands it what `read_package`
+reads from a directory. Nothing reads
 content to decide what it was handed: `PACKAGE_MODELS[package]` says which key is the package's root and
 which kind each located key holds, and a key no location matches is not part
 of the package and is not graded.
@@ -140,13 +141,13 @@ def validate_single_document(
 
 def validate_package(request: ValidatePackageRequest) -> ValidationEnvelope:
     """Grade `request.documents` as the published package `request.package`."""
-    return _envelope(_graded_package(request.package, dict(request.documents.root)))
+    return grade_package(request.package, dict(request.documents.root))
 
 
 def validate_package_at(directory: Path, package: str) -> ValidationEnvelope:
     """Grade the files under `directory` as the published package `package`,
     as `read_package` reads them."""
-    return _envelope(_graded_package(package, read_package(directory, package)))
+    return grade_package(package, read_package(directory, package))
 
 
 def read_package(directory: Path, package: str) -> dict[str, str | Exception]:
@@ -211,9 +212,11 @@ def _mode(path: Path) -> int | None:
         raise
 
 
-def _graded_package(package: str, texts: dict[str, str | Exception]) -> list[Finding]:
-    """The findings for `texts` graded as `package`, where a value that is an
-    exception is a document that could not be read."""
+def grade_package(package: str, texts: dict[str, str | Exception]) -> ValidationEnvelope:
+    """Grade `texts` as the published package `package`, where a value that is
+    an exception is a document that could not be read — the shape
+    `read_package` returns. Raises `ValueError` for a package name outside the
+    published ones."""
     from pydantic import TypeAdapter
 
     from analitiq.validator._core import (
@@ -245,4 +248,4 @@ def _graded_package(package: str, texts: dict[str, str | Exception]) -> list[Fin
     findings += _run_guarded(
         lambda: [qualified(f, quote(key)) for key, f in check(documents, frozenset(unread))],
         crash_label=f"{package} check")
-    return findings
+    return _envelope(findings)

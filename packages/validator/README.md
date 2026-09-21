@@ -62,7 +62,9 @@ the document that declares the bare `{id}` (connector identities match whole).
 `validate_package` takes a `ValidatePackageRequest` from
 `analitiq.contracts.validation_requests`: the package it names and its documents'
 text, keyed by path within the package. `validate_package_at` reads the same
-package from a directory. The package model owns which key is its root and
+package from a directory. `read_package` returns what that read found, and
+`grade_package` grades it, so a caller that needs the documents as well as the
+verdict reads the directory once. The package model owns which key is its root and
 which kind each located key holds; a key it does not locate is not part of the
 package and is not graded. A request never carries a directory to read from,
 and its keys are never resolved against a filesystem.

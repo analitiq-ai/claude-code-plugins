@@ -11,9 +11,9 @@ at `severity: "error"`.
 
 The caller names what it holds. `validate_document(doc, kind)` grades one
 document as `kind`, one of the kinds the published packages locate.
-`validate_package` / `validate_package_at` grade a package as the published
-package schema it names, which says where its root and each kind of document
-sit.
+`validate_package`, `validate_package_at` and `grade_package` grade a package
+as the published package schema it names, which says where its root and each
+kind of document sit.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 `connections`, `streams`), each of which registers its kinds and its package's
@@ -24,6 +24,7 @@ from ._core import finding, finding_costs_a_pass, main, validate_document
 from .document_set import (
     Finding,
     ValidationEnvelope,
+    grade_package,
     read_package,
     validate_package,
     validate_package_at,
@@ -54,6 +55,7 @@ __all__ = [
     "validate_document",
     "Finding",
     "ValidationEnvelope",
+    "grade_package",
     "read_package",
     "validate_package",
     "validate_package_at",

@@ -20,8 +20,9 @@ referential integrity no single document can verify. A draft bundle passes
 ``require_runnable=False`` (a not-yet-runnable draft is not an authoring
 error); an ``active`` pipeline is held to full runnability. The bundle is read
 the way each published package locates its documents: every stream the
-pipeline's package holds is graded as a stream, and every connection directory
-is graded as a connection package by ``analitiq.validator.validate_package_at``.
+pipeline's package holds is graded as a stream, and every directory under
+``connections/`` is read once by ``analitiq.validator.read_package`` and graded
+as a connection package by ``analitiq.validator.grade_package``.
 
 One check is the adapter's own, because it reads files the published
 validator never receives:
@@ -52,7 +53,9 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import os
 import posixpath
+import stat
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote
 
@@ -172,35 +175,36 @@ def _parsed(text: str | Exception) -> tuple[object, Exception | None]:
         return None, exc
 
 
-def _assemble_bundle(pipeline_doc: dict, document_path: Path,
-                     root: Path) -> tuple[dict, list[dict], bool, bool]:
+def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path
+                     ) -> tuple[dict, list[dict], bool, bool, dict[str, set[str]]]:
     """Gather the on-disk pipeline bundle the way the engine resolves it at load:
     the pipeline plus the streams its package holds, every connection package,
     the connection-scoped endpoint documents (stamped with their owning
     connection's id, which endpoint documents do not carry themselves), and the
     downloaded connector identities. Returns the bundle, the findings grading
     its members, whether every member on disk actually made it into the bundle,
-    and whether a containment guard is the reason any didn't — a crash or read
-    error that excludes a member leaves the published bundle validator unable
-    to tell "genuinely missing" from "excluded here", so a caller must know
-    before trusting its referential verdicts, and separately must know whether
-    that exclusion came from an actual crash (worth its own labeled finding) or
-    an already-reported ordinary read error (which needs no second, misleading
-    one)."""
+    whether a containment guard is the reason any didn't, and the endpoint ids
+    each downloaded connector publishes (`_connector_endpoint_ids`).
+
+    A crash or read error that excludes a member leaves the published bundle
+    validator unable to tell "genuinely missing" from "excluded here", so a
+    caller must know before trusting its referential verdicts, and separately
+    must know whether that exclusion came from an actual crash (worth its own
+    labeled finding) or an already-reported ordinary read error (which needs no
+    second, misleading one)."""
     from analitiq.contracts.connection_package import ConnectionPackage
+    from analitiq.contracts.connector_package import ConnectorPackage
     from analitiq.contracts.pipeline_package import PipelinePackage
-    from analitiq.validator import read_package, validate_document, validate_package_at
+    from analitiq.validator import grade_package, read_package, validate_document
     from analitiq.validator._core import _unreadable_document_finding
     findings: list[dict] = []
     complete = True
     crashed = False
 
     # Each section below is wrapped in its own outer guard too, not just each
-    # item within it: reading the directory materializes the whole listing
-    # before the loop even starts, so a filesystem failure enumerating it (a
-    # vanished directory, a permission error) would otherwise escape every
-    # per-item guard and abort this whole function before it could return
-    # what earlier sections already decided.
+    # item within it: a filesystem failure listing the section's directory
+    # would otherwise escape every per-item guard and abort this whole
+    # function before it could return what earlier sections already decided.
 
     streams: list[dict] = []
     with _contained(findings, "streams") as section:
@@ -230,8 +234,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     connections: list[dict] = []
     endpoints: list[dict] = []
     with _contained(findings, "connections") as section:
-        for conn_dir in sorted(d for d in (root / "connections").glob("*")
-                               if (d / ConnectionPackage.ROOT).is_file()):
+        for conn_dir in _package_dirs(root / "connections"):
             site = f"connections/{conn_dir.name}"
             # One connection is one independently-decidable unit: a directory
             # it cannot be read from must not discard what was decided for
@@ -244,12 +247,13 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
                 continue
             # Grading is its own unit too: a crash grading a connection package
             # must not take the connection — and every endpoint under it — out
-            # of the bundle the referential pass reads. An unreadable member
-            # needs no finding below; grading reports it.
+            # of the bundle the referential pass reads. A missing or unreadable
+            # root needs no finding below; grading reports it.
             with _contained(findings, site):
                 findings.extend(_at_site(f"{site}/{ConnectionPackage.ROOT}",
-                                         validate_package_at(conn_dir, "connection-package")["findings"]))
-            conn, _ = _parsed(texts[ConnectionPackage.ROOT])
+                                         grade_package("connection-package", texts)["findings"]))
+            conn, _ = _parsed(texts[ConnectionPackage.ROOT]) \
+                if ConnectionPackage.ROOT in texts else (None, None)
             if not isinstance(conn, dict):
                 complete = False
                 continue
@@ -270,20 +274,27 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
         complete = False
 
     # Connectors supply identity only, and the directory slug already is that
-    # identity — so a malformed connector.json is best-effort skipped (its slug
-    # still counts), not a bundle error. A crash beyond the read errors already
-    # handled below (e.g. a pathologically deep document) is its own unit too,
-    # and it costs only the connector_id alias below (the slug is already
-    # recorded) — but a connection naming that id rather than the slug would
-    # then wrongly read as unresolved, so it still marks the bundle incomplete.
+    # identity — so a connector.json that cannot be read or parsed is
+    # best-effort skipped (its slug still counts), not a bundle error. A
+    # directory holding no connector.json is not a connector; a connection
+    # naming it is the bundle validator's finding. A crash reading one
+    # connector is its own unit, but a connection naming its connector_id
+    # rather than its slug would then wrongly read as unresolved, so it still
+    # marks the bundle incomplete.
     connectors: set[str] = set()
+    endpoint_ids: dict[str, set[str]] = {}
     with _contained(findings, "connectors") as section:
-        for connector_dir in _connector_dirs(root):
-            connectors.add(connector_dir.name)  # directory slug
+        for connector_dir in _package_dirs(root / "connectors"):
             with _contained(findings, f"connectors/{connector_dir.name}") as outcome:
-                cid = _connector_id(connector_dir)
-                if cid:
-                    connectors.add(cid)
+                texts = read_package(connector_dir, "connector-package")
+                if ConnectorPackage.ROOT in texts:
+                    names = {connector_dir.name, _connector_id(texts[ConnectorPackage.ROOT])} - {None}
+                    connectors |= names
+                    ids = _connector_endpoint_ids(texts)
+                    # An empty set is unknown, not "publishes nothing": the
+                    # plugin may not have downloaded this connector's endpoints.
+                    if ids:
+                        endpoint_ids.update(dict.fromkeys(names, ids))
             if outcome.crashed:
                 crashed = True
                 complete = False
@@ -298,68 +309,50 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
         "connectors": sorted(connectors),
         "endpoints": endpoints,
     }
-    return bundle, findings, complete, crashed
+    return bundle, findings, complete, crashed, endpoint_ids
 
 
-def _connector_dirs(root: Path) -> list[Path]:
-    """Every downloaded connector package under `root`: a directory holding a
-    connector package's root document."""
-    from analitiq.contracts.connector_package import ConnectorPackage
-    return sorted(d for d in (root / "connectors").glob("*")
-                  if (d / ConnectorPackage.ROOT).is_file())
+def _package_dirs(parent: Path) -> list[Path]:
+    """Every directory directly under `parent`, none where `parent` does not
+    exist. An entry whose lookup is refused raises: it may be a package, and
+    what it holds is unknown."""
+    from analitiq.validator.document_set import _mode
+    try:
+        with os.scandir(parent) as entries:
+            paths = sorted(Path(entry.path) for entry in entries)
+    except FileNotFoundError:
+        return []
+    dirs = []
+    for path in paths:
+        mode = _mode(path)
+        if mode is not None and stat.S_ISDIR(mode):
+            dirs.append(path)
+    return dirs
 
 
-def _connector_id(connector_dir: Path) -> str | None:
+def _connector_id(text: str | Exception) -> str | None:
     """The `connector_id` a downloaded connector's root document declares, or
     `None` when it declares none it can be read for."""
-    from analitiq.contracts.connector_package import ConnectorPackage
-    from analitiq.validator._core import _JSON_READ_ERRORS
-    try:
-        cid = _read_json(connector_dir / ConnectorPackage.ROOT).get("connector_id")
-    except (*_JSON_READ_ERRORS, AttributeError):
-        return None
+    connector, _ = _parsed(text)
+    cid = connector.get("connector_id") if isinstance(connector, dict) else None
     return cid if isinstance(cid, str) and cid else None
 
 
-def _connector_endpoint_sets(root: Path, findings: list[dict]) -> dict[str, set[str]]:
-    """Map each downloaded connector — by directory slug **and** its authored
-    `connector_id` — to the set of endpoint ids it publishes on disk (each
-    endpoint document its package holds contributes both its filename stem and
-    its `endpoint_id` field, which the connector's own filename gate keeps
-    equal for well-formed registry connectors — this adapter records both to
-    stay correct even if a malformed connector let them diverge).
-
-    A connector whose package holds no endpoint document is **omitted**, not
-    recorded as an empty set: its endpoint set is *unknown* here (the plugin
-    may not have downloaded endpoints for it), and an unknown set must not read
-    as "no endpoints", which would warn on every ref. Callers treat a missing
-    key as "cannot verify — skip" — the same treatment a crash reading one
-    connector's endpoints gets here (contained per connector, so it costs only
-    that connector's set, never every other connector's).
-
-    The enumeration itself is wrapped in its own outer guard too: a filesystem
-    failure there would otherwise escape every per-connector guard below and
-    return nothing at all, rather than whatever connectors were already found
-    before it."""
+def _connector_endpoint_ids(texts: dict[str, str | Exception]) -> set[str]:
+    """The endpoint ids a connector package publishes: each endpoint document
+    contributes its filename stem and its `endpoint_id` field, which the
+    connector's own filename gate keeps equal for well-formed registry
+    connectors — both are recorded to stay correct even if a malformed
+    connector let them diverge."""
     from analitiq.contracts.connector_package import ConnectorPackage
-    from analitiq.validator import read_package
-    sets: dict[str, set[str]] = {}
-    with _contained(findings, "connectors"):
-        for connector_dir in _connector_dirs(root):
-            with _contained(findings, f"connectors/{connector_dir.name}"):
-                texts = read_package(connector_dir, "connector-package")
-                ids: set[str] = set()
-                for key in sorted(k for k in texts
-                                  if ConnectorPackage.kind_at(k) == "api-endpoint"):
-                    ids.add(PurePosixPath(key).stem)
-                    endpoint, _ = _parsed(texts[key])
-                    eid = endpoint.get("endpoint_id") if isinstance(endpoint, dict) else None
-                    if isinstance(eid, str) and eid:
-                        ids.add(eid)
-                if ids:
-                    for key in {connector_dir.name, _connector_id(connector_dir)} - {None}:
-                        sets[key] = ids
-    return sets
+    ids: set[str] = set()
+    for key in (k for k in texts if ConnectorPackage.kind_at(k) == "api-endpoint"):
+        ids.add(PurePosixPath(key).stem)
+        endpoint, _ = _parsed(texts[key])
+        eid = endpoint.get("endpoint_id") if isinstance(endpoint, dict) else None
+        if isinstance(eid, str) and eid:
+            ids.add(eid)
+    return ids
 
 
 def _check_connector_endpoint_refs(streams, connections,
@@ -439,7 +432,8 @@ def is_runnable_required(pipeline_doc: object) -> bool:
 
 def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> list[dict]:
     from analitiq.validator import validate_pipeline_bundle
-    bundle, findings, complete, crashed = _assemble_bundle(pipeline_doc, document_path, root)
+    bundle, findings, complete, crashed, endpoint_ids = _assemble_bundle(
+        pipeline_doc, document_path, root)
     # Every referential finding stays blocking whether or not runnability is
     # enforced too — see is_runnable_required for what the flag itself decides.
     require_runnable = is_runnable_required(pipeline_doc)
@@ -473,10 +467,10 @@ def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> lis
     # downloaded connector endpoint files, so verify those refs here and warn (with an
     # alignment suggestion) rather than error — connectors are trusted, pinned at
     # runtime. _check_connector_endpoint_refs contains each ref on its own; this
-    # outer guard is a backstop, e.g. against _connector_endpoint_sets itself.
+    # outer guard is a backstop.
     with _contained(findings, "connector-endpoint-refs"):
         _check_connector_endpoint_refs(
-            bundle["streams"], bundle["connections"], _connector_endpoint_sets(root, findings), findings)
+            bundle["streams"], bundle["connections"], endpoint_ids, findings)
     return findings
 
 

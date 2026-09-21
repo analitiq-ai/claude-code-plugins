@@ -114,7 +114,7 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator._core::_unreadable_document_finding", "unreadable-document"): (
         "the document could not be read or parsed at all, before any kind "
         "was even identified"),
-    ("analitiq.validator.document_set::_graded_package", "check-crashed"): (
+    ("analitiq.validator.document_set::grade_package", "check-crashed"): (
         "a package's cross-document check crashed, leaving every rule it "
         "evaluates unevaluated together, so the crash is attributable to no "
         "one of them"),

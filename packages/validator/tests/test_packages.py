@@ -351,6 +351,16 @@ def test_an_entry_whose_lookup_is_refused_raises_where_it_could_hold_documents(
         validator.read_package(tmp_path, "connector-package")
 
 
+@pytest.mark.parametrize("link", ["definition/endpoints/v2__records.json", "definition/notes"])
+@pytest.mark.parametrize("target", ["nowhere", "self"])
+def test_a_link_that_leads_to_nothing_is_skipped(validator, tmp_path, link, target):
+    """A dangling or looping link holds nothing to grade, located or not."""
+    documents = _connector_package()
+    _write(tmp_path, documents)
+    (tmp_path / link).symlink_to(tmp_path / link if target == "self" else tmp_path / target)
+    assert sorted(validator.read_package(tmp_path, "connector-package")) == sorted(documents)
+
+
 def test_a_located_name_that_is_not_a_regular_file_is_not_read(validator, tmp_path):
     """A FIFO at a document's location would block a read forever; a name that
     holds no file holds no document."""
@@ -589,7 +599,7 @@ def test_cli_reports_only_the_read_as_unreadable(validator, tmp_path, monkeypatc
     else:
         _write(tmp_path, _connector_package())
         argv = ["--package", str(tmp_path), "--kind", "connector-package"]
-        monkeypatch.setattr(document_set, "_graded_package", defect)
+        monkeypatch.setattr(document_set, "grade_package", defect)
     monkeypatch.setattr("sys.argv", ["analitiq-validate", *argv])
     with pytest.raises(ValueError, match="a grading defect"):
         _core.main()

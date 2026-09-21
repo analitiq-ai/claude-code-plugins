@@ -156,12 +156,10 @@ naming a lesser-tier rule do not fail validation.
 }
 ```
 
-This adapter's `database-endpoint` and `type-map` entities also run the
-document against its contract model, whose own `@model_validator`s can reject
-it citing a rule of their own — every rule bound to `DatabaseEndpointDoc` or
-`TypeMapDoc` is reachable that way, catalogued in full
-in `references/rules/database-endpoint.md` and `references/rules/type-map.md`
-rather than restated here.
+Every entity also runs the document against its contract model, whose own
+`@model_validator`s can reject it citing a rule of their own — every rule bound
+to that model is reachable that way, catalogued in full per artifact kind under
+`references/rules/` rather than restated here.
 
 <!-- BEGIN GENERATED: validator-ids -->
 Rule ids this adapter's own `analitiq.validator` entry points can actually emit, whether the check needs a second document in hand (referential integrity across a bundle, filename↔id) or grades one document as a plain function rather than a `@model_validator` (a database endpoint's id, a type-map's own rule warnings) — never what a contract model rejects on its own, which is catalogued per model in `references/rules/` instead of restated here:
@@ -191,12 +189,11 @@ printed no `Diagnostics` JSON at all and the driving agent reconstructed this
 finding from a stderr excerpt, carried in `message` with `path` empty.
 
 This id names only a crash reaching a guard in this adapter. A crash inside
-the published validator's own single-document dispatch (the `database-endpoint`
-/ `type-map` routes, which call it directly) is already caught there and
-returned as a forwarded `kind: "notApplicable"`,
-`message_id: "check-crashed"` finding whose `message` says the check itself
-crashed — that finding never reaches this adapter as an exception, so no
-guard here fires and it is not relabeled.
+the published validator's grading of one document, which every entity goes
+through, is already caught there and returned as a forwarded
+`kind: "notApplicable"`, `message_id: "check-crashed"` finding whose `message`
+says the check itself crashed — that finding never reaches this adapter as an
+exception, so no guard here fires and it is not relabeled.
 
 Some findings name the rule they apply, as a leading `[RULE-<AREA>-NNN]` in
 `message`. Quote the id verbatim whenever one is present — `pipeline-spec` and

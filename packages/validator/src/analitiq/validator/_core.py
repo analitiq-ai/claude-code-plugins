@@ -537,11 +537,10 @@ def main() -> int:
         read = document_set.read_package(args.package, args.kind) if args.package \
             else json.loads(args.document.read_text(encoding="utf-8"))
     except _JSON_READ_ERRORS as exc:
-        envelope = {"passed": False, "findings": [_unreadable_document_finding(exc)]}
+        envelope = document_set._envelope([_unreadable_document_finding(exc)])
     else:
-        findings = document_set._graded_package(args.kind, read) if args.package \
-            else validate_document(read, args.kind)
-        envelope = {"passed": _passed(findings), "findings": findings}
+        envelope = document_set.grade_package(args.kind, read) if args.package \
+            else document_set._envelope(validate_document(read, args.kind))
     print(json.dumps(envelope, indent=2))
     return 0 if envelope["passed"] else 1
 

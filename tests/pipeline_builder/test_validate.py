@@ -666,6 +666,53 @@ def test_a_definition_directory_that_cannot_be_listed_is_reported_at_the_connect
     assert crash and "PermissionError" in crash[0]["message"], diag["findings"]
 
 
+def test_a_connection_directory_that_cannot_be_looked_into_costs_only_that_connection(tmp_path, refuse):
+    # A refused connection is not an absent one: it crashes the unit reading
+    # it, and every other connection is still read.
+    doc = _build_bundle(tmp_path)
+    refuse(tmp_path / "connections/postgresql", 0o000)
+    bundle, findings, complete, crashed, _ = V._assemble_bundle(
+        json.loads(doc.read_text()), doc, tmp_path)
+    assert [f["path"] for f in findings if f.get("validator") == "adapter-crash"] == [
+        "connections/postgresql"], findings
+    assert (not complete, crashed) == (True, True)
+    assert [c["connection_id"] for c in bundle["connections"]] == [SRC], bundle["connections"]
+
+
+@pytest.mark.parametrize("mode", [0o300, 0o600], ids=["unlisted", "unsearchable"])
+def test_connections_that_cannot_be_listed_or_looked_up_crash_the_section(tmp_path, refuse, mode):
+    # What an unlisted directory holds is unknown, and each entry whose lookup
+    # is refused may be a connection, so neither reads as absent.
+    doc = _build_bundle(tmp_path)
+    refuse(tmp_path / "connections", mode)
+    bundle, findings, complete, crashed, _ = V._assemble_bundle(
+        json.loads(doc.read_text()), doc, tmp_path)
+    assert [f["path"] for f in findings if f.get("validator") == "adapter-crash"] == [
+        "connections"], findings
+    assert (complete, crashed) == (False, True)
+
+
+def test_a_connection_directory_without_its_root_is_reported_at_the_root(tmp_path):
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, f"connections/stray/definition/endpoints/{EID}.json", DB_ENDPOINT)
+    bundle, findings, complete, crashed, _ = V._assemble_bundle(
+        json.loads(doc.read_text()), doc, tmp_path)
+    assert [f["kind"] for f in findings if f["path"] == "connections/stray/connection.json"] == [
+        "fail"], findings
+    assert (complete, crashed) == (False, False)
+
+
+def test_a_connector_whose_root_lookup_is_refused_still_names_its_slug(tmp_path, refuse):
+    # The slug is the connector's identity, and the root is there to be
+    # refused: only the `connector_id` alias is unknown.
+    doc = _build_bundle(tmp_path)
+    refuse(tmp_path / "connectors/wise/definition", 0o600)
+    bundle, findings, complete, crashed, _ = V._assemble_bundle(
+        json.loads(doc.read_text()), doc, tmp_path)
+    assert "wise" in bundle["connectors"], (bundle["connectors"], findings)
+    assert (complete, crashed) == (True, False), findings
+
+
 @pytest.mark.parametrize("path, rooted", [
     ("", "connections/pg/definition/endpoints/a.json"),
     ("/", "connections/pg/definition/endpoints/a.json/"),
@@ -715,14 +762,14 @@ def test_bundle_per_connection_crash_preserves_earlier_findings(tmp_path, monkey
     _plant_unparseable_map(tmp_path)
 
     import analitiq.validator as validator_module
-    original = validator_module.validate_package_at
+    original = validator_module.grade_package
 
-    def boom(conn_dir, package):
-        if conn_dir.name == "wise":
+    def boom(package, texts):
+        if json.loads(texts["connection.json"])["connector_id"] == "wise":
             raise TypeError("simulated crash")
-        return original(conn_dir, package)
+        return original(package, texts)
 
-    monkeypatch.setattr(validator_module, "validate_package_at", boom)
+    monkeypatch.setattr(validator_module, "grade_package", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
     assert _unparseable_map_reported(diag["findings"]), diag["findings"]  # postgresql's, decided first
@@ -733,7 +780,7 @@ def test_bundle_per_connection_crash_preserves_earlier_findings(tmp_path, monkey
 
 
 def test_bundle_connector_endpoint_refs_crash_contained(tmp_path, monkeypatch):
-    # the combined _check_connector_endpoint_refs/_connector_endpoint_sets call
+    # the _check_connector_endpoint_refs call
     # is its own guarded unit — a crash there must not discard the referential
     # findings the OTHER guarded unit (validate_pipeline_bundle) already decided
     doc = _build_bundle(tmp_path)
@@ -801,10 +848,10 @@ def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, m
     doc = _build_bundle(tmp_path)
     import analitiq.validator as validator_module
 
-    def boom(conn_dir, package):
+    def boom(package, texts):
         raise MemoryError()
 
-    monkeypatch.setattr(validator_module, "validate_package_at", boom)
+    monkeypatch.setattr(validator_module, "grade_package", boom)
     rc = V.main(["--entity", "pipeline", "--document", str(doc), "--bundle-root", str(tmp_path)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
@@ -842,10 +889,10 @@ def test_bundle_connection_grading_crash_does_not_orphan_connection_from_referen
     doc = _build_bundle(tmp_path)
     import analitiq.validator as validator_module
 
-    def boom(conn_dir, package):
+    def boom(package, texts):
         raise TypeError("simulated crash")
 
-    monkeypatch.setattr(validator_module, "validate_package_at", boom)
+    monkeypatch.setattr(validator_module, "grade_package", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
     assert "adapter-crash" in validators, diag["findings"]
@@ -903,10 +950,10 @@ def test_bundle_findings_crash_unrelated_to_exclusion_does_not_mislabel_it(tmp_p
     (tmp_path / "pipelines/p/streams/orphan.json").write_text("{not valid json")  # ordinary error
     import analitiq.validator as validator_module
 
-    def boom(conn_dir, package):
+    def boom(package, texts):
         raise TypeError("simulated crash")
 
-    monkeypatch.setattr(validator_module, "validate_package_at", boom)
+    monkeypatch.setattr(validator_module, "grade_package", boom)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     validators = _ids(diag["findings"])
     assert any(f.get("message_id") == "unreadable-document"
@@ -950,66 +997,53 @@ def test_bundle_endpoint_grading_crash_preserves_endpoint_and_siblings(tmp_path,
 
 
 def test_bundle_connector_loop_crash_preserves_other_connector_identity(tmp_path, monkeypatch):
-    # a crash beyond the read errors _assemble_bundle's connectors loop already
-    # handles (e.g. a pathologically deep document) is its own guarded unit —
-    # it must not abort the loop before a later connector's identity is read
+    # a crash reading one connector is its own guarded unit — it must not
+    # abort the loop before a later connector's identity is read
     doc = _build_bundle(tmp_path)
     _write(tmp_path, "connectors/wise/definition/connector.json",
            {"connector_id": "wise-live", "kind": "api"})
 
-    original = V._read_json
+    import analitiq.validator as validator_module
+    original = validator_module.read_package
 
-    def boom(path):
-        if path.name == "connector.json" and path.parent.parent.name == "postgresql":
+    def boom(directory, package):
+        if package == "connector-package" and directory.name == "postgresql":
             raise TypeError("simulated crash")
-        return original(path)
+        return original(directory, package)
 
-    monkeypatch.setattr(V, "_read_json", boom)
+    monkeypatch.setattr(validator_module, "read_package", boom)
     pipeline_doc = json.loads(doc.read_text())
-    bundle, findings, complete, crashed = V._assemble_bundle(pipeline_doc, doc, tmp_path)
-    # the crash cost only the connector_id alias (the slug is recorded before the
-    # guarded read), but a connection could still name that id rather than the
-    # slug, so assembly is marked incomplete out of caution
+    bundle, findings, complete, crashed, _ = V._assemble_bundle(pipeline_doc, doc, tmp_path)
+    # a connection could name the crashed connector, so assembly is marked
+    # incomplete out of caution
     assert not complete
     assert crashed
-    validators = _ids(findings)
-    assert "adapter-crash" in validators, findings
-    crash = [f for f in findings if f.get("validator") == "adapter-crash"][0]
-    assert crash["path"] == "connectors/postgresql"
-    # postgresql's directory slug is recorded unconditionally, before the crash
-    assert "postgresql" in bundle["connectors"], bundle["connectors"]
+    assert [f["path"] for f in findings if f.get("validator") == "adapter-crash"] == [
+        "connectors/postgresql"], findings
     # wise, processed after the crashed unit in loop order, still registers its
     # connector_id (which here differs from its directory slug)
     assert "wise-live" in bundle["connectors"], bundle["connectors"]
 
 
-def test_connector_endpoint_sets_enumeration_crash_returns_partial_result(tmp_path, monkeypatch):
-    # the top-level enumeration of connectors/ is its own guarded
-    # unit, same as _assemble_bundle's sections — a filesystem failure there
-    # must not escape every per-connector guard below it and abort the whole
-    # function; it should return whatever it has (nothing, if the enumeration
-    # itself never got going) instead of raising past its caller
+def test_connector_enumeration_crash_is_contained(tmp_path, monkeypatch):
+    # the top-level enumeration of connectors/ is its own guarded unit — a
+    # failure there must not escape every per-connector guard below it and
+    # abort the bundle's assembly
     doc = _build_bundle(tmp_path)
+    original = V._package_dirs
 
-    original_glob = Path.glob
-
-    def boom(self, pattern):
-        if self.name == "connectors" and pattern == "*":
+    def boom(parent):
+        if parent.name == "connectors":
             raise TypeError("simulated crash")
-        return original_glob(self, pattern)
+        return original(parent)
 
-    monkeypatch.setattr(Path, "glob", boom)
-    findings: list = []
-    sets = V._connector_endpoint_sets(tmp_path, findings)
-    assert sets == {}
-    crash = [f for f in findings if f.get("validator") == "adapter-crash" and f["path"] == "connectors"]
-    assert crash, findings
-
-    # confirmed the same way through the full pipeline: the crash is contained,
-    # not left to propagate out of _bundle_findings
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = _ids(diag["findings"])
-    assert "adapter-crash" in validators, diag["findings"]
+    monkeypatch.setattr(V, "_package_dirs", boom)
+    bundle, findings, complete, crashed, endpoint_ids = V._assemble_bundle(
+        json.loads(doc.read_text()), doc, tmp_path)
+    assert (bundle["connectors"], endpoint_ids) == ([], {})
+    assert [f["path"] for f in findings if f.get("validator") == "adapter-crash"] == [
+        "connectors"], findings
+    assert (complete, crashed) == (False, True)
 
 
 def test_bundle_connections_section_crash_preserves_streams_and_reaches_connectors(tmp_path, monkeypatch):
@@ -1019,16 +1053,16 @@ def test_bundle_connections_section_crash_preserves_streams_and_reaches_connecto
     # connectors section gets its own turn afterward
     doc = _build_bundle(tmp_path)
 
-    original_glob = Path.glob
+    original = V._package_dirs
 
-    def boom(self, pattern):
-        if self.name == "connections" and pattern == "*":
+    def boom(parent):
+        if parent.name == "connections":
             raise TypeError("simulated crash")
-        return original_glob(self, pattern)
+        return original(parent)
 
-    monkeypatch.setattr(Path, "glob", boom)
+    monkeypatch.setattr(V, "_package_dirs", boom)
     pipeline_doc = json.loads(doc.read_text())
-    bundle, findings, complete, crashed = V._assemble_bundle(pipeline_doc, doc, tmp_path)
+    bundle, findings, complete, crashed, _ = V._assemble_bundle(pipeline_doc, doc, tmp_path)
     assert not complete
     assert crashed
     crash = [f for f in findings if f.get("validator") == "adapter-crash" and f["path"] == "connections"]
@@ -1133,7 +1167,7 @@ def test_bundle_unrelated_malformed_stream_skips_referential_pass_without_crash_
     assert "adapter-crash" not in validators, diag["findings"]  # nothing actually crashed
 
 
-def test_connector_endpoint_sets_crash_isolated_to_one_connector(tmp_path, monkeypatch):
+def test_a_connector_read_crash_costs_only_its_endpoint_ids(tmp_path, monkeypatch):
     # a crash reading one connector's package must cost only that connector's
     # endpoint set — every OTHER connector's set, and the
     # connector-endpoint-ref checks it feeds, must still be computed
