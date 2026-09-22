@@ -556,6 +556,31 @@ class TestCursorFieldsInRecordShape:
         with pytest.raises(ValidationError, match="is not read back"):
             parse_endpoint(payload)
 
+    def test_a_cursor_field_contributed_only_by_an_array_level_allof_is_rejected(self):
+        # The engine takes the records array's own `items` and reads that
+        # map's `properties`; it never folds the array's `allOf` into `items`.
+        # Composing the array first would put `updated_at` on a record shape
+        # the cursor reader never sees.
+        payload = self._payload_with_cursor_field("updated_at", {"id": {"type": "integer"}})
+        payload["operations"]["read"]["response"]["schema"]["allOf"] = [
+            {"items": {"properties": {"updated_at": {"type": "string", "format": "date-time"}}}}
+        ]
+        with pytest.raises(ValidationError, match="names no key on the record shape"):
+            parse_endpoint(payload)
+
+    def test_a_dotted_key_contributed_only_by_a_branch_is_declared_but_not_read(self):
+        # "a.b" is one whole key the document declares, on an `allOf` branch.
+        # RULE-ENDP-013 finds it as a whole key; only the engine's reading
+        # misses it, because the branch is not the record shape's own
+        # `properties`. Splitting the name because that reading missed would
+        # call a declared field undeclared.
+        payload = self._payload_with_cursor_field("a.b", {"id": {"type": "integer"}})
+        payload["operations"]["read"]["response"]["schema"]["items"]["allOf"] = [
+            {"properties": {"a.b": {"type": "integer"}}}
+        ]
+        with pytest.raises(ValidationError, match="names no key on the record shape"):
+            parse_endpoint(payload)
+
     def test_cursor_field_traversing_a_scalar_node_is_rejected(self):
         # `metadata` is declared `type: "string"`, so its sibling `properties`
         # map is never reachable from a conforming instance — the watermark
