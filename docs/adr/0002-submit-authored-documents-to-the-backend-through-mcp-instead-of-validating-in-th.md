@@ -46,8 +46,8 @@ single documents during authoring, packages when complete, and for a pipeline th
 pipeline, connection and connector packages) — and act on the findings returned. The plugins do not
 install, import or pin the validator. Every document, whatever its kind, is submitted and graded the
 same way; a type map gets no operation of its own. An identity derived from a document (a database
-endpoint's id) is computed by the backend. No location the package contract marks secret (the
-connection's credentials) is ever selected or submitted.
+endpoint's id) is computed by the backend. What a plugin selects and submits follows ADR-0001's
+selection rule, which leaves out every secret location.
 
 ## Options considered
 
@@ -91,6 +91,5 @@ lose their only gate.
 ## Action items
 
 1. [ ] Backend accepts single-document, package and pipeline-project submissions through MCP, and derives database endpoint ids.
-2. [ ] The package contract marks the credentials location secret.
-3. [ ] Remove the plugins' validation adapter, gap script, endpoint-id helper, bootstrap and agent self-install; agents submit through MCP.
-4. [ ] Then, once no plugin installs the validator, retire the runtime pin rules, `pinned-validator-guard` and the agent pin test, in their own PR.
+2. [ ] After item 1 and ADR-0001 item 1: remove the plugins' validation adapter, gap script, endpoint-id helper, bootstrap and agent self-install; agents submit through MCP.
+3. [ ] Then, once no plugin installs the validator, retire the runtime pin rules, `pinned-validator-guard` and the agent pin test, in their own PR.
