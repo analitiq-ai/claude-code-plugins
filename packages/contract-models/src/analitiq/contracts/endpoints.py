@@ -2341,9 +2341,11 @@ class ReadOperation(_EndpointModel):
             filters_landed=_filters_landed_params(self.filters),
         )
 
-        # response.records → response.schema traversal raises directly.
-        # When replication is declared, the same traversal feeds cursor-field
-        # validation (avoiding a second walk of the same JSON Schema).
+        # Cursor grading takes both readings of the records array: the
+        # declared (composed) one that `records` is validated against, and the
+        # engine's raw one. Neither is derived from the other, because
+        # composing the engine reading is what let a cursor the engine cannot
+        # see pass.
         records_array = _validate_records_in_response_schema(self.response)
         records_array_node = records_array.composed
         if self.replication is not None:
@@ -4650,11 +4652,15 @@ def _record_properties_as_the_engine_reads_them(
 def _validate_records_in_response_schema(
     response: ResponseExtraction,
 ) -> _RecordsArray:
-    """Validate ``response.records`` resolves to an array node in ``response.schema``.
+    """Validate ``response.records`` resolves to an array node in ``response.schema``,
+    and return both readings of that array.
 
-    Always raises on failure — never returns ``None``. Spec: §Cross-Field
-    Validation — ``response.records`` must resolve to a path represented in
-    ``response.schema``, and that schema location must be an array.
+    A records path that does not resolve to an array raises. Spec:
+    §Cross-Field Validation — ``response.records`` must resolve to a path
+    represented in ``response.schema``, and that schema location must be an
+    array. ``engine_record_properties`` is ``None``, not an error, when the
+    engine's raw walk reaches no record `properties`; cursor grading decides
+    what that means.
     """
     ref: str = response.records.ref  # validated upstream to start with response.body
     segments = _response_body_segments(ref) or []

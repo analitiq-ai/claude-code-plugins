@@ -115,8 +115,8 @@ record shape `response.schema` describes (`RULE-ENDP-013`), not merely
 something the provider mentions.
 
 Declare the cursor field inline on the record shape's own `properties`, as a
-top-level key, with `type` naming exactly one JSON type besides `null`,
-`string` or `integer` (`RULE-ENDP-074`). Write a nullable cursor as
+top-level key, with a `type` that names exactly one JSON type besides `null`,
+and that type is `string` or `integer` (`RULE-ENDP-074`). Write a nullable cursor as
 `{"type": ["string", "null"]}`. Write the `response.records` path and the
 record shape's fields inline too, not through a `$ref` or an `allOf`. An
 integer cursor says which kind of integer it is in a `format` on that same
