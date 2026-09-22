@@ -32,8 +32,8 @@ mapping variant fits a provider, and when to skip replication entirely.
 
 A cursor mapping ties a record field to the request params filtered on it:
 
-- a **cursor field** — the dotted record path whose value is the
-  per-record watermark (`updated_at`, `meta.changed`); and
+- a **cursor field** — the top-level record field whose value is the
+  per-record watermark (`updated_at`); and
 - the **request param(s)** the runtime sets on the next run to fetch only
   records past that watermark, plus the comparison `operator`.
 
@@ -119,11 +119,22 @@ read back through it. It must name exactly one JSON type besides `null` in
 its own `type`, and that type must be `string` or `integer`
 (`RULE-ENDP-074`); a number, boolean or container leaves the next run nothing
 it can compare. Write a nullable cursor as `{"type": ["string", "null"]}`:
-the declaration is read off that node and no deeper, so a type named only
-inside an `anyOf`/`oneOf` branch is refused — the reader that reads a stored
-cursor back does not descend a union, and a document it cannot read is one
-that ships and then fails on the first incremental run. An integer says which
-kind of integer it is in its own `format`: `epoch_seconds` or
+the declaration is read off that node and no deeper, so a type reached only
+through an `anyOf`/`oneOf` branch, a `$ref` or an `allOf` is refused — the
+reader that reads a stored cursor back descends none of them, and a document
+it cannot read is one that fails as the endpoint is prepared, on every
+replication method — not only the incremental one.
+Where the field sits is read the same way: it must be a plain key on the
+record shape's `properties`, looked up whole. A dotted `cursor_field` names
+no key there, so point the cursor at a top-level record field rather than a
+nested one. A `$ref` base or an `allOf` branch alongside is fine — the
+record shape's own declaration of the field is the one that is read, and
+the branch's is not read at all. So a field declared ONLY on that base is
+invisible, and a `format` added by a branch to a `type` on the shape is
+invisible too — declare the cursor field on the record shape's own
+`properties`, with its `type` and any `format` it needs on that node. An
+integer says which kind of integer it is in its own
+`format` — on that same node, for the same reason: `epoch_seconds` or
 `epoch_milliseconds` makes it a moment, a calendar cursor format is refused
 outright — a moment an integer cannot spell — and anything else, a provider's
 own width token or no format at all, makes it a monotonic id

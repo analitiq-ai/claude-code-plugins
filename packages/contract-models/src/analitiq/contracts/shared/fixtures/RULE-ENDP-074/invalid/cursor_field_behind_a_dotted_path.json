@@ -1,0 +1,61 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/items",
+    "query": {
+      "since": {
+        "from_param": "since"
+      }
+    }
+  },
+  "params": {
+    "since": {
+      "in": "query",
+      "type": "string",
+      "required": false,
+      "controlled_by": "replication"
+    }
+  },
+  "response": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "updated_at": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "records": {
+      "ref": "response.body.records"
+    }
+  },
+  "replication": {
+    "supported_methods": [
+      "full_refresh",
+      "incremental"
+    ],
+    "cursor_mappings": [
+      {
+        "cursor_field": "metadata.updated_at",
+        "param": "since",
+        "operator": "gte"
+      }
+    ]
+  }
+}
