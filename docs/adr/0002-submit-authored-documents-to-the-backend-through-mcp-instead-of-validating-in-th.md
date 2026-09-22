@@ -21,14 +21,14 @@ provenance:
 
 ## Context
 
-The connector and pipeline plugins graded their own output. Each installed `analitiq-validator` from
+The connector and pipeline plugins grade their own output. Each installs `analitiq-validator` from
 PyPI at run time, pinned by `VALIDATOR_PIN` in the pipeline plugin's bootstrap and by a second copy in
 the connector agent's self-install. Marketplace installs track main, so that pin must name a version
 already on PyPI and must never run ahead of what the repo ships; CI guards, a drift test and release
 rules exist only to hold it there.
 
 The backend also grades what a plugin submits, with its own installed validator. So an authored
-document had two gates at two independently chosen versions, which can disagree on the same document.
+document has two gates at two independently chosen versions, which can disagree on the same document.
 
 ## Decision
 

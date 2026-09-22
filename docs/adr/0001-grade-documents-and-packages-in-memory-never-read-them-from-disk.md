@@ -25,15 +25,14 @@ provenance:
 runs, in the backend that grades what a plugin submits, and in DIP CI. The Engine and the backend
 already hold documents in memory; only DIP CI and the plugins hold files.
 
-The validator read packages from disk with its own idea of where each file sits. That made it own
+The validator reads packages from disk with its own idea of where each file sits. That makes it own
 filesystem behaviour — links, permissions, encodings, paths leading outside a package — none of which
-decides whether a document is correct. That surface produced most of the review churn on the
-validator: each fix to the reader exposed another filesystem edge.
+decides whether a document is correct, and each of which is a separate defect surface inside the gate.
 
-Two published contracts settle most of what the reader used to guess: the request models
-(`ValidateSingleDocumentRequest`, `ValidatePackageRequest`) carry document text keyed by path, and each
-package schema's location table (its `patternProperties`) says where a document sits and what kind it
-is. They do not yet settle the rest: the package request names no package, so nothing says which
+Two published contracts settle most of what the reader guesses: `ValidatePackageRequest` carries
+document text keyed by path inside the package, `ValidateSingleDocumentRequest` carries one document's
+text and its schema name, and each package schema's location table (its `patternProperties`) says
+where a document sits and what kind it is. They do not yet settle the rest: the package request names no package, so nothing says which
 location table applies; no package model states which document is its root; and nothing marks the
 connection package's credentials location as holding secret values.
 
