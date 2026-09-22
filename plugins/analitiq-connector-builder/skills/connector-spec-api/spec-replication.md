@@ -114,36 +114,14 @@ A cursor on `updated_at` requires `updated_at` to be a declared field of the
 record shape `response.schema` describes (`RULE-ENDP-013`), not merely
 something the provider mentions.
 
-That field's own declaration is read as well, because the stored cursor is
-read back through it. It must name exactly one JSON type besides `null` in
-its own `type`, and that type must be `string` or `integer`
-(`RULE-ENDP-074`); a number, boolean or container leaves the next run nothing
-it can compare. Write a nullable cursor as `{"type": ["string", "null"]}`:
-the declaration is read off that node and no deeper, so a type reached only
-through an `anyOf`/`oneOf` branch, a `$ref` or an `allOf` is refused — the
-reader that reads a stored cursor back descends none of them, and a document
-it cannot read is one that fails as the endpoint is prepared, on every
-replication method — not only the incremental one.
-Where the field sits is read the same way: it must be a plain key on the
-record shape's `properties`, looked up whole. A dot never walks into a
-nested object: a top-level key literally named `a.b` works, a path to a
-nested field does not, so point the cursor at a top-level record field. A `$ref` base or an `allOf` branch alongside is fine — the
-record shape's own declaration of the field is the one that is read, and
-the branch's is not read at all. So a field declared ONLY on that base is
-invisible, and a `format` added by a branch to a `type` on the shape is
-invisible too — declare the cursor field on the record shape's own
-`properties`, with its `type` and any `format` it needs on that node. The
-record shape is reached the same way: `response.records` is followed through
-each node's own `properties` to the array's own `items`, following no `$ref`
-or `allOf`, and that `items` must carry a non-empty `properties` of its own.
-A records key declared only by a branch, or a record shape written as
-`{"$ref": "#/$defs/Rec"}`, leaves nowhere to read the cursor from and is
-refused — write the records path and the record shape's fields inline. An
-integer says which kind of integer it is in its own
-`format` — on that same node, for the same reason: `epoch_seconds` or
-`epoch_milliseconds` makes it a moment, a calendar cursor format is refused
-outright — a moment an integer cannot spell — and anything else, a provider's
-own width token or no format at all, makes it a monotonic id
+Declare the cursor field inline on the record shape's own `properties`, as a
+top-level key, with `type` naming exactly one JSON type besides `null`,
+`string` or `integer` (`RULE-ENDP-074`). Write a nullable cursor as
+`{"type": ["string", "null"]}`. Write the `response.records` path and the
+record shape's fields inline too, not through a `$ref` or an `allOf`. An
+integer cursor says which kind of integer it is in a `format` on that same
+node: `epoch_seconds` or `epoch_milliseconds` makes it a moment, and a
+provider's own width token or no format makes it a monotonic id
 (`RULE-ENDP-078`). An id has no "now", so it takes neither the window variant
 nor a mapping `format`.
 
