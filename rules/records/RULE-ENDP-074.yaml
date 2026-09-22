@@ -20,10 +20,9 @@ rationale: >
   before the first request. A number, boolean or container field is worse: it
   is refused only when a stored cursor is read back, after the first run has
   read everything and committed a checkpoint the stream can never resume
-  from. The reading is the field node's own `type` key and no deeper —
-  `declared_json_types` in the engine's response-schema reader takes
-  `field["type"]` and descends nothing, not a union, not a `$ref`, not an
-  `allOf` — so a field typed only through one of those, or only by a
+  from. The reading is the field node's own `type` key and no deeper — the
+  engine's response-schema reader takes that key off the node as written
+  and descends nothing, not a union, not a `$ref`, not an `allOf` — so a field typed only through one of those, or only by a
   `native_type`/`arrow_type` pair, is refused here for the same reason: it
   satisfies the typedness rule other paths ask about and still names no JSON
   type the cursor reader can see. Reading any of them through would be the
@@ -58,7 +57,13 @@ rationale: >
   contradict each other. The gap it leaves is real and belongs to the engine:
   until the engine resolves the record shape, a document written this way is
   accepted here and refused there.
-  The predicate also stands on the contract alone: a watermark whose type the
-  document leaves open cannot be compared, whatever reads it.
+  The type half also stands on the contract alone: a watermark whose type
+  the document leaves open cannot be compared, whatever reads it. The
+  location half does not — JSON Schema declares a nested field and a field
+  contributed by a branch just as well — so it rests on the engine's
+  reading alone. If that reading goes stale, because the engine comes to
+  walk a dotted name or merge the record shape's contributors, this rule
+  fails by refusing documents the engine could run, never by accepting
+  one it cannot.
 status: active
 superseded_by: null

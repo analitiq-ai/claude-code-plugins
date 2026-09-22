@@ -4763,14 +4763,16 @@ def _validate_cursor_fields_in_record_shape(
     for cm in replication.cursor_mappings:
         cursor_field = _cursor_field_of(cm)
         field = _cursor_node_as_the_engine_reads_it(items, cursor_field, root)
-        # When the engine's lookup misses, the declared-path walk either names
-        # the hop that broke (a typo, RULE-ENDP-013) or resolves — a dotted
-        # path the engine does not walk, left to the not-found arm of
-        # :func:`_check_cursor_field_holds_the_mapping` to explain. Either way
-        # the typedness question is asked of whichever node was found.
-        declared = (
-            field if field is not None
-            else _cursor_node_by_declared_path(cursor_field, items, where="items", root=root)
+        # RULE-ENDP-013 asks about the document, so it grades the declared
+        # (composed) node; what the cursor reader sees of the field is
+        # RULE-ENDP-074's question, asked of `field`. A hit is looked up as one
+        # whole name, as the reader looks it up. On a miss the name is walked
+        # as a path, which either names the hop that broke (a typo) or
+        # resolves — a dotted path the reader does not walk, left to the
+        # not-found arm of :func:`_check_cursor_field_holds_the_mapping`.
+        segments = [cursor_field] if field is not None else cursor_field.split(".")
+        declared = _cursor_node_by_declared_path(
+            cursor_field, segments, items, where="items", root=root
         )
         _require_cursor_node_declares_a_type(cursor_field, declared, root, where="items")
         _check_cursor_field_holds_the_mapping(cm, field)
@@ -4811,18 +4813,17 @@ def _cursor_node_as_the_engine_reads_it(
 ) -> Any:
     """The cursor field's declaration as the engine's cursor reader gets it.
 
-    `cdk.api.response_schema.record_field_declaration` is
-    ``(items_schema.get("properties") or {}).get(cursor_field)`` — one flat
-    lookup keyed by the whole name, on a map it does not merge, returning a
-    declaration it does not resolve. Two of those three properties are
+    The engine's cursor reader takes the record shape's own `properties` map
+    and looks the cursor field up in it — one flat lookup keyed by the whole
+    name, on a map it does not merge, returning a declaration it does not
+    resolve. Two of those three properties are
     reproduced exactly:
 
     * The lookup is FLAT. A dotted `cursor_field` matches no key there, so it
       is not walked here either. The engine raises when it prepares the read,
       before the first request; refusing it here moves that to authoring
-      time. (The value read is flat too — `generic.py` takes
-      ``records[-1].get(cursor_field)`` — so nothing downstream would rescue
-      it either.)
+      time. (The value read is flat too — the last record's value under the
+      whole name — so nothing downstream would rescue it either.)
     * The declaration is returned AS AUTHORED. Resolving it would read a
       `type` or a `format` the engine cannot see, which is the whole reason
       this function exists rather than re-using
@@ -4872,8 +4873,7 @@ def _check_cursor_field_holds_the_mapping(
 
     Read off the field node's own `type` and `format` and no deeper, because
     that is the reading the engine performs when it reads a stored cursor back:
-    `cdk.api.response_schema.declared_json_types` takes `field["type"]`, and
-    `record_field_declaration` takes `field["format"]` off that same node. It
+    the engine takes the node's `type` key and its `format` key as written. It
     descends nothing — not an `anyOf`/`oneOf` branch, not a `$ref`, not an
     `allOf`. So `{"anyOf": [{"type": "string"}, {"type": "null"}]}` is refused
     here even though it states exactly what `{"type": ["string", "null"]}`
@@ -4894,7 +4894,8 @@ def _check_cursor_field_holds_the_mapping(
     would fail until the second run, when a committed checkpoint has to be
     rendered back into a request. Reading the authored node is what keeps the
     two readings the same one: both call it an id, and RULE-ENDP-078 refuses a
-    mapping `format` over it here rather than leaving it to `cursor_bounds`.
+    mapping `format` over it here rather than leaving it to the engine's
+    rendering of the stored cursor.
 
     ``field`` is ``None`` when the flat lookup lands on nothing. Two shapes
     reach it, both declared as far as the document is concerned — RULE-ENDP-013
@@ -5031,9 +5032,14 @@ def _cursor_field_of(cm: Any) -> str:
 
 
 def _cursor_node_by_declared_path(
-    cursor_field: str, items_node: dict[str, Any], *, where: str, root: Any
+    cursor_field: str,
+    segments: list[str],
+    items_node: dict[str, Any],
+    *,
+    where: str,
+    root: Any,
 ) -> Any:
-    """The node a ``cursor_field`` resolves to under the record shape by
+    """The composed node ``segments`` resolve to under the record shape by
     declared-path resolution — the same algorithm `response.records` and the
     pagination / metadata refs use, so an author never has to hold two
     traversal rules.
@@ -5046,7 +5052,6 @@ def _cursor_node_by_declared_path(
     What the engine's cursor reader will find is a different question with a
     different answer, asked by :func:`_cursor_node_as_the_engine_reads_it`.
     """
-    segments = cursor_field.split(".")
     try:
         node = resolve_declared_path(items_node, segments, root=root)
     except DeclaredPathError as exc:

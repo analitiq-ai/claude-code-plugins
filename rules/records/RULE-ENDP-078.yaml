@@ -19,8 +19,8 @@ rationale: >
   mapping `format` over it asks for an id rendered as a date. As the engine
   reads it today, each of these is refused when the first stored cursor is
   read back, which is after the whole first read has run and committed its
-  checkpoint. The `format` read is the field node's own key, the one
-  `record_field_declaration` takes in the engine; a format sitting inside an
+  checkpoint. The `format` read is the field node's own key, taken off the
+  node as written; a format sitting inside an
   `anyOf`/`oneOf` branch, or behind a `$ref` or an `allOf`, is invisible to
   that reader, which is why RULE-ENDP-074 refuses a cursor field typed that
   way before this rule is reached. A field that writes its `type` itself and
