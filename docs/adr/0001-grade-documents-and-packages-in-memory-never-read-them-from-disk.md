@@ -81,8 +81,8 @@ class stays in the gate.
 ### Option D: In-memory library plus a CLI reading a request on stdin
 
 **Pros:** Shell and CI scripts can grade without writing Python.
-**Cons:** Its only users are the plugins, which stop running the validator under ADR-0002; after that
-no consumer needs a command line. It is a second entry surface to version and test.
+**Cons:** Once the plugins submit through the backend (ADR-0002) and DIP CI builds requests as a
+library caller, no consumer needs a command line. It is a second entry surface to version and test.
 
 ## Trade-offs
 
@@ -102,8 +102,8 @@ of Python to grade a package.
 
 ## Action items
 
-Items 1 and 2 land only after ADR-0002 item 3 has removed the plugin callers.
+Items 2 and 3 land only after item 1 and ADR-0002 item 3 have moved every caller off them.
 
-1. [ ] Remove every path-taking entry point and the disk reader from `analitiq.validator`.
-2. [ ] Remove the `analitiq-validate` console script and its `main()`.
-3. [ ] DIP CI builds requests by selecting files with the package schema's published location table.
+1. [ ] DIP CI builds requests by selecting files with the package schema's published location table.
+2. [ ] Remove every path-taking entry point and the disk reader from `analitiq.validator`.
+3. [ ] Remove the `analitiq-validate` console script and its `main()`.
