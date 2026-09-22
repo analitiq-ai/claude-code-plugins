@@ -319,6 +319,11 @@ def package_locations(schema: dict[str, Any], package: type[DocumentPackage]) ->
     schema["required"] = [package.ROOT]
 
 
+def _at_location(pattern: str, key: str) -> bool:
+    # `fullmatch` holds `$` to the true end, as the published lookahead does.
+    return re.fullmatch(pattern, key) is not None
+
+
 class DocumentPackage(ParseOnly, RootModel[dict[str, Any]]):
     """A package: its authored documents, keyed by path from the package's own directory."""
 
@@ -348,11 +353,15 @@ class DocumentPackage(ParseOnly, RootModel[dict[str, Any]]):
     @classmethod
     def kind_at(cls, key: str) -> str | None:
         """The resource the document at `key` is written against, or `None` outside every location."""
-        # `fullmatch` holds `$` to the true end, as the published lookahead does.
         for pattern, resource in cls.LOCATIONS.items():
-            if re.fullmatch(pattern, key):
+            if _at_location(pattern, key):
                 return resource
         return None
+
+    @classmethod
+    def secret_at(cls, key: str) -> bool:
+        """Whether the document at `key` sits at one of the package's secret locations."""
+        return any(_at_location(pattern, key) for pattern in cls.SECRET_LOCATIONS)
 
     @model_validator(mode="after")
     def _located(self) -> DocumentPackage:
