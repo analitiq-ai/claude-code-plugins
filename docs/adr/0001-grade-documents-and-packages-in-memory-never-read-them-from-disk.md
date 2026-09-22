@@ -20,9 +20,21 @@ affects:
   - type: path
     pattern: "packages/contract-models/src/analitiq/contracts/*_package.py"
   - type: path
-    pattern: "plugins/analitiq-pipeline-builder/scripts/**"
+    pattern: "schemas/validate-package-request/**"
   - type: path
-    pattern: "plugins/analitiq-connector-builder/agents/connector-schema-validator.md"
+    pattern: "schemas/*-package/**"
+  - type: path
+    pattern: "rules/records/**"
+  - type: path
+    pattern: "plugins/*/skills/*/references/rules/**"
+  - type: path
+    pattern: "scripts/gen_pipeline_docs.py"
+  - type: path
+    pattern: "scripts/render_validator_claims.py"
+  - type: path
+    pattern: "tests/connector_builder/test_examples_validate.py"
+  - type: path
+    pattern: ".github/workflows/validator-release.yml"
 review:
   tier: async
   tierReason: One component and its callers; reversible by restoring a path entry point.
@@ -43,10 +55,12 @@ filesystem behaviour — links, permissions, encodings, paths leading outside a 
 decides whether a document is correct. That surface produced most of the review churn on the
 validator: each fix to the reader exposed another filesystem edge.
 
-Two published contracts now settle what the reader used to guess: the request models
+Two published contracts settle most of what the reader used to guess: the request models
 (`ValidateSingleDocumentRequest`, `ValidatePackageRequest`) carry document text keyed by path, and each
 package schema's location table (its `patternProperties`) says where a document sits and what kind it
-is. One of those locations, the connection package's credentials, holds secret values.
+is. They do not yet settle the rest: the package request names no package, so nothing says which
+location table applies; no package model states which document is its root; and nothing marks the
+connection package's credentials location as holding secret values.
 
 ## Decision
 
@@ -54,10 +68,11 @@ We will make the validator a pure grader. Its only inputs are the published requ
 cross-package references, the pipeline bundle. No entry point takes a path and grading performs no
 filesystem access.
 
-A caller holding files selects them by the package schema's published location table, skipping every
-location the contract marks secret, reads them as UTF-8, reports its own read errors, and builds the
-request. The contract marks the credentials location secret, and a package request holding a key at a
-secret location is refused as the caller's error, so no credential enters a request.
+A package request names its package, and the named package's model states its location table and its
+root. A caller holding files selects them by that published location table, skipping every location the
+contract marks secret, reads them as UTF-8, reports its own read errors, and builds the request. The
+contract marks the credentials location secret, and a package request holding a key at a secret
+location of its package is refused as the caller's error, so no credential enters a request.
 
 The validator ships no command-line interface. Every consumer calls it as a library; a command line
 would need file input, which is the disk reader this record removes.
@@ -109,12 +124,16 @@ write a few lines of Python to grade a package.
 
 ## Action items
 
-Each item lands only after the items before it. Items 4 and 5 also wait for ADR-0002 item 2, which
-moves the plugins off the validator.
+Each item lands only after the items before it, and updates every in-repo reader of what it changes in
+the same PR. Items 5 and 6 also wait for ADR-0002 item 3, which moves the plugins off the validator.
 
-1. [ ] The package contract marks the credentials location secret.
-2. [ ] The package request refuses a key at a secret location, as the caller's error.
-3. [ ] DIP CI builds requests by selecting files with the published location table, skipping secret
-   locations.
-4. [ ] Remove every path-taking entry point and the disk reader from `analitiq.validator`.
-5. [ ] Remove the `analitiq-validate` console script and its `main()`.
+1. [ ] The package request names its package, restricted to the published package schema names, and
+   each package model states its root document.
+2. [ ] The package contract marks the credentials location secret.
+3. [ ] The package request refuses a key at a secret location of the package it names, as the caller's
+   error.
+4. [ ] DIP CI builds requests by selecting files with the named package's published location table,
+   skipping secret locations.
+5. [ ] Remove every path-taking entry point, the disk reader and the validator's own filename constants
+   from `analitiq.validator`, with the findings and rule records only they produce.
+6. [ ] Remove the `analitiq-validate` console script and its `main()`.

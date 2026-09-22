@@ -14,11 +14,33 @@ affects:
   - type: path
     pattern: "plugins/**"
   - type: path
+    pattern: "scripts/gen_pipeline_docs.py"
+  - type: path
+    pattern: "scripts/render_validator_claims.py"
+  - type: path
+    pattern: "scripts/_guard_lib.py"
+  - type: path
     pattern: "scripts/check_validator_pin_contract.py"
+  - type: path
+    pattern: "scripts/check_contracts_version_pin.py"
+  - type: path
+    pattern: "tests/pipeline_builder/**"
   - type: path
     pattern: "tests/connector_builder/**"
   - type: path
+    pattern: "tests/schemas/test_contracts_version_guard.py"
+  - type: path
+    pattern: "tests/plugins/test_eval_runner.py"
+  - type: path
+    pattern: ".github/workflows/tests.yml"
+  - type: path
+    pattern: ".github/workflows/validator-release.yml"
+  - type: path
+    pattern: ".github/workflows/contract-models-release.yml"
+  - type: path
     pattern: "CLAUDE.md"
+  - type: path
+    pattern: ".claude/rules/plugin-prose.md"
 review:
   tier: arb
   tierReason: Moves the authoring gate for both plugins and retires the runtime pin and its release rules.
@@ -90,6 +112,16 @@ lose their only gate.
 
 ## Action items
 
-1. [ ] Backend accepts single-document, package and pipeline-project submissions through MCP, and derives database endpoint ids.
-2. [ ] After item 1 and ADR-0001 item 1: remove the plugins' validation adapter, gap script, endpoint-id helper, bootstrap and agent self-install; agents submit through MCP.
-3. [ ] Then, once no plugin installs the validator, retire the runtime pin rules, `pinned-validator-guard` and the agent pin test, in their own PR.
+Each item lands only after the items before it.
+
+1. [ ] The backend accepts single-document, package and pipeline-project submissions through MCP, and
+   derives database endpoint ids.
+2. [ ] The doc generator, the validator-claim probes and the tests that reach the validator through the
+   pipeline plugin's validation adapter call the library's request entry points instead.
+3. [ ] After ADR-0001 item 2 as well: remove the plugins' validation adapter, gap script and endpoint-id
+   helper, the connector agent's self-install, and the tests and prose that exist only for them; agents
+   submit through MCP. The bootstrap stays, unimported, because the pin guards still read its pin.
+4. [ ] In their own PR: retire every guard, test and release rule that reads `VALIDATOR_PIN` —
+   `pinned-validator-guard`, the pin leg of `contracts-version-guard` and its shared reader, the release
+   workflows' lockstep lists, and the pin rules in `CLAUDE.md` and the plugin-prose rule.
+5. [ ] Remove the bootstrap and the test that relies on its source-checkout short circuit.
