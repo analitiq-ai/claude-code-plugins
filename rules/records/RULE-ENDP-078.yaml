@@ -1,9 +1,10 @@
 id: RULE-ENDP-078
 statement: >
-  A replication cursor field typed `integer` MUST declare either an epoch
-  cursor format, making it a moment, or no cursor format at all, making it an
-  id; a cursor mapping over an id MUST declare no `format` and MUST NOT take
-  the window form.
+  A replication cursor field typed `integer` MUST NOT declare a calendar
+  `format` (`date-time`, `date`). An epoch `format` (`epoch_seconds`,
+  `epoch_milliseconds`) makes it a moment; any other `format`, such as a
+  provider width token like `int64`, or none makes it an id. A cursor mapping
+  over an id MUST declare no `format` and MUST NOT take the window form.
 tier: coherence
 severity: error
 artifact_kinds: [api-endpoint]
