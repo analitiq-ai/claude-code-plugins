@@ -25,9 +25,8 @@ the same way, without touching `_core`. The public surface is re-exported here.
 
 `document_set` carries the path-free document-set API, and `workspace` reads
 where each document a package carries sits off the published location tables.
-See that module's docstring and `__all__` below for what it contributes to
-this package's surface. Its entry
-points take the request models in `analitiq.contracts.validation_requests`,
+See `document_set`'s docstring and `__all__` below for what it contributes to
+this package's surface. `document_set`'s entry points take the request models in `analitiq.contracts.validation_requests`,
 which own the document-set shape and are where a malformed argument is
 refused.
 """

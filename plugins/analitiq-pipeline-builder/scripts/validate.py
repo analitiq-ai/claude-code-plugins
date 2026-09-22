@@ -546,16 +546,18 @@ def _check_connector_endpoint_refs(streams, connections,
 
 
 def is_runnable_required(pipeline_doc: object) -> bool:
-    """Whether this run's bundle is held to runnability — the published
-    derivation, called rather than restated, so this adapter and the bundle
-    validator it hands the flag to cannot answer differently.
+    """This plugin authors draft bundles by design: a draft pipeline is not yet
+    runnable, so its runnability verdicts are an author-time expectation, not a
+    defect. Ask the bundle validator for referential integrity only
+    (require_runnable=False) while the pipeline is a draft, and enforce runnability
+    once it is authored 'active'. A non-dict pipeline_doc already earned its own
+    contract-model finding at the single-document stage (see diagnostics_for) —
+    treat it as not-yet-active here rather than raising.
 
     Public (no leading underscore): `scripts/gen_pipeline_docs.py` calls this
     directly to measure which `require_runnable`-gated rules this adapter can
     actually surface, rather than reasoning about the gate from outside it."""
-    from analitiq.validator import is_runnable_required as published
-
-    return published(pipeline_doc)
+    return isinstance(pipeline_doc, dict) and pipeline_doc.get("status") == "active"
 
 
 def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> list[dict]:

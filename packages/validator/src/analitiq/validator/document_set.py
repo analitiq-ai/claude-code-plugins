@@ -600,10 +600,10 @@ def validate_pipeline_package(request: ValidatePackageRequest) -> ValidationEnve
             endpoints.append(endpoint)
             endpoint_keys.append(key)
 
-        # Read through the published loader, which also refuses every other
-        # type-map name beside it — a directory property no key-by-key walk can
-        # see. A connection's map is gap-only, so it is graded at connection
-        # scope rather than held to a connector's write vocabulary.
+        # Read through the loader the connector route uses, so one rule decides
+        # how a type map is loaded. A connection's map is gap-only, so it is
+        # graded at connection scope rather than held to a connector's write
+        # vocabulary.
         for key in type_maps_authored.get(root, []):
             directory = posixpath.dirname(key)
             load = load_type_map(Location(PurePosixPath(directory), tree), rule=None)
