@@ -20,6 +20,18 @@ affects:
   - type: path
     pattern: "packages/contract-models/src/analitiq/contracts/*_package.py"
   - type: path
+    pattern: "packages/contract-models/src/analitiq/contracts/pipeline_manifest.py"
+  - type: path
+    pattern: "packages/contract-models/tests/unit/test_validation_requests.py"
+  - type: path
+    pattern: "packages/contract-models/README.md"
+  - type: path
+    pattern: "census/areas/validation_requests.py"
+  - type: path
+    pattern: "census/areas/*_package.py"
+  - type: path
+    pattern: "scripts/render_schemas.py"
+  - type: path
     pattern: "schemas/validate-package-request/**"
   - type: path
     pattern: "schemas/*-package/**"
@@ -125,15 +137,18 @@ write a few lines of Python to grade a package.
 ## Action items
 
 Each item lands only after the items before it, and updates every in-repo reader of what it changes in
-the same PR. Items 5 and 6 also wait for ADR-0002 item 3, which moves the plugins off the validator.
+the same PR. Items 6 and 7 also wait for ADR-0002 item 3, which moves the plugins off the validator.
 
 1. [ ] The package request names its package, restricted to the published package schema names, and
    each package model states its root document.
 2. [ ] The package contract marks the credentials location secret.
 3. [ ] The package request refuses a key at a secret location of the package it names, as the caller's
    error.
-4. [ ] DIP CI builds requests by selecting files with the named package's published location table,
+4. [ ] The validator grades a package request by the package it names: each key's kind comes from that
+   package's location table, and a request without its root fails with one finding about the package
+   as a whole, replacing the root check keyed to the validator's own filename.
+5. [ ] DIP CI builds requests by selecting files with the named package's published location table,
    skipping secret locations.
-5. [ ] Remove every path-taking entry point, the disk reader and the validator's own filename constants
+6. [ ] Remove every path-taking entry point, the disk reader and the validator's own filename constants
    from `analitiq.validator`, with the findings and rule records only they produce.
-6. [ ] Remove the `analitiq-validate` console script and its `main()`.
+7. [ ] Remove the `analitiq-validate` console script and its `main()`.

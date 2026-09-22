@@ -14,6 +14,14 @@ affects:
   - type: path
     pattern: "plugins/**"
   - type: path
+    pattern: "contributing/analitiq-pipeline-builder.md"
+  - type: path
+    pattern: "rules/SCHEMA.md"
+  - type: path
+    pattern: "evals/run_evals.py"
+  - type: path
+    pattern: "conftest.py"
+  - type: path
     pattern: "scripts/gen_pipeline_docs.py"
   - type: path
     pattern: "scripts/render_validator_claims.py"
@@ -26,11 +34,15 @@ affects:
   - type: path
     pattern: "tests/pipeline_builder/**"
   - type: path
-    pattern: "tests/connector_builder/**"
+    pattern: "tests/connector_builder/test_validator_pin_guard.py"
+  - type: path
+    pattern: "tests/connector_builder/test_schema_drift.py"
   - type: path
     pattern: "tests/schemas/test_contracts_version_guard.py"
   - type: path
     pattern: "tests/plugins/test_eval_runner.py"
+  - type: path
+    pattern: "tests/plugins/test_plugin_root_references.py"
   - type: path
     pattern: ".github/workflows/tests.yml"
   - type: path
@@ -112,16 +124,20 @@ lose their only gate.
 
 ## Action items
 
-Each item lands only after the items before it.
+Each item lands only after the items before it, and updates every in-repo reader of what it changes in
+the same PR.
 
 1. [ ] The backend accepts single-document, package and pipeline-project submissions through MCP, and
    derives database endpoint ids.
-2. [ ] The doc generator, the validator-claim probes and the tests that reach the validator through the
-   pipeline plugin's validation adapter call the library's request entry points instead.
+2. [ ] Every in-repo caller that reaches the validator through the pipeline plugin's validation adapter
+   or its command line — the doc generator, the validator-claim probes, the eval grader and the
+   pipeline tests — calls the library's request entry points instead.
 3. [ ] After ADR-0001 item 2 as well: remove the plugins' validation adapter, gap script and endpoint-id
    helper, the connector agent's self-install, and the tests and prose that exist only for them; agents
    submit through MCP. The bootstrap stays, unimported, because the pin guards still read its pin.
 4. [ ] In their own PR: retire every guard, test and release rule that reads `VALIDATOR_PIN` —
    `pinned-validator-guard`, the pin leg of `contracts-version-guard` and its shared reader, the release
-   workflows' lockstep lists, and the pin rules in `CLAUDE.md` and the plugin-prose rule.
-5. [ ] Remove the bootstrap and the test that relies on its source-checkout short circuit.
+   workflows' lockstep lists, the eval runner's pin reference, and the pin rules in `CLAUDE.md` and the
+   plugin-prose rule.
+5. [ ] Remove the bootstrap and the `ANALITIQ_VALIDATOR_FROM_SOURCE` plumbing that only it reads: the
+   repo-root `conftest.py`, the eval runner's grader environment, its test and the `CLAUDE.md` sentence.
