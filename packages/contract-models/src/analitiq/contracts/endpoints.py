@@ -79,7 +79,6 @@ from analitiq.contracts.shared.json_schema import (
     _MISSING,
     DeclaredPathError,
     SchemaResolutionError,
-    _composed_permits_object,
     _declares_a_type,
     materialize_node,
     pointer_position,
@@ -4744,7 +4743,9 @@ def _require_record_shape_items(array_node: dict[str, Any], *, subject: str) -> 
 def _validate_cursor_fields_in_record_shape(
     replication: Replication, array_node: dict[str, Any], root: Any
 ) -> None:
-    """Each ``cursor_field`` path must exist under the array's ``items`` subschema.
+    """Each ``cursor_field`` must exist under the array's ``items`` subschema
+    (RULE-ENDP-013), and the flat lookup the cursor reader makes must find it
+    there (RULE-ENDP-074).
 
     Spec: §Cross-Field Validation — "Each replication ``cursor_field`` must
     correspond to a field path in ``response.schema`` under the extracted
@@ -4768,8 +4769,10 @@ def _validate_cursor_fields_in_record_shape(
         # RULE-ENDP-074's question, asked of `field`. A hit is looked up as one
         # whole name, as the reader looks it up. On a miss the name is walked
         # as a path, which either names the hop that broke (a typo) or
-        # resolves — a dotted path the reader does not walk, left to the
-        # not-found arm of :func:`_check_cursor_field_holds_the_mapping`.
+        # resolves — a dotted path the reader does not walk, or a field only a
+        # `$ref` base or an `allOf` branch contributes, which the reader does
+        # not see. Both are left to the not-found arm of
+        # :func:`_check_cursor_field_holds_the_mapping`.
         segments = [cursor_field] if field is not None else cursor_field.split(".")
         declared = _cursor_node_by_declared_path(
             cursor_field, segments, items, where="items", root=root
@@ -4849,15 +4852,7 @@ def _cursor_node_as_the_engine_reads_it(
     rule turns on. The looseness is unobservable — every document that reaches
     the fallback is one the engine refuses outright — so it is recorded here
     rather than papered over with a distinction that would change no verdict.
-
-    A record shape whose composed declaration excludes objects carries no
-    field at all, whatever `properties` map it writes down: JSON Schema applies
-    `properties` only to object instances, and the engine reads the cursor off
-    each record as an object. The same gate the declared-path walk applies,
-    so the two lookups cannot disagree about whether a record has fields.
     """
-    if not _composed_permits_object(items, root):
-        return None
     properties = items.get("properties")
     if not isinstance(properties, dict):
         shape = materialize_node(items, root)

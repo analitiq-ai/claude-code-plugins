@@ -567,9 +567,9 @@ class TestCursorFieldsInRecordShape:
             ))
 
     def test_cursor_field_on_a_record_shape_that_excludes_objects_is_rejected(self):
-        # The flat lookup must not read a `properties` map no record can carry:
-        # a record shape typed `string` describes scalar records, and the
-        # engine reads the cursor value off each record as an object.
+        # A record shape typed `string` describes scalar records, so the
+        # RULE-ENDP-013 declared-path walk finds no field on it, whatever
+        # `properties` map it writes down.
         payload = self._payload_with_cursor_field(
             "updated_at", {"updated_at": {"type": "string"}}
         )
