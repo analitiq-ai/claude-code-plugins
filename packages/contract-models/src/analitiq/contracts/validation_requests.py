@@ -8,10 +8,11 @@ contract — is not judged here.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import Field, RootModel, StringConstraints, model_validator
+from pydantic import ConfigDict, Field, RootModel, StringConstraints, model_validator
 
 from analitiq.contracts.connection_package import ConnectionPackage
 from analitiq.contracts.connector_package import ConnectorPackage
@@ -24,6 +25,7 @@ from analitiq.contracts.shared.common import (
     ParseOnly,
     StrictModel,
     closed_true_end_keys,
+    true_ended,
 )
 
 # A coarse guard against an unbounded request, not a policy on package size:
@@ -84,12 +86,32 @@ PACKAGE_MODELS: dict[str, type[DocumentPackage]] = {
 }
 
 
+def _refuse_secret_keys(schema: dict[str, Any]) -> None:
+    schema["allOf"] = [
+        {"if": {"properties": {"package": {"const": name}}},
+         "then": {"properties": {"documents": {"propertyNames": {
+             "not": {"anyOf": [{"pattern": true_ended(pattern)} for pattern in sorted(model.SECRET_LOCATIONS)]}}}}}}
+        for name, model in PACKAGE_MODELS.items() if model.SECRET_LOCATIONS
+    ]
+
+
 class ValidatePackageRequest(StrictModel):
     """A request to validate one package, supplied as its documents."""
+
+    model_config = ConfigDict(json_schema_extra=_refuse_secret_keys)
 
     package: Literal[tuple(PACKAGE_MODELS)] = Field(  # type: ignore[valid-type]
         ..., description="Name of the published package schema the documents form.")
     documents: DocumentSet
+
+    @model_validator(mode="after")
+    def _no_document_at_a_secret_location(self) -> ValidatePackageRequest:
+        secret = PACKAGE_MODELS[self.package].SECRET_LOCATIONS
+        held = sorted(key for key in self.documents.root
+                      if any(re.fullmatch(pattern, key) for pattern in secret))
+        if held:
+            raise ValueError(f"keys at a secret location of {self.package}: {', '.join(map(repr, held))}")
+        return self
 
 
 #: Written by `scripts/render_schemas.py document-schemas`: the names of the
