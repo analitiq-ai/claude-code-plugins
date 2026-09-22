@@ -201,6 +201,15 @@ def test_the_model_names_the_kind_at_each_location_and_none_outside(resource):
 
 
 @document_package
+def test_the_model_names_each_secret_location_and_nothing_else(resource):
+    model = PACKAGE_MODELS[resource]
+    for key in PACKAGES[resource]["located"]:
+        assert model.secret_at(key) is (key in PACKAGES[resource].get("secret", ())), key
+    for key in PACKAGES[resource]["outside"]:
+        assert model.secret_at(key) is False, key
+
+
+@document_package
 def test_the_model_admits_a_package_holding_its_root(resource):
     model = PACKAGE_MODELS[resource]
     model.model_validate(dict.fromkeys(PACKAGES[resource]["located"], {}))

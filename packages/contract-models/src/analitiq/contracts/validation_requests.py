@@ -8,7 +8,6 @@ contract — is not judged here.
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -106,9 +105,8 @@ class ValidatePackageRequest(StrictModel):
 
     @model_validator(mode="after")
     def _no_document_at_a_secret_location(self) -> ValidatePackageRequest:
-        secret = PACKAGE_MODELS[self.package].SECRET_LOCATIONS
-        held = sorted(key for key in self.documents.root
-                      if any(re.fullmatch(pattern, key) for pattern in secret))
+        package = PACKAGE_MODELS[self.package]
+        held = sorted(key for key in self.documents.root if package.secret_at(key))
         if held:
             raise ValueError(f"keys at a secret location of {self.package}: {', '.join(map(repr, held))}")
         return self

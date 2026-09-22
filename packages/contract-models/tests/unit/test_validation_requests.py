@@ -197,6 +197,17 @@ def test_a_key_at_a_secret_location_of_the_named_package_is_refused():
         jsonschema.validate(request, PUBLISHED_SCHEMA)
 
 
+def test_a_connection_package_request_without_a_secret_key_is_accepted():
+    request = {"package": "connection-package", "documents": {
+        "connection.json": "{}",
+        "definition/type-map.json": "{}",
+        "x/.secrets/credentials.json": "{}",
+        ".secrets/credentials.json.bak": "{}",
+    }}
+    ValidatePackageRequest.model_validate(request)
+    jsonschema.validate(request, PUBLISHED_SCHEMA)
+
+
 def test_a_location_is_secret_only_in_the_package_that_marks_it():
     request = {"package": "connector-package", "documents": {SECRET_KEY: "{}"}}
     ValidatePackageRequest.model_validate(request)
