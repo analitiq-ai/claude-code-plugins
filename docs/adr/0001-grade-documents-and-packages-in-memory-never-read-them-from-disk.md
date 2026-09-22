@@ -9,7 +9,7 @@ tags: [validator, contracts]
 scope: component
 reversibility: two-way-door
 blastRadius: component
-relatesTo: []
+relatesTo: ["0002"]
 affects:
   - type: path
     pattern: "packages/validator/**"
@@ -49,7 +49,7 @@ package model's location table says where a document sits and what kind it is.
 
 We will make the validator a pure grader. Its only inputs are the published request models and, for
 cross-package references, the pipeline bundle. No entry point takes a path and grading performs no
-filesystem access. A caller holding files selects them by the package's location table (`kind_at`),
+filesystem access. A caller holding files selects them by the package schema's published location table (its `patternProperties`),
 reads them as UTF-8, reports its own read errors, and builds the request.
 
 The validator ships no command-line interface. Every consumer calls it as a library; a command line
@@ -81,13 +81,13 @@ class stays in the gate.
 ### Option D: In-memory library plus a CLI reading a request on stdin
 
 **Pros:** Shell and CI scripts can grade without writing Python.
-**Cons:** No consumer needs it: the backend, the Engine and DIP CI call the library, and the plugins,
-its only users, no longer run the validator. It is a second entry surface to version and test.
+**Cons:** Its only users are the plugins, which stop running the validator under ADR-0002; after that
+no consumer needs a command line. It is a second entry surface to version and test.
 
 ## Trade-offs
 
 Each file holder writes a small reader. Their agreement rests on all of them selecting by the same
-contract rule (`location_patterns()` / `kind_at`), not on shared code. A file the caller cannot read
+contract rule (the package schema's published location table), not on shared code. A file the caller cannot read
 never reaches the validator, so reporting it is the caller's job. A shell user must write a few lines
 of Python to grade a package.
 
@@ -102,6 +102,8 @@ of Python to grade a package.
 
 ## Action items
 
+Items 1 and 2 land only after ADR-0002 item 3 has removed the plugin callers.
+
 1. [ ] Remove every path-taking entry point and the disk reader from `analitiq.validator`.
 2. [ ] Remove the `analitiq-validate` console script and its `main()`.
-3. [ ] DIP CI builds requests by selecting files with `kind_at`.
+3. [ ] DIP CI builds requests by selecting files with the package schema's published location table.
