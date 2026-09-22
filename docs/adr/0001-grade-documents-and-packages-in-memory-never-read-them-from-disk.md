@@ -14,37 +14,23 @@ affects:
   - type: path
     pattern: "packages/validator/**"
   - type: path
-    pattern: "packages/contract-models/src/analitiq/contracts/validation_requests.py"
+    pattern: "packages/contract-models/**"
   - type: path
-    pattern: "packages/contract-models/src/analitiq/contracts/shared/common.py"
+    pattern: "census/**"
   - type: path
-    pattern: "packages/contract-models/src/analitiq/contracts/*_package.py"
+    pattern: "scripts/**"
   - type: path
-    pattern: "packages/contract-models/src/analitiq/contracts/pipeline_manifest.py"
+    pattern: "tests/**"
   - type: path
-    pattern: "packages/contract-models/tests/unit/test_validation_requests.py"
-  - type: path
-    pattern: "packages/contract-models/README.md"
-  - type: path
-    pattern: "census/areas/validation_requests.py"
-  - type: path
-    pattern: "census/areas/*_package.py"
-  - type: path
-    pattern: "scripts/render_schemas.py"
-  - type: path
-    pattern: "schemas/validate-package-request/**"
-  - type: path
-    pattern: "schemas/*-package/**"
+    pattern: "evals/**"
   - type: path
     pattern: "rules/records/**"
   - type: path
+    pattern: "schemas/*-package/**"
+  - type: path
+    pattern: "schemas/validate-package-request/**"
+  - type: path
     pattern: "plugins/*/skills/*/references/rules/**"
-  - type: path
-    pattern: "scripts/gen_pipeline_docs.py"
-  - type: path
-    pattern: "scripts/render_validator_claims.py"
-  - type: path
-    pattern: "tests/connector_builder/test_examples_validate.py"
   - type: path
     pattern: ".github/workflows/validator-release.yml"
 review:
@@ -136,8 +122,9 @@ write a few lines of Python to grade a package.
 
 ## Action items
 
-Each item lands only after the items before it, and updates every in-repo reader of what it changes in
-the same PR. Items 6 and 7 also wait for ADR-0002 item 3, which moves the plugins off the validator.
+Each item lands only after the items before it, and in the same PR updates every in-repo caller of
+what it changes, as `git grep` finds them when it lands. Items 6 and 7 also wait for ADR-0002 item 3, which moves the plugins off the
+validator.
 
 1. [ ] The package request names its package, restricted to the published package schema names, and
    each package model states its root document.
@@ -149,6 +136,7 @@ the same PR. Items 6 and 7 also wait for ADR-0002 item 3, which moves the plugin
    as a whole, replacing the root check keyed to the validator's own filename.
 5. [ ] DIP CI builds requests by selecting files with the named package's published location table,
    skipping secret locations.
-6. [ ] Remove every path-taking entry point, the disk reader and the validator's own filename constants
-   from `analitiq.validator`, with the findings and rule records only they produce.
-7. [ ] Remove the `analitiq-validate` console script and its `main()`.
+6. [ ] Remove every path-taking entry point (a `doc_path` argument, the disk reader) and the validator's
+   own filename constants from `analitiq.validator`, with the findings and rule records only they
+   produce; every caller moves to the request entry points.
+7. [ ] Remove the `analitiq-validate` console script and `main()`, with every caller of either.

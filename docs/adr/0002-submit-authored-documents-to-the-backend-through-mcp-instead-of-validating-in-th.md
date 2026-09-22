@@ -14,45 +14,25 @@ affects:
   - type: path
     pattern: "plugins/**"
   - type: path
-    pattern: "contributing/analitiq-pipeline-builder.md"
+    pattern: "scripts/**"
   - type: path
-    pattern: "rules/SCHEMA.md"
+    pattern: "tests/**"
   - type: path
-    pattern: "evals/run_evals.py"
+    pattern: "evals/**"
   - type: path
     pattern: "conftest.py"
   - type: path
-    pattern: "scripts/gen_pipeline_docs.py"
+    pattern: "packages/validator/tests/**"
   - type: path
-    pattern: "scripts/render_validator_claims.py"
-  - type: path
-    pattern: "scripts/_guard_lib.py"
-  - type: path
-    pattern: "scripts/check_validator_pin_contract.py"
-  - type: path
-    pattern: "scripts/check_contracts_version_pin.py"
-  - type: path
-    pattern: "tests/pipeline_builder/**"
-  - type: path
-    pattern: "tests/connector_builder/test_validator_pin_guard.py"
-  - type: path
-    pattern: "tests/connector_builder/test_schema_drift.py"
-  - type: path
-    pattern: "tests/schemas/test_contracts_version_guard.py"
-  - type: path
-    pattern: "tests/plugins/test_eval_runner.py"
-  - type: path
-    pattern: "tests/plugins/test_plugin_root_references.py"
-  - type: path
-    pattern: ".github/workflows/tests.yml"
-  - type: path
-    pattern: ".github/workflows/validator-release.yml"
-  - type: path
-    pattern: ".github/workflows/contract-models-release.yml"
+    pattern: ".github/workflows/**"
   - type: path
     pattern: "CLAUDE.md"
   - type: path
-    pattern: ".claude/rules/plugin-prose.md"
+    pattern: "contributing/**"
+  - type: path
+    pattern: "rules/SCHEMA.md"
+  - type: path
+    pattern: ".claude/rules/**"
 review:
   tier: arb
   tierReason: Moves the authoring gate for both plugins and retires the runtime pin and its release rules.
@@ -124,20 +104,19 @@ lose their only gate.
 
 ## Action items
 
-Each item lands only after the items before it, and updates every in-repo reader of what it changes in
-the same PR.
+Each item lands only after the items before it, and in the same PR updates every in-repo caller of
+what it changes, as `git grep` finds them when it lands.
 
-1. [ ] The backend accepts single-document, package and pipeline-project submissions through MCP, and
-   derives database endpoint ids.
-2. [ ] Every in-repo caller that reaches the validator through the pipeline plugin's validation adapter
-   or its command line — the doc generator, the validator-claim probes, the eval grader and the
-   pipeline tests — calls the library's request entry points instead.
-3. [ ] After ADR-0001 item 2 as well: remove the plugins' validation adapter, gap script and endpoint-id
-   helper, the connector agent's self-install, and the tests and prose that exist only for them; agents
-   submit through MCP. The bootstrap stays, unimported, because the pin guards still read its pin.
-4. [ ] In their own PR: retire every guard, test and release rule that reads `VALIDATOR_PIN` —
-   `pinned-validator-guard`, the pin leg of `contracts-version-guard` and its shared reader, the release
-   workflows' lockstep lists, the eval runner's pin reference, and the pin rules in `CLAUDE.md` and the
-   plugin-prose rule.
-5. [ ] Remove the bootstrap and the `ANALITIQ_VALIDATOR_FROM_SOURCE` plumbing that only it reads: the
-   repo-root `conftest.py`, the eval runner's grader environment, its test and the `CLAUDE.md` sentence.
+1. [ ] After ADR-0001 items 1-4 (the request names its package, the secret mark, the refusal, grading by
+   the named package's location table): the backend accepts single-document, package and
+   pipeline-project submissions through MCP, and derives database endpoint ids.
+2. [ ] Every importer of the pipeline plugin's validation adapter and every caller of the validator's
+   command line calls the library's request entry points instead; one that exists only to test the
+   adapter is deleted with it in item 3.
+3. [ ] Remove the plugins' validation adapter, gap script and endpoint-id helper, the connector agent's
+   self-install, and everything that exists only for them; agents submit through MCP. The bootstrap
+   stays, unimported, because the pin guards still read its pin.
+4. [ ] In their own PR: retire every reader of `VALIDATOR_PIN` — the guards, their shared reader and
+   tests, the release workflows' lockstep lists, and the pin rules in prose.
+5. [ ] Remove the bootstrap and every reader of `ANALITIQ_VALIDATOR_FROM_SOURCE`, which only the bootstrap
+   consumes.
