@@ -45,7 +45,9 @@ We will make the backend the plugins' only gate. Both plugins submit what they a
 single documents during authoring, packages when complete, and for a pipeline the whole project (its
 pipeline, connection and connector packages) — and act on the findings returned. The plugins do not
 install, import or pin the validator. Every document, whatever its kind, is submitted and graded the
-same way.
+same way; a type map gets no operation of its own. An identity derived from a document (a database
+endpoint's id) is computed by the backend. No location the package contract marks secret (the
+connection's credentials) is ever selected or submitted.
 
 ## Options considered
 
@@ -88,6 +90,7 @@ lose their only gate.
 
 ## Action items
 
-1. [ ] Backend accepts single-document, package and pipeline-project submissions through MCP.
-2. [ ] Retire the runtime pin rules, `pinned-validator-guard` and the agent pin test, in their own PR.
-3. [ ] Then remove the plugins' validation adapter, gap script, bootstrap and agent self-install; agents submit through MCP.
+1. [ ] Backend accepts single-document, package and pipeline-project submissions through MCP, and derives database endpoint ids.
+2. [ ] The package contract marks the credentials location secret.
+3. [ ] Remove the plugins' validation adapter, gap script, endpoint-id helper, bootstrap and agent self-install; agents submit through MCP.
+4. [ ] Then, once no plugin installs the validator, retire the runtime pin rules, `pinned-validator-guard` and the agent pin test, in their own PR.
