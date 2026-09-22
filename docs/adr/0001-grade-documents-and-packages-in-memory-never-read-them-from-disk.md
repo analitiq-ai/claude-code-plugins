@@ -45,7 +45,9 @@ filesystem access.
 
 A package request names its package, and the named package's model states its location table and its
 root. A caller holding files selects them by that published location table, skipping every location the
-contract marks secret, reads them as UTF-8, reports its own read errors, and builds the request. The
+contract marks secret, reads them as UTF-8, and builds the request. It follows no link and reads no
+entry whose resolved path leaves the package root; such an entry, like an unreadable file, is its own
+finding to report and stays out of the request. The
 contract marks the credentials location secret, and a package request holding a key at a secret
 location of its package is refused as the caller's error, so no credential enters a request.
 

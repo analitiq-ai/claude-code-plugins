@@ -35,11 +35,15 @@ document has two gates at two independently chosen versions, which can disagree 
 We will make the backend the plugins' only gate. Both plugins submit what they author through MCP —
 single documents during authoring, packages when complete, and for a pipeline the whole project (its
 pipeline, connection and connector packages) — and act on the findings returned. The plugins do not
-install, import or pin the validator. Every document, whatever its kind, is submitted and graded the
-same way, by its kind's rules alone whichever package it sits in, so a connector's and a
-connection's type map are graded identically. An identity derived from a document (a database
-endpoint's id) is computed by the backend. What a plugin selects and submits follows ADR-0001's
-selection rule, which leaves out every secret location.
+install, import or pin the validator.
+
+Every document, whatever its kind, is graded by its kind's rules alone whichever package it sits in,
+so a connector's and a connection's type map are graded identically. An identity a plugin needs
+derived from a document (a database endpoint's id) is computed by the backend and returned to the
+plugin through MCP. What a plugin selects and submits follows ADR-0001's selection rule.
+
+The backend deploys a validator release before main renders plugin prose that teaches its contract,
+so a plugin never authors against a contract the backend's gate does not enforce.
 
 ## Options considered
 
@@ -48,7 +52,7 @@ selection rule, which leaves out every secret location.
 | Dimension | Assessment |
 |---|---|
 | Gates per document | One, at the backend's version |
-| Version management | No runtime pin in the plugins; validator release decoupled from plugin release |
+| Version management | No runtime pin in the plugins; a release ordering keeps main's prose at or behind the backend's validator |
 | Plugin footprint | No venv bootstrap, no self-install, no local adapter scripts |
 | Dependency | Authoring needs the backend reachable |
 
@@ -72,10 +76,11 @@ lose their only gate.
 
 ## Consequences
 
-- Easier: one verdict per document; validator releases no longer coordinate with plugin releases; the
-  plugins shed their bootstrap and adapter code.
+- Easier: one verdict per document; the plugins shed their bootstrap and adapter code, and the pin
+  and its guards go.
 - Harder: the plugins depend on backend availability; the backend owns the MCP interface and must keep
-  it in step with the plugins.
+  it in step with the plugins; a contract change reaches plugin prose only after the backend deploys
+  the validator release carrying it.
 - Verdicts change for type maps: the write-vocabulary warning a connector's type map gets
   (`RULE-TMAP-017`) now reaches a connection's too, and the gap-only rule for connection maps
   (`RULE-TMAP-018`) is retired, since neither package's type map has rules of its own.
