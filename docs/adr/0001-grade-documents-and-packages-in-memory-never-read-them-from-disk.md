@@ -25,14 +25,16 @@ provenance:
 plugins author, and for DIP CI. It reads packages from disk with its own idea of where each file sits,
 so it carries filesystem behaviour that has nothing to do with whether a document is correct.
 
-The published contracts already describe what the validator needs: request models carrying document
-text, and package schemas saying where each document sits and what kind it is.
+The published contracts describe most of what the validator needs: request models carrying document
+text, and package schemas saying where each document sits and what kind it is. The package request
+does not yet name its package, and no location is marked as holding secrets.
 
 ## Decision
 
-We will make the validator grade only the published request models, in memory. No entry point takes a
-path. A caller that holds files reads them and builds the request, selecting files by the published
-package schema. The validator ships no command-line interface.
+We will make the validator grade only the published request models, in memory. A package request
+names its package, and that package's published schema decides which files belong to it and where each
+sits. No entry point takes a path. A caller that holds files builds the request from that schema and
+leaves out every location the contract marks secret. The validator ships no command-line interface.
 
 ## Options considered
 

@@ -60,7 +60,8 @@ the backend must deploy a contract change before the plugins teach it.
 
 - Easier: one verdict per document; the plugins shed their bootstrap and adapter code.
 - Harder: the plugins depend on the backend being available; the backend owns the MCP interface and
-  must accept every submission the plugins make before they switch to it.
+  must accept every submission the plugins make, and run every check the plugins run today, before
+  they switch to it.
 - **How we would know this was wrong:** authoring routinely fails on backend unavailability, or users
   need to author without access to the backend.
 - Revisit if: an offline authoring use case appears.
