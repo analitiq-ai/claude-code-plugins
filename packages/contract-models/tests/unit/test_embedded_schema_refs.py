@@ -1186,13 +1186,21 @@ class TestRecordShapeThroughRefs:
         record = resolve_read_record_schema({"records": {"ref": "response.body.data"}}, schema)
         assert set(find_record_field_properties(record) or {}) == {"id"}
 
+    # RULE-ENDP-013 runs first, so a refusal under RULE-ENDP-074's "no record
+    # shape" complaint is proof the declared walk found the field.
+    _ONLY_THE_ENGINE_READING_REFUSES = (
+        r"\[RULE-ENDP-074\].*finds no own `properties` on the way to or at the record shape"
+    )
+
     def test_cursor_field_resolves_through_a_ref_record_shape(self):
-        """The record shape is a SUBTREE of `response.schema`, so the cursor
-        walk must resolve `#/$defs/…` against the DOCUMENT. Rooting it at the
-        subtree finds no `$defs` and reports a declared field as undeclared —
-        with a diagnosis ("declare it under 'properties'") that is factually
-        wrong, since it already is."""
-        parse_endpoint(_replicating_doc(self.SCHEMA, "updated_at"))
+        """The record shape is a SUBTREE of `response.schema`, so the declared
+        cursor walk must resolve `#/$defs/…` against the DOCUMENT. Rooting it
+        at the subtree finds no `$defs` and reports a declared field as
+        undeclared — with a diagnosis ("declare it under 'properties'") that is
+        factually wrong, since it already is. The engine follows no `$ref`, so
+        the document is still refused, by the engine reading alone."""
+        with pytest.raises(ValidationError, match=self._ONLY_THE_ENGINE_READING_REFUSES):
+            parse_endpoint(_replicating_doc(self.SCHEMA, "updated_at"))
 
     def test_cursor_field_resolves_through_an_allof_ref_record_shape(self):
         schema = {
@@ -1202,7 +1210,8 @@ class TestRecordShapeThroughRefs:
             },
             "$defs": self.SCHEMA["$defs"],
         }
-        parse_endpoint(_replicating_doc(schema, "updated_at"))
+        with pytest.raises(ValidationError, match=self._ONLY_THE_ENGINE_READING_REFUSES):
+            parse_endpoint(_replicating_doc(schema, "updated_at"))
 
     def test_a_typo_in_a_cursor_field_is_still_caught_through_a_ref(self):
         with pytest.raises(ValidationError, match="not declared in response.schema record-shape"):

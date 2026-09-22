@@ -132,7 +132,13 @@ record shape's own declaration of the field is the one that is read, and
 the branch's is not read at all. So a field declared ONLY on that base is
 invisible, and a `format` added by a branch to a `type` on the shape is
 invisible too — declare the cursor field on the record shape's own
-`properties`, with its `type` and any `format` it needs on that node. An
+`properties`, with its `type` and any `format` it needs on that node. The
+record shape is reached the same way: `response.records` is followed through
+each node's own `properties` to the array's own `items`, following no `$ref`
+or `allOf`, and that `items` must carry a non-empty `properties` of its own.
+A records key declared only by a branch, or a record shape written as
+`{"$ref": "#/$defs/Rec"}`, leaves nowhere to read the cursor from and is
+refused — write the records path and the record shape's fields inline. An
 integer says which kind of integer it is in its own
 `format` — on that same node, for the same reason: `epoch_seconds` or
 `epoch_milliseconds` makes it a moment, a calendar cursor format is refused

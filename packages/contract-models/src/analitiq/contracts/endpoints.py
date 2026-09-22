@@ -1055,9 +1055,11 @@ class SingleCursorMapping(_EndpointModel):
     cursor_field: str = Field(
         ...,
         pattern=RECORD_FIELD_PATH_PATTERN,
-        description="Record field used as the incremental watermark. A plain key on "
-                    "the records array's own `items.properties`, looked up whole "
-                    "— not a path.",
+        description="Record field used as the incremental watermark. A whole key "
+                    "— not a path — in the record shape's own `properties`, as "
+                    "the engine walks to it: `records` followed through each "
+                    "node's own `properties` to the array's own `items`, "
+                    "following no `$ref` or `allOf`.",
     )
     param: str = Field(..., min_length=1)
     operator: Literal["gt", "gte", "lt", "lte"]
@@ -1070,9 +1072,11 @@ class WindowCursorMapping(_EndpointModel):
     cursor_field: str = Field(
         ...,
         pattern=RECORD_FIELD_PATH_PATTERN,
-        description="Record field used as the incremental watermark. A plain key on "
-                    "the records array's own `items.properties`, looked up whole "
-                    "— not a path.",
+        description="Record field used as the incremental watermark. A whole key "
+                    "— not a path — in the record shape's own `properties`, as "
+                    "the engine walks to it: `records` followed through each "
+                    "node's own `properties` to the array's own `items`, "
+                    "following no `$ref` or `allOf`.",
     )
     start_param: str = Field(..., min_length=1)
     end_param: str = Field(..., min_length=1)
@@ -1939,11 +1943,13 @@ class ResponseExtraction(_EndpointModel):
             "algorithm below, relative to the record shape but against this "
             "document as root, taken as one whole key when any contributor "
             "declares that key and as a dotted path otherwise. And it must be a "
-            "whole key in the record shape's own `properties`, reached by "
-            "walking `records` through each node's own `properties` to the "
-            "array's own `items` with no `$ref` or `allOf` folded in anywhere, "
-            "because that raw lookup is how the engine reads a stored cursor "
-            "back.\n"
+            "whole key in the record shape's own `properties`, as the engine "
+            "walks to it: `records` followed through each node's own "
+            "`properties` to the array's own `items`, following no `$ref` or "
+            "`allOf`, because that raw lookup is how the engine reads a stored "
+            "cursor back. A document where that walk reaches no non-empty own "
+            "`properties` is refused, since the engine has no record shape to "
+            "read the cursor from.\n"
             "\n"
             "**Declared-path resolution.** Every `response.body[.<path>]` this "
             "endpoint reads — `records` above, "
@@ -4608,8 +4614,9 @@ class _RecordsArray(NamedTuple):
     """The record shape as the engine reads it, and the array as declared.
 
     ``engine_record_properties`` is the `properties` map the engine's cursor
-    reader looks a cursor field up in, or ``None`` when its walk reaches no
-    such map. ``composed`` is the records array node the document declares.
+    reader looks a cursor field up in, or ``None`` when the engine's walk
+    reaches no such map. ``composed`` is the records array node the document
+    declares.
     Cursor grading needs both, and derives neither from the other.
     """
 
@@ -4621,14 +4628,13 @@ def _record_properties_as_the_engine_reads_them(
     schema: Any, segments: list[str]
 ) -> dict[str, Any] | None:
     """The record shape's own `properties`, reached the way the engine
-    reaches them, or ``None`` when that walk reaches none.
+    reaches them, or ``None`` when that walk reaches no non-empty map.
 
     Mirrors the engine's `records_items_schema`: each `records.ref` segment
     is taken from the current node's own `properties`, the array's own
     `items` is the record shape, and no `$ref` or `allOf` is folded or
-    resolved anywhere on the way. ``None`` is a document the engine refuses
-    before any cursor is read; that refusal belongs to the records path, not
-    to cursor grading.
+    resolved anywhere on the way. The engine refuses a ``None`` before the
+    first request, so a cursor has nowhere to be read from.
     """
     node: Any = schema
     for segment in segments:
@@ -4807,12 +4813,11 @@ def _validate_cursor_fields_in_record_shape(
     record shape's own `properties` as the engine reaches them. A document
     can pass one and fail the other, so neither reading may choose the
     other's input or how the name is segmented; each is computed on its own
-    terms and graded on its own. Where the engine reaches no record shape,
-    RULE-ENDP-074 has nothing to grade.
+    terms and graded on its own.
 
-    ``root`` is the whole ``response.schema``: `items: {"$ref":
-    "#/$defs/Record"}` is the ordinary way to write a record shape, and its
-    pointers resolve against the document, not the subtree.
+    ``root`` is the whole ``response.schema``, which the declared walk
+    resolves `$ref`s against: a pointer inside the record shape names a
+    position in the document, not in the subtree.
     """
     try:
         items = _require_record_shape_items(records_array.composed, subject="replication")
@@ -4828,10 +4833,19 @@ def _validate_cursor_fields_in_record_shape(
             root=root,
         )
         _require_cursor_node_declares_a_type(cursor_field, declared, root, where="items")
-        if records_array.engine_record_properties is not None:
-            _check_cursor_field_holds_the_mapping(
-                cm, records_array.engine_record_properties.get(cursor_field)
+        engine_properties = records_array.engine_record_properties
+        if engine_properties is None:
+            raise violation(
+                "RULE-ENDP-074", "cursor-field-not-where-the-cursor-is-read",
+                f"replication cursor_field {cursor_field!r}: the engine finds no "
+                "own `properties` on the way to or at the record shape. It "
+                "walks `response.records` through each node's own "
+                "`properties` to the array's own `items` and reads that "
+                "node's own non-empty `properties`, following no `$ref` and "
+                "no `allOf`, so write the records path and the record "
+                "shape's fields inline"
             )
+        _check_cursor_field_holds_the_mapping(cm, engine_properties.get(cursor_field))
 
 
 def _declared_cursor_segments(

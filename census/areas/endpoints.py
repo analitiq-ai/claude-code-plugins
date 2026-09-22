@@ -118,7 +118,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ResponseExtraction", field="schema_",
-        prose_hash="4ada2ac4a29d",
+        prose_hash="7150f9b2a68d",
         rule_ids=(
             "RULE-ENDP-012", "RULE-ENDP-013", "RULE-ENDP-023", "RULE-ENDP-026",
             "RULE-ENDP-074",
@@ -339,14 +339,14 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="SingleCursorMapping", prose_hash="47d7dccff621", descriptive=True),
     ProseObligation(
         model="SingleCursorMapping", field="cursor_field",
-        prose_hash="7c7481daab47",
+        prose_hash="a83612b5f689",
         rule_ids=("RULE-ENDP-013", "RULE-ENDP-074"),
         structural="Field(pattern=RECORD_FIELD_PATH_PATTERN)",
     ),
     ProseObligation(model="WindowCursorMapping", prose_hash="d68aaa0695ba", descriptive=True),
     ProseObligation(
         model="WindowCursorMapping", field="cursor_field",
-        prose_hash="7c7481daab47",
+        prose_hash="a83612b5f689",
         rule_ids=("RULE-ENDP-013", "RULE-ENDP-074"),
         structural="Field(pattern=RECORD_FIELD_PATH_PATTERN)",
     ),

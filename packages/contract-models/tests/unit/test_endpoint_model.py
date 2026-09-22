@@ -538,6 +538,41 @@ class TestCursorFieldsInRecordShape:
         with pytest.raises(ValidationError, match="contributed only by a `\\$ref` base"):
             parse_endpoint(payload)
 
+    _NO_ENGINE_RECORD_SHAPE = r"\[RULE-ENDP-074\].*finds no own `properties` on the way to or at the record shape"
+
+    def test_a_ref_record_shape_is_refused_even_for_a_well_typed_cursor(self):
+        # The engine reads `properties` off `items` as written and resolves no
+        # `$ref`, so it reaches no record shape to look the cursor up in and
+        # refuses the read before the first request.
+        payload = self._payload_with_cursor_field("updated_at", {})
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {
+            "Rec": {"type": "object", "properties": {"updated_at": {"type": "string", "format": "date-time"}}},
+        }
+        schema["items"] = {"$ref": "#/$defs/Rec"}
+        with pytest.raises(ValidationError, match=self._NO_ENGINE_RECORD_SHAPE):
+            parse_endpoint(payload)
+
+    def test_a_ref_record_shape_is_refused_for_a_badly_typed_cursor(self):
+        # RULE-ENDP-013 passes: the declared field has a type. Only the
+        # engine's reading can refuse it, so a skipped reading accepts it.
+        payload = self._payload_with_cursor_field("updated_at", {})
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {"Rec": {"type": "object", "properties": {"updated_at": {"type": "number"}}}}
+        schema["items"] = {"$ref": "#/$defs/Rec"}
+        with pytest.raises(ValidationError, match=self._NO_ENGINE_RECORD_SHAPE):
+            parse_endpoint(payload)
+
+    def test_empty_own_properties_beside_an_allof_declaring_the_cursor_is_refused(self):
+        # The engine refuses a record shape whose own `properties` is empty,
+        # whatever an `allOf` beside it declares.
+        payload = self._payload_with_cursor_field("updated_at", {})
+        payload["operations"]["read"]["response"]["schema"]["items"]["allOf"] = [
+            {"properties": {"updated_at": {"type": "string", "format": "date-time"}}}
+        ]
+        with pytest.raises(ValidationError, match=self._NO_ENGINE_RECORD_SHAPE):
+            parse_endpoint(payload)
+
     def test_a_cursor_field_contributed_only_by_an_array_level_allof_is_rejected(self):
         # The engine takes the records array's own `items` and reads that
         # map's `properties`; it never folds the array's `allOf` into `items`.
