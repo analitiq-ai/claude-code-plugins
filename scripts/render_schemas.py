@@ -1085,8 +1085,9 @@ RESOURCES: tuple[Resource, ...] = (
             "connection package: where each sits, read from the connection's own "
             "directory (the one holding `connection.json`), and the published "
             "schema it is written against. It holds locations only; each "
-            "document's shape is the schema it points at. Other files a package "
-            "carries are outside this schema. "
+            "document's shape is the schema it points at, and a location marked "
+            "`x-secret` holds secret values. Other files a package carries are "
+            "outside this schema. "
             "Source of truth: analitiq.contracts.connection_package.ConnectionPackage "
             "(Pydantic)."
         ),

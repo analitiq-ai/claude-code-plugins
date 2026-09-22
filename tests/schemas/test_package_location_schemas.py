@@ -145,7 +145,7 @@ def test_a_location_outside_the_table_is_written_against_nothing(resource):
 
 
 @package
-def test_the_schema_holds_locations_and_references_only(resource):
+def test_the_schema_holds_locations_references_and_secret_marks_only(resource):
     rendered = _rendered(resource)
     assert all(set(node) - {"x-secret"} == {"$ref"} for node in rendered["patternProperties"].values())
     assert "$defs" not in rendered
