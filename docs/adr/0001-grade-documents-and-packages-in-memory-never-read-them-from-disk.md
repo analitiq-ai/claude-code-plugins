@@ -49,7 +49,8 @@ contract marks secret, reads them as UTF-8, and builds the request. It follows n
 entry whose resolved path leaves the package root; such an entry, like an unreadable file, is its own
 finding to report and stays out of the request. The
 contract marks the credentials location secret, and a package request holding a key at a secret
-location of its package is refused as the caller's error, so no credential enters a request.
+location of its package is refused as the caller's error, so the credentials document never enters a
+request.
 
 The validator ships no command-line interface. Every consumer calls it as a library; a command line
 would need file input, which is the disk reader this record removes.
