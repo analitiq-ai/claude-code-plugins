@@ -363,10 +363,11 @@ class TestCursorFieldsInRecordShape:
         # The nullable idiom, and the spelling a generated schema usually
         # emits. It states exactly what the accepted `{"type": ["string",
         # "null"]}` states — and is still refused, because the engine's cursor
-        # reader takes `field["type"]` and never descends a union. Accepting it
-        # would bless a document that validates clean, ships, and dies on the
-        # first cursor read. The refusal has to name the spelling that works,
-        # or the author has no way from one to the other.
+        # reader takes the node's own `type` key and never descends a union. Accepting it
+        # would bless a document the engine cannot read: untyped to it, the
+        # field earns no Arrow type, and the read fails as the endpoint is
+        # prepared, on every replication method. The refusal has to name the
+        # spelling that works, or the author has no way from one to the other.
         with pytest.raises(ValidationError, match="is not read back"):
             parse_endpoint(self._payload_with_cursor_field(
                 "updated_at",
@@ -391,7 +392,7 @@ class TestCursorFieldsInRecordShape:
 
     def test_integer_cursor_field_under_anyof_is_rejected_before_its_format_is_read(self):
         # A `format` on the branch does not rescue the union: RULE-ENDP-074
-        # settles the type first, and `record_field_declaration` cannot see a
+        # settles the type first, and the engine's cursor reader cannot see a
         # format inside a branch any more than it can see the type.
         with pytest.raises(ValidationError, match="is not read back"):
             parse_endpoint(self._payload_with_cursor_field(
@@ -400,6 +401,50 @@ class TestCursorFieldsInRecordShape:
                     {"type": "integer", "format": "epoch_seconds"}, {"type": "null"},
                 ]}},
             ))
+
+    def test_cursor_field_typed_only_through_a_ref_is_rejected(self):
+        # `{"$ref": ...}` is the same divergence as `anyOf`, one level up.
+        # RULE-ENDP-013 resolves the pointer to prove the path lands on
+        # something typed, but the engine's cursor reader never resolves one:
+        # it reads the node under `properties` as written, whose `type` key is
+        # absent. Accepting this ships a document the engine refuses as it
+        # prepares the read.
+        payload = self._payload_with_cursor_field(
+            "updated_at", {"updated_at": {"$ref": "#/$defs/T"}}
+        )
+        payload["operations"]["read"]["response"]["schema"]["$defs"] = {"T": {"type": "string"}}
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(payload)
+
+    def test_cursor_field_typed_only_through_an_allof_is_rejected(self):
+        # The other way to reach a type without writing one: the engine reads
+        # no more of an `allOf` than it reads of an `anyOf`.
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(self._payload_with_cursor_field(
+                "updated_at", {"updated_at": {"allOf": [{"type": "string"}]}},
+            ))
+
+    def test_integer_cursor_field_reads_its_own_format_not_a_refs(self):
+        # The case where both sides accept and disagree about what the
+        # document says: the node writes `type: integer` itself, so neither
+        # side refuses it, but the `format` sits behind the `$ref`. The engine
+        # reads `format=None` and treats the cursor as an id; grading the
+        # resolved node here would read `epoch_milliseconds` and call it a
+        # moment. Nothing fails on the first run — only on the second, once a
+        # checkpoint exists to render back. The mapping declares a `format`,
+        # which RULE-ENDP-078 refuses on an id, so the two readings give
+        # opposite verdicts and the assertion pins the engine's.
+        payload = self._payload_with_cursor_field("updated_at", {})
+        payload["operations"]["read"]["response"]["schema"]["$defs"] = {
+            "F": {"type": "integer", "format": "epoch_milliseconds"},
+        }
+        items = payload["operations"]["read"]["response"]["schema"]["items"]
+        items["properties"] = {"updated_at": {"type": "integer", "$ref": "#/$defs/F"}}
+        payload["operations"]["read"]["replication"]["cursor_mappings"][0]["format"] = (
+            "epoch_milliseconds"
+        )
+        with pytest.raises(ValidationError, match="is an integer id"):
+            parse_endpoint(payload)
 
     def test_cursor_field_with_an_untyped_anyof_branch_rejected(self):
         # One branch declaring nothing makes the union unbounded — not a
@@ -410,11 +455,169 @@ class TestCursorFieldsInRecordShape:
                 {"updated_at": {"anyOf": [{"type": "string"}, {}]}},
             ))
 
-    def test_dotted_cursor_field_traverses_nested_objects(self):
-        parse_endpoint(self._payload_with_cursor_field(
-            "metadata.updated_at",
-            {"metadata": {"type": "object", "properties": {"updated_at": {"type": "string"}}}},
-        ))
+    def test_a_dotted_cursor_field_is_rejected(self):
+        # The path resolves in the document, so RULE-ENDP-013 passes — and the
+        # engine still cannot read a cursor out of it. Its cursor reader
+        # looks the name up WHOLE under the record shape's `properties`, so
+        # "metadata.updated_at" matches no key and raises when the read is
+        # prepared, before the first request. Refusing it here moves that
+        # failure to authoring time.
+        with pytest.raises(ValidationError, match="names no key on the record shape"):
+            parse_endpoint(self._payload_with_cursor_field(
+                "metadata.updated_at",
+                {"metadata": {"type": "object", "properties": {"updated_at": {"type": "string"}}}},
+            ))
+
+    def test_a_record_field_whose_name_contains_a_dot_is_accepted(self):
+        # The engine looks the whole name up, so a field literally named
+        # "a.b" is one it reads. Splitting on "." here would report a declared
+        # field as undeclared — and worse, an unrelated sibling named "a"
+        # would flip the verdict, making one cursor field's fate depend on
+        # another field's existence.
+        parse_endpoint(self._payload_with_cursor_field("a.b", {"a.b": {"type": "integer"}}))
+
+    def test_an_empty_cursor_node_typed_only_by_an_allof_branch_is_rejected(self):
+        # The refinement idiom's mirror image: there the own node carried the
+        # type and the branch refined it, here the branch carries the type and
+        # the own node is bare. The engine reads the bare node, so the field
+        # names no type it can see and earns no Arrow type at all.
+        payload = self._payload_with_cursor_field("updated_at", {"updated_at": {}})
+        payload["operations"]["read"]["response"]["schema"]["items"]["allOf"] = [
+            {"properties": {"updated_at": {"type": "string"}}}
+        ]
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(payload)
+
+    def test_an_empty_cursor_node_typed_only_by_a_ref_base_is_rejected(self):
+        # The same shape reached through a `$ref`. Resolving the base would
+        # find the type; the engine resolves nothing, so neither does this.
+        payload = self._payload_with_cursor_field("updated_at", {"updated_at": {}})
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {"Base": {"type": "object", "properties": {"updated_at": {"type": "string"}}}}
+        schema["items"]["allOf"] = [{"$ref": "#/$defs/Base"}]
+        with pytest.raises(ValidationError, match="is not read back"):
+            parse_endpoint(payload)
+
+    def test_cursor_field_declared_by_an_allof_branch_beside_properties_is_accepted(self):
+        # The refinement idiom: the record shape declares the field itself and
+        # an `allOf` branch narrows it. The engine reads
+        # `items["properties"]["updated_at"]` and finds `{"type": "string"}`,
+        # so refusing this would refuse a document that runs — over-refusal is
+        # as much a parity defect as over-acceptance.
+        payload = self._payload_with_cursor_field(
+            "updated_at", {"updated_at": {"type": "string"}}
+        )
+        payload["operations"]["read"]["response"]["schema"]["items"]["allOf"] = [
+            {"properties": {"updated_at": {"format": "date-time"}}}
+        ]
+        parse_endpoint(payload)
+
+    def test_cursor_field_declared_beside_a_ref_base_is_accepted(self):
+        # The same shape reached the other way. The field is on the record
+        # shape's own `properties`, which is where the engine looks; that a
+        # `$ref` base also declares it changes nothing about that lookup.
+        payload = self._payload_with_cursor_field(
+            "updated_at", {"updated_at": {"type": "string", "format": "date-time"}}
+        )
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {"Base": {"type": "object", "properties": {"updated_at": {"type": "string"}}}}
+        schema["items"]["allOf"] = [{"$ref": "#/$defs/Base"}]
+        parse_endpoint(payload)
+
+    def test_a_cursor_field_contributed_only_by_a_ref_base_is_rejected(self):
+        # The nearest neighbour of the refinement idiom above, and the one an
+        # author is most likely to hit: the record shape has `properties` of
+        # its own, so the engine reads that map and no other — and the cursor
+        # field is declared only on the base. Both sides refuse; the message
+        # has to say which of its two causes applies, because the author's fix
+        # here is to restate the field, not to un-dot a path.
+        payload = self._payload_with_cursor_field("updated_at", {"id": {"type": "integer"}})
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {"Base": {"type": "object", "properties": {"updated_at": {"type": "string"}}}}
+        schema["items"]["allOf"] = [{"$ref": "#/$defs/Base"}]
+        with pytest.raises(ValidationError, match="contributed only by a `\\$ref` base"):
+            parse_endpoint(payload)
+
+    _NO_ENGINE_RECORD_SHAPE = r"\[RULE-ENDP-074\].*finds no own `properties` on the way to or at the record shape"
+
+    def test_a_ref_record_shape_is_refused_even_for_a_well_typed_cursor(self):
+        # The engine reads `properties` off `items` as written and resolves no
+        # `$ref`, so it reaches no record shape to look the cursor up in and
+        # refuses the read before the first request.
+        payload = self._payload_with_cursor_field("updated_at", {})
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {
+            "Rec": {"type": "object", "properties": {"updated_at": {"type": "string", "format": "date-time"}}},
+        }
+        schema["items"] = {"$ref": "#/$defs/Rec"}
+        with pytest.raises(ValidationError, match=self._NO_ENGINE_RECORD_SHAPE):
+            parse_endpoint(payload)
+
+    def test_a_ref_record_shape_is_refused_for_a_badly_typed_cursor(self):
+        # RULE-ENDP-013 passes: the declared field has a type. Only the
+        # engine's reading can refuse it, so a skipped reading accepts it.
+        payload = self._payload_with_cursor_field("updated_at", {})
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {"Rec": {"type": "object", "properties": {"updated_at": {"type": "number"}}}}
+        schema["items"] = {"$ref": "#/$defs/Rec"}
+        with pytest.raises(ValidationError, match=self._NO_ENGINE_RECORD_SHAPE):
+            parse_endpoint(payload)
+
+    def test_empty_own_properties_beside_an_allof_declaring_the_cursor_is_refused(self):
+        # The engine refuses a record shape whose own `properties` is empty,
+        # whatever an `allOf` beside it declares.
+        payload = self._payload_with_cursor_field("updated_at", {})
+        payload["operations"]["read"]["response"]["schema"]["items"]["allOf"] = [
+            {"properties": {"updated_at": {"type": "string", "format": "date-time"}}}
+        ]
+        with pytest.raises(ValidationError, match=self._NO_ENGINE_RECORD_SHAPE):
+            parse_endpoint(payload)
+
+    def test_a_cursor_field_contributed_only_by_an_array_level_allof_is_rejected(self):
+        # The engine takes the records array's own `items` and reads that
+        # map's `properties`; it never folds the array's `allOf` into `items`.
+        # Composing the array first would put `updated_at` on a record shape
+        # the cursor reader never sees.
+        payload = self._payload_with_cursor_field("updated_at", {"id": {"type": "integer"}})
+        payload["operations"]["read"]["response"]["schema"]["allOf"] = [
+            {"items": {"properties": {"updated_at": {"type": "string", "format": "date-time"}}}}
+        ]
+        with pytest.raises(ValidationError, match="names no key on the record shape"):
+            parse_endpoint(payload)
+
+    def test_a_cursor_field_contributed_only_by_a_root_allof_redeclaring_the_records_key_is_rejected(self):
+        # The engine walks `records.ref` through each node's own `properties`
+        # and folds nothing on the way, so a root `allOf` that re-declares
+        # `data` never reaches the record shape it reads. Composing the walk
+        # would hand the cursor reader a field it does not see.
+        payload = self._payload_with_cursor_field("updated_at", {})
+        response = payload["operations"]["read"]["response"]
+        response["records"] = {"ref": "response.body.data"}
+        response["schema"] = {
+            "type": "object",
+            "properties": {"data": {
+                "type": "array",
+                "items": {"type": "object", "properties": {"id": {"type": "integer"}}},
+            }},
+            "allOf": [{"properties": {"data": {
+                "items": {"properties": {"updated_at": {"type": "string", "format": "date-time"}}},
+            }}}],
+        }
+        with pytest.raises(ValidationError, match="names no key on the record shape"):
+            parse_endpoint(payload)
+
+    def test_a_dotted_key_contributed_only_by_a_branch_is_declared_but_not_read(self):
+        # "a.b" is one whole key the document declares, on an `allOf` branch.
+        # RULE-ENDP-013 finds it as a whole key; only the engine's reading
+        # misses it, because the branch is not the record shape's own
+        # `properties`. Splitting the name because that reading missed would
+        # call a declared field undeclared.
+        payload = self._payload_with_cursor_field("a.b", {"id": {"type": "integer"}})
+        payload["operations"]["read"]["response"]["schema"]["items"]["allOf"] = [
+            {"properties": {"a.b": {"type": "integer"}}}
+        ]
+        with pytest.raises(ValidationError, match="names no key on the record shape"):
+            parse_endpoint(payload)
 
     def test_cursor_field_traversing_a_scalar_node_is_rejected(self):
         # `metadata` is declared `type: "string"`, so its sibling `properties`
@@ -425,6 +628,17 @@ class TestCursorFieldsInRecordShape:
                 "metadata.updated_at",
                 {"metadata": {"type": "string", "properties": {"updated_at": {"type": "string"}}}},
             ))
+
+    def test_cursor_field_on_a_record_shape_that_excludes_objects_is_rejected(self):
+        # A record shape typed `string` describes scalar records, so the
+        # RULE-ENDP-013 declared-path walk finds no field on it, whatever
+        # `properties` map it writes down.
+        payload = self._payload_with_cursor_field(
+            "updated_at", {"updated_at": {"type": "string"}}
+        )
+        payload["operations"]["read"]["response"]["schema"]["items"]["type"] = "string"
+        with pytest.raises(ValidationError, match="not declared in response.schema record-shape branch"):
+            parse_endpoint(payload)
 
     def test_items_missing_rejected(self):
         # `items` not declared on the array — cursor field cannot be verified.

@@ -32,8 +32,8 @@ mapping variant fits a provider, and when to skip replication entirely.
 
 A cursor mapping ties a record field to the request params filtered on it:
 
-- a **cursor field** — the dotted record path whose value is the
-  per-record watermark (`updated_at`, `meta.changed`); and
+- a **cursor field** — the top-level record field whose value is the
+  per-record watermark (`updated_at`); and
 - the **request param(s)** the runtime sets on the next run to fetch only
   records past that watermark, plus the comparison `operator`.
 
@@ -114,19 +114,14 @@ A cursor on `updated_at` requires `updated_at` to be a declared field of the
 record shape `response.schema` describes (`RULE-ENDP-013`), not merely
 something the provider mentions.
 
-That field's own declaration is read as well, because the stored cursor is
-read back through it. It must name exactly one JSON type besides `null` in
-its own `type`, and that type must be `string` or `integer`
-(`RULE-ENDP-074`); a number, boolean or container leaves the next run nothing
-it can compare. Write a nullable cursor as `{"type": ["string", "null"]}`:
-the declaration is read off that node and no deeper, so a type named only
-inside an `anyOf`/`oneOf` branch is refused — the reader that reads a stored
-cursor back does not descend a union, and a document it cannot read is one
-that ships and then fails on the first incremental run. An integer says which
-kind of integer it is in its own `format`: `epoch_seconds` or
-`epoch_milliseconds` makes it a moment, a calendar cursor format is refused
-outright — a moment an integer cannot spell — and anything else, a provider's
-own width token or no format at all, makes it a monotonic id
+Declare the cursor field inline on the record shape's own `properties`, as a
+top-level key, with a `type` that names exactly one JSON type besides `null`,
+and that type is `string` or `integer` (`RULE-ENDP-074`). Write a nullable cursor as
+`{"type": ["string", "null"]}`. Write the `response.records` path and the
+record shape's fields inline too, not through a `$ref` or an `allOf`. An
+integer cursor says which kind of integer it is in a `format` on that same
+node: `epoch_seconds` or `epoch_milliseconds` makes it a moment, and a
+provider's own width token or no format makes it a monotonic id
 (`RULE-ENDP-078`). An id has no "now", so it takes neither the window variant
 nor a mapping `format`.
 
