@@ -554,6 +554,10 @@ def is_runnable_required(pipeline_doc: object) -> bool:
     contract-model finding at the single-document stage (see diagnostics_for) —
     treat it as not-yet-active here rather than raising.
 
+    It restates `analitiq.validator.is_runnable_required` because the release
+    VALIDATOR_PIN installs does not export it; a test holds the two to the same
+    answers.
+
     Public (no leading underscore): `scripts/gen_pipeline_docs.py` calls this
     directly to measure which `require_runnable`-gated rules this adapter can
     actually surface, rather than reasoning about the gate from outside it."""

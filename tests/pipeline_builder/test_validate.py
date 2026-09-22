@@ -1650,3 +1650,17 @@ def test_scripts_borrow_private_names_that_still_exist():
         assert hasattr(importlib.import_module(module), name), f"{module}.{name}"
 
 
+
+
+@pytest.mark.parametrize("pipeline_doc", [
+    pytest.param({"status": "active"}, id="active"),
+    pytest.param({"status": "draft"}, id="draft"),
+    pytest.param({"status": "inactive"}, id="another status"),
+    pytest.param({"pipeline_id": "p"}, id="no status"),
+    pytest.param({}, id="empty"),
+    pytest.param(["active"], id="not a mapping"),
+])
+def test_the_adapter_runnability_gate_agrees_with_the_validator(pipeline_doc):
+    from analitiq.validator import is_runnable_required
+
+    assert V.is_runnable_required(pipeline_doc) is is_runnable_required(pipeline_doc)
