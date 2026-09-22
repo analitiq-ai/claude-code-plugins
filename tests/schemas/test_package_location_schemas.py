@@ -27,7 +27,8 @@ from analitiq.contracts.shared.common import schema_url_for  # noqa: E402
 from analitiq.contracts.validation_requests import PACKAGE_MODELS  # noqa: E402
 
 # Per package: a sample key at each location and the schema it is written against,
-# and keys that sit outside every location. The outside keys are chosen to tell an
+# the sample keys at a location that holds secret values, and keys that sit outside
+# every location. The outside keys are chosen to tell an
 # anchored pattern from an unanchored one (a prefixed key, trailing newlines).
 PACKAGES = {
     "connector-package": {
@@ -54,6 +55,7 @@ PACKAGES = {
             "definition/endpoints/customers.json": "database-endpoint",
             ".secrets/credentials.json": "credentials",
         },
+        "secret": {".secrets/credentials.json"},
         "outside": (
             "definition/connection.json",
             "definition/endpoints/a/b.json",
@@ -145,9 +147,18 @@ def test_a_location_outside_the_table_is_written_against_nothing(resource):
 @package
 def test_the_schema_holds_locations_and_references_only(resource):
     rendered = _rendered(resource)
-    assert all(set(node) == {"$ref"} for node in rendered["patternProperties"].values())
+    assert all(set(node) - {"x-secret"} == {"$ref"} for node in rendered["patternProperties"].values())
     assert "$defs" not in rendered
     assert "properties" not in rendered
+
+
+@package
+def test_a_location_is_marked_secret_exactly_when_it_holds_secret_values(resource):
+    nodes = _rendered(resource)["patternProperties"]
+    for key in PACKAGES[resource]["located"]:
+        marks = {nodes[pattern].get("x-secret") for pattern in nodes if re.search(pattern, key)}
+        expected = True if key in PACKAGES[resource].get("secret", ()) else None
+        assert marks == {expected}, key
 
 
 @package
@@ -210,3 +221,13 @@ def test_the_model_refuses_a_key_outside_the_table(resource):
     key = PACKAGES[resource]["outside"][0]
     with pytest.raises(ValidationError, match=re.escape(repr(key))):
         PACKAGE_MODELS[resource].model_validate({_root(resource): {}, key: {}})
+
+
+def test_a_secret_location_must_be_one_of_the_package_member_locations():
+    from analitiq.contracts.shared.common import DocumentPackage
+    with pytest.raises(TypeError, match="secret locations outside"):
+        class _Package(DocumentPackage):  # noqa: F841  # skipcq: PTC-W0065
+            ROOT = "root.json"
+            ROOT_KIND = "connection"
+            MEMBER_LOCATIONS = {r"^a\.json$": "credentials"}
+            SECRET_LOCATIONS = frozenset({r"^b\.json$"})

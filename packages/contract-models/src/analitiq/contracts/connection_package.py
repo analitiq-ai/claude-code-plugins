@@ -6,6 +6,9 @@ from pydantic import ConfigDict
 from analitiq.contracts.shared.common import DocumentPackage, package_locations
 
 
+_CREDENTIALS = r"^\.secrets/credentials\.json$"
+
+
 class ConnectionPackage(DocumentPackage):
     """The authored documents of a connection package that are written against a published schema, keyed by path from the connection's own directory. Other files a package carries are not described here."""
 
@@ -16,5 +19,6 @@ class ConnectionPackage(DocumentPackage):
     MEMBER_LOCATIONS = {
         r"^definition/type-map\.json$": "type-map",
         r"^definition/endpoints/[^/]+\.json$": "database-endpoint",
-        r"^\.secrets/credentials\.json$": "credentials",
+        _CREDENTIALS: "credentials",
     }
+    SECRET_LOCATIONS = frozenset({_CREDENTIALS})
