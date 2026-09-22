@@ -1,5 +1,5 @@
 {
-  "$id": "https://schemas.analitiq.ai/pipeline-package/latest.json",
+  "$id": "https://schemas.analitiq.ai/pipeline-package/2.0.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Public JSON Schema contract for the authored documents of a pipeline package: where each sits, read from the pipeline's own directory (the one holding `pipeline.json`), and the published schema it is written against. It holds locations only; each document's shape is the schema it points at. Other files a package carries are outside this schema. Source of truth: analitiq.contracts.pipeline_package.PipelinePackage (Pydantic).",

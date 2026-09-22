@@ -14,14 +14,15 @@ from __future__ import annotations
 
 import os
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal
+from collections.abc import Callable
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    RootModel,
     StringConstraints,
     ValidationError,
     model_validator,
@@ -307,6 +308,52 @@ def document_locations(locations: dict[str, str]) -> Callable[[dict[str, Any]], 
         closed_true_end_keys(schema)
 
     return locate
+
+
+def package_locations(schema: dict[str, Any], package: type[DocumentPackage]) -> None:
+    """A package's `json_schema_extra`: publishes its `LOCATIONS` and requires its `ROOT`."""
+    document_locations(package.LOCATIONS)(schema)
+    schema["required"] = [package.ROOT]
+
+
+class DocumentPackage(ParseOnly, RootModel[dict[str, Any]]):
+    """A package: its authored documents, keyed by path from the package's own directory."""
+
+    # The one document whose presence makes a directory this package, and the
+    # resource it is written against.
+    ROOT: ClassVar[str]
+    ROOT_KIND: ClassVar[str]
+    # Key pattern -> resource, for every location besides the root.
+    MEMBER_LOCATIONS: ClassVar[dict[str, str]]
+    # Key pattern -> the resource the document at a matching key is written
+    # against. The schema points each location at the resource's `latest.json`,
+    # the URL every document declares as its own `$schema`, so a location keeps
+    # its kind across that schema's versions. Built from the root and the member
+    # locations, so the root's path is stated once.
+    LOCATIONS: ClassVar[dict[str, str]]
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        super().__pydantic_init_subclass__(**kwargs)
+        cls.LOCATIONS = {rf"^{re.escape(cls.ROOT)}$": cls.ROOT_KIND, **cls.MEMBER_LOCATIONS}
+
+    @classmethod
+    def kind_at(cls, key: str) -> str | None:
+        """The resource the document at `key` is written against, or `None` outside every location."""
+        # `fullmatch` holds `$` to the true end, as the published lookahead does.
+        for pattern, resource in cls.LOCATIONS.items():
+            if re.fullmatch(pattern, key):
+                return resource
+        return None
+
+    @model_validator(mode="after")
+    def _located(self) -> DocumentPackage:
+        outside = sorted(key for key in self.root if self.kind_at(key) is None)
+        if outside:
+            raise ValueError(f"keys outside every location: {', '.join(map(repr, outside))}")
+        if self.ROOT not in self.root:
+            raise ValueError(f"no document at the root location {self.ROOT!r}")
+        return self
 
 
 class StrictModel(ParseOnly, BaseModel):

@@ -54,10 +54,11 @@ def _xfail(fn_name: str):
         reason=f"{fn_name} raises NotImplementedError (analitiq.validator.document_set)")
 
 
-def _package_request(documents: dict) -> ValidatePackageRequest:
-    """A package request over `documents`, each serialized to the file text a
-    request actually carries."""
+def _package_request(package: str, documents: dict) -> ValidatePackageRequest:
+    """A request to grade `documents` as `package`, each serialized to the file
+    text a request actually carries."""
     return ValidatePackageRequest(
+        package=package,
         documents={key: json.dumps(doc) for key, doc in documents.items()})
 
 
@@ -591,7 +592,7 @@ def test_an_assembled_bundle_resolves_to_no_published_name(validator):
 
 def test_validate_connector_package_validates_its_own_root_shape(validator):
     result = validator.validate_connector_package(
-        _package_request(_connector_package_documents()))
+        _package_request("connector-package", _connector_package_documents()))
     # Findings empty, not merely `passed` — a route emitting a `notApplicable`
     # finding and still reporting a pass would satisfy the weaker assertion.
     assert result == _expected_envelope(validator, []), result
@@ -605,7 +606,7 @@ def test_unparseable_document_in_a_package_is_a_finding_not_a_raise(validator):
                  for key, doc in _connector_package_documents().items()}
     documents["endpoints/v2__widgets.json"] = "{not json"
     result = validator.validate_connector_package(
-        ValidatePackageRequest(documents=documents))
+        ValidatePackageRequest(package="connector-package", documents=documents))
     assert result["passed"] is False
     # Naming the document, not merely failing: the rest of this package is
     # clean, so a bare `any(kind == "fail")` cannot tell "reported as
@@ -619,7 +620,7 @@ def test_unparseable_document_in_a_package_is_a_finding_not_a_raise(validator):
 @_xfail("validate_pipeline_package")
 def test_validate_pipeline_package_validates_its_own_root_shape(validator):
     result = validator.validate_pipeline_package(
-        _package_request(_pipeline_package_documents()))
+        _package_request("pipeline-package", _pipeline_package_documents()))
     assert result == _expected_envelope(validator, []), result
 
 
@@ -635,7 +636,7 @@ def test_embedded_connector_subtree_gets_its_own_coverage_findings(validator):
     read map, RULE-PKG-035 missing endpoints/), scoped under the subtree's key
     prefix."""
     result = validator.validate_pipeline_package(
-        _package_request(_pipeline_package_documents_with_embedded_connectors()))
+        _package_request("pipeline-package", _pipeline_package_documents_with_embedded_connectors()))
     # Containment, not a prefix spelling: what is fixed is that the finding is
     # scoped to its subtree, and `rule` is optional on a `Finding`, so neither
     # a leading slash nor a ruleless finding turns this into a failure about
@@ -653,7 +654,7 @@ def test_a_connector_package_finding_names_the_document_it_is_about(validator):
     documents = {**_connector_package_documents(),
                  "endpoints/v2__widgets.json": _uncovered_endpoint_document()}
     documents["connector.json"]["display_name"] = 7
-    result = validator.validate_connector_package(_package_request(documents))
+    result = validator.validate_connector_package(_package_request("connector-package", documents))
     assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
         ("string_type", "connector.json#/display_name"),
         ("native-type-unresolved",
@@ -664,7 +665,7 @@ def test_a_connector_package_finding_names_the_document_it_is_about(validator):
 def test_a_connector_package_obligation_is_about_the_whole_connector(validator):
     documents = _connector_package_documents()
     del documents["type-map.json"]
-    result = validator.validate_connector_package(_package_request(documents))
+    result = validator.validate_connector_package(_package_request("connector-package", documents))
     [found] = [f for f in result["findings"] if f["message_id"] == "read-map-missing"]
     assert found["path"] == "connector.json#", found
 
@@ -672,7 +673,7 @@ def test_a_connector_package_obligation_is_about_the_whole_connector(validator):
 def test_a_connector_package_key_is_percent_encoded_in_a_finding(validator):
     documents = {**_connector_package_documents(),
                  "endpoints/v2 widgets.json": _uncovered_endpoint_document()}
-    result = validator.validate_connector_package(_package_request(documents))
+    result = validator.validate_connector_package(_package_request("connector-package", documents))
     [found] = [f for f in result["findings"] if f["message_id"] == "native-type-unresolved"]
     assert found["path"] == (
         "endpoints/v2%20widgets.json#/operations/read/response/schema/items/properties/b"), found
@@ -681,7 +682,7 @@ def test_a_connector_package_key_is_percent_encoded_in_a_finding(validator):
 def test_a_connector_package_without_a_connector_document_fails(validator):
     documents = _connector_package_documents()
     del documents["connector.json"]
-    result = validator.validate_connector_package(_package_request(documents))
+    result = validator.validate_connector_package(_package_request("connector-package", documents))
     assert result["passed"] is False
     [found] = result["findings"]
     assert (found["message_id"], found["kind"], found["path"]) == (
@@ -692,7 +693,7 @@ def test_a_connector_package_without_a_connector_document_fails(validator):
 def test_a_connector_document_that_does_not_parse_is_a_finding(validator):
     documents = {key: json.dumps(doc) for key, doc in _connector_package_documents().items()}
     documents["connector.json"] = "{not json"
-    result = validator.validate_connector_package(ValidatePackageRequest(documents=documents))
+    result = validator.validate_connector_package(ValidatePackageRequest(package="connector-package", documents=documents))
     assert result["passed"] is False
     assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
         ("unreadable-document", "connector.json#")], result
@@ -701,7 +702,7 @@ def test_a_connector_document_that_does_not_parse_is_a_finding(validator):
 def test_a_connector_document_holding_another_entity_is_a_mismatch(validator):
     documents = _connector_package_documents()
     documents["connector.json"] = documents["type-map.json"]
-    result = validator.validate_connector_package(_package_request(documents))
+    result = validator.validate_connector_package(_package_request("connector-package", documents))
     assert result["passed"] is False
     assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
         ("entity-mismatch", "connector.json#")], result
@@ -773,7 +774,7 @@ def _assert_every_path_names_a_submitted_document(findings: list, keys: set) -> 
 @pytest.mark.parametrize("texts", _PACKAGE_TEXTS_WITH_FINDINGS.values(),
                          ids=_PACKAGE_TEXTS_WITH_FINDINGS.keys())
 def test_every_package_finding_names_a_submitted_document(validator, texts):
-    result = validator.validate_connector_package(ValidatePackageRequest(documents=texts))
+    result = validator.validate_connector_package(ValidatePackageRequest(package="connector-package", documents=texts))
     _assert_every_path_names_a_submitted_document(result["findings"], set(texts))
 
 
@@ -805,10 +806,10 @@ def test_connector_package_finding_order_is_independent_of_input_order(validator
         "endpoints/v3__gadgets.json": _uncovered_endpoint_document(
             endpoint_id="v3__gadgets", request_path="/v3/gadgets", native="INTEGER", arrow="Int64"),
     }
-    forward = validator.validate_connector_package(_package_request(documents))
+    forward = validator.validate_connector_package(_package_request("connector-package", documents))
     assert len(forward["findings"]) >= 2, forward  # non-vacuous: order genuinely matters below
     reversed_documents = dict(reversed(list(documents.items())))
-    backward = validator.validate_connector_package(_package_request(reversed_documents))
+    backward = validator.validate_connector_package(_package_request("connector-package", reversed_documents))
     assert forward == backward
 
 
@@ -817,10 +818,10 @@ def test_pipeline_package_finding_order_is_independent_of_input_order(validator)
     # The same determinism rule on the other package entry point, over a
     # fixture that reports real findings down both orders.
     documents = _pipeline_package_documents_with_two_findings()
-    forward = validator.validate_pipeline_package(_package_request(documents))
+    forward = validator.validate_pipeline_package(_package_request("pipeline-package", documents))
     assert len(forward["findings"]) >= 2, forward  # non-vacuous: order genuinely matters below
     reversed_documents = dict(reversed(list(documents.items())))
-    backward = validator.validate_pipeline_package(_package_request(reversed_documents))
+    backward = validator.validate_pipeline_package(_package_request("pipeline-package", reversed_documents))
     assert forward == backward
 
 
@@ -843,7 +844,7 @@ def test_connector_package_equivalence_with_the_path_based_route(validator, tmp_
     _write_package(tmp_path, documents)
     path_based = validator.validate_document(documents["connector.json"], doc_path=tmp_path / "connector.json")
     assert len(path_based) >= 2, path_based  # non-vacuous: order genuinely matters below
-    package_based = validator.validate_connector_package(_package_request(documents))
+    package_based = validator.validate_connector_package(_package_request("connector-package", documents))
     # The disk route reads a finding about `connector.json` itself as a bare
     # pointer: that is the document it validated. A package has no validated
     # document, so the package route names it, and does nothing else.
@@ -860,5 +861,5 @@ def test_pipeline_package_equivalence_with_the_path_based_route(validator, tmp_p
     path_based = pipeline_adapter.diagnostics_for(
         "pipeline", tmp_path / "pipelines" / "p" / "pipeline.json", bundle_root=tmp_path)
     assert len(path_based["findings"]) >= 2, path_based  # non-vacuous: order genuinely matters below
-    package_based = validator.validate_pipeline_package(_package_request(documents))
+    package_based = validator.validate_pipeline_package(_package_request("pipeline-package", documents))
     assert json.dumps(package_based) == json.dumps(path_based)

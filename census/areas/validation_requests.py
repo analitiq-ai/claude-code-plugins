@@ -27,9 +27,24 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ValidatePackageRequest",
-        prose_hash="68a6572fde0c",
-        structural="`documents` is a required DocumentSet under extra='forbid'",
+        prose_hash="c475f86ef0ec",
+        structural=(
+            "`package` and `documents` are required under extra='forbid'; "
+            "`documents` is a DocumentSet"
+        ),
         waiver=_CONTENT_IS_NOT_JUDGED_HERE,
+    ),
+    ProseObligation(
+        model="ValidatePackageRequest", field="package",
+        prose_hash="c0e043517dbd",
+        structural=(
+            "a Literal over the names of PACKAGE_MODELS, each held to the "
+            "registered package resource rendered from its model"
+        ),
+        waiver=(
+            "whether the documents form the named package is their content, which "
+            "this model does not judge"
+        ),
     ),
     ProseObligation(
         model="ValidateSingleDocumentRequest",

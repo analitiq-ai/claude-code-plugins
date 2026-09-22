@@ -24,6 +24,7 @@ require_contract_models("analitiq.contracts", "render_schemas")
 
 import render_schemas  # noqa: E402
 from analitiq.contracts.shared.common import schema_url_for  # noqa: E402
+from analitiq.contracts.validation_requests import PACKAGE_MODELS  # noqa: E402
 
 # Per package: a sample key at each location and the schema it is written against,
 # and keys that sit outside every location. The outside keys are chosen to tell an
@@ -158,3 +159,54 @@ def test_no_location_beyond_the_table_is_admitted(resource):
 def test_every_reference_names_a_registered_schema(resource):
     published = {schema_url_for(name) for name in render_schemas.RESOURCES_BY_NAME}
     assert set(_table(resource).values()) <= published
+
+
+# The workspace is a table of packages, not a package of documents: it has no root.
+document_package = pytest.mark.parametrize("resource", sorted(PACKAGE_MODELS))
+
+
+def _root(resource: str) -> str:
+    return PACKAGE_MODELS[resource].ROOT
+
+
+def test_the_package_models_are_the_registered_package_schemas():
+    assert set(PACKAGE_MODELS) == set(PACKAGES) - {"workspace"}
+    for name, model in PACKAGE_MODELS.items():
+        assert render_schemas.get_resource(name).adapter._type is model  # skipcq: PYL-W0212
+
+
+@document_package
+def test_the_root_document_is_required(resource):
+    assert _rendered(resource)["required"] == [_root(resource)]
+
+
+@document_package
+def test_the_model_names_the_kind_at_each_location_and_none_outside(resource):
+    model = PACKAGE_MODELS[resource]
+    for key, kind in PACKAGES[resource]["located"].items():
+        assert model.kind_at(key) == kind, key
+    for key in PACKAGES[resource]["outside"]:
+        assert model.kind_at(key) is None, key
+
+
+@document_package
+def test_the_model_admits_a_package_holding_its_root(resource):
+    model = PACKAGE_MODELS[resource]
+    model.model_validate(dict.fromkeys(PACKAGES[resource]["located"], {}))
+
+
+@document_package
+def test_the_model_refuses_a_package_without_its_root(resource):
+    from pydantic import ValidationError
+    located = dict.fromkeys(PACKAGES[resource]["located"], {})
+    del located[_root(resource)]
+    with pytest.raises(ValidationError, match=re.escape(repr(_root(resource)))):
+        PACKAGE_MODELS[resource].model_validate(located)
+
+
+@document_package
+def test_the_model_refuses_a_key_outside_the_table(resource):
+    from pydantic import ValidationError
+    key = PACKAGES[resource]["outside"][0]
+    with pytest.raises(ValidationError, match=re.escape(repr(key))):
+        PACKAGE_MODELS[resource].model_validate({_root(resource): {}, key: {}})

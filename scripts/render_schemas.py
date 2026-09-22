@@ -1142,8 +1142,8 @@ RESOURCES: tuple[Resource, ...] = (
         name="validate-package-request",
         title="Analitiq Validate Package Request",
         description=(
-            "Public JSON Schema contract for a request to validate one connector "
-            "or pipeline package supplied as its documents: each document's file "
+            "Public JSON Schema contract for a request to validate one package, "
+            "named by its published package schema and supplied as its documents: each document's file "
             "text keyed by its relative path in the package. The schema gates the "
             "request's shape only; the documents' content is not judged by it. "
             "Source of truth: analitiq.contracts.validation_requests."

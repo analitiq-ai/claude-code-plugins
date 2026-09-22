@@ -1,11 +1,12 @@
 """The index of the pipelines a workspace holds."""
 from __future__ import annotations
 
+import re
 from operator import attrgetter
 
 from pydantic import Field, model_validator
 
-from analitiq.contracts.pipeline_package import PIPELINE_DOCUMENT_PATH
+from analitiq.contracts.pipeline_package import PipelinePackage
 from analitiq.contracts.pipelines.config import PipelineStatus
 from analitiq.contracts.shared.common import PATH_SEGMENT, StrictModel, true_ended
 from analitiq.contracts.shared.rules import find_duplicates, violation
@@ -14,7 +15,7 @@ from analitiq.contracts.shared.types import UUID_PATTERN
 # One segment keeps the listed pipeline's directory a `pipelines/<dir>/` the workspace
 # schema locates; the segment grammar excludes `.` and `..`, so the path cannot leave
 # the manifest's directory.
-_LISTED_PIPELINE_PATH = rf"^{PATH_SEGMENT}/{PIPELINE_DOCUMENT_PATH}$"
+_LISTED_PIPELINE_PATH = rf"^{PATH_SEGMENT}/{re.escape(PipelinePackage.ROOT)}$"
 
 
 class PipelineManifestEntry(StrictModel):

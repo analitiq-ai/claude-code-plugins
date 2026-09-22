@@ -1,21 +1,19 @@
 """Where each authored document of a connector package sits."""
 from __future__ import annotations
 
-from typing import Any
+from pydantic import ConfigDict
 
-from pydantic import ConfigDict, RootModel
-
-from analitiq.contracts.shared.common import ParseOnly, document_locations
-
-# Paths are read from the connector's own directory, the one holding `definition/`.
-_DOCUMENT_LOCATIONS = {
-    r"^definition/connector\.json$": "connector",
-    r"^definition/type-map\.json$": "type-map",
-    r"^definition/endpoints/[^/]+\.json$": "api-endpoint",
-}
+from analitiq.contracts.shared.common import DocumentPackage, package_locations
 
 
-class ConnectorPackage(ParseOnly, RootModel[dict[str, Any]]):
+class ConnectorPackage(DocumentPackage):
     """The authored documents of a connector package that are written against a published schema, keyed by path from the connector's own directory. Other files a package carries are not described here."""
 
-    model_config = ConfigDict(json_schema_extra=document_locations(_DOCUMENT_LOCATIONS))
+    model_config = ConfigDict(json_schema_extra=package_locations)
+
+    ROOT = "definition/connector.json"
+    ROOT_KIND = "connector"
+    MEMBER_LOCATIONS = {
+        r"^definition/type-map\.json$": "type-map",
+        r"^definition/endpoints/[^/]+\.json$": "api-endpoint",
+    }
