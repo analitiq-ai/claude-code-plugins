@@ -363,7 +363,7 @@ class TestCursorFieldsInRecordShape:
         # The nullable idiom, and the spelling a generated schema usually
         # emits. It states exactly what the accepted `{"type": ["string",
         # "null"]}` states — and is still refused, because the engine's cursor
-        # reader takes `field["type"]` and never descends a union. Accepting it
+        # reader takes the node's own `type` key and never descends a union. Accepting it
         # would bless a document the engine cannot read: untyped to it, the
         # field earns no Arrow type, and the read fails as the endpoint is
         # prepared, on every replication method. The refusal has to name the
