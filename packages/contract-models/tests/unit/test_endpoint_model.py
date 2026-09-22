@@ -538,24 +538,6 @@ class TestCursorFieldsInRecordShape:
         with pytest.raises(ValidationError, match="contributed only by a `\\$ref` base"):
             parse_endpoint(payload)
 
-    def test_a_cursor_field_through_a_ref_record_shape_is_read_as_authored(self):
-        # The record SHAPE is resolved — refusing it would contradict
-        # RULE-ENDP-026, which steers authors into `$defs` — but the field
-        # found through it is still graded as written. `$defs/Rec` declares
-        # `updated_at` only through a `$ref`, which the cursor reader cannot
-        # see. (The engine cannot read a `$ref` record shape at all today;
-        # that gap is the engine's, and this test pins the field grading, not
-        # a claim that the document runs.)
-        payload = self._payload_with_cursor_field("updated_at", {})
-        schema = payload["operations"]["read"]["response"]["schema"]
-        schema["$defs"] = {
-            "Rec": {"type": "object", "properties": {"updated_at": {"$ref": "#/$defs/T"}}},
-            "T": {"type": "string"},
-        }
-        schema["items"] = {"$ref": "#/$defs/Rec"}
-        with pytest.raises(ValidationError, match="is not read back"):
-            parse_endpoint(payload)
-
     def test_a_cursor_field_contributed_only_by_an_array_level_allof_is_rejected(self):
         # The engine takes the records array's own `items` and reads that
         # map's `properties`; it never folds the array's `allOf` into `items`.
@@ -565,6 +547,27 @@ class TestCursorFieldsInRecordShape:
         payload["operations"]["read"]["response"]["schema"]["allOf"] = [
             {"items": {"properties": {"updated_at": {"type": "string", "format": "date-time"}}}}
         ]
+        with pytest.raises(ValidationError, match="names no key on the record shape"):
+            parse_endpoint(payload)
+
+    def test_a_cursor_field_contributed_only_by_a_root_allof_redeclaring_the_records_key_is_rejected(self):
+        # The engine walks `records.ref` through each node's own `properties`
+        # and folds nothing on the way, so a root `allOf` that re-declares
+        # `data` never reaches the record shape it reads. Composing the walk
+        # would hand the cursor reader a field it does not see.
+        payload = self._payload_with_cursor_field("updated_at", {})
+        response = payload["operations"]["read"]["response"]
+        response["records"] = {"ref": "response.body.data"}
+        response["schema"] = {
+            "type": "object",
+            "properties": {"data": {
+                "type": "array",
+                "items": {"type": "object", "properties": {"id": {"type": "integer"}}},
+            }},
+            "allOf": [{"properties": {"data": {
+                "items": {"properties": {"updated_at": {"type": "string", "format": "date-time"}}},
+            }}}],
+        }
         with pytest.raises(ValidationError, match="names no key on the record shape"):
             parse_endpoint(payload)
 

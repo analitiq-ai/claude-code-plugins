@@ -1939,11 +1939,11 @@ class ResponseExtraction(_EndpointModel):
             "algorithm below, relative to the record shape but against this "
             "document as root, taken as one whole key when any contributor "
             "declares that key and as a dotted path otherwise. And it must be a "
-            "whole key in the `properties` the records array's own `items` "
-            "writes, before any `$ref` or `allOf` on the array or the record "
-            "shape is folded in, because that raw lookup is how the engine "
-            "reads a stored cursor back; a record shape with no `properties` of "
-            "its own is read through its composition instead.\n"
+            "whole key in the record shape's own `properties`, reached by "
+            "walking `records` through each node's own `properties` to the "
+            "array's own `items` with no `$ref` or `allOf` folded in anywhere, "
+            "because that raw lookup is how the engine reads a stored cursor "
+            "back.\n"
             "\n"
             "**Declared-path resolution.** Every `response.body[.<path>]` this "
             "endpoint reads — `records` above, "
@@ -4605,16 +4605,40 @@ def find_record_field_properties(
 
 
 class _RecordsArray(NamedTuple):
-    """The records array node, as written and as composed.
+    """The record shape as the engine reads it, and the array as declared.
 
-    ``authored`` is what the engine's cursor reader takes: it walks raw
-    `properties` to the array and reads its `items` without folding any
-    `$ref` or `allOf`. ``composed`` is what the document declares. Cursor
-    grading needs both, and must not derive either from the other.
+    ``engine_record_properties`` is the `properties` map the engine's cursor
+    reader looks a cursor field up in, or ``None`` when its walk reaches no
+    such map. ``composed`` is the records array node the document declares.
+    Cursor grading needs both, and derives neither from the other.
     """
 
-    authored: dict[str, Any]
+    engine_record_properties: dict[str, Any] | None
     composed: dict[str, Any]
+
+
+def _record_properties_as_the_engine_reads_them(
+    schema: Any, segments: list[str]
+) -> dict[str, Any] | None:
+    """The record shape's own `properties`, reached the way the engine
+    reaches them, or ``None`` when that walk reaches none.
+
+    Mirrors the engine's `records_items_schema`: each `records.ref` segment
+    is taken from the current node's own `properties`, the array's own
+    `items` is the record shape, and no `$ref` or `allOf` is folded or
+    resolved anywhere on the way. ``None`` is a document the engine refuses
+    before any cursor is read; that refusal belongs to the records path, not
+    to cursor grading.
+    """
+    node: Any = schema
+    for segment in segments:
+        properties = node.get("properties") if isinstance(node, dict) else None
+        if not isinstance(properties, dict) or segment not in properties:
+            return None
+        node = properties[segment]
+    items = node.get("items") if isinstance(node, dict) and node.get("type") == "array" else node
+    properties = items.get("properties") if isinstance(items, dict) else None
+    return properties if isinstance(properties, dict) and properties else None
 
 
 def _validate_records_in_response_schema(
@@ -4646,7 +4670,6 @@ def _validate_records_in_response_schema(
             f"response.records ref {ref!r} resolved to a non-object schema location "
             "(spec: §API Response Extraction — declared-path resolution)"
         )
-    authored = node
     # `type`/`items` may be contributed by a `$ref` target or an `allOf` branch
     # rather than stated inline, so read them off the materialized node — the
     # raw one would report `type=None` for a perfectly good `{"$ref": …}`
@@ -4726,7 +4749,12 @@ def _validate_records_in_response_schema(
                 "`$defs` entry that only references itself composes to nothing) "
                 "(spec: §Cross-Field Validation)"
             )
-    return _RecordsArray(authored=authored, composed=node)
+    return _RecordsArray(
+        engine_record_properties=_record_properties_as_the_engine_reads_them(
+            response.schema_, segments
+        ),
+        composed=node,
+    )
 
 
 def _require_record_shape_items(array_node: dict[str, Any], *, subject: str) -> dict[str, Any]:
@@ -4775,10 +4803,12 @@ def _validate_cursor_fields_in_record_shape(
 
     RULE-ENDP-013 asks whether the document declares the field on the
     composed record shape (spec: §Cross-Field Validation). RULE-ENDP-074 asks
-    what the engine's cursor reader finds under the authored record shape. A
-    document can pass one and fail the other, so neither reading may choose
-    the other's input or how the name is segmented; each is computed on its
-    own terms and graded on its own.
+    what the engine's cursor reader finds: the whole name, looked up in the
+    record shape's own `properties` as the engine reaches them. A document
+    can pass one and fail the other, so neither reading may choose the
+    other's input or how the name is segmented; each is computed on its own
+    terms and graded on its own. Where the engine reaches no record shape,
+    RULE-ENDP-074 has nothing to grade.
 
     ``root`` is the whole ``response.schema``: `items: {"$ref":
     "#/$defs/Record"}` is the ordinary way to write a record shape, and its
@@ -4798,9 +4828,10 @@ def _validate_cursor_fields_in_record_shape(
             root=root,
         )
         _require_cursor_node_declares_a_type(cursor_field, declared, root, where="items")
-        _check_cursor_field_holds_the_mapping(
-            cm, _cursor_node_as_the_engine_reads_it(records_array, cursor_field, root)
-        )
+        if records_array.engine_record_properties is not None:
+            _check_cursor_field_holds_the_mapping(
+                cm, records_array.engine_record_properties.get(cursor_field)
+            )
 
 
 def _declared_cursor_segments(
@@ -4848,34 +4879,6 @@ def _require_cursor_node_declares_a_type(
         )
 
 
-def _cursor_node_as_the_engine_reads_it(
-    records_array: _RecordsArray, cursor_field: str, root: Any
-) -> Any:
-    """The cursor field's declaration as the engine's cursor reader gets it.
-
-    The engine takes the records array as authored, reads its raw `items`,
-    and looks the cursor field up in that map's own `properties` as one whole
-    key — folding no `$ref` or `allOf` at either level, walking no dot, and
-    resolving nothing it returns. This reproduces that lookup.
-
-    One departure: a record shape with no `properties` of its own is read
-    through its composition. RULE-ENDP-026 steers authors to write a
-    non-local record shape as `items: {"$ref": "#/$defs/..."}`, and refusing
-    that shape here would make the two rules contradict each other. The
-    engine cannot read such a shape at all; that gap is the engine's. The
-    field found through it is still returned unresolved.
-    """
-    items = records_array.authored.get("items")
-    properties = items.get("properties") if isinstance(items, dict) else None
-    if not isinstance(properties, dict):
-        composed_items = records_array.composed.get("items")
-        shape = materialize_node(composed_items, root) if isinstance(composed_items, dict) else None
-        properties = shape.get("properties") if isinstance(shape, dict) else None
-    if not isinstance(properties, dict):
-        return None
-    return properties.get(cursor_field)
-
-
 def _check_cursor_field_holds_the_mapping(
     cm: SingleCursorMapping | WindowCursorMapping, field: Any
 ) -> None:
@@ -4913,8 +4916,8 @@ def _check_cursor_field_holds_the_mapping(
     has already passed — and neither naming a key where a cursor is read from:
     a dotted `cursor_field`, which is looked up whole rather than walked, and a
     field contributed only by a `$ref` base or an `allOf` branch — on the
-    record shape or on the array around it — when the record shape has
-    `properties` of its own, which the lookup does not merge.
+    record shape or anywhere on the way to it — which the lookup does not
+    merge.
     The message names both, because the fix differs and the author cannot tell
     from the verdict which one they hit.
     """
@@ -5062,7 +5065,8 @@ def _cursor_node_by_declared_path(
 
     Answers only "is this path declared" — a question about the document.
     What the engine's cursor reader will find is a different question with a
-    different answer, asked by :func:`_cursor_node_as_the_engine_reads_it`.
+    different answer, asked of
+    :func:`_record_properties_as_the_engine_reads_them`.
     """
     try:
         node = resolve_declared_path(items_node, segments, root=root)

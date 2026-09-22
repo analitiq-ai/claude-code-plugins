@@ -118,7 +118,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ResponseExtraction", field="schema_",
-        prose_hash="c8a7d8fed2ac",
+        prose_hash="4ada2ac4a29d",
         rule_ids=(
             "RULE-ENDP-012", "RULE-ENDP-013", "RULE-ENDP-023", "RULE-ENDP-026",
             "RULE-ENDP-074",
