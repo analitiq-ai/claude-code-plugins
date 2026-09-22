@@ -1,0 +1,22 @@
+id: RULE-PIPE-020
+statement: >
+  Each entry in a pipeline manifest MUST list a pipeline no other entry
+  lists: no two entries share a `pipeline_id` or a `path`.
+tier: coherence
+severity: error
+artifact_kinds: [pipeline-manifest]
+validator: "analitiq.contracts.pipeline_manifest::PipelineManifest._each_pipeline_listed_once"
+owners: [engine]
+targets: [PipelineManifest]
+fields:
+  - pipelines[].pipeline_id
+  - pipelines[].path
+rationale: >
+  An entry is looked up by `pipeline_id` and carries that pipeline's status
+  and location, so two entries for one id give one pipeline two answers, and
+  two entries at one path give one `pipeline.json` two identities. Either
+  way which entry a reader acts on depends on list order. The emitted JSON
+  Schema carries no uniqueness keyword for these keys, so a schema-only
+  reading looks permissive.
+status: active
+superseded_by: null

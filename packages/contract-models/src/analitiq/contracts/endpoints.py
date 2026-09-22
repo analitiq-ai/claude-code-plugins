@@ -80,6 +80,7 @@ from analitiq.contracts.shared.json_schema import (
     DeclaredPathError,
     SchemaResolutionError,
     _declares_a_type,
+    _property_contributors,
     materialize_node,
     pointer_position,
     resolve_declared_path,
@@ -1054,7 +1055,11 @@ class SingleCursorMapping(_EndpointModel):
     cursor_field: str = Field(
         ...,
         pattern=RECORD_FIELD_PATH_PATTERN,
-        description="Dotted record field path used as the incremental watermark.",
+        description="Record field used as the incremental watermark. A whole key "
+                    "— not a path — in the record shape's own `properties`, as "
+                    "the engine walks to it: `records` followed through each "
+                    "node's own `properties` to the array's own `items`, "
+                    "following no `$ref` or `allOf`.",
     )
     param: str = Field(..., min_length=1)
     operator: Literal["gt", "gte", "lt", "lte"]
@@ -1067,7 +1072,11 @@ class WindowCursorMapping(_EndpointModel):
     cursor_field: str = Field(
         ...,
         pattern=RECORD_FIELD_PATH_PATTERN,
-        description="Dotted record field path used as the incremental watermark.",
+        description="Record field used as the incremental watermark. A whole key "
+                    "— not a path — in the record shape's own `properties`, as "
+                    "the engine walks to it: `records` followed through each "
+                    "node's own `properties` to the array's own `items`, "
+                    "following no `$ref` or `allOf`.",
     )
     start_param: str = Field(..., min_length=1)
     end_param: str = Field(..., min_length=1)
@@ -1929,11 +1938,24 @@ class ResponseExtraction(_EndpointModel):
             "JSON Schema Draft 2020-12 document describing the full response "
             "body.\n"
             "\n"
+            "**Cursor fields.** Each replication `cursor_field` must pass two "
+            "independent checks. It must be declared on the record shape by the "
+            "algorithm below, relative to the record shape but against this "
+            "document as root, taken as one whole key when any contributor "
+            "declares that key and as a dotted path otherwise. And it must be a "
+            "whole key in the record shape's own `properties`, as the engine "
+            "walks to it: `records` followed through each node's own "
+            "`properties` to the array's own `items`, following no `$ref` or "
+            "`allOf`, because that raw lookup is how the engine reads a stored "
+            "cursor back. A document where that walk reaches no non-empty own "
+            "`properties` is refused, since the engine has no record shape to "
+            "read the cursor from.\n"
+            "\n"
             "**Declared-path resolution.** Every `response.body[.<path>]` this "
-            "endpoint reads — `records` above, each replication "
-            "`cursor_field` and `pagination.keyset.order_by_field` (both "
-            "resolved relative to the record shape but against this document as "
-            "root), and every `{ref}` and `${...}` placeholder inside "
+            "endpoint reads — `records` above, "
+            "`pagination.keyset.order_by_field` (resolved relative to the "
+            "record shape but against this document as root), and every "
+            "`{ref}` and `${...}` placeholder inside "
             "`pagination`, `response.metadata`, the `request` "
             "`path_params`/`headers`/`query`/`body` slots and every "
             "`params.<name>.default` — must "
@@ -2319,13 +2341,16 @@ class ReadOperation(_EndpointModel):
             filters_landed=_filters_landed_params(self.filters),
         )
 
-        # response.records → response.schema traversal raises directly.
-        # When replication is declared, the same traversal feeds cursor-field
-        # validation (avoiding a second walk of the same JSON Schema).
-        records_array_node = _validate_records_in_response_schema(self.response)
+        # Cursor grading takes both readings of the records array: the
+        # declared (composed) one that `records` is validated against, and the
+        # engine's raw one. Neither is derived from the other, because
+        # composing the engine reading is what let a cursor the engine cannot
+        # see pass.
+        records_array = _validate_records_in_response_schema(self.response)
+        records_array_node = records_array.composed
         if self.replication is not None:
             _validate_cursor_fields_in_record_shape(
-                self.replication, records_array_node, self.response.schema_
+                self.replication, records_array, self.response.schema_
             )
 
         if self.filters:
@@ -4587,15 +4612,55 @@ def find_record_field_properties(
     return None
 
 
+class _RecordsArray(NamedTuple):
+    """The record shape as the engine reads it, and the array as declared.
+
+    ``engine_record_properties`` is the `properties` map the engine's cursor
+    reader looks a cursor field up in, or ``None`` when the engine's walk
+    reaches no such map. ``composed`` is the records array node the document
+    declares.
+    Cursor grading needs both, and derives neither from the other.
+    """
+
+    engine_record_properties: dict[str, Any] | None
+    composed: dict[str, Any]
+
+
+def _record_properties_as_the_engine_reads_them(
+    schema: Any, segments: list[str]
+) -> dict[str, Any] | None:
+    """The record shape's own `properties`, reached the way the engine
+    reaches them, or ``None`` when that walk reaches no non-empty map.
+
+    Mirrors the engine's `records_items_schema`: each `records.ref` segment
+    is taken from the current node's own `properties`, the array's own
+    `items` is the record shape, and no `$ref` or `allOf` is folded or
+    resolved anywhere on the way. The engine refuses a ``None`` before the
+    first request, so a cursor has nowhere to be read from.
+    """
+    node: Any = schema
+    for segment in segments:
+        properties = node.get("properties") if isinstance(node, dict) else None
+        if not isinstance(properties, dict) or segment not in properties:
+            return None
+        node = properties[segment]
+    items = node.get("items") if isinstance(node, dict) and node.get("type") == "array" else node
+    properties = items.get("properties") if isinstance(items, dict) else None
+    return properties if isinstance(properties, dict) and properties else None
+
+
 def _validate_records_in_response_schema(
     response: ResponseExtraction,
-) -> dict[str, Any]:
-    """Validate ``response.records`` resolves to an array node in ``response.schema``.
+) -> _RecordsArray:
+    """Validate ``response.records`` resolves to an array node in ``response.schema``,
+    and return both readings of that array.
 
-    Returns the array subschema (caller drills into ``items.*``). Always
-    raises on failure — never returns ``None``. Spec: §Cross-Field Validation
-    — ``response.records`` must resolve to a path represented in
-    ``response.schema``, and that schema location must be an array.
+    A records path that does not resolve to an array raises. Spec:
+    §Cross-Field Validation — ``response.records`` must resolve to a path
+    represented in ``response.schema``, and that schema location must be an
+    array. ``engine_record_properties`` is ``None``, not an error, when the
+    engine's raw walk reaches no record `properties`; cursor grading decides
+    what that means.
     """
     ref: str = response.records.ref  # validated upstream to start with response.body
     segments = _response_body_segments(ref) or []
@@ -4696,7 +4761,12 @@ def _validate_records_in_response_schema(
                 "`$defs` entry that only references itself composes to nothing) "
                 "(spec: §Cross-Field Validation)"
             )
-    return node
+    return _RecordsArray(
+        engine_record_properties=_record_properties_as_the_engine_reads_them(
+            response.schema_, segments
+        ),
+        composed=node,
+    )
 
 
 def _require_record_shape_items(array_node: dict[str, Any], *, subject: str) -> dict[str, Any]:
@@ -4739,29 +4809,94 @@ def _require_record_shape_items(array_node: dict[str, Any], *, subject: str) -> 
 
 
 def _validate_cursor_fields_in_record_shape(
-    replication: Replication, array_node: dict[str, Any], root: Any
+    replication: Replication, records_array: _RecordsArray, root: Any
 ) -> None:
-    """Each ``cursor_field`` path must exist under the array's ``items`` subschema.
+    """Grade each ``cursor_field`` twice, from two independent inputs.
 
-    Spec: §Cross-Field Validation — "Each replication ``cursor_field`` must
-    correspond to a field path in ``response.schema`` under the extracted
-    record-shape branch."
+    RULE-ENDP-013 asks whether the document declares the field on the
+    composed record shape (spec: §Cross-Field Validation). RULE-ENDP-074 asks
+    what the engine's cursor reader finds: the whole name, looked up in the
+    record shape's own `properties` as the engine reaches them. A document
+    can pass one and fail the other, so neither reading may choose the
+    other's input or how the name is segmented; each is computed on its own
+    terms and graded on its own.
 
-    ``root`` is the whole ``response.schema``. The record shape is a SUBTREE of
-    it, and `items: {"$ref": "#/$defs/Record"}` is the ordinary way to write one
-    — so the walk must keep resolving pointers against the document, not against
-    the subtree it starts at. Rooting at the subtree would find no `$defs` and
-    report a field that IS declared as undeclared.
+    ``root`` is the whole ``response.schema``, which the declared walk
+    resolves `$ref`s against: a pointer inside the record shape names a
+    position in the document, not in the subtree.
     """
     try:
-        items = _require_record_shape_items(array_node, subject="replication")
+        items = _require_record_shape_items(records_array.composed, subject="replication")
     except ValueError as detail:
         raise violation("RULE-ENDP-013", "cursor-record-shape-unusable", str(detail)) from None
     for cm in replication.cursor_mappings:
-        field = _check_cursor_field_in_node(
-            _cursor_field_of(cm), items, where="items", root=root
+        cursor_field = _cursor_field_of(cm)
+        declared = _cursor_node_by_declared_path(
+            cursor_field,
+            _declared_cursor_segments(cursor_field, items, root),
+            items,
+            where="items",
+            root=root,
         )
-        _check_cursor_field_holds_the_mapping(cm, field)
+        _require_cursor_node_declares_a_type(cursor_field, declared, root, where="items")
+        engine_properties = records_array.engine_record_properties
+        if engine_properties is None:
+            raise violation(
+                "RULE-ENDP-074", "cursor-field-not-where-the-cursor-is-read",
+                f"replication cursor_field {cursor_field!r}: the engine finds no "
+                "own `properties` on the way to or at the record shape. It "
+                "walks `response.records` through each node's own "
+                "`properties` to the array's own `items` and reads that "
+                "node's own non-empty `properties`, following no `$ref` and "
+                "no `allOf`, so write the records path and the record "
+                "shape's fields inline"
+            )
+        _check_cursor_field_holds_the_mapping(cm, engine_properties.get(cursor_field))
+
+
+def _declared_cursor_segments(
+    cursor_field: str, items: dict[str, Any], root: Any
+) -> list[str]:
+    """How RULE-ENDP-013 segments the name: whole when any contributor to the
+    composed record shape declares it, dotted otherwise.
+
+    A field literally named `a.b` is a declared field wherever it is declared;
+    splitting it because a sibling `a` also exists would let one field's
+    verdict hang on another's.
+    """
+    if cursor_field in _property_contributors(items, root):
+        return [cursor_field]
+    return cursor_field.split(".")
+
+
+def _require_cursor_node_declares_a_type(
+    cursor_field: str, field: Any, root: Any, *, where: str
+) -> None:
+    """RULE-ENDP-013's typedness half, applied to an already-found node.
+
+    Resolution is right here and wrong in the grader: this asks whether the
+    document types the node at all, which a `$ref` answers, while the grader
+    asks what the cursor reader sees, which a `$ref` hides.
+    """
+    try:
+        materialized = materialize_node(field, root)
+    except SchemaResolutionError as exc:
+        raise violation(
+            "RULE-ENDP-013", "cursor-field-self-contradictory-node",
+            f"replication cursor_field {cursor_field!r} resolves in the "
+            f"response.schema record-shape branch (under {where!r}) to a "
+            f"self-contradictory node: {exc.reason} (spec: §Cross-Field Validation)"
+        ) from None
+    if not _declares_a_type(materialized, root):
+        raise violation(
+            "RULE-ENDP-013", "cursor-field-untyped-node",
+            f"replication cursor_field {cursor_field!r} resolves in the "
+            f"response.schema record-shape branch (under {where!r}) to a node "
+            "that declares no `type` (and no `native_type`/`arrow_type` pair). "
+            "Declare the type of the watermark value read there, or nothing "
+            "can tell what a valid comparison looks like "
+            "(spec: §Cross-Field Validation)"
+        )
 
 
 def _check_cursor_field_holds_the_mapping(
@@ -4772,16 +4907,54 @@ def _check_cursor_field_holds_the_mapping(
 
     Read off the field node's own `type` and `format` and no deeper, because
     that is the reading the engine performs when it reads a stored cursor back:
-    `cdk.api.response_schema.declared_json_types` takes `field["type"]`, and
-    `record_field_declaration` takes `field["format"]` off that same node.
-    Neither descends an `anyOf`/`oneOf`. So `{"anyOf": [{"type": "string"},
-    {"type": "null"}]}` is refused here even though it states exactly what
-    `{"type": ["string", "null"]}` states — reading the union through would
-    resolve a type the engine cannot see, and bless a document that validates
-    clean, ships, and then dies on the first cursor read. The refusal names the
-    spelling that does work, because a generated schema usually emits the other
-    one.
+    the engine takes the node's `type` key and its `format` key as written. It
+    descends nothing — not an `anyOf`/`oneOf` branch, not a `$ref`, not an
+    `allOf`. So `{"anyOf": [{"type": "string"}, {"type": "null"}]}` is refused
+    here even though it states exactly what `{"type": ["string", "null"]}`
+    states, and `{"$ref": "#/$defs/Timestamp"}` is refused however plainly the
+    pointer's target is typed: reading either one through would resolve a type
+    the engine cannot see, and bless a document the engine cannot read. A field
+    it sees no type on earns no Arrow type either, so the read fails as the
+    endpoint is prepared, under every replication method — and where the author
+    also writes the `native_type`/`arrow_type` pair, the document survives that
+    far and fails at the cursor reader instead. The refusal names the spelling
+    that does work, because a generated schema usually emits one of the others.
+
+    The `format` half is the quieter failure. A node that writes `type:
+    integer` itself and carries its `format` behind a `$ref` names a type both
+    sides can see, so neither refuses it for its type — and grading the
+    resolved node WOULD read `epoch_milliseconds` where the engine reads no
+    format at all, calling a moment what the engine calls a bare id. Nothing
+    would fail until the second run, when a committed checkpoint has to be
+    rendered back into a request. Reading the authored node is what keeps the
+    two readings the same one: both call it an id, and RULE-ENDP-078 refuses a
+    mapping `format` over it here rather than leaving it to the engine's
+    rendering of the stored cursor.
+
+    ``field`` is ``None`` when the flat lookup lands on nothing. Two shapes
+    reach it, both declared as far as the document is concerned — RULE-ENDP-013
+    has already passed — and neither naming a key where a cursor is read from:
+    a dotted `cursor_field`, which is looked up whole rather than walked, and a
+    field contributed only by a `$ref` base or an `allOf` branch — on the
+    record shape or anywhere on the way to it — which the lookup does not
+    merge.
+    The message names both, because the fix differs and the author cannot tell
+    from the verdict which one they hit.
     """
+    if field is None:
+        raise violation(
+            "RULE-ENDP-074", "cursor-field-not-where-the-cursor-is-read",
+            f"replication cursor_field {cm.cursor_field!r} is declared in "
+            "response.schema but names no key on the record shape's "
+            "`properties`, which is where a stored cursor is read from. The "
+            "name is looked up whole and the lookup merges nothing, so a "
+            "dotted path is not walked — point the cursor at a top-level "
+            "record field — and a field contributed only by a `$ref` base or "
+            "an `allOf` branch is not seen either — declare it on the record "
+            "shape's own `properties`, carrying its own `type` and any "
+            "`format` it needs, because a branch alongside is not read for "
+            "this field"
+        )
     declared = field.get("type") if isinstance(field, dict) else None
     if isinstance(declared, str):
         types = [declared]
@@ -4794,9 +4967,9 @@ def _check_cursor_field_holds_the_mapping(
             "RULE-ENDP-074", "cursor-field-not-one-json-type",
             f"replication cursor_field {cm.cursor_field!r} declares type "
             f"{declared!r}; a cursor field declares one JSON type in its own "
-            "`type`, optionally beside null — a type named only inside an "
-            "`anyOf`/`oneOf` branch is not read back, so spell it "
-            '`{"type": ["<type>", "null"]}`'
+            "`type`, optionally beside null — a type reached only through an "
+            "`anyOf`/`oneOf` branch, a `$ref` or an `allOf` is not read back, "
+            'so spell it `{"type": ["<type>", "null"]}`'
         )
     if types[0] not in CURSOR_JSON_TYPES:
         raise violation(
@@ -4893,22 +5066,28 @@ def _cursor_field_of(cm: Any) -> str:
     )
 
 
-def _check_cursor_field_in_node(
-    cursor_field: str, items_node: dict[str, Any], *, where: str, root: Any
+def _cursor_node_by_declared_path(
+    cursor_field: str,
+    segments: list[str],
+    items_node: dict[str, Any],
+    *,
+    where: str,
+    root: Any,
 ) -> Any:
-    """A ``cursor_field`` must resolve under the record shape by declared-path
-    resolution — the same algorithm `response.records` and the pagination /
-    metadata refs use, so an author never has to hold two traversal rules.
+    """The composed node ``segments`` resolve to under the record shape by
+    declared-path resolution — the same algorithm `response.records` and the
+    pagination / metadata refs use, so an author never has to hold two
+    traversal rules.
 
     The walk STARTS at the record shape but resolves `$ref`s against ``root``
     (the whole ``response.schema``) — see
-    :func:`_validate_cursor_fields_in_record_shape`. The resolved node must
-    also declare a type, the same requirement `_validate_record_field_path`
-    holds `filters`/`order_by_field` to: an incremental comparison built over
-    an untyped node has nothing to tell it what a valid watermark looks like.
-    Returns the materialized node.
+    :func:`_validate_cursor_fields_in_record_shape`.
+
+    Answers only "is this path declared" — a question about the document.
+    What the engine's cursor reader will find is a different question with a
+    different answer, asked of
+    :func:`_record_properties_as_the_engine_reads_them`.
     """
-    segments = cursor_field.split(".")
     try:
         node = resolve_declared_path(items_node, segments, root=root)
     except DeclaredPathError as exc:
@@ -4921,23 +5100,4 @@ def _check_cursor_field_in_node(
             f"response.schema record-shape branch at {walked!r} (under {where!r}): "
             f"{exc.reason} (spec: §Cross-Field Validation)"
         ) from None
-    try:
-        materialized = materialize_node(node, root)
-    except SchemaResolutionError as exc:
-        raise violation(
-            "RULE-ENDP-013", "cursor-field-self-contradictory-node",
-            f"replication cursor_field {cursor_field!r} resolves in the "
-            f"response.schema record-shape branch (under {where!r}) to a "
-            f"self-contradictory node: {exc.reason} (spec: §Cross-Field Validation)"
-        ) from None
-    if not _declares_a_type(materialized, root):
-        raise violation(
-            "RULE-ENDP-013", "cursor-field-untyped-node",
-            f"replication cursor_field {cursor_field!r} resolves in the "
-            f"response.schema record-shape branch (under {where!r}) to a node "
-            "that declares no `type` (and no `native_type`/`arrow_type` pair). "
-            "Declare the type of the watermark value read there, or nothing "
-            "can tell what a valid comparison looks like "
-            "(spec: §Cross-Field Validation)"
-        )
-    return materialized
+    return node

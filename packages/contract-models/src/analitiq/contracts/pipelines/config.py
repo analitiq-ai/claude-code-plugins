@@ -52,6 +52,8 @@ from analitiq.contracts.shared.types import (
 )
 PIPELINE_SCHEMA_URL = schema_url_for("pipeline")
 
+PipelineStatus = Literal["draft", "active", "inactive"]
+
 
 
 
@@ -339,7 +341,7 @@ class PipelineAuthored(StrictModel):
     description: str | None = Field(
         default=None, max_length=DESCRIPTION_MAX, description="User-facing summary"
     )
-    status: Literal["draft", "active", "inactive"] = Field(
+    status: PipelineStatus = Field(
         default="draft", description="Pipeline lifecycle status"
     )
     tags: list[TrimmedTag] | None = Field(

@@ -86,6 +86,30 @@ PACKAGES = {
             "README.md",
         ),
     },
+    "workspace": {
+        "located": {
+            "pipelines/manifest.json": "pipeline-manifest",
+            "pipelines/orders/": "pipeline-package",
+            "connections/0b1f0c9e-2c7a-4d1e-9b6a-3f5e8d2c1a47/": "connection-package",
+            "connectors/postgres/": "connector-package",
+        },
+        "outside": (
+            "pipelines/manifest.json\n",
+            "pipelines/orders/\n",
+            "connectors/postgres/\n",
+            "pipelines/orders/pipeline.json",
+            "pipelines/orders",
+            "pipelines/",
+            "pipelines/../",
+            "pipelines/./",
+            "connections/a/b/",
+            "connectors/",
+            "vendor/connectors/postgres/",
+            "vendor/pipelines/manifest.json",
+            "manifest.json",
+            "README.md",
+        ),
+    },
 }
 
 package = pytest.mark.parametrize("resource", sorted(PACKAGES))
@@ -141,6 +165,8 @@ ROOTS = {
     "connection-package": "connection.json",
     "pipeline-package": "pipeline.json",
 }
+# The workspace is a table of packages, not a package of documents: it has no root.
+document_package = pytest.mark.parametrize("resource", sorted(ROOTS))
 
 
 def _model(resource: str):
@@ -150,17 +176,17 @@ def _model(resource: str):
 
 def test_the_package_models_are_the_registered_package_schemas():
     from analitiq.contracts.validation_requests import PACKAGE_MODELS
-    assert set(PACKAGE_MODELS) == set(PACKAGES)
+    assert set(PACKAGE_MODELS) == set(ROOTS)
     for name, model in PACKAGE_MODELS.items():
         assert render_schemas.get_resource(name).adapter._type is model  # skipcq: PYL-W0212
 
 
-@package
+@document_package
 def test_the_root_document_is_required(resource):
     assert _rendered(resource)["required"] == [ROOTS[resource]]
 
 
-@package
+@document_package
 def test_the_model_names_the_kind_at_each_location_and_none_outside(resource):
     model = _model(resource)
     for key, kind in PACKAGES[resource]["located"].items():
@@ -169,13 +195,13 @@ def test_the_model_names_the_kind_at_each_location_and_none_outside(resource):
         assert model.kind_at(key) is None, key
 
 
-@package
+@document_package
 def test_the_model_admits_a_package_holding_its_root(resource):
     model = _model(resource)
     model.model_validate(dict.fromkeys(PACKAGES[resource]["located"], {}))
 
 
-@package
+@document_package
 def test_the_model_refuses_a_package_without_its_root(resource):
     from pydantic import ValidationError
     located = dict.fromkeys(PACKAGES[resource]["located"], {})
@@ -184,7 +210,7 @@ def test_the_model_refuses_a_package_without_its_root(resource):
         _model(resource).model_validate(located)
 
 
-@package
+@document_package
 def test_the_model_refuses_a_key_outside_the_table(resource):
     from pydantic import ValidationError
     key = PACKAGES[resource]["outside"][0]

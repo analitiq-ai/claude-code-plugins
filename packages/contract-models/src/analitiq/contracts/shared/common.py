@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
+from collections.abc import Callable
 from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import (
@@ -79,6 +80,11 @@ SEMVER_PATTERN = (
 )
 
 CRON_PATTERN = r"^cron\(.+\)$"
+
+# A path segment is any run of characters other than `/` and NUL — the two a POSIX
+# filename cannot hold — except `.` and `..`. Written without lookahead, which
+# pydantic-core's regex engine refuses.
+PATH_SEGMENT = r"(?:[^/.\x00][^/\x00]*|\.[^/.\x00][^/\x00]*|\.\.[^/\x00]+)"
 
 
 # --- Length constants -------------------------------------------------------
@@ -277,20 +283,37 @@ def closed_true_end_keys(schema: dict[str, Any]) -> None:
     pattern_props = schema.pop("patternProperties", None)
     if pattern_props:
         schema["patternProperties"] = {
-            (key[:-1] + r"(?![\s\S])" if key.endswith("$") else key): value
-            for key, value in pattern_props.items()
+            true_ended(key): value for key, value in pattern_props.items()
         }
     schema["additionalProperties"] = False
 
 
-def document_locations(schema: dict[str, Any], package: type[DocumentPackage]) -> None:
-    """A package's `json_schema_extra`: publishes its `LOCATIONS` and `ROOT` into its schema."""
-    schema["patternProperties"] = {
-        pattern: {"$ref": schema_url_for(resource)}
-        for pattern, resource in package.LOCATIONS.items()
-    }
+def true_ended(pattern: str) -> str:
+    """`pattern` with its trailing `$` replaced by the true-end assertion
+    `closed_true_end_keys` explains, for publishing; unchanged without one."""
+    return pattern[:-1] + r"(?![\s\S])" if pattern.endswith("$") else pattern
+
+
+# A package or workspace schema is a closed table of locations: each pattern names
+# where one document, or one package's documents, sits and points at that
+# resource's `latest.json` rather than a pinned version, so a location keeps its
+# kind across that schema's versions. `locations` maps a key pattern to the
+# resource written at it.
+def document_locations(locations: dict[str, str]) -> Callable[[dict[str, Any]], None]:
+    def locate(schema: dict[str, Any]) -> None:
+        schema["patternProperties"] = {
+            pattern: {"$ref": schema_url_for(resource)}
+            for pattern, resource in locations.items()
+        }
+        closed_true_end_keys(schema)
+
+    return locate
+
+
+def package_locations(schema: dict[str, Any], package: type[DocumentPackage]) -> None:
+    """A package's `json_schema_extra`: publishes its `LOCATIONS` and requires its `ROOT`."""
+    document_locations(package.LOCATIONS)(schema)
     schema["required"] = [package.ROOT]
-    closed_true_end_keys(schema)
 
 
 class DocumentPackage(ParseOnly, RootModel[dict[str, Any]]):

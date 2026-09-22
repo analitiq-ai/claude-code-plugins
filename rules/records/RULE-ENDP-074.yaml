@@ -1,8 +1,11 @@
 id: RULE-ENDP-074
 statement: >
-  Every replication cursor field MUST resolve to a record-shape node whose own
-  `type` names exactly one JSON type besides `null`, and that type MUST be one
-  that can hold a cursor: a string moment or an integer.
+  Every replication cursor field MUST be a whole key in the record shape's
+  own `properties`, as the engine walks to it — `response.records` followed
+  through each node's own `properties` to the array's own `items`, following
+  no `$ref` or `allOf` — on a node whose own `type` names exactly one JSON
+  type besides `null`, and that type MUST be one that can hold a cursor: a
+  string moment or an integer.
 tier: coherence
 severity: error
 artifact_kinds: [api-endpoint]
@@ -19,16 +22,41 @@ rationale: >
   before the first request. A number, boolean or container field is worse: it
   is refused only when a stored cursor is read back, after the first run has
   read everything and committed a checkpoint the stream can never resume
-  from. The reading is the field node's own `type` key and no deeper —
-  `declared_json_types` in the engine's response-schema reader takes
-  `field["type"]` and does not descend a union — so a field typed only
-  through `anyOf`/`oneOf`, or only by a `native_type`/`arrow_type` pair, is
-  refused here for the same reason: it satisfies the typedness rule other
-  paths ask about and still names no JSON type the cursor reader can see.
-  Reading the union through would be the worse error of the two available: it
-  would bless the one spelling that validates clean, ships, and then dies on
-  the first cursor read. The predicate also stands on the contract alone: a
-  watermark whose type the document leaves open cannot be compared, whatever
-  reads it.
+  from. The reading is the field node's own `type` key and no deeper — the
+  engine's response-schema reader takes that key off the node as written
+  and descends nothing, not a union, not a `$ref`, not an `allOf` — so a field typed only through one of those, or only by a
+  `native_type`/`arrow_type` pair, is refused here for the same reason: it
+  satisfies the typedness rule other paths ask about and still names no JSON
+  type the cursor reader can see. Reading any of them through would be the
+  worse error of the two available: it would bless spellings the engine
+  cannot read at all. A field it sees no type on earns no Arrow type either,
+  so the read fails as the endpoint is prepared, under every replication
+  method; where the author also writes a `native_type`/`arrow_type` pair the
+  document survives that far and fails at the cursor reader instead.
+  Where the field is looked up is part of the same reading. The engine
+  walks `response.records` through each node's own `properties`, takes the
+  array's own `items` as the record shape, and looks the cursor field up in
+  that node's own `properties` as one whole key. It follows no `$ref` and
+  no `allOf` at any step, and it merges nothing. So a dotted path matches no
+  key; a field contributed only by a `$ref` base or an `allOf` branch — on
+  the record shape, on the array, or on any node on the way — is not there;
+  and a field the record shape declares itself is read as that declaration,
+  whatever a branch alongside also says about it, so it must carry its own
+  `type` and any `format` it needs on its own node. Where the walk reaches
+  no non-empty own `properties` at all — the records key declared only by a
+  branch, a hop or the record shape written as a `$ref` or an `allOf`, or an
+  empty or missing own `properties` — the engine has no record shape to read
+  the cursor from and refuses the read before the first request, so this
+  rule refuses the document at authoring time. There is no fallback to the
+  composed shape: grading a node the engine never reads is the error this
+  rule exists to prevent.
+  The type half also stands on the contract alone: a watermark whose type
+  the document leaves open cannot be compared, whatever reads it. The
+  location half does not — JSON Schema declares a nested field and a field
+  contributed by a branch just as well — so it rests on the engine's
+  reading alone. If that reading goes stale, because the engine comes to
+  walk a dotted name or merge the record shape's contributors, this rule
+  fails by refusing documents the engine could run, never by accepting
+  one it cannot.
 status: active
 superseded_by: null
