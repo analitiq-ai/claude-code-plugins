@@ -11,9 +11,9 @@ class ConnectorPackage(DocumentPackage):
 
     model_config = ConfigDict(json_schema_extra=package_locations)
 
-    LOCATIONS = {
-        r"^definition/connector\.json$": "connector",
+    ROOT = "definition/connector.json"
+    ROOT_KIND = "connector"
+    MEMBER_LOCATIONS = {
         r"^definition/type-map\.json$": "type-map",
         r"^definition/endpoints/[^/]+\.json$": "api-endpoint",
     }
-    ROOT = "definition/connector.json"

@@ -11,10 +11,10 @@ class ConnectionPackage(DocumentPackage):
 
     model_config = ConfigDict(json_schema_extra=package_locations)
 
-    LOCATIONS = {
-        r"^connection\.json$": "connection",
+    ROOT = "connection.json"
+    ROOT_KIND = "connection"
+    MEMBER_LOCATIONS = {
         r"^definition/type-map\.json$": "type-map",
         r"^definition/endpoints/[^/]+\.json$": "database-endpoint",
         r"^\.secrets/credentials\.json$": "credentials",
     }
-    ROOT = "connection.json"

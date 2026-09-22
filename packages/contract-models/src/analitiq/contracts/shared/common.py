@@ -319,13 +319,23 @@ def package_locations(schema: dict[str, Any], package: type[DocumentPackage]) ->
 class DocumentPackage(ParseOnly, RootModel[dict[str, Any]]):
     """A package: its authored documents, keyed by path from the package's own directory."""
 
+    # The one document whose presence makes a directory this package, and the
+    # resource it is written against.
+    ROOT: ClassVar[str]
+    ROOT_KIND: ClassVar[str]
+    # Key pattern -> resource, for every location besides the root.
+    MEMBER_LOCATIONS: ClassVar[dict[str, str]]
     # Key pattern -> the resource the document at a matching key is written
     # against. The schema points each location at the resource's `latest.json`,
     # the URL every document declares as its own `$schema`, so a location keeps
-    # its kind across that schema's versions.
+    # its kind across that schema's versions. Built from the root and the member
+    # locations, so the root's path is stated once.
     LOCATIONS: ClassVar[dict[str, str]]
-    # The one document whose presence makes a directory this package.
-    ROOT: ClassVar[str]
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        super().__pydantic_init_subclass__(**kwargs)
+        cls.LOCATIONS = {rf"^{re.escape(cls.ROOT)}$": cls.ROOT_KIND, **cls.MEMBER_LOCATIONS}
 
     @classmethod
     def kind_at(cls, key: str) -> str | None:
