@@ -38,8 +38,9 @@ dist/
 *.egg-info/
 *.egg
 
-# Design docs kept local — not published to the public repo for now
-docs/
+# Design docs kept local — not published to the public repo for now; the ADR corpus is tracked
+docs/*
+!docs/adr/
 
 # One spec per issue, written into the worktree the issue is implemented in. It
 # is the authority while the work is open and goes with the worktree when the
