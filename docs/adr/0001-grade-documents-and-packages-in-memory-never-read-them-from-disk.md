@@ -40,8 +40,8 @@ connection package's credentials location as holding secret values.
 ## Decision
 
 We will make the validator a pure grader. Its only inputs are the published request models and, for
-cross-package references, the pipeline bundle. No entry point takes a path and grading performs no
-filesystem access.
+cross-package references, the pipeline bundle. No entry point takes a path and grading reads no
+document or package from a filesystem.
 
 A package request names its package, and the named package's model states its location table and its
 root. A caller holding files selects them by that published location table, skipping every location the

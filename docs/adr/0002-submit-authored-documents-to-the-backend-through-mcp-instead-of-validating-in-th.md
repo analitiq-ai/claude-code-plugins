@@ -38,9 +38,9 @@ pipeline, connection and connector packages) — and act on the findings returne
 install, import or pin the validator.
 
 Every document, whatever its kind, is graded by its kind's rules alone whichever package it sits in,
-so a connector's and a connection's type map are graded identically. An identity a plugin needs
-derived from a document (a database endpoint's id) is computed by the backend and returned to the
-plugin through MCP. What a plugin selects and submits follows ADR-0001's selection rule.
+so a connector's and a connection's type map are graded identically. A document-derived identity a
+plugin needs (a database endpoint's id) is computed by the backend and returned to the plugin through
+MCP. What a plugin selects and submits follows ADR-0001's selection rule.
 
 The backend deploys a validator release before main renders plugin prose that teaches its contract,
 so a plugin never authors against a contract the backend's gate does not enforce.
@@ -77,7 +77,7 @@ lose their only gate.
 ## Consequences
 
 - Easier: one verdict per document; the plugins shed their bootstrap and adapter code, and the pin
-  and its guards go.
+  and the checks that hold it go.
 - Harder: the plugins depend on backend availability; the backend owns the MCP interface and must keep
   it in step with the plugins; a contract change reaches plugin prose only after the backend deploys
   the validator release carrying it.
