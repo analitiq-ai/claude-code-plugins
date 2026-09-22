@@ -334,8 +334,7 @@ class DocumentPackage(ParseOnly, RootModel[dict[str, Any]]):
     # its kind across that schema's versions. Built from the root and the member
     # locations, so the root's path is stated once.
     LOCATIONS: ClassVar[dict[str, str]]
-    # The member locations whose documents hold secret values. A file holder never
-    # puts a document from one into a request.
+    # The member locations whose documents hold secret values.
     SECRET_LOCATIONS: ClassVar[frozenset[str]] = frozenset()
 
     @classmethod
