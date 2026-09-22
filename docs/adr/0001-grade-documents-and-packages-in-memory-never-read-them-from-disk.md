@@ -22,8 +22,9 @@ provenance:
 ## Context
 
 `analitiq-validator` is the one gate for Analitiq documents. It runs in the Engine before a pipeline
-runs, in the backend that grades what a plugin submits, and in DIP CI. The Engine and the backend
-already hold documents in memory; only DIP CI and the plugins hold files.
+runs, in the backend that grades what a plugin submits, and in DIP CI. The backend holds documents
+in memory, and so does the Engine as it stands; a consumer that holds files instead builds a
+request, as DIP CI and the plugins do.
 
 The validator reads packages from disk with its own idea of where each file sits. That makes it own
 filesystem behaviour — links, permissions, encodings, paths leading outside a package — none of which

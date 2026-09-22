@@ -36,7 +36,8 @@ We will make the backend the plugins' only gate. Both plugins submit what they a
 single documents during authoring, packages when complete, and for a pipeline the whole project (its
 pipeline, connection and connector packages) — and act on the findings returned. The plugins do not
 install, import or pin the validator. Every document, whatever its kind, is submitted and graded the
-same way; a type map gets no operation of its own. An identity derived from a document (a database
+same way, by its kind's rules alone whichever package it sits in, so a connector's and a
+connection's type map are graded identically. An identity derived from a document (a database
 endpoint's id) is computed by the backend. What a plugin selects and submits follows ADR-0001's
 selection rule, which leaves out every secret location.
 
