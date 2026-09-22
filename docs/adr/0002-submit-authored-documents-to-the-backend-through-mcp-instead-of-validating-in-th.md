@@ -12,7 +12,7 @@ blastRadius: cross-team
 relatesTo: ["0001"]
 review:
   tier: arb
-  tierReason: Moves the authoring gate for both plugins and retires the runtime pin and its release rules.
+  tierReason: Moves the authoring gate for both plugins and retires the plugins' runtime validator pin.
 provenance:
   authoredBy: agent
 ---
@@ -21,69 +21,46 @@ provenance:
 
 ## Context
 
-The connector and pipeline plugins grade their own output. Each installs `analitiq-validator` from
-PyPI at run time, pinned by `VALIDATOR_PIN` in the pipeline plugin's bootstrap and by a second copy in
-the connector agent's self-install. Marketplace installs track main, so that pin must name a version
-already on PyPI and must never run ahead of what the repo ships; CI guards, a drift test and release
-rules exist only to hold it there.
-
-The backend also grades what a plugin submits, with its own installed validator. So an authored
-document has two gates at two independently chosen versions, which can disagree on the same document.
+The connector and pipeline plugins grade their own output with a copy of `analitiq-validator` they
+install at run time, at a pinned version. The backend grades what the plugins submit with its own
+copy. An authored document therefore has two gates at independently chosen versions, and keeping the
+plugins' pin publishable takes CI guards and release rules of its own.
 
 ## Decision
 
-We will make the backend the plugins' only gate. Both plugins submit what they author through MCP —
-single documents during authoring, packages when complete, and for a pipeline the whole project (its
-pipeline, connection and connector packages) — and act on the findings returned. The plugins do not
-install, import or pin the validator.
-
-Every document, whatever its kind, is graded by its kind's rules alone whichever package it sits in,
-so a connector's and a connection's type map are graded identically. A document-derived identity a
-plugin needs (a database endpoint's id) is computed by the backend and returned to the plugin through
-MCP. What a plugin selects and submits follows ADR-0001's selection rule.
-
-The backend deploys a validator release before main renders plugin prose that teaches its contract,
-so a plugin never authors against a contract the backend's gate does not enforce.
+We will make the backend the plugins' only gate. The plugins submit what they author to the backend
+through MCP and act on the findings it returns. They do not install, import or pin the validator.
 
 ## Options considered
 
 ### Option A: Submit through MCP, no local validator (chosen)
 
-| Dimension | Assessment |
-|---|---|
-| Gates per document | One, at the backend's version |
-| Version management | No runtime pin in the plugins; a release ordering keeps main's prose at or behind the backend's validator |
-| Plugin footprint | No venv bootstrap, no self-install, no local adapter scripts |
-| Dependency | Authoring needs the backend reachable |
+**Pros:** One gate per document; the plugins lose their bootstrap install and pin.
+**Cons:** Authoring needs the backend reachable.
 
 ### Option B: Keep local validation in the plugins (status quo)
 
 **Pros:** Works without the backend; fast local feedback.
-**Cons:** A second gate whose version is chosen separately from the backend's; the pin machinery and
-its guards stay; every plugin run pays a bootstrap install.
+**Cons:** A second gate at a separately chosen version; the pin and its release rules stay; every
+plugin run pays a bootstrap install.
 
 ### Option C: Local pre-check plus backend submission
 
 **Pros:** Fast feedback before the round trip.
-**Cons:** Two validators over the same shape is split-brain: a document can pass locally and fail at
-the backend, or the reverse. Keeps all of Option B's pin machinery.
+**Cons:** Two validators over the same documents can disagree, and it keeps all of Option B's pin
+machinery.
 
 ## Trade-offs
 
-Authoring stops when the backend is unreachable; there is no offline mode. Each check is a network
-round trip. The backend must accept every submission shape before the plugins switch, or the plugins
-lose their only gate.
+Authoring stops when the backend is unreachable, and each check is a network round trip. The plugins
+still teach the contract from this repo while the backend enforces the validator it has deployed, so
+the backend must deploy a contract change before the plugins teach it.
 
 ## Consequences
 
-- Easier: one verdict per document; the plugins shed their bootstrap and adapter code, and the pin
-  and the checks that hold it go.
-- Harder: the plugins depend on backend availability; the backend owns the MCP interface and must keep
-  it in step with the plugins; a contract change reaches plugin prose only after the backend deploys
-  the validator release carrying it.
-- Verdicts change for type maps: the write-vocabulary warning a connector's type map gets
-  (`RULE-TMAP-017`) now reaches a connection's too, and the gap-only rule for connection maps
-  (`RULE-TMAP-018`) is retired, since neither package's type map has rules of its own.
-- **How we would know this was wrong:** authoring runs routinely fail on backend unavailability, or
-  users need to author without access to the backend.
+- Easier: one verdict per document; the plugins shed their bootstrap and adapter code.
+- Harder: the plugins depend on the backend being available; the backend owns the MCP interface and
+  must accept every submission the plugins make before they switch to it.
+- **How we would know this was wrong:** authoring routinely fails on backend unavailability, or users
+  need to author without access to the backend.
 - Revisit if: an offline authoring use case appears.
