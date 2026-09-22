@@ -104,19 +104,16 @@ lose their only gate.
 
 ## Action items
 
-Each item lands only after the items before it, and in the same PR updates every in-repo caller of
-what it changes, as `git grep` finds them when it lands.
+Each item lands only after the items before it, and in the same PR updates or removes every in-repo reference to what it changes, as `git grep` finds them when it lands.
 
 1. [ ] After ADR-0001 items 1-4 (the request names its package, the secret mark, the refusal, grading by
    the named package's location table): the backend accepts single-document, package and
    pipeline-project submissions through MCP, and derives database endpoint ids.
-2. [ ] Every importer of the pipeline plugin's validation adapter and every caller of the validator's
-   command line calls the library's request entry points instead; one that exists only to test the
+2. [ ] Every reference to the pipeline plugin's validation adapter and to the validator's command line
+   moves to the library's request entry points; one that exists only to test the
    adapter is deleted with it in item 3.
 3. [ ] Remove the plugins' validation adapter, gap script and endpoint-id helper, the connector agent's
    self-install, and everything that exists only for them; agents submit through MCP. The bootstrap
    stays, unimported, because the pin guards still read its pin.
-4. [ ] In their own PR: retire every reader of `VALIDATOR_PIN` — the guards, their shared reader and
-   tests, the release workflows' lockstep lists, and the pin rules in prose.
-5. [ ] Remove the bootstrap and every reader of `ANALITIQ_VALIDATOR_FROM_SOURCE`, which only the bootstrap
-   consumes.
+4. [ ] In their own PR: retire every reference to `VALIDATOR_PIN`.
+5. [ ] Remove the bootstrap and every reference to `ANALITIQ_VALIDATOR_FROM_SOURCE`.

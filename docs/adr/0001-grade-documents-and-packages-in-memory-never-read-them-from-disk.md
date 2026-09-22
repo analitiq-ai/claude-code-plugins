@@ -122,8 +122,7 @@ write a few lines of Python to grade a package.
 
 ## Action items
 
-Each item lands only after the items before it, and in the same PR updates every in-repo caller of
-what it changes, as `git grep` finds them when it lands. Items 6 and 7 also wait for ADR-0002 item 3, which moves the plugins off the
+Each item lands only after the items before it, and in the same PR updates or removes every in-repo reference to what it changes, as `git grep` finds them when it lands. Items 6 and 7 also wait for ADR-0002 item 3, which moves the plugins off the
 validator.
 
 1. [ ] The package request names its package, restricted to the published package schema names, and
@@ -138,5 +137,5 @@ validator.
    skipping secret locations.
 6. [ ] Remove every path-taking entry point (a `doc_path` argument, the disk reader) and the validator's
    own filename constants from `analitiq.validator`, with the findings and rule records only they
-   produce; every caller moves to the request entry points.
-7. [ ] Remove the `analitiq-validate` console script and `main()`, with every caller of either.
+   produce; every reference moves to the request entry points.
+7. [ ] Remove the `analitiq-validate` console script and `main()`, with every reference to either.
