@@ -4819,8 +4819,10 @@ def _cursor_node_as_the_engine_reads_it(
     resolve. Two of those three properties are
     reproduced exactly:
 
-    * The lookup is FLAT. A dotted `cursor_field` matches no key there, so it
-      is not walked here either. The engine raises when it prepares the read,
+    * The lookup is FLAT: the name is one whole key and a dot never walks
+      into a nested object. A top-level key literally named `a.b` matches;
+      a path to a nested field matches nothing, so it is not walked here
+      either. The engine raises when it prepares the read,
       before the first request; refusing it here moves that to authoring
       time. (The value read is flat too — the last record's value under the
       whole name — so nothing downstream would rescue it either.)

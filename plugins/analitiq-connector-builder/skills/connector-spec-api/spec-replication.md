@@ -125,9 +125,9 @@ reader that reads a stored cursor back descends none of them, and a document
 it cannot read is one that fails as the endpoint is prepared, on every
 replication method — not only the incremental one.
 Where the field sits is read the same way: it must be a plain key on the
-record shape's `properties`, looked up whole. A dotted `cursor_field` names
-no key there, so point the cursor at a top-level record field rather than a
-nested one. A `$ref` base or an `allOf` branch alongside is fine — the
+record shape's `properties`, looked up whole. A dot never walks into a
+nested object: a top-level key literally named `a.b` works, a path to a
+nested field does not, so point the cursor at a top-level record field. A `$ref` base or an `allOf` branch alongside is fine — the
 record shape's own declaration of the field is the one that is read, and
 the branch's is not read at all. So a field declared ONLY on that base is
 invisible, and a `format` added by a branch to a `type` on the shape is
