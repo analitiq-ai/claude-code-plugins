@@ -76,6 +76,9 @@ lose their only gate.
   plugins shed their bootstrap and adapter code.
 - Harder: the plugins depend on backend availability; the backend owns the MCP interface and must keep
   it in step with the plugins.
+- Verdicts change for type maps: the write-vocabulary warning a connector's type map gets
+  (`RULE-TMAP-017`) now reaches a connection's too, and the gap-only rule for connection maps
+  (`RULE-TMAP-018`) is retired, since neither package's type map has rules of its own.
 - **How we would know this was wrong:** authoring runs routinely fail on backend unavailability, or
   users need to author without access to the backend.
 - Revisit if: an offline authoring use case appears.
