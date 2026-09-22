@@ -311,8 +311,11 @@ def document_locations(locations: dict[str, str]) -> Callable[[dict[str, Any]], 
 
 
 def package_locations(schema: dict[str, Any], package: type[DocumentPackage]) -> None:
-    """A package's `json_schema_extra`: publishes its `LOCATIONS` and requires its `ROOT`."""
+    """A package's `json_schema_extra`: publishes its `LOCATIONS`, marks its
+    `SECRET_LOCATIONS` and requires its `ROOT`."""
     document_locations(package.LOCATIONS)(schema)
+    for pattern in package.SECRET_LOCATIONS:
+        schema["patternProperties"][true_ended(pattern)]["x-secret"] = True
     schema["required"] = [package.ROOT]
 
 
@@ -331,10 +334,15 @@ class DocumentPackage(ParseOnly, RootModel[dict[str, Any]]):
     # its kind across that schema's versions. Built from the root and the member
     # locations, so the root's path is stated once.
     LOCATIONS: ClassVar[dict[str, str]]
+    # The member locations whose documents hold secret values.
+    SECRET_LOCATIONS: ClassVar[frozenset[str]] = frozenset()
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         super().__pydantic_init_subclass__(**kwargs)
+        unknown = cls.SECRET_LOCATIONS - cls.MEMBER_LOCATIONS.keys()
+        if unknown:
+            raise TypeError(f"{cls.__name__}: secret locations outside its member locations: {sorted(unknown)}")
         cls.LOCATIONS = {rf"^{re.escape(cls.ROOT)}$": cls.ROOT_KIND, **cls.MEMBER_LOCATIONS}
 
     @classmethod
