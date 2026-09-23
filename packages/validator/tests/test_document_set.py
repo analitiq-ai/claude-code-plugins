@@ -541,10 +541,21 @@ def test_a_pipeline_package_catches_a_stream_under_another_pipeline(validator):
 
 
 def test_a_draft_pipeline_package_passes(validator):
-    """Runnability is not a package property: a draft is authored content."""
+    """A pipeline in a status that schedules nothing is held only to its
+    references, so its streams may all be draft."""
     documents = {"pipeline.json": _PIPELINE, f"streams/{_SID}.json": _STREAM}
     assert validator.validate_package(_package_request("pipeline", documents)) == {
         "passed": True, "findings": []}
+
+
+def test_an_active_pipeline_package_needs_a_runnable_stream(validator):
+    """The gate reads only kinds a pipeline package holds, so the package is a
+    unit that can settle it — the same verdict a workspace reaches."""
+    pipeline = {**_PIPELINE, "status": "active"}
+    documents = {"pipeline.json": pipeline, f"streams/{_SID}.json": _STREAM}
+    result = validator.validate_package(_package_request("pipeline", documents))
+    assert _at(result, "active-pipeline-no-runnable-stream") == ["pipeline.json#/streams"]
+    assert result["passed"] is False
 
 
 def test_a_crash_in_a_cross_document_check_costs_only_that_check(validator, monkeypatch):
@@ -640,9 +651,7 @@ def test_an_unparseable_document_withholds_the_workspace_checks(validator):
     assert "endpoint-ref-unresolved" not in _ids(result)
 
 
-
-
-_PHASES = ("root", "document", "package-check", "workspace-check", "run-check")
+_PHASES = ("root", "document", "package-check", "workspace-check")
 
 
 def _graded_phases(monkeypatch, grade) -> list[tuple[str, str]]:

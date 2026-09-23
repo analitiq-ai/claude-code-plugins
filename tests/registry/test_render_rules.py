@@ -392,9 +392,9 @@ def test_a_duplicate_id_is_refused(registry):
     assert "duplicate id RULE-TEST-001" in _refusal(registry)
 
 
-def test_reissuing_an_id_retired_before_the_registry_is_refused(registry):
+def test_reissuing_a_retired_id_is_refused(registry):
     """Those ids are in archived findings; reusing one re-points them."""
-    retired = sorted(RR.RETIRED_BEFORE_THE_REGISTRY)[0]
+    retired = sorted(RR.RETIRED_WITHOUT_A_RECORD)[0]
     _write(registry, id=retired, name=f"{retired}.yaml")
     assert retired in _refusal(registry)
 

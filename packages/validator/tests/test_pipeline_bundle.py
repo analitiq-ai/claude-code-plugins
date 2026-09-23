@@ -9,8 +9,6 @@ defect. The valid fixture deliberately exercises the id-matching contract:
 `{id}_v{n}` versioned refs while the stream and connection *documents* declare the
 bare id — they must still resolve.
 """
-import pytest
-
 SOURCE_CONN = "11111111-1111-4111-8111-111111111111"
 DEST_CONN = "22222222-2222-4222-8222-222222222222"
 STREAM = "33333333-3333-4333-8333-333333333333"
@@ -82,7 +80,7 @@ def test_valid_bundle_detected_and_dispatched(validator):
     assert [f for f in findings if f["severity"] == "error"] == []
 
 
-# --- pipeline runnable (RULE-PIPE-018/019/014) ------------------------------
+# --- pipeline runnable (RULE-PIPE-018/014) ----------------------------------
 
 def test_missing_pipeline_id_flagged(validator):
     bundle = _valid_bundle()

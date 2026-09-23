@@ -179,12 +179,17 @@ ENFORCEMENT_LOCATIONS = (
     UNENFORCED_LOCATION,
 )
 
-#: Ids retired before the registry had files, so no record on disk remembers
-#: them. A live record normally carries `status: retired` and guards its own id;
-#: these have nothing to carry it, and an id is never reissued — it appears in
-#: findings and archived diagnostics, where reuse silently re-points every
-#: stored occurrence at a different rule.
-RETIRED_BEFORE_THE_REGISTRY = (
+#: Retired ids no record on disk remembers. A live record normally carries
+#: `status: retired` and guards its own id; these have nothing to carry it —
+#: either they predate the registry having files, or the obligation was
+#: withdrawn rather than superseded, so the record went with it. An id is never
+#: reissued: it appears in findings and archived diagnostics, where reuse
+#: silently re-points every stored occurrence at a different rule.
+RETIRED_WITHOUT_A_RECORD = (
+    # `only an `active` pipeline is runnable`, retired when the validator
+    # stopped deciding whether a pipeline may run. RULE-PIPE-014 keeps the half
+    # that grades what was authored, so nothing supersedes this one.
+    "RULE-PIPE-019",
     # `exactly one of expression or constant`, retired in 1.0.0rc19 when
     # `AssignmentValue` became a `kind`-discriminated union, so the union states
     # the rule and no validator enforces it.

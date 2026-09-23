@@ -27,7 +27,7 @@ from analitiq.contracts.shared.rule_record import (
     IN_FORCE_STATUSES,
     MECHANISMS,
     OWNERS,
-    RETIRED_BEFORE_THE_REGISTRY,
+    RETIRED_WITHOUT_A_RECORD,
     SEVERITIES,
     SHAPE_TIER,
     SYMBOL_MECHANISMS,
@@ -70,7 +70,7 @@ def test_rule_ids_are_unique():
 def test_retired_rule_ids_are_not_reissued():
     """Uniqueness alone misses this — a retired id is free by definition."""
     live = {r.id for r in all_rules()}
-    reissued = sorted(set(RETIRED_BEFORE_THE_REGISTRY) & live)
+    reissued = sorted(set(RETIRED_WITHOUT_A_RECORD) & live)
     assert not reissued, (
         f"retired rule ids reissued: {reissued}. These appear in archived "
         "findings; give the new rule the next free number instead."

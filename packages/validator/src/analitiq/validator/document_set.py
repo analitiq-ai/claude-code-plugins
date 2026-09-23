@@ -15,10 +15,9 @@ graded. A package's root document is required.
 **Cross-document checks are routed by what they read.** Each entry of `_CHECKS`
 declares the document kinds it reads. A check reading only kinds one package
 holds is a package check, run on each package alone; any other is a workspace
-check; a check that gates running a pipeline runs only for the pipeline a
-workspace request names to run. A check runs only over documents that all parsed,
-and in a unit whose every package has its root: it cannot tell a missing document
-from one it could not read.
+check. A check runs only over documents that all parsed, and in a unit whose
+every package has its root: it cannot tell a missing document from one it could
+not read.
 
 **The request model is the argument gate.** A key outside the document-key
 grammar, a value that is not text, a key at a secret location, an unknown kind —

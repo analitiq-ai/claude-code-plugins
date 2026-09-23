@@ -1,9 +1,8 @@
 """The request to validate a workspace: document texts keyed by path from the
-workspace root, and optionally the pipeline to run.
+workspace root.
 
 A malformed request is refused when it is built, and the published schema
-refuses the same inputs, except where JSON Schema cannot say it (a named
-pipeline the request holds no document of).
+refuses the same inputs.
 """
 from __future__ import annotations
 
