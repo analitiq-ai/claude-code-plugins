@@ -1,16 +1,16 @@
 id: RULE-PKG-032
 statement: >
-  Every endpoint document in a connector release MUST declare an `endpoint_id`
-  no other document in that release declares.
+  Every endpoint document in a connector or connection package MUST declare an
+  `endpoint_id` no other document in that package declares.
 tier: reference
 severity: error
-artifact_kinds: [connector-package]
+artifact_kinds: [connector-package, connection-package]
 validator: "analitiq.validator.connectors::_duplicate_endpoint_id_findings"
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
-  The id is what a stream pins, and a release resolves it to one document, so
+  The id is what a stream pins, and a package resolves it to one document, so
   two documents claiming it means every stream that pins it reads whichever the
-  release happened to key last. The filename rule hides this rather than
+  package happened to key last. The filename rule hides this rather than
   catching it: identical ids collide on the filesystem and one file overwrites
   the other, so the duplicate is gone before anything can report it, and ids
   that differ only where the filename is not case-sensitive land as a filename

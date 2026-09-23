@@ -181,8 +181,7 @@ def test_measured_reachable_connectors_ids_matches_expectation():
     """`measured_reachable_connectors_ids` derives its answer by running probe
     documents through the real adapter rather than naming functions by hand —
     this pins the resulting *ids*, which is a legitimate test assertion target
-    (unlike a hand-typed allowlist of function names, which is what this
-    replaced). A rename inside `connectors.py` cannot break this test: the
+    (unlike a hand-typed allowlist of function names). A rename inside `connectors.py` cannot break this test: the
     measurement calls through the live dispatch, not by name, so there is
     nothing here for a rename to go stale against."""
     assert G.measured_reachable_connectors_ids() == {

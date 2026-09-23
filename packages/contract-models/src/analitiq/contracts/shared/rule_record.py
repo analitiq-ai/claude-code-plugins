@@ -102,6 +102,7 @@ OWNERS = ("engine", "connector-plugin", "pipeline-plugin")
 ARTIFACT_KINDS = (
     "connector",
     "connector-package",
+    "connection-package",
     "api-endpoint",
     "database-endpoint",
     "type-map",
@@ -117,8 +118,8 @@ ARTIFACT_KINDS = (
 
 #: `ARTIFACT_KINDS`, restricted to members that denote one concrete, authorable
 #: document. A rule record legitimately needs the wider vocabulary above —
-#: `any` binds every document at once, `connector-package` grades a directory
-#: layout rather than a single document, `data-sync-run-status` and
+#: `any` binds every document at once, `connector-package` and
+#: `connection-package` grade a directory layout rather than a single document, `data-sync-run-status` and
 #: `pipeline-manifest` are documents neither plugin authors — but a call site naming exactly one kind of
 #: document a plugin dispatches on (the pipeline-builder's validation adapter,
 #: for instance) never means one of those. Derived rather than a second
@@ -126,7 +127,7 @@ ARTIFACT_KINDS = (
 DOCUMENT_ARTIFACT_KINDS = tuple(
     kind
     for kind in ARTIFACT_KINDS
-    if kind not in ("any", "connector-package", "data-sync-run-status", "pipeline-manifest")
+    if kind not in ("any", "connector-package", "connection-package", "data-sync-run-status", "pipeline-manifest")
 )
 
 #: Which shape device a shape rule is ABOUT — not merely which one the
