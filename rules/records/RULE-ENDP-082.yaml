@@ -1,0 +1,22 @@
+id: RULE-ENDP-082
+statement: >
+  A write mode that declares batching MUST NOT declare a form-encoded
+  (`application/x-www-form-urlencoded`) request `content_type`, matched on the
+  media type with its parameters dropped and case folded.
+tier: shape
+severity: error
+artifact_kinds: [api-endpoint]
+validator: "analitiq.contracts.endpoints::WriteOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [WriteOperation]
+fixture_model: WriteOperation
+rationale: >
+  A batched request body binds `records`, a list of records, and a form body
+  carries only flat name/value pairs, so no batch has a form encoding. The
+  document alone settles it: `batching` and `request.content_type` sit on the
+  same write-mode object. An omitted `content_type` means a JSON body and is
+  outside the rule. RFC 9110 makes a media type's type and subtype
+  case-insensitive and lets it carry parameters, so the match reads the value
+  the same way the body encoder does rather than comparing the raw string.
+status: active
+superseded_by: null

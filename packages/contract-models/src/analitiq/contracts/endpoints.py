@@ -102,6 +102,7 @@ from analitiq.contracts.value_expression import (
     _EXPRESSION_KEYS as _RESOLVER_EXPRESSION_KEYS,
     has_known_scope,
     has_unterminated_placeholder,
+    is_form_content_type,
     iter_expression_nodes,
     iter_expression_strings,
     template_placeholders,
@@ -2646,6 +2647,15 @@ class WriteOperation(_EndpointModel):
                 "from_input in request.path_params cannot be combined with batching — "
                 "a path segment takes one record's value and a multi-record request "
                 "has no single record to take it from (spec: §Write Modes)"
+            )
+
+        if self.batching is not None and is_form_content_type(self.request.content_type):
+            raise violation(
+                "RULE-ENDP-082", "batched-write-form-content-type",
+                f"batching cannot be combined with content_type "
+                f"{self.request.content_type!r} — a batched body binds the "
+                "`records` list and a form body carries only flat name/value pairs "
+                "(spec: §Write Modes)"
             )
 
         if self.conflict_keys is not None:

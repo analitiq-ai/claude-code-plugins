@@ -606,6 +606,15 @@ def header_name_key(name: str) -> str:
     return name.strip().lower()
 
 
+FORM_CONTENT_TYPE = "application/x-www-form-urlencoded"
+
+
+def _media_type_essence(content_type: str) -> str:
+    """The `type/subtype` of a media type: parameters dropped, case folded,
+    since RFC 9110 makes both halves case-insensitive."""
+    return content_type.split(";", 1)[0].strip().lower()
+
+
 def is_json_content_type(content_type: str | None) -> bool:
     """True when a Content-Type selects JSON body encoding.
 
@@ -615,7 +624,15 @@ def is_json_content_type(content_type: str | None) -> bool:
     """
     if not content_type:
         return False
-    return content_type.split(";", 1)[0].strip().lower() == "application/json"
+    return _media_type_essence(content_type) == "application/json"
+
+
+def is_form_content_type(content_type: str | None) -> bool:
+    """True when a Content-Type selects form body encoding, read the way
+    `is_json_content_type` reads JSON."""
+    if not content_type:
+        return False
+    return _media_type_essence(content_type) == FORM_CONTENT_TYPE
 
 
 def select_transport(connector: dict, template: dict) -> dict | None:
@@ -760,7 +777,7 @@ def resolve_operation_url(
 #: What an auth operation's body is encoded as when it declares no
 #: `content_type`. Form encoding because that is what a token request is
 #: specified in, which is what these operations overwhelmingly are.
-DEFAULT_AUTH_CONTENT_TYPE = "application/x-www-form-urlencoded"
+DEFAULT_AUTH_CONTENT_TYPE = FORM_CONTENT_TYPE
 
 
 def apply_operation_content_type(headers: dict[str, str], operation: dict) -> str:
