@@ -24,6 +24,7 @@ from analitiq.contracts.validation_requests import (
     DocumentSet,
     ValidatePackageRequest,
     ValidateSingleDocumentRequest,
+    WorkspaceDocumentSet,
 )
 
 PUBLISHED_SCHEMA = json.loads(
@@ -235,6 +236,15 @@ def test_document_count_ceiling():
     with pytest.raises(jsonschema.ValidationError):
         _publish_validate(over)
 
+
+
+def test_a_workspace_set_is_not_a_package_set():
+    # Pydantic takes an instance of the field's type (or a subtype) without
+    # revalidating it, so a workspace set typed as a package set would carry
+    # its larger ceiling into the package request.
+    over = WorkspaceDocumentSet({f"endpoints/{i}.json": "{}" for i in range(MAX_PACKAGE_DOCUMENTS + 1)})
+    with pytest.raises(ValidationError):
+        ValidatePackageRequest(package_kind="connector", documents=over)
 
 def test_document_text_ceiling():
     at_ceiling = {"connector.json": "x" * DOCUMENT_TEXT_MAX_LENGTH}

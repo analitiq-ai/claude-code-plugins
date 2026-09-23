@@ -289,7 +289,7 @@ EXEMPT_MODEL_VALIDATORS = {
         "and passes a non-string straight through, so the declarative "
         "ISO_TS_PATTERN sees the normalized value and reports every rejection"
     ),
-    ("analitiq.contracts.validation_requests", "DocumentSet", "_no_document_is_a_directory"): (
+    ("analitiq.contracts.validation_requests", "_DocumentTree", "_no_document_is_a_directory"): (
         "request argument, not an artifact obligation: a key that is both a "
         "document and a directory is a malformed request refused at "
         "construction, which no artifact author can violate or a finding cite"

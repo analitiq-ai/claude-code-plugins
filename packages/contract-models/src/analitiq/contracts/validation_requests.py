@@ -42,28 +42,15 @@ DocumentKey = Annotated[
 
 
 # `RootModel` cannot inherit `StrictModel` — pydantic rejects an `extra`
-# setting on a root model — so `DocumentSet` mixes in the parse-only policy
-# directly, as `CredentialsFile` does.
-class DocumentSet(
-    ParseOnly,
-    RootModel[
-        Annotated[
-            dict[DocumentKey, DocumentText],
-            Field(max_length=MAX_PACKAGE_DOCUMENTS, json_schema_extra=closed_true_end_keys),
-        ]
-    ],
-):
-    """Authored documents keyed by relative path, each value the document's
-    file text. The request carrying the set names what a path is relative to.
-
-    A key is a relative POSIX path with exactly one spelling per
-    document; the key pattern carries the grammar. A key that names a
-    document may not also be an ancestor directory of another key. The text
-    is opaque to this model.
-    """
+# setting on a root model — so the tree mixes in the parse-only policy
+# directly, as `CredentialsFile` does. It carries no ceiling and no request
+# field is typed as it: each request's set is a sibling subclass declaring its
+# own, because pydantic takes a subtype instance without revalidating it, so a
+# set that subclassed another would carry its ceiling into the other's request.
+class _DocumentTree(ParseOnly, RootModel[dict[DocumentKey, DocumentText]]):
 
     @model_validator(mode="after")
-    def _no_document_is_a_directory(self) -> DocumentSet:
+    def _no_document_is_a_directory(self) -> _DocumentTree:
         # Every key is a file path in one tree, so a key that is also a
         # directory of another describes a tree no filesystem holds. Sorted as
         # segment tuples, a path's descendants follow it directly — nothing
@@ -79,7 +66,23 @@ class DocumentSet(
         return self
 
 
-class WorkspaceDocumentSet(DocumentSet):
+class DocumentSet(_DocumentTree):
+    """Authored documents keyed by relative path, each value the document's
+    file text. The request carrying the set names what a path is relative to.
+
+    A key is a relative POSIX path with exactly one spelling per
+    document; the key pattern carries the grammar. A key that names a
+    document may not also be an ancestor directory of another key. The text
+    is opaque to this model.
+    """
+
+    root: Annotated[
+        dict[DocumentKey, DocumentText],
+        Field(max_length=MAX_PACKAGE_DOCUMENTS, json_schema_extra=closed_true_end_keys),
+    ]
+
+
+class WorkspaceDocumentSet(_DocumentTree):
     """Authored documents spanning every package a workspace carries, keyed
     by relative path from the workspace root, each value the document's file
     text.

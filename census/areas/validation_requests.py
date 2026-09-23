@@ -31,7 +31,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="WorkspaceDocumentSet",
         prose_hash="c927f707312e",
-        structural=_DOCUMENT_SET_SHAPE + ", inherited from DocumentSet",
+        structural=_DOCUMENT_SET_SHAPE,
         waiver=_DOCUMENT_SET_CONTENT + ", nor that the keys span the workspace's packages",
     ),
     ProseObligation(
@@ -88,7 +88,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ValidateWorkspaceRequest",
         prose_hash="71068bb20329",
-        structural="`documents` is required under extra='forbid' and is a DocumentSet",
+        structural="`documents` is required under extra='forbid' and is a WorkspaceDocumentSet",
         waiver=(
             "that each key is a path from the workspace root is the caller's "
             "content, which this model does not judge"
