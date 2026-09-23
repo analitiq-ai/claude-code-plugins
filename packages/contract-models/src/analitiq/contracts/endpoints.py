@@ -1420,9 +1420,8 @@ class PostReadRequest(_BodyBearingRequest):
 
 
 # `method`-discriminated read request: only the POST branch declares `body`, so
-# the published JSON Schema structurally forbids a body on a GET read (the rule
-# formerly enforced only by a `@model_validator`). Both branches share the
-# `_RequestBase` fields.
+# the published JSON Schema structurally forbids a body on a GET read. Both
+# branches share the `_RequestBase` fields.
 ReadRequest = Annotated[
     GetReadRequest | PostReadRequest,
     Field(discriminator="method"),
@@ -2378,9 +2377,8 @@ class ReadOperation(_EndpointModel):
         # and it is skipped. It needs the record-shape walk instead, the same one
         # replication `cursor_field` gets: both name a field the engine reads off
         # a record to advance from, and an undeclared one truncates or repeats
-        # pages silently while the run still reports success. Until this it was
-        # guarded by nothing but `RECORD_FIELD_PATH_PATTERN` — a shape check,
-        # not an existence one.
+        # pages silently while the run still reports success.
+        # `RECORD_FIELD_PATH_PATTERN` is a shape check, not an existence one.
         if isinstance(self.pagination, KeysetPagination):
             try:
                 _validate_record_field_path(
@@ -4248,11 +4246,10 @@ def _validate_param_binding_uniqueness(
 class _OperationKind(str, Enum):
     """Which operation a swept site belongs to.
 
-    Passed explicitly rather than inferred from the site label. Prefix-matching
-    a caller-supplied string already produced one wrong message: `Param` is
-    shared by reads and writes, so its label matched neither operation prefix
-    and write authors were told "paging stops after the first page" about an
-    operation that does not page.
+    Passed explicitly rather than inferred from the site label: `Param` is
+    shared by reads and writes, so its label matches neither operation prefix,
+    and a kind prefix-matched from it would tell write authors "paging stops
+    after the first page" about an operation that does not page.
     """
 
     READ = "read"
@@ -4264,12 +4261,10 @@ class _OperationKind(str, Enum):
 class _ExpressionSite:
     """One swept slot, with everything the checks need STATED by its producer.
 
-    `operation` used to be a per-call default and `WRITE_RESPONSE` was then
-    re-derived by prefix-matching `where` — the very inference this enum's
-    docstring says it replaced, one field rename away from firing again. A
-    producer knows which operation it is and whether its slot is built before
+    A producer knows which operation it is and whether its slot is built before
     the response exists; neither is recoverable from a display label, so
-    neither is inferred from one.
+    neither is inferred from one — prefix-matching `where` breaks on the next
+    field rename.
     """
 
     where: str
@@ -4290,15 +4285,12 @@ def _sweep_expression_sites(
 
     The four checks — expression shape, leading scope, response sub-scope, and
     (where a `response.schema` exists) declared-path resolution with typedness —
-    were wired per CALL SITE rather than per slot, and every hole found after
-    the first was the same shape: a site that was not on somebody's list.
-    `request.path_params` was missing from two tables; `pagination` and the write
-    `response` never reached the shape walk; `params.<name>.default` was added to
-    three walks and not the fourth. `_validate_response_body_paths`' own
-    docstring rejects exactly this reasoning for the INSIDE of `pagination`
-    ("enumerating sites would mean a new strategy field silently escapes the
-    rule; walking the block cannot") — it just was not applied to the
-    enumeration of the blocks themselves.
+    run per SLOT, not per call site: wired per call site, each check carries its
+    own list of sites, and a site missing from one list escapes that check
+    silently. `_validate_response_body_paths` applies the same reasoning to the
+    INSIDE of `pagination` ("enumerating sites would mean a new strategy field
+    silently escapes the rule; walking the block cannot"); this applies it to
+    the enumeration of the blocks themselves.
 
     So: one function, all four checks, and each operation states its slots once.
     A slot added to the table gets every check by construction.
@@ -4422,9 +4414,8 @@ def _unresolved_harm(operation: _OperationKind) -> str:
             "first page and the run still reports success."
         )
     # Exhaustive on purpose. With the read text as the fall-through, a raw
-    # `"write"` string — `==`-equal to the member but not `is`-identical — got
-    # paging advice, which is the wrong-message bug this enum replaced; and a
-    # member added later would inherit it silently.
+    # `"write"` string — `==`-equal to the member but not `is`-identical — would
+    # get paging advice, and a member added later would inherit it silently.
     raise AssertionError(f"unhandled operation kind {operation!r}")
 
 
