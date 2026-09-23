@@ -37,9 +37,8 @@ catch-all.
 
 Because composition is first-match over the concatenation, a connection rule
 for a native/canonical the connector already covers **overrides** the
-connector's rendering for every stream on that connection — enforced for the
-write direction (`RULE-TMAP-018`); the read-direction mirror (`RULE-TMAP-024`)
-is not yet enforced.
+connector's rendering for every stream on that connection (`RULE-TMAP-018` for
+write, `RULE-TMAP-024` for read).
 
 ## When each direction is consulted
 
