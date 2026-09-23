@@ -15,9 +15,9 @@ This module is the fix, in three parts:
    each asserting an outcome: rejected with a message, accepted clean, or
    accepted silent (zero findings). A probe is a *measurement*; if the contract
    moves under it, `verify_probes()` fails and CI goes red. A claim about what
-   a plugin's own adapter does — the pipeline plugin chooses `require_runnable`
-   from the pipeline's status — is measured through that adapter instead, which
-   is the entry its agent runs; the findings list is the same shape either way.
+   a plugin's own adapter does — the pipeline plugin stitches a bundle off disk
+   before grading it — is measured through that adapter instead, which is the
+   entry its agent runs; the findings list is the same shape either way.
 2. **Claims** — the prose sentences themselves, authored ONCE here, each naming
    the probes that prove it. Marked regions in the plugin docs
    (`<!-- BEGIN GENERATED: <block-id> -->` … `END GENERATED`, the same marker
@@ -777,10 +777,10 @@ def _staged_pipeline_bundle(
 ) -> list[dict]:
     """The shipped examples laid out on disk as a bundle, graded at `status`.
 
-    Runnability is the one verdict the pipeline plugin asks for conditionally:
-    `scripts/validate.py` passes `require_runnable` off the pipeline's own
-    status, so measuring the claim means calling the adapter the agent runs,
-    not `validate_document`. Everything but the wiring comes from the bundled
+    A cross-document verdict is one the pipeline plugin reaches by stitching a
+    bundle off disk, which `scripts/validate.py` does, so measuring such a
+    claim means calling the adapter the agent runs, not `validate_document`.
+    Everything but the wiring comes from the bundled
     examples — the pipeline's `streams` list and the destination ref are
     repointed because no example pair ships pre-stitched.
 
@@ -1477,9 +1477,9 @@ def _pipeline_gen():
 def _pipeline_adapter():
     """The pipeline plugin's validator adapter, imported by path (cached).
 
-    One claim in that plugin's prose is about the adapter rather than about the
-    published validator: `require_runnable` is chosen from the pipeline's own
-    status in `scripts/validate.py`, so a probe that called
+    Claims in that plugin's prose are about the adapter rather than about the
+    published validator: `scripts/validate.py` stitches the bundle it grades
+    out of the files on disk, so a probe that called
     `validate_pipeline_bundle` directly would measure the wrong side of the
     sentence. Import is side-effect-free — `_bootstrap`'s venv build and
     re-exec only fire from the adapter's `main()`.

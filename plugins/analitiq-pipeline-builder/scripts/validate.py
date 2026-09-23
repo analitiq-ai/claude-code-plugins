@@ -33,9 +33,7 @@ entry point. This adapter routes each entity as follows:
     (``RULE-TMAP-018``) earns the write-vocabulary warning (``RULE-TMAP-017``).
   * ``pipeline`` with ``--bundle-root`` -> additionally
     ``analitiq.validator.validate_pipeline_bundle`` over the on-disk bundle, for the
-    cross-document referential integrity no single document can verify. A draft
-    bundle passes ``require_runnable=False`` (a not-yet-runnable draft is not an
-    authoring error); an ``active`` pipeline is held to full runnability. The
+    cross-document referential integrity no single document can verify. The
     published bundle validator receives assembled documents, never a
     connection's directory, so the bundle pass also hands each connection's
     ``definition/`` to ``analitiq.validator.load_type_map`` — the loading a
@@ -413,33 +411,15 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     return bundle, findings, complete, crashed
 
 
-def is_runnable_required(pipeline_doc: object) -> bool:
-    """This plugin authors draft bundles by design: a draft pipeline is not yet
-    runnable, so its runnability verdicts are an author-time expectation, not a
-    defect. Ask the bundle validator for referential integrity only
-    (require_runnable=False) while the pipeline is a draft, and enforce runnability
-    once it is authored 'active'. A non-dict pipeline_doc already earned its own
-    contract-model finding at the single-document stage (see diagnostics_for) —
-    treat it as not-yet-active here rather than raising.
-
-    Public (no leading underscore): `scripts/gen_pipeline_docs.py` calls this
-    directly to measure which `require_runnable`-gated rules this adapter can
-    actually surface, rather than reasoning about the gate from outside it."""
-    return isinstance(pipeline_doc, dict) and pipeline_doc.get("status") == "active"
-
-
 def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> list[dict]:
     from analitiq.validator import validate_pipeline_bundle
     bundle, findings, complete, crashed = _assemble_bundle(pipeline_doc, document_path, root)
-    # Every referential finding stays blocking whether or not runnability is
-    # enforced too — see is_runnable_required for what the flag itself decides.
-    require_runnable = is_runnable_required(pipeline_doc)
     if complete:
         # Each of these two is its own unit: a crash in one must not discard the
         # per-connection findings _assemble_bundle already decided above, nor the
         # other unit's result.
         with _contained(findings, "pipeline"):
-            findings.extend(validate_pipeline_bundle(bundle, require_runnable=require_runnable))
+            findings.extend(validate_pipeline_bundle(bundle))
     elif crashed:
         # A containment guard above actually fired and excluded an on-disk member
         # (that finding already names which one and why). The published validator

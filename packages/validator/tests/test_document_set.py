@@ -37,10 +37,9 @@ def _document_request(document, document_kind: str) -> ValidateSingleDocumentReq
     return ValidateSingleDocumentRequest(document=json.dumps(document), document_kind=document_kind)
 
 
-def _workspace_request(documents: dict, run_pipeline: str | None = None) -> ValidateWorkspaceRequest:
+def _workspace_request(documents: dict) -> ValidateWorkspaceRequest:
     return ValidateWorkspaceRequest(
-        documents={key: json.dumps(doc) for key, doc in documents.items()},
-        run_pipeline=run_pipeline)
+        documents={key: json.dumps(doc) for key, doc in documents.items()})
 
 
 def _ids(result) -> list[str]:
@@ -542,10 +541,21 @@ def test_a_pipeline_package_catches_a_stream_under_another_pipeline(validator):
 
 
 def test_a_draft_pipeline_package_passes(validator):
-    """Runnability is not a package property: a draft is authored content."""
+    """A pipeline in a status that schedules nothing is held only to its
+    references, so its streams may all be draft."""
     documents = {"pipeline.json": _PIPELINE, f"streams/{_SID}.json": _STREAM}
     assert validator.validate_package(_package_request("pipeline", documents)) == {
         "passed": True, "findings": []}
+
+
+def test_an_active_pipeline_package_needs_a_runnable_stream(validator):
+    """The gate reads only kinds a pipeline package holds, so the package is a
+    unit that can settle it — the same verdict a workspace reaches."""
+    pipeline = {**_PIPELINE, "status": "active"}
+    documents = {"pipeline.json": pipeline, f"streams/{_SID}.json": _STREAM}
+    result = validator.validate_package(_package_request("pipeline", documents))
+    assert _at(result, "active-pipeline-no-runnable-stream") == ["pipeline.json#/streams"]
+    assert result["passed"] is False
 
 
 def test_a_crash_in_a_cross_document_check_costs_only_that_check(validator, monkeypatch):
@@ -555,7 +565,7 @@ def test_a_crash_in_a_cross_document_check_costs_only_that_check(validator, monk
         raise RuntimeError("boom")
 
     (check,) = [c for c in document_set._CHECKS if c.run.__name__ == "_check_stream_refs"]
-    crashed = [document_set._Check(_explodes, c.reads, c.gates_run) if c is check else c
+    crashed = [document_set._Check(_explodes, c.reads) if c is check else c
                for c in document_set._CHECKS]
     monkeypatch.setattr(document_set, "_CHECKS", tuple(crashed))
     stream = {**_STREAM, "pipeline_id": "55555555-5555-4555-8555-555555555555"}
@@ -641,9 +651,7 @@ def test_an_unparseable_document_withholds_the_workspace_checks(validator):
     assert "endpoint-ref-unresolved" not in _ids(result)
 
 
-
-
-_PHASES = ("root", "document", "package-check", "workspace-check", "run-check")
+_PHASES = ("root", "document", "package-check", "workspace-check")
 
 
 def _graded_phases(monkeypatch, grade) -> list[tuple[str, str]]:
@@ -656,8 +664,6 @@ def _graded_phases(monkeypatch, grade) -> list[tuple[str, str]]:
     from analitiq.validator import document_set
 
     def unit(checks, documents) -> tuple[str, str]:
-        if all(c.gates_run for c in checks):
-            return "run-check", ""
         if all(c in document_set._workspace_checks() for c in checks):
             return "workspace-check", ""
         assert any(checks == document_set._package_checks(m) for m in PACKAGE_MODELS.values()), checks
@@ -717,7 +723,7 @@ def test_a_workspace_is_graded_in_one_request_wide_phase_order(validator, monkey
     def graded(arrival):
         def grade():
             results.append(validator.validate_workspace(
-                _workspace_request(arrival, run_pipeline=f"pipelines/{_PID}/")))
+                _workspace_request(arrival)))
             return results[-1]
         return _graded_phases(monkeypatch, grade)
 
@@ -725,7 +731,7 @@ def test_a_workspace_is_graded_in_one_request_wide_phase_order(validator, monkey
         phases = graded(arrival)
         assert {key for phase, key in phases if phase == "package-check"} == {
             "connectors/wise/", f"pipelines/{_PID}/"}, phases
-        _assert_graded_in_phase_order(phases, {"document", "package-check", "workspace-check", "run-check"})
+        _assert_graded_in_phase_order(phases, {"document", "package-check", "workspace-check"})
     assert results[0] == results[1]
 
 
@@ -760,28 +766,22 @@ def test_a_workspace_package_without_its_root_fails_about_that_package(validator
     assert _at(result, "package-root-missing") == [f"connections/{_DST}/connection.json#"]
 
 
-def test_the_pipeline_named_to_run_must_be_active(validator):
-    documents = _workspace_documents()
-    ran = validator.validate_workspace(_workspace_request(documents, run_pipeline=f"pipelines/{_PID}/"))
-    assert _at(ran, "pipeline-not-active") == [f"pipelines/{_PID}/pipeline.json#/status"]
-    assert ran["passed"] is False
-    assert "pipeline-not-active" not in _ids(validator.validate_workspace(_workspace_request(documents)))
-
-
-def test_an_active_pipeline_named_to_run_needs_a_runnable_stream(validator):
+def test_an_active_pipeline_needs_a_runnable_stream(validator):
+    """An active pipeline whose referenced streams are all inactive is a defect
+    in what was authored, so it is found without anything asking to run it."""
     documents = _workspace_documents()
     documents[f"pipelines/{_PID}/pipeline.json"]["status"] = "active"
-    result = validator.validate_workspace(_workspace_request(documents, run_pipeline=f"pipelines/{_PID}/"))
+    result = validator.validate_workspace(_workspace_request(documents))
     assert _at(result, "active-pipeline-no-runnable-stream") == [f"pipelines/{_PID}/pipeline.json#/streams"]
+    assert result["passed"] is False
 
 
-def test_only_the_pipeline_named_to_run_is_held_to_running(validator):
-    other = "66666666-6666-4666-8666-666666666666"
+def test_a_pipeline_that_is_not_active_is_graded_like_any_other(validator):
+    """Which statuses exist is the pipeline model's answer, and every one of
+    them is authorable, so no status earns a finding of its own."""
     documents = _workspace_documents()
-    documents[f"pipelines/{other}/pipeline.json"] = {**_PIPELINE, "pipeline_id": other, "streams": []}
-    documents[f"pipelines/{_PID}/pipeline.json"]["status"] = "active"
-    result = validator.validate_workspace(_workspace_request(documents, run_pipeline=f"pipelines/{_PID}/"))
-    assert "pipeline-not-active" not in _ids(result)
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert result["passed"] is True and result["findings"] == [], result
 
 
 def test_the_manifest_is_graded_by_its_model(validator):
@@ -814,8 +814,7 @@ def test_every_check_runs_at_exactly_one_kind_of_unit(validator):
     for check in document_set._CHECKS:
         packages = [m for m in PACKAGE_MODELS.values() if check in document_set._package_checks(m)]
         at_workspace = check in document_set._workspace_checks()
-        at_run = check in document_set._run_checks()
-        assert (bool(packages), at_workspace, at_run).count(True) == 1, check
+        assert bool(packages) != at_workspace, check
 
 
 def test_a_check_is_handed_only_the_kinds_it_reads(validator):

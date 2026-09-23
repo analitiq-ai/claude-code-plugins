@@ -5106,29 +5106,6 @@
    "superseded_by": null
   },
   {
-   "id": "RULE-PIPE-019",
-   "statement": "When a bundle is checked for runnability, its pipeline document's `status` MUST be `active`.\n",
-   "tier": "reference",
-   "severity": "error",
-   "artifact_kinds": [
-    "pipeline"
-   ],
-   "validator": "analitiq.validator.pipelines::_check_pipeline_active",
-   "enforcement_location": null,
-   "owners": [
-    "engine",
-    "pipeline-plugin"
-   ],
-   "targets": [],
-   "fields": [],
-   "mechanism": null,
-   "symbol": null,
-   "fixture_model": null,
-   "rationale": "RULE-PIPE-014 checks that an active pipeline references at least one runnable stream; this is the other half of the same runnability question — that the pipeline itself claims the status a run requires. An authoring tool validating a draft bundle skips both checks (`require_runnable=False`), since a draft is expected not to be active.\n",
-   "status": "active",
-   "superseded_by": null
-  },
-  {
    "id": "RULE-PIPE-020",
    "statement": "Each entry in a pipeline manifest MUST list a pipeline no other entry lists: no two entries share a `pipeline_id` or a `path`.\n",
    "tier": "coherence",

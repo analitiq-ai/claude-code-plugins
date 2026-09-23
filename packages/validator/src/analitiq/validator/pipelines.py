@@ -11,10 +11,10 @@ A check does NOT assume each document was already contract-validated: a missing
 reference field (a connection naming no connector, a stream slot with no
 endpoint_ref) is an unresolved reference, not a skip.
 
-Referential integrity is separate from runnability. The run checks gate the
-pipeline on `status='active'` with a runnable stream — what an executor needs;
-the bundle applies them under `require_runnable`, and a workspace request to the
-pipeline `run_pipeline` names.
+Which statuses a pipeline may carry is the pipeline model's answer, so no check
+here reads `status` to decide that a pipeline is authorable. A status does decide
+what else must hold: an `active` pipeline needs a runnable stream, and a check
+reading `status` for that applies wherever the documents it reads are in hand.
 
 Stream and connection refs are matched on their base form: a `{id}_v{n}` ref and
 the bare `{id}` it pins resolve to the same document. Connector identities are
@@ -197,21 +197,6 @@ def _check_pipeline_id(documents: _Documents) -> list[tuple[str, dict]]:
         message="pipeline document has no pipeline_id; it cannot be resolved to a pipeline.",
     )) for doc in documents["pipeline"]
         if not isinstance(_content(doc).get("pipeline_id"), str) or not _content(doc)["pipeline_id"]]
-
-
-def _check_pipeline_active(documents: _Documents) -> list[tuple[str, dict]]:
-    """RUNNABILITY: only an `active` pipeline is executable. Run only for a
-    pipeline about to run — an authoring tool validating a draft skips it."""
-    findings: list[tuple[str, dict]] = []
-    for doc in documents["pipeline"]:
-        status = _content(doc).get("status")
-        if status != "active":
-            findings.append((doc.key, finding(
-                rule="RULE-PIPE-019",
-                message_id="pipeline-not-active", kind="fail", path="/status",
-                message=f"pipeline status is {status!r}; only 'active' pipelines are runnable.",
-            )))
-    return findings
 
 
 def _check_pipeline_active_gate(documents: _Documents) -> list[tuple[str, dict]]:
@@ -588,7 +573,7 @@ def _bundle_documents(bundle: dict, pipeline: dict) -> dict[str, tuple[_Doc, ...
     }
 
 
-def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> list[dict]:
+def validate_pipeline_bundle(bundle: Any) -> list[dict]:
     """Validate referential integrity across an assembled pipeline bundle.
 
     `bundle` is a mapping of the already-parsed documents:
@@ -598,13 +583,9 @@ def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> l
     a list of findings (empty == referentially sound); every referential defect is
     error severity.
 
-    `require_runnable` (default True) additionally gates RUNNABILITY: the pipeline
-    must be `status='active'` with at least one referenced stream that is itself
-    runnable — the check an executor needs. An authoring tool validating a **draft**
-    bundle passes `require_runnable=False` to get the referential checks WITHOUT the
-    active-status gate (a draft is expected not to be active, not a defect); the
-    always-checked referential rules — including that the bundle names a
-    `pipeline_id` — still apply.
+    An `active` pipeline is additionally held to carrying a runnable stream; a
+    pipeline in any other status is not, so a draft answers on its references
+    alone.
     """
     if not isinstance(bundle, dict):
         # No rule to name: this rejects before any referential check — the ones
@@ -635,9 +616,8 @@ def validate_pipeline_bundle(bundle: Any, *, require_runnable: bool = True) -> l
         _check_connection_connector_refs,
         _check_connection_scoped_endpoints,
         _check_endpoint_ids_unique,
+        _check_pipeline_active_gate,
     ]
-    if require_runnable:
-        checks += [_check_pipeline_active, _check_pipeline_active_gate]
     return [{**f, "path": key + f["path"]} for check in checks for key, f in check(documents)]
 
 

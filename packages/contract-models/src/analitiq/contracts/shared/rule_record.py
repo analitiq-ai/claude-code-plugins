@@ -69,7 +69,9 @@ SEVERITIES = ("error", "warning", "info")
 #: not the opposite of one thing. `draft` is written down but not yet in force;
 #: `deprecated` is still in force and on its way out, so prose citing it still
 #: resolves while authors are moved off it; `retired` no longer binds and its
-#: record survives only to keep the id from being reused.
+#: record survives to point that prose at the id that replaced it. An
+#: obligation withdrawn with nothing replacing it has no successor to name, so
+#: it leaves no record and its id is held by `RETIRED_WITHOUT_A_RECORD`.
 STATUSES = ("draft", "active", "deprecated", "retired")
 
 #: The statuses under which a record binds an author — `active` and
@@ -179,12 +181,17 @@ ENFORCEMENT_LOCATIONS = (
     UNENFORCED_LOCATION,
 )
 
-#: Ids retired before the registry had files, so no record on disk remembers
-#: them. A live record normally carries `status: retired` and guards its own id;
-#: these have nothing to carry it, and an id is never reissued — it appears in
-#: findings and archived diagnostics, where reuse silently re-points every
-#: stored occurrence at a different rule.
-RETIRED_BEFORE_THE_REGISTRY = (
+#: Retired ids no record on disk remembers. A live record normally carries
+#: `status: retired` and guards its own id; these have nothing to carry it —
+#: either they predate the registry having files, or the obligation was
+#: withdrawn rather than superseded, so the record went with it. An id is never
+#: reissued: it appears in findings and archived diagnostics, where reuse
+#: silently re-points every stored occurrence at a different rule.
+RETIRED_WITHOUT_A_RECORD = (
+    # `only an `active` pipeline is runnable`, retired when the validator
+    # stopped deciding whether a pipeline may run. RULE-PIPE-014 keeps the half
+    # that grades what was authored, so nothing supersedes this one.
+    "RULE-PIPE-019",
     # `exactly one of expression or constant`, retired in 1.0.0rc19 when
     # `AssignmentValue` became a `kind`-discriminated union, so the union states
     # the rule and no validator enforces it.
@@ -444,7 +451,9 @@ class RuleRecord:
             self._fail(
                 "a retired rule names the id that replaced it — a retirement "
                 "with no successor leaves every prose site citing it with "
-                "nowhere to go"
+                "nowhere to go. An obligation withdrawn rather than replaced "
+                "takes the other route: delete this record and add its id to "
+                "RETIRED_WITHOUT_A_RECORD, which holds it against reissue"
             )
         if self.superseded_by == self.id:
             self._fail("a rule cannot supersede itself")

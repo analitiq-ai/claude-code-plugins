@@ -27,7 +27,7 @@ from analitiq.contracts.shared.rule_record import (
     IN_FORCE_STATUSES,
     MECHANISMS,
     OWNERS,
-    RETIRED_BEFORE_THE_REGISTRY,
+    RETIRED_WITHOUT_A_RECORD,
     SEVERITIES,
     SHAPE_TIER,
     SYMBOL_MECHANISMS,
@@ -70,7 +70,7 @@ def test_rule_ids_are_unique():
 def test_retired_rule_ids_are_not_reissued():
     """Uniqueness alone misses this — a retired id is free by definition."""
     live = {r.id for r in all_rules()}
-    reissued = sorted(set(RETIRED_BEFORE_THE_REGISTRY) & live)
+    reissued = sorted(set(RETIRED_WITHOUT_A_RECORD) & live)
     assert not reissued, (
         f"retired rule ids reissued: {reissued}. These appear in archived "
         "findings; give the new rule the next free number instead."
@@ -303,11 +303,6 @@ EXEMPT_MODEL_VALIDATORS = {
         "request argument, not an artifact obligation: a key at a secret location "
         "of the package holding it is a malformed request refused at construction, "
         "which no artifact author can violate or a finding cite"
-    ),
-    ("analitiq.contracts.validation_requests", "ValidateWorkspaceRequest", "_the_pipeline_to_run_is_held"): (
-        "request argument, not an artifact obligation: naming a pipeline to run "
-        "that the request holds no document of is a malformed request refused at "
-        "construction, which no artifact author can violate or a finding cite"
     ),
     ("analitiq.contracts.shared.common", "DocumentPackage", "_located"): (
         "structural, not an obligation a record names: it is the runtime form of "

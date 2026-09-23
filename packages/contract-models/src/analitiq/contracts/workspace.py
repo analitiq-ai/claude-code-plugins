@@ -66,8 +66,3 @@ class Workspace(ParseOnly, RootModel[dict[str, Any]]):
             for directory, resource in _PACKAGE_DIRECTORIES.items()
             for secret in sorted(PACKAGE_MODELS[resource].SECRET_LOCATIONS)
         ]
-
-    @classmethod
-    def directory_patterns(cls, model: type[DocumentPackage]) -> list[str]:
-        """The patterns of the directories that hold a package of `model`."""
-        return [pattern for pattern, resource in _PACKAGE_DIRECTORIES.items() if PACKAGE_MODELS[resource] is model]

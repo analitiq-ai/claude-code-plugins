@@ -59,7 +59,7 @@ os.environ.setdefault("DOMAIN", "analitiq.ai")
 from analitiq.contracts.shared.rule_record import (  # noqa: E402
     ARTIFACT_KINDS,
     OWNERS,
-    RETIRED_BEFORE_THE_REGISTRY,
+    RETIRED_WITHOUT_A_RECORD,
     RULES_PATH,
     RuleRecord,
 )
@@ -120,10 +120,10 @@ def load_registry() -> list[RuleRecord]:
         if record.id in seen:
             problems.append(f"duplicate id {record.id}")
         seen[record.id] = record.id
-        if record.id in RETIRED_BEFORE_THE_REGISTRY:
+        if record.id in RETIRED_WITHOUT_A_RECORD:
             problems.append(
-                f"{record.id} was retired before the registry existed and must "
-                "never be reissued — it still appears in archived findings"
+                f"{record.id} was retired and must never be reissued — it "
+                "still appears in archived findings"
             )
     problems += _unresolved_validators(records)
     if problems:

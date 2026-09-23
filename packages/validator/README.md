@@ -44,11 +44,9 @@ any storage or on-disk layout:
 - every `scope='connection'` endpoint_ref resolves to a bundled endpoint document;
 - the bundle names a pipeline (has a `pipeline_id`).
 
-Referential integrity is separate from **runnability**. `require_runnable=True`
-(the default) additionally gates the pipeline on `status='active'` with at least
-one runnable stream — the check an executor needs. An authoring tool validating a
-**draft** bundle passes `require_runnable=False` to get the referential checks
-without the active-status gate.
+A pipeline whose `status` is `active` is additionally held to referencing at
+least one runnable stream. Which statuses a pipeline may carry is the pipeline
+model's answer, so no status is a finding of its own here.
 
 It does not assume the documents were already contract-validated, so a missing
 reference field (a connection naming no connector, a stream slot with no
@@ -124,8 +122,7 @@ findings = validate_pipeline_bundle(
         "connections": connection_docs,
         "connectors": connector_ids,          # the connector identities present
         "endpoints": connection_endpoint_docs,  # scope='connection', connection_id, endpoint_id
-    },
-    require_runnable=False,  # authoring a DRAFT bundle: referential checks, no active-status gate
+    }
 )
 if any(f["severity"] == "error" for f in findings):
     raise SystemExit(findings)
