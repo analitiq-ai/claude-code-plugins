@@ -15,7 +15,7 @@ module adds only what a single-document model cannot express:
 - **filename ↔ id** (`RULE-PKG-031`): an endpoint file must be named
   `{endpoint_id}.json`;
 - **endpoint id uniqueness** (`RULE-PKG-032`): each `endpoint_id` is unique
-  within the connector release;
+  within its package, a connector's or a connection's;
 - **endpoint id ↔ locator** (`RULE-ENDP-046`/`RULE-DBEP-011`): an `endpoint_id`
   equals the handle derived from its locator — an API id from its
   `operations.*.request.path` (lowercase, `__` between path levels, path-params
