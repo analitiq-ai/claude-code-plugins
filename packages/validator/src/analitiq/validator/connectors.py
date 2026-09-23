@@ -48,7 +48,7 @@ import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePath, PurePosixPath
-from typing import Any, Callable, Iterator, Literal, Mapping, TypeVar
+from typing import Any, Callable, Iterator, Mapping, TypeVar
 
 from ._core import (
     _Doc,
@@ -1088,25 +1088,18 @@ def _load_json_sibling(path: Location, *, message_id: str) -> tuple[_Sibling, li
         rule=None, message_id=message_id, kind="fail", path="", message=_unread(path, sibling))]
 
 
-def type_map_findings(
-    doc: Any, scope: Literal["connector", "connection"] = "connector",
-) -> list[dict]:
+def type_map_findings(doc: Any) -> list[dict]:
     """Validate a type-map document: model errors + advisory rule warnings for
-    each direction's section + (write-vocabulary coverage). `doc` is nominally
+    each direction's section + write-vocabulary coverage. `doc` is nominally
     the whole `{$schema, read, write}` object — a malformed map can hand it any
     JSON-parseable value instead, which `_model_findings` rejects — and each
     advisory reads only the section of its own direction, because a rule's
     matcher is `native_type` under `read` and `arrow_type` under `write`.
 
-    `scope` decides the write vocabulary alone: a connector write section must
-    render all of it, a connection map is gap-only (`RULE-TMAP-018`) and would
-    earn the write-vocabulary finding (`RULE-TMAP-017`) forever."""
-    # An unsupported value would silently select the scope nobody asked for. It
-    # is the caller's own argument rather than anything the document did, so it
-    # raises past the guard instead of arriving as a finding.
-    if scope not in ("connector", "connection"):
-        raise ValueError(f"scope must be 'connector' or 'connection', got {scope!r}")
-    return _graded_type_map(doc, renders_write_vocabulary=scope == "connector")
+    A map is graded by its kind alone, so a connection's gap-only map
+    (`RULE-TMAP-018`) earns the write-vocabulary warning (`RULE-TMAP-017`) as a
+    connector's does."""
+    return _graded_type_map(doc, renders_write_vocabulary=True)
 
 
 def _graded_type_map(doc: Any, *, renders_write_vocabulary: bool) -> list[dict]:

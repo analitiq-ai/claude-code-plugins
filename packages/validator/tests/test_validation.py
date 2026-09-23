@@ -1356,9 +1356,7 @@ def test_a_map_finding_names_the_file_it_was_read_from(tmp_path, validator, payl
 
 @pytest.mark.parametrize("kind", (*_DATABASE_KINDS, *_STORAGE_KINDS))
 def test_coverage_holds_a_connector_write_map_to_the_whole_vocabulary(tmp_path, kind, validator):
-    # The package route grades at connector scope: a connector that renders
-    # one Arrow family materializes nothing else, and the gap-only allowance
-    # belongs to a connection map filling in behind one.
+    # A connector that renders one Arrow family materializes nothing else.
     _plant_map(tmp_path, ("read", "write"))
     findings = validator.check_coverage(_min_connector(kind), tmp_path / "connector.json")
     assert "RULE-TMAP-017" in {f.get("rule") for f in findings}, findings
@@ -2285,8 +2283,8 @@ def test_type_map_findings_grades_each_section_as_its_direction(validator):
     # same rule is clean under one key and a defect under the other: the key a
     # rule list sits under is what decides the model it is measured against.
     rule = [{"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}]
-    assert not _errors(validator.type_map_findings(_type_map_doc(read=rule), scope="connection"))
-    errors = _errors(validator.type_map_findings(_type_map_doc(write=rule), scope="connection"))
+    assert not _errors(validator.type_map_findings(_type_map_doc(read=rule)))
+    errors = _errors(validator.type_map_findings(_type_map_doc(write=rule)))
     assert [(e["path"], e["message_id"]) for e in errors] == [
         ("/write/0", "write-exact-malformed-placeholder")], errors
 
@@ -2296,7 +2294,7 @@ def test_type_map_findings_points_each_advisory_into_its_section(validator):
     # `write`, so each section is deduplicated on its own matcher and every
     # warning points into the section it is about.
     doc = _type_map_doc(read=_read_rules() * 2, write=_write_rules() * 2)
-    duplicates = [f["path"] for f in validator.type_map_findings(doc, scope="connection")
+    duplicates = [f["path"] for f in validator.type_map_findings(doc)
                   if f["message_id"] == "duplicate-type-map-rule"]
     assert duplicates == ["/read/1", "/write/1"], duplicates
 
@@ -2306,38 +2304,8 @@ def test_type_map_findings_reads_no_section_as_the_other_direction(validator):
     # `native_type`, they are one native matched four times.
     doc = _type_map_doc(write=[{"match": "exact", "arrow_type": a, "native_type": "BIGINT"}
                                for a in ("Int8", "Int16", "Int32", "Int64")])
-    assert validator.type_map_findings(doc, scope="connection") == []
-
-
-def test_type_map_findings_scope_decides_the_write_vocabulary_alone(validator):
-    # the whole reason `scope` exists: a connector write map must render the
-    # canonical vocabulary, a connection map is gap-only and would earn
-    # RULE-TMAP-017 forever
-    gap_only = _type_map_doc(write=_write_rules())
-    at_connector = validator.type_map_findings(gap_only, scope="connector")
-    at_connection = validator.type_map_findings(gap_only, scope="connection")
-    assert [(f.get("rule"), f["path"]) for f in at_connector] == [("RULE-TMAP-017", "/write")], at_connector
-    assert at_connection == [], at_connection
-
-
-def test_type_map_findings_scope_does_not_reach_the_read_direction(validator):
-    # nothing about a read section differs by scope; a divergence here would
-    # mean `scope` had grown a second meaning
-    # The rule earns an advisory, so the equality has content: over a clean
-    # document both sides are empty and any scope-keyed filter passes.
-    doc = _type_map_doc(read=[{"match": "regex", "native_type": "^vector\\(", "arrow_type": "Utf8"}])
-    at_connector = validator.type_map_findings(doc, scope="connector")
-    assert at_connector, "the document must earn a finding or this asserts nothing"
-    assert at_connector == validator.type_map_findings(doc, scope="connection")
-
-
-@pytest.mark.parametrize("scope", ["Connection", None])
-def test_type_map_findings_rejects_its_own_bad_arguments(validator, scope):
-    # a typo'd scope would silently grade the document at the one nobody asked
-    # for. It is the caller's mistake, not the document's, so it raises past the
-    # crash guard instead of arriving as a finding about the map.
-    with pytest.raises(ValueError, match="scope must be"):
-        validator.type_map_findings(_type_map_doc(read=_read_rules()), scope=scope)
+    # The write-vocabulary warning is the only finding the section earns.
+    assert [f.get("rule") for f in validator.type_map_findings(doc)] == ["RULE-TMAP-017"]
 
 
 def test_type_map_findings_reports_its_own_crash_as_unchecked(validator, monkeypatch):

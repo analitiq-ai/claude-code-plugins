@@ -361,12 +361,8 @@ def measured_reachable_connectors_ids() -> set[str]:
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
             "type-map", path)["findings"]}
 
-        # RULE-TMAP-017 (write-vocabulary coverage) fires in the published
-        # validator on a CONNECTOR write map covering too little — reachable at that layer
-        # — but the adapter grades a connection map at connection scope, where
-        # the check does not apply, so this measures whether the id survives to
-        # the adapter's own output. It does not: excluded below by what this
-        # probe observes, not by name.
+        # RULE-TMAP-017 (write-vocabulary coverage): a write map covering too
+        # little, a connection's included.
         path = root / "write-map.json"
         path.write_text(json.dumps({
             "$schema": TYPE_MAP_SCHEMA_URL,
