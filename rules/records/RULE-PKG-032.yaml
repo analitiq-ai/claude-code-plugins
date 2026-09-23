@@ -6,7 +6,7 @@ tier: reference
 severity: error
 artifact_kinds: [connector-package]
 validator: "analitiq.validator.connectors::_duplicate_endpoint_id_findings"
-owners: [connector-plugin, engine]
+owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   The id is what a stream pins, and a release resolves it to one document, so
   two documents claiming it means every stream that pins it reads whichever the
