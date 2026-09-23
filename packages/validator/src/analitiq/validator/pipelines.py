@@ -534,14 +534,10 @@ def _connection_write_shadow_probes(connection_rules: list, connector_rules: lis
 
 def _check_connection_type_map_shadow(documents: _Documents) -> list[tuple[str, dict]]:
     """RULE-TMAP-018: a connection's write map must declare a rule only for an
-    Arrow type its connector's own write map does not already render. The
-    engine composes the connection's rules as primary over the connector's by
-    concatenating the two lists into one first-match list, so a rule the
-    connection restates does not sit harmlessly beside the connector's — it
-    silently overrides it for every stream on that connection. Silent when
-    the connector is unresolved (RULE-CONN-011's finding instead) or when
-    either side carries no write section — nothing to compare there, not a
-    violation."""
+    Arrow type its connector's own write map does not already render. Silent
+    when the connector is unresolved (RULE-CONN-011's finding instead) or
+    when either side carries no write section — nothing to compare there,
+    not a violation."""
     connector_write_rules = {
         connector.package_id: doc.content.get("write")
         for connector in documents["connector"]
