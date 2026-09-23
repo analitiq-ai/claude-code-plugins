@@ -479,7 +479,7 @@ def test_an_api_connector_package_without_endpoints_fails(validator):
 
 def test_an_endpoint_transport_ref_resolves_against_its_connector(validator):
     documents = _connector_package_documents()
-    key = next(k for k in documents if "/endpoints/" in k)
+    (key,) = [k for k in documents if "/endpoints/" in k]
     documents[key]["operations"]["read"]["request"]["transport_ref"] = "nowhere"
     result = validator.validate_package(_package_request("connector", documents))
     assert [f.get("rule") for f in result["findings"]] == ["RULE-ENDP-047"]
@@ -554,7 +554,7 @@ def test_a_crash_in_a_cross_document_check_costs_only_that_check(validator, monk
     def _explodes(documents):
         raise RuntimeError("boom")
 
-    check = next(c for c in document_set._CHECKS if c.run.__name__ == "_check_stream_refs")
+    (check,) = [c for c in document_set._CHECKS if c.run.__name__ == "_check_stream_refs"]
     crashed = [document_set._Check(_explodes, c.reads, c.gates_run) if c is check else c
                for c in document_set._CHECKS]
     monkeypatch.setattr(document_set, "_CHECKS", tuple(crashed))
