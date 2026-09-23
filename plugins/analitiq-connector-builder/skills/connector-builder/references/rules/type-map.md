@@ -52,7 +52,7 @@ than edited.
 | RULE-TMAP-008 | A write `exact` rule's arrow_type MUST hold against the cross-parameter bounds its Arrow family declares, and the native_type DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | validator | — |
 | RULE-TMAP-009 | A write `regex` rule's arrow_type matcher MUST compile under the RE2 regex dialect with any named capture spelled `(?<name>…)` under a name no other group carries, and the native_type DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | validator | — |
 | RULE-TMAP-011 | A type map MUST NOT carry a catch-all rule standing in for whatever the map's earlier-resolving rules leave uncovered. | `type-map` | error | — | — |
-| RULE-TMAP-017 | A connector's write map MUST render every Arrow type a source can hand its system, including the bare container markers an API source emits as literal Arrow types. | `type-map` | warning | validator | — |
+| RULE-TMAP-017 | A type map's write rules MUST render every Arrow type a source can hand its system, including the bare container markers an API source emits as literal Arrow types. | `type-map` | warning | validator | — |
 | RULE-TMAP-023 | A type map MUST carry a rule list under at least one of `read` or `write`. | `type-map` | error | validator | — |
 
 ## Coherence
