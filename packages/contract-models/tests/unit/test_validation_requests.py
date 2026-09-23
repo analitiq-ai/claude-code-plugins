@@ -20,7 +20,7 @@ from pydantic import ValidationError
 
 from analitiq.contracts.shared.common import DOCUMENT_KEY_MAX_LENGTH, DOCUMENT_TEXT_MAX_LENGTH
 from analitiq.contracts.validation_requests import (
-    MAX_DOCUMENTS,
+    MAX_PACKAGE_DOCUMENTS,
     DocumentSet,
     ValidatePackageRequest,
     ValidateSingleDocumentRequest,
@@ -119,9 +119,9 @@ def test_shared_name_prefix_is_not_a_directory_conflict():
 def test_directory_conflict_check_is_not_quadratic_in_key_depth():
     # Every key at the length ceiling and as deep as that allows, at the count
     # ceiling: a per-depth prefix rebuild takes seconds here.
-    width = len(str(MAX_DOCUMENTS))
+    width = len(str(MAX_PACKAGE_DOCUMENTS))
     depth = (DOCUMENT_KEY_MAX_LENGTH - width) // 2
-    documents = {"a/" * depth + f"{i:0{width}}": "" for i in range(MAX_DOCUMENTS)}
+    documents = {"a/" * depth + f"{i:0{width}}": "" for i in range(MAX_PACKAGE_DOCUMENTS)}
     assert {len(key) for key in documents} == {DOCUMENT_KEY_MAX_LENGTH}
     started = time.perf_counter()
     _validate(documents)
@@ -226,7 +226,7 @@ def test_a_location_is_secret_only_in_the_package_that_marks_it():
 
 
 def test_document_count_ceiling():
-    at_ceiling = {f"endpoints/{i}.json": "{}" for i in range(MAX_DOCUMENTS)}
+    at_ceiling = {f"endpoints/{i}.json": "{}" for i in range(MAX_PACKAGE_DOCUMENTS)}
     _validate(at_ceiling)
     _publish_validate(at_ceiling)
     over = at_ceiling | {"connector.json": "{}"}

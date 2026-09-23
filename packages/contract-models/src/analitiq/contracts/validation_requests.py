@@ -27,10 +27,12 @@ from analitiq.contracts.shared.common import (
 )
 from analitiq.contracts.workspace import PACKAGE_MODELS, Workspace
 
-# A coarse guard against an unbounded request, not a policy on package size:
-# set far above what a real connector or pipeline package needs, so exceeding
-# it is a request error rather than a large package.
-MAX_DOCUMENTS = 2000
+# Coarse guards against an unbounded request, not policies on size: each is set
+# far above what a real instance of its unit needs, so exceeding it is a request
+# error rather than a large package or workspace. A workspace carries every
+# package it references at once, so its guard is its own.
+MAX_PACKAGE_DOCUMENTS = 2000
+MAX_WORKSPACE_DOCUMENTS = 10_000
 
 DOCUMENT_KEY_PATTERN = rf"^{PATH_SEGMENT}(?:/{PATH_SEGMENT})*$"
 
@@ -47,7 +49,7 @@ class DocumentSet(
     RootModel[
         Annotated[
             dict[DocumentKey, DocumentText],
-            Field(max_length=MAX_DOCUMENTS, json_schema_extra=closed_true_end_keys),
+            Field(max_length=MAX_PACKAGE_DOCUMENTS, json_schema_extra=closed_true_end_keys),
         ]
     ],
 ):
@@ -62,7 +64,7 @@ class DocumentSet(
 
     @model_validator(mode="after")
     def _no_document_is_a_directory(self) -> DocumentSet:
-        # Every key is a file path in one package, so a key that is also a
+        # Every key is a file path in one tree, so a key that is also a
         # directory of another describes a tree no filesystem holds. Sorted as
         # segment tuples, a path's descendants follow it directly — nothing
         # else sorts between a tuple and its extensions — so comparing
@@ -75,6 +77,23 @@ class DocumentSet(
                     f"key {'/'.join(path)!r} names a document and is also a "
                     f"directory of key {'/'.join(following)!r}")
         return self
+
+
+class WorkspaceDocumentSet(DocumentSet):
+    """Authored documents spanning every package a workspace carries, keyed
+    by relative path from the workspace root, each value the document's file
+    text.
+
+    A key is a relative POSIX path with exactly one spelling per
+    document; the key pattern carries the grammar. A key that names a
+    document may not also be an ancestor directory of another key. The text
+    is opaque to this model.
+    """
+
+    root: Annotated[
+        dict[DocumentKey, DocumentText],
+        Field(max_length=MAX_WORKSPACE_DOCUMENTS, json_schema_extra=closed_true_end_keys),
+    ]
 
 
 #: Each package request's kind: the kind of the package's root document.
@@ -130,7 +149,7 @@ class ValidateWorkspaceRequest(StrictModel):
 
     model_config = ConfigDict(json_schema_extra=_publish_workspace_request)
 
-    documents: DocumentSet
+    documents: WorkspaceDocumentSet
     run_pipeline: Annotated[str, StringConstraints(pattern="|".join(_PIPELINE_DIRECTORIES))] | None = Field(
         None,
         description=(

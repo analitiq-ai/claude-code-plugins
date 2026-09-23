@@ -9,21 +9,30 @@ _CONTENT_IS_NOT_JUDGED_HERE = (
     "which this model does not judge; it gates only the request's shape"
 )
 
+_DOCUMENT_SET_SHAPE = (
+    "every key is typed DocumentKey, whose DOCUMENT_KEY_PATTERN admits "
+    "only `/`-separated segments that are non-empty, hold no NUL, and are "
+    "neither `.` nor `..`; the `_no_document_is_a_directory` model validator refuses a "
+    "key that is also a directory of another; each value is typed "
+    "DocumentText, a length-bounded string left unparsed"
+)
+_DOCUMENT_SET_CONTENT = (
+    "that each key is the path its document occupies and each value that "
+    "document's text is the caller's content, which this model does not judge"
+)
+
 PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="DocumentSet",
         prose_hash="f9a0d01efb9f",
-        structural=(
-            "every key is typed DocumentKey, whose DOCUMENT_KEY_PATTERN admits "
-            "only `/`-separated segments that are non-empty, hold no NUL, and are "
-            "neither `.` nor `..`; the `_no_document_is_a_directory` model validator refuses a "
-            "key that is also a directory of another; each value is typed "
-            "DocumentText, a length-bounded string left unparsed"
-        ),
-        waiver=(
-            "that each key is the path its document occupies and each value that "
-            "document's text is the caller's content, which this model does not judge"
-        ),
+        structural=_DOCUMENT_SET_SHAPE,
+        waiver=_DOCUMENT_SET_CONTENT,
+    ),
+    ProseObligation(
+        model="WorkspaceDocumentSet",
+        prose_hash="c927f707312e",
+        structural=_DOCUMENT_SET_SHAPE + ", inherited from DocumentSet",
+        waiver=_DOCUMENT_SET_CONTENT + ", nor that the keys span the workspace's packages",
     ),
     ProseObligation(
         model="ValidatePackageRequest",

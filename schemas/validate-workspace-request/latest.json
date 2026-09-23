@@ -1,9 +1,9 @@
 {
   "$defs": {
-    "DocumentSet": {
+    "WorkspaceDocumentSet": {
       "additionalProperties": false,
-      "description": "Authored documents keyed by relative path, each value the document's\nfile text. The request carrying the set names what a path is relative to.\n\nA key is a relative POSIX path with exactly one spelling per\ndocument; the key pattern carries the grammar. A key that names a\ndocument may not also be an ancestor directory of another key. The text\nis opaque to this model.",
-      "maxProperties": 2000,
+      "description": "Authored documents spanning every package a workspace carries, keyed\nby relative path from the workspace root, each value the document's file\ntext.\n\nA key is a relative POSIX path with exactly one spelling per\ndocument; the key pattern carries the grammar. A key that names a\ndocument may not also be an ancestor directory of another key. The text\nis opaque to this model.",
+      "maxProperties": 10000,
       "patternProperties": {
         "^(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+)(?:/(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+))*(?![\\s\\S])": {
           "maxLength": 500000,
@@ -13,7 +13,7 @@
       "propertyNames": {
         "maxLength": 1024
       },
-      "title": "DocumentSet",
+      "title": "WorkspaceDocumentSet",
       "type": "object"
     }
   },
@@ -23,7 +23,7 @@
   "description": "Public JSON Schema contract for a request to validate a workspace, supplied as its documents: each document's file text keyed by its relative path from the workspace root, the packages it holds located by the workspace schema. It may name one pipeline package the workspace holds as the pipeline to be run. The schema gates the request's shape only; the documents' content is not judged by it. Source of truth: analitiq.contracts.validation_requests.ValidateWorkspaceRequest (Pydantic).",
   "properties": {
     "documents": {
-      "$ref": "#/$defs/DocumentSet",
+      "$ref": "#/$defs/WorkspaceDocumentSet",
       "propertyNames": {
         "not": {
           "anyOf": [

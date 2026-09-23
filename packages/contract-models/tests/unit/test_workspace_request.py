@@ -15,7 +15,7 @@ import jsonschema
 import pytest
 from pydantic import ValidationError
 
-from analitiq.contracts.validation_requests import ValidateWorkspaceRequest
+from analitiq.contracts.validation_requests import MAX_WORKSPACE_DOCUMENTS, ValidateWorkspaceRequest
 
 PUBLISHED = json.loads(
     (Path(__file__).resolve().parents[4] / "schemas" / "validate-workspace-request"
@@ -95,3 +95,11 @@ def test_the_pipeline_to_run_is_one_the_request_holds():
     # JSON Schema cannot relate one field's value to another's keys.
     with pytest.raises(ValidationError, match=re.escape(repr("pipelines/billing/"))):
         ValidateWorkspaceRequest.model_validate({"documents": DOCUMENTS, "run_pipeline": "pipelines/billing/"})
+
+
+def test_document_count_ceiling():
+    """A workspace carries every package at once, so it is bounded by a
+    ceiling of its own, not a package's."""
+    at_ceiling = {f"connectors/c{i}/definition/endpoints/e.json": "{}" for i in range(MAX_WORKSPACE_DOCUMENTS)}
+    _accepted_by_both({"documents": at_ceiling})
+    _refused_by_both({"documents": at_ceiling | {"README.md": "{}"}})
