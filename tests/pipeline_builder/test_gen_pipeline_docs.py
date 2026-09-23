@@ -215,6 +215,37 @@ def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
     assert "RULE-TMAP-017" not in G.measured_reachable_connectors_ids()
 
 
+def test_bundle_reach_follows_references_across_modules_and_splits_off_the_run_gate():
+    """A rule is reachable through the bundle when the function holding its
+    finding call is, however many calls and module imports lie between; a
+    function the bundle never references is not, even in the same module."""
+    sources = {
+        "analitiq.validator.pipelines": (
+            "from .connectors import shared_check as shared\n"
+            "def validate_pipeline_bundle(bundle, *, require_runnable=True):\n"
+            "    checks = [local_check, shared]\n"
+            "    if require_runnable:\n"
+            "        checks += [gated_check]\n"
+            "def local_check(d):\n    return helper(d)\n"
+            "def helper(d):\n    return []\n"
+            "def gated_check(d):\n    return helper(d)\n"
+            "def unreferenced_check(d):\n    return []\n"
+        ),
+        "analitiq.validator.connectors": (
+            "def shared_check(d):\n    return inner(d)\n"
+            "def inner(d):\n    return []\n"
+        ),
+    }
+    always, gated = G._bundle_reach(sources)
+    assert always == {
+        "analitiq.validator.pipelines::local_check",
+        "analitiq.validator.pipelines::helper",
+        "analitiq.validator.connectors::shared_check",
+        "analitiq.validator.connectors::inner",
+    }
+    assert gated == {"analitiq.validator.pipelines::gated_check"}
+
+
 def test_pipeline_active_gate_is_excluded_but_active_stream_gate_is_not():
     """RULE-PIPE-019 (`_check_pipeline_active`) and RULE-PIPE-014
     (`_check_pipeline_active_gate`) are both computed as `require_runnable`-gated

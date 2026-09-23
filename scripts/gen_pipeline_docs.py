@@ -394,12 +394,80 @@ def measured_reachable_connectors_ids() -> set[str]:
     return {rule_id for rule_id in observed if rule_id is not None}
 
 
+_BUNDLE = "analitiq.validator.pipelines::validate_pipeline_bundle"
+
+
+def _validator_sources() -> dict[str, str]:
+    """Each `analitiq.validator` module's source, keyed by module name."""
+    root = REPO_ROOT / "packages" / "validator" / "src" / "analitiq" / "validator"
+    return {f"analitiq.validator.{path.stem}": path.read_text()
+            for path in root.glob("*.py") if path.stem != "__init__"}
+
+
+def _bundle_reach(sources: dict[str, str]) -> tuple[set[str], set[str]]:
+    """The functions `validate_pipeline_bundle` reaches by reference, as
+    `module::name` — the form a rule record's `validator` takes: those it
+    always reaches, and those it reaches only under `if require_runnable:`.
+
+    Followed through every call and relative import, because a record names
+    the function holding its finding call, which can sit behind a helper or in
+    another module; read from the AST, never from a list of names, so a check
+    the bundle stops calling stops counting."""
+    import ast
+
+    functions: dict[str, ast.FunctionDef] = {}
+    imported: dict[str, str] = {}
+    for module, text in sources.items():
+        package = module.rsplit(".", 1)[0]
+        for node in ast.parse(text).body:
+            if isinstance(node, ast.FunctionDef):
+                functions[f"{module}::{node.name}"] = node
+            elif isinstance(node, ast.ImportFrom) and node.level == 1 and node.module:
+                for alias in node.names:
+                    imported[f"{module}::{alias.asname or alias.name}"] = (
+                        f"{package}.{node.module}::{alias.name}")
+    if _BUNDLE not in functions:
+        raise RuntimeError(f"{_BUNDLE} no longer exists — this measurement has nothing to walk")
+
+    def referenced(module: str, nodes) -> set[str]:
+        found = set()
+        for node in nodes:
+            if isinstance(node, ast.Name):
+                symbol = f"{module}::{node.id}"
+                symbol = imported.get(symbol, symbol)
+                if symbol in functions:
+                    found.add(symbol)
+        return found
+
+    def closure(start: set[str]) -> set[str]:
+        reached, pending = set(), set(start)
+        while pending:
+            symbol = pending.pop()
+            if symbol not in reached:
+                reached.add(symbol)
+                pending |= referenced(symbol.split("::")[0], ast.walk(functions[symbol]))
+        return reached
+
+    bundle = functions[_BUNDLE]
+    module = _BUNDLE.split("::")[0]
+    under_gate = [
+        node
+        for branch in ast.walk(bundle)
+        if isinstance(branch, ast.If)
+        and isinstance(branch.test, ast.Name) and branch.test.id == "require_runnable"
+        for stmt in branch.body
+        for node in ast.walk(stmt)
+    ]
+    gated_ids = {id(node) for node in under_gate}
+    always = closure(referenced(module, (n for n in ast.walk(bundle) if id(n) not in gated_ids)))
+    always.discard(_BUNDLE)
+    return always, closure(referenced(module, under_gate)) - always
+
+
 def _require_runnable_gated_pipelines_ids() -> set[str]:
-    """Rule ids from `analitiq.validator.pipelines` whose only emitter runs
-    inside `validate_pipeline_bundle`'s `if require_runnable:` block — found
-    by parsing that function's own AST for calls under that condition, not by
-    naming the functions. `validate_pipeline_bundle` always runs when this
-    adapter validates a stitched pipeline, so every rule it can emit is
+    """Rule ids whose only emitter `validate_pipeline_bundle` reaches under its
+    `if require_runnable:` block. `validate_pipeline_bundle` always runs when
+    this adapter validates a stitched pipeline, so every rule it can emit is
     reachable UNLESS gating on `require_runnable` makes it structurally
     impossible — which is exactly the failure `measured_reachable_connectors_ids`
     already fixed on the connectors.py side of this same function, found here
@@ -407,32 +475,10 @@ def _require_runnable_gated_pipelines_ids() -> set[str]:
     this adapter's own `is_runnable_required` (`validate.py`) is true only when
     status IS 'active' — a rule and its own gate that can never both hold.
     """
-    import ast
-
-    tree = ast.parse((REPO_ROOT / "packages" / "validator" / "src" / "analitiq"
-                       / "validator" / "pipelines.py").read_text())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name == "validate_pipeline_bundle":
-            target = node
-            break
-    else:
-        raise RuntimeError(
-            "analitiq.validator.pipelines no longer defines validate_pipeline_bundle "
-            "— this measurement has nothing to walk"
-        )
-    gated_functions = {
-        call.func.id
-        for stmt in ast.walk(target)
-        if isinstance(stmt, ast.If)
-        and isinstance(stmt.test, ast.Name) and stmt.test.id == "require_runnable"
-        for call in ast.walk(stmt)
-        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
-    }
-
     from analitiq.contracts.shared.rules import all_rules
 
-    gated_symbols = {f"analitiq.validator.pipelines::{fn}" for fn in gated_functions}
-    return {rule.id for rule in all_rules() if rule.validator in gated_symbols}
+    _, gated = _bundle_reach(_validator_sources())
+    return {rule.id for rule in all_rules() if rule.validator in gated}
 
 
 def _measured_reachable_pipelines_ids() -> set[str]:
@@ -470,14 +516,13 @@ def render_validator_ids() -> str:
     from analitiq.contracts.shared.rules import all_rules
 
     reachable_connectors_ids = measured_reachable_connectors_ids()
-    gated_pipelines_ids = _require_runnable_gated_pipelines_ids()
-    reachable_gated_pipelines_ids = _measured_reachable_pipelines_ids() & gated_pipelines_ids
+    always_reached, _ = _bundle_reach(_validator_sources())
+    reachable_gated_pipelines_ids = (
+        _measured_reachable_pipelines_ids() & _require_runnable_gated_pipelines_ids())
     ids = sorted(
         rule.id for rule in all_rules()
-        if (
-            rule.validator_module == "analitiq.validator.pipelines"
-            and (rule.id not in gated_pipelines_ids or rule.id in reachable_gated_pipelines_ids)
-        )
+        if rule.validator in always_reached
+        or rule.id in reachable_gated_pipelines_ids
         or rule.id in reachable_connectors_ids
     )
     if not ids:
