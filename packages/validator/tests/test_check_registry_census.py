@@ -117,7 +117,7 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator._core::_unreadable_document_finding", "unreadable-document"): (
         "the document could not be read or parsed at all, before any kind "
         "was even identified"),
-    ("analitiq.validator.document_set::_graded_package", "package-root-missing"): (
+    ("analitiq.validator.document_set::_graded_request", "package-root-missing"): (
         "a structural precondition — the package carries no document at its "
         "root location — rejected before any package check could run"),
     ("analitiq.validator._core::validate_document_as", "check-crashed"): (

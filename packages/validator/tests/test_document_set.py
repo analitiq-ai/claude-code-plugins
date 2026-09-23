@@ -593,6 +593,16 @@ def test_a_connector_scoped_endpoint_must_be_in_the_connections_connector(valida
     assert result["passed"] is True
 
 
+
+def test_a_connector_scoped_endpoint_from_another_connector_is_unresolved(validator):
+    documents = _workspace_documents()
+    balances = copy.deepcopy(_WISE_TRANSFERS_ENDPOINT) | {"endpoint_id": "balances"}
+    documents["connectors/postgresql/definition/endpoints/balances.json"] = balances
+    documents[f"pipelines/{_PID}/streams/{_SID}.json"]["source"]["endpoint_ref"]["endpoint_id"] = "balances"
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "connector-endpoint-ref-unresolved") == [
+        f"pipelines/{_PID}/streams/{_SID}.json#/source/endpoint_ref"]
+
 def test_a_pipeline_must_find_its_connections(validator):
     documents = _workspace_documents()
     documents = {k: v for k, v in documents.items() if not k.startswith(f"connections/{_SRC}/")}
@@ -630,6 +640,28 @@ def test_an_unparseable_document_withholds_the_workspace_checks(validator):
     assert _at(result, "unreadable-document") == [f"connections/{_SRC}/connection.json#"]
     assert "endpoint-ref-unresolved" not in _ids(result)
 
+
+
+def test_a_workspace_is_graded_in_one_request_wide_order(validator):
+    documents = _workspace_documents()
+    del documents["connectors/wise/definition/connector.json"]
+    documents[f"connections/{_DST}/connection.json"] = {}
+    entry = documents["pipelines/manifest.json"]["pipelines"][0]
+    documents["pipelines/manifest.json"]["pipelines"].append(dict(entry))
+    result = validator.validate_workspace(_workspace_request(documents))
+    keys = [f["path"].split("#")[0] for f in result["findings"]]
+    assert keys[0] == "connectors/wise/definition/connector.json"
+    assert _ids(result)[0] == "package-root-missing"
+    assert keys[1:] == sorted(keys[1:])
+    assert {f"connections/{_DST}/connection.json", "pipelines/manifest.json"} <= set(keys[1:])
+
+
+def test_an_unparseable_document_withholds_every_packages_checks_in_a_workspace(validator):
+    documents = {k: json.dumps(v) for k, v in _workspace_documents().items()}
+    del documents[f"pipelines/{_PID}/streams/{_SID}.json"]
+    documents["connectors/wise/definition/endpoints/v3__gadgets.json"] = "{not json"
+    result = validator.validate_workspace(ValidateWorkspaceRequest(documents=documents))
+    assert _ids(result) == ["unreadable-document"]
 
 def test_an_unparseable_manifest_withholds_the_workspace_checks(validator):
     documents = {k: json.dumps(v) for k, v in _workspace_documents().items()}

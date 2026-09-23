@@ -219,40 +219,39 @@ def _graded(kind: str, key: str, package: str, text: str) -> tuple[_Doc | None, 
     return (None if unreadable else _Doc(key, package, content)), named
 
 
-class _GradedPackage(NamedTuple):
+class _GradedRequest(NamedTuple):
     findings: list[Finding]
-    documents: dict[str, list[_Doc]]
-    #: Whether its root is present and every located document parsed.
+    documents: dict[str, tuple[_Doc, ...]]
+    #: Whether every package has its root and every located document parsed.
     complete: bool
 
 
-def _graded_package(model: type[DocumentPackage], directory: str,
-                    texts: Mapping[str, str]) -> _GradedPackage:
-    """Each located document of one package, keyed within it, graded as the kind
-    its location gives it; `directory` is where the package sits in the request."""
-    findings: list[Finding] = []
-    documents: dict[str, list[_Doc]] = {}
-    complete = model.ROOT in texts
-    if not complete:
-        findings.append(qualified(finding(
+def _graded_request(texts: Mapping[str, str], packages: Mapping[str, type[DocumentPackage]],
+                    located: Mapping[str, tuple[str, str]]) -> _GradedRequest:
+    """Root presence for every package, keyed by the directory it sits in, then
+    each located document in key order; `located` gives each key its kind and
+    the directory of the package holding it."""
+    findings: list[Finding] = [
+        qualified(finding(
             message_id="package-root-missing", kind="fail", path="",
             message=f"a {model.ROOT_KIND} package carries its root document at {model.ROOT!r}; none is there."),
-            relative_reference(directory + model.ROOT)))
-    for inner in sorted(texts):
-        kind = model.kind_at(inner)
-        if kind is None:
-            continue
-        doc, graded = _graded(kind, directory + inner, directory, texts[inner])
+            relative_reference(directory + model.ROOT))
+        for directory, model in sorted(packages.items()) if directory + model.ROOT not in texts]
+    complete = not findings
+    documents: dict[str, list[_Doc]] = {}
+    for key in sorted(located):
+        kind, package = located[key]
+        doc, graded = _graded(kind, key, package, texts[key])
         findings += graded
         if doc is None:
             complete = False
         else:
             documents.setdefault(kind, []).append(doc)
-    return _GradedPackage(findings, documents, complete)
+    return _GradedRequest(findings, {kind: tuple(docs) for kind, docs in documents.items()}, complete)
 
 
-def _frozen(documents: Mapping[str, list[_Doc]]) -> dict[str, tuple[_Doc, ...]]:
-    return {kind: tuple(docs) for kind, docs in documents.items()}
+def _in_package(documents: _Documents, directory: str) -> _Documents:
+    return {kind: tuple(d for d in docs if d.package == directory) for kind, docs in documents.items()}
 
 
 def validate_single_document(
@@ -265,55 +264,44 @@ def validate_single_document(
 
 
 def validate_package(request: ValidatePackageRequest) -> ValidationEnvelope:
-    """Validate one package: each located document, then — where the root is
-    present and every located document parsed — the package checks."""
+    """Validate one package: its root presence, each located document, then —
+    where the root is present and every located document parsed — the package
+    checks."""
     model = PACKAGE_KINDS[request.package_kind]
-    graded = _graded_package(model, "", request.documents.root)
+    texts = request.documents.root
+    located = {key: (kind, "") for key in texts if (kind := model.kind_at(key)) is not None}
+    graded = _graded_request(texts, {"": model}, located)
     findings = list(graded.findings)
     if graded.complete:
-        findings += _check_findings(_package_checks(model), _frozen(graded.documents))
+        findings += _check_findings(_package_checks(model), graded.documents)
     return _envelope(findings)
 
 
 def validate_workspace(request: ValidateWorkspaceRequest) -> ValidationEnvelope:
-    """Validate a workspace: each package as `validate_package` does, each
-    document the workspace holds directly, then — where every package has its
-    root and every located document parsed — the workspace checks, and the run
-    checks over the pipeline `request.run_pipeline` names."""
-    packages: dict[str, tuple[type[DocumentPackage], dict[str, str]]] = {}
-    direct: list[str] = []
-    for key, text in request.documents.root.items():
-        located = Workspace.package_at(key)
-        if located is None:
-            direct.append(key)
-            continue
-        directory, model, inner = located
-        packages.setdefault(directory, (model, {}))[1][inner] = text
+    """Validate a workspace: every package's root presence, each located
+    document, then — where every root is present and every located document
+    parsed — each package's checks, the workspace checks, and the run checks
+    over the pipeline `request.run_pipeline` names."""
+    texts = request.documents.root
+    packages: dict[str, type[DocumentPackage]] = {}
+    located: dict[str, tuple[str, str]] = {}
+    for key in texts:
+        held = Workspace.package_at(key)
+        if held is None:
+            kind, directory = Workspace.kind_at(key), ""
+        else:
+            directory, model, inner = held
+            packages[directory] = model
+            kind = model.kind_at(inner)
+        if kind is not None:
+            located[key] = (kind, directory)
 
-    findings: list[Finding] = []
-    documents: dict[str, list[_Doc]] = {}
-    complete = True
-    for directory in sorted(packages):
-        model, texts = packages[directory]
-        graded = _graded_package(model, directory, texts)
-        findings += graded.findings
-        if graded.complete:
-            findings += _check_findings(_package_checks(model), _frozen(graded.documents))
-        complete = complete and graded.complete
-        for kind, docs in graded.documents.items():
-            documents.setdefault(kind, []).extend(docs)
-    for key in sorted(direct):
-        kind = Workspace.kind_at(key)
-        if kind is None:
-            continue
-        doc, graded = _graded(kind, key, "", request.documents.root[key])
-        findings += graded
-        complete = complete and doc is not None
-
-    if complete:
-        findings += _check_findings(_workspace_checks(), _frozen(documents))
+    graded = _graded_request(texts, packages, located)
+    findings = list(graded.findings)
+    if graded.complete:
+        for directory, model in sorted(packages.items()):
+            findings += _check_findings(_package_checks(model), _in_package(graded.documents, directory))
+        findings += _check_findings(_workspace_checks(), graded.documents)
         if request.run_pipeline is not None:
-            running = {kind: tuple(d for d in docs if d.package == request.run_pipeline)
-                       for kind, docs in documents.items()}
-            findings += _check_findings(_run_checks(), running)
+            findings += _check_findings(_run_checks(), _in_package(graded.documents, request.run_pipeline))
     return _envelope(findings)
