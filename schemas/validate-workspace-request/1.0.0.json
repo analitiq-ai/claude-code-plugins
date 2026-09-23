@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "WorkspaceDocumentSet": {
+      "additionalProperties": false,
+      "description": "Authored documents spanning every package a workspace carries, keyed\nby relative path from the workspace root, each value the document's file\ntext.\n\nA key is a relative POSIX path with exactly one spelling per\ndocument; the key pattern carries the grammar. A key that names a\ndocument may not also be an ancestor directory of another key. The text\nis opaque to this model.",
+      "maxProperties": 10000,
+      "patternProperties": {
+        "^(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+)(?:/(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+))*(?![\\s\\S])": {
+          "maxLength": 500000,
+          "type": "string"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 1024
+      },
+      "title": "WorkspaceDocumentSet",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.analitiq.ai/validate-workspace-request/1.0.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public JSON Schema contract for a request to validate a workspace, supplied as its documents: each document's file text keyed by its relative path from the workspace root, the packages it holds located by the workspace schema. It may name one pipeline package the workspace holds as the pipeline to be run. The schema gates the request's shape only; the documents' content is not judged by it. Source of truth: analitiq.contracts.validation_requests.ValidateWorkspaceRequest (Pydantic).",
+  "properties": {
+    "documents": {
+      "$ref": "#/$defs/WorkspaceDocumentSet",
+      "propertyNames": {
+        "not": {
+          "anyOf": [
+            {
+              "pattern": "^connections/(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+)/\\.secrets/credentials\\.json(?![\\s\\S])"
+            }
+          ]
+        }
+      }
+    },
+    "run_pipeline": {
+      "anyOf": [
+        {
+          "pattern": "^pipelines/(?:[^/.\\x00][^/\\x00]*|\\.[^/.\\x00][^/\\x00]*|\\.\\.[^/\\x00]+)/(?![\\s\\S])",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The directory, from the workspace root, of the pipeline package to be run. Absent when the workspace is validated as authored content only.",
+      "title": "Run Pipeline"
+    }
+  },
+  "required": [
+    "documents"
+  ],
+  "title": "Analitiq Validate Workspace Request",
+  "type": "object",
+  "version": "1.0.0"
+}

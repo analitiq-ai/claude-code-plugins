@@ -289,7 +289,7 @@ EXEMPT_MODEL_VALIDATORS = {
         "and passes a non-string straight through, so the declarative "
         "ISO_TS_PATTERN sees the normalized value and reports every rejection"
     ),
-    ("analitiq.contracts.validation_requests", "DocumentSet", "_no_document_is_a_directory"): (
+    ("analitiq.contracts.validation_requests", "_DocumentTree", "_no_document_is_a_directory"): (
         "request argument, not an artifact obligation: a key that is both a "
         "document and a directory is a malformed request refused at "
         "construction, which no artifact author can violate or a finding cite"
@@ -298,6 +298,16 @@ EXEMPT_MODEL_VALIDATORS = {
         "request argument, not an artifact obligation: a key at a secret location "
         "of the named package is a malformed request refused at construction, "
         "which no artifact author can violate or a finding cite"
+    ),
+    ("analitiq.contracts.validation_requests", "ValidateWorkspaceRequest", "_no_document_at_a_secret_location"): (
+        "request argument, not an artifact obligation: a key at a secret location "
+        "of the package holding it is a malformed request refused at construction, "
+        "which no artifact author can violate or a finding cite"
+    ),
+    ("analitiq.contracts.validation_requests", "ValidateWorkspaceRequest", "_the_pipeline_to_run_is_held"): (
+        "request argument, not an artifact obligation: naming a pipeline to run "
+        "that the request holds no document of is a malformed request refused at "
+        "construction, which no artifact author can violate or a finding cite"
     ),
     ("analitiq.contracts.shared.common", "DocumentPackage", "_located"): (
         "structural, not an obligation a record names: it is the runtime form of "

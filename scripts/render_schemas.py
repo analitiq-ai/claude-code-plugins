@@ -121,6 +121,7 @@ from analitiq.contracts.validation_requests import (  # noqa: E402
     DOCUMENT_SCHEMAS_PATH,
     ValidatePackageRequest,
     ValidateSingleDocumentRequest,
+    ValidateWorkspaceRequest,
 )
 SCHEMAS_ROOT = REPO_ROOT / "schemas"
 
@@ -1144,14 +1145,17 @@ RESOURCES: tuple[Resource, ...] = (
         title="Analitiq Validate Package Request",
         description=(
             "Public JSON Schema contract for a request to validate one package, "
-            "named by its published package schema and supplied as its documents: each document's file "
+            "named by the kind of its root document and supplied as its documents: each document's file "
             "text keyed by its relative path in the package. The schema gates the "
             "request's shape only; the documents' content is not judged by it. "
             "Source of truth: analitiq.contracts.validation_requests."
             "ValidatePackageRequest (Pydantic)."
         ),
         adapter=TypeAdapter(ValidatePackageRequest),
-        source_paths=(f"{_CONTRACTS_PREFIX}/validation_requests.py",),
+        source_paths=(
+            f"{_CONTRACTS_PREFIX}/validation_requests.py",
+            f"{_CONTRACTS_PREFIX}/workspace.py",
+        ),
     ),
     Resource(
         name="validate-single-document-request",
@@ -1168,6 +1172,25 @@ RESOURCES: tuple[Resource, ...] = (
         source_paths=(
             f"{_CONTRACTS_PREFIX}/validation_requests.py",
             f"{_CONTRACTS_PREFIX}/document_schemas.json",
+        ),
+    ),
+    Resource(
+        name="validate-workspace-request",
+        title="Analitiq Validate Workspace Request",
+        description=(
+            "Public JSON Schema contract for a request to validate a workspace, "
+            "supplied as its documents: each document's file text keyed by its "
+            "relative path from the workspace root, the packages it holds located "
+            "by the workspace schema. It may name one pipeline package the "
+            "workspace holds as the pipeline to be run. The schema gates the "
+            "request's shape only; the documents' content is not judged by it. "
+            "Source of truth: analitiq.contracts.validation_requests."
+            "ValidateWorkspaceRequest (Pydantic)."
+        ),
+        adapter=TypeAdapter(ValidateWorkspaceRequest),
+        source_paths=(
+            f"{_CONTRACTS_PREFIX}/validation_requests.py",
+            f"{_CONTRACTS_PREFIX}/workspace.py",
         ),
     ),
 )
@@ -1745,10 +1768,10 @@ def cmd_contracts_version(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
-# document_schemas.json — the single-document request's `entity` vocabulary
+# document_schemas.json — the single-document request's `document_kind` vocabulary
 # ---------------------------------------------------------------------------
 # Generated into the contract package rather than the schemas/ tree: the
-# request model loads it to build its `entity` Literal, and a model cannot read
+# request model loads it to build its `document_kind` Literal, and a model cannot read
 # RESOURCES itself, which lives in this script and imports the models. The
 # selection is a property of the models, so a resource becomes a label by
 # declaring `$schema` on its root model, never by being listed.
@@ -2525,7 +2548,7 @@ def main(argv: list[str] | None = None) -> int:
     p_ds = sub.add_parser(
         "document-schemas",
         help="render the contract package's document_schemas.json — the "
-        "single-document request's `entity` vocabulary, selected from RESOURCES",
+        "single-document request's `document_kind` vocabulary, selected from RESOURCES",
     )
     p_ds.add_argument(
         "--check",

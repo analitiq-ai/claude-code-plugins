@@ -17,7 +17,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.analitiq.ai/validate-package-request/latest.json",
+  "$id": "https://schemas.analitiq.ai/validate-package-request/4.0.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "allOf": [

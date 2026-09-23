@@ -21,7 +21,7 @@ package entry point precisely because the function carries the kind.
 
 **The request model is the argument gate.** A key outside the document-key
 grammar, a value that is not text, a key that is also a directory of another,
-a package past the document ceiling, an `entity` outside the published document
+a package past the document ceiling, a `document_kind` outside the published document
 schema names — each is a `pydantic.ValidationError` raised at construction, for
 an in-process caller and a remote one alike, so there is one gate rather than
 one per transport. `bytes` and `bytearray` holding UTF-8 pass that gate:
@@ -162,7 +162,7 @@ def validate_single_document(
         request: ValidateSingleDocumentRequest) -> ValidationEnvelope:
     """Validate one document supplied as its file text.
 
-    `request.entity` names the published document schema the caller says the
+    `request.document_kind` names the published document schema the caller says the
     text is written against. It is checked, not trusted: a document whose own
     content is inconsistent with the declared name is reported as an
     `entity-mismatch` finding rather than validated as whatever it resembles.
@@ -184,7 +184,7 @@ def validate_single_document(
     except _JSON_TEXT_REFUSALS as exc:
         return _envelope([_unreadable_document_finding(exc)])
 
-    mismatch = _entity_mismatch_findings(document, request.entity)
+    mismatch = _entity_mismatch_findings(document, request.document_kind)
     return _envelope(mismatch or validate_document(document))
 
 

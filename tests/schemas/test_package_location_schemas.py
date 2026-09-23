@@ -24,7 +24,7 @@ require_contract_models("analitiq.contracts", "render_schemas")
 
 import render_schemas  # noqa: E402
 from analitiq.contracts.shared.common import schema_url_for  # noqa: E402
-from analitiq.contracts.validation_requests import PACKAGE_MODELS  # noqa: E402
+from analitiq.contracts.workspace import PACKAGE_MODELS, Workspace  # noqa: E402
 
 # Per package: a sample key at each location and the schema it is written against,
 # the sample keys at a location that holds secret values, and keys that sit outside
@@ -182,6 +182,7 @@ def _root(resource: str) -> str:
 
 def test_the_package_models_are_the_registered_package_schemas():
     assert set(PACKAGE_MODELS) == set(PACKAGES) - {"workspace"}
+    assert set(PACKAGE_MODELS) == set(PACKAGES["workspace"]["located"].values()) - {"pipeline-manifest"}
     for name, model in PACKAGE_MODELS.items():
         assert render_schemas.get_resource(name).adapter._type is model  # skipcq: PYL-W0212
 
@@ -240,3 +241,39 @@ def test_a_secret_location_must_be_one_of_the_package_member_locations():
             ROOT_KIND = "connection"
             MEMBER_LOCATIONS = {r"^a\.json$": "credentials"}
             SECRET_LOCATIONS = frozenset({r"^b\.json$"})
+
+
+# A workspace key is a package directory followed by a key of that package, or
+# a document the workspace holds directly.
+_WORKSPACE_DIRECTORIES = {
+    directory: resource for directory, resource in PACKAGES["workspace"]["located"].items()
+    if directory.endswith("/")}
+
+
+@pytest.mark.parametrize("directory", sorted(_WORKSPACE_DIRECTORIES))
+def test_the_workspace_names_the_kind_at_each_package_location_and_none_outside(directory):
+    table = PACKAGES[_WORKSPACE_DIRECTORIES[directory]]
+    for key, kind in table["located"].items():
+        assert Workspace.kind_at(directory + key) == kind, key
+        assert Workspace.secret_at(directory + key) is (key in table.get("secret", ())), key
+    for key in table["outside"]:
+        assert Workspace.kind_at(directory + key) is None, key
+        assert Workspace.secret_at(directory + key) is False, key
+
+
+@pytest.mark.parametrize("directory", sorted(_WORKSPACE_DIRECTORIES))
+def test_the_workspace_splits_a_key_into_its_package_and_the_key_within_it(directory):
+    model = PACKAGE_MODELS[_WORKSPACE_DIRECTORIES[directory]]
+    assert Workspace.package_at(directory + model.ROOT) == (directory, model, model.ROOT)
+
+
+def test_the_workspace_names_the_documents_it_holds_directly_and_nothing_outside():
+    for key, kind in PACKAGES["workspace"]["located"].items():
+        if not key.endswith("/"):
+            assert Workspace.kind_at(key) == kind, key
+            assert Workspace.package_at(key) is None, key
+    for key in ("pipelines/manifest.json\n", "pipelines/orders", "connectors/postgres",
+                "vendor/pipelines/manifest.json", "vendor/connections/pg/connection.json",
+                "manifest.json", "README.md"):
+        assert Workspace.kind_at(key) is None, key
+        assert Workspace.package_at(key) is None, key
