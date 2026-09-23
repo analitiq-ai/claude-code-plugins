@@ -13,10 +13,12 @@ This module owns the parts that are independent of any particular artifact kind:
 - the KIND-VALIDATOR REGISTRY and `_dispatch()`/`validate_document()` driver — a
   per-kind module (e.g. `connectors`) contributes a `(detector, validator_fn)`
   pair via `register_kind()`; `_dispatch` consults the registry rather than
-  hard-coding any kind's branches, so a new kind is *register, done*. A kind
-  whose validity is its contract model plus the `$schema`-omission check
-  registers via `register_model_and_schema_kind()` instead of hand-writing
-  that combination;
+  hard-coding any kind's branches, so a new kind is *register, done*;
+- the DOCUMENT-VALIDATOR REGISTRY and `validate_document_as()` — each located
+  document kind's validator, reached by the kind a request names rather than
+  by detection. `register_document_kind()` registers one validator for both
+  routes where the path route adds nothing beside the document;
+- `_Doc`, one parsed document as a cross-document check receives it;
 - `_bounded()` — the one width a diagnostic borrowed from another library, or
   a document value it echoes, is clipped to; messages the contract models write
   are not clipped;
@@ -39,8 +41,8 @@ import argparse
 import contextlib
 import json
 import os
-from pathlib import Path
-from typing import Any, Callable, Iterator
+from pathlib import Path, PurePosixPath
+from typing import Any, Callable, Iterator, NamedTuple
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -70,6 +72,51 @@ _KIND_REGISTRY: list[tuple[Callable[[Any], bool], _Validator]] = []
 def register_kind(detector: Callable[[Any], bool], validator: _Validator) -> None:
     """Append a `(detector, validator_fn)` pair to the dispatch registry."""
     _KIND_REGISTRY.append((detector, validator))
+
+
+#: Each located document kind's validator, keyed by the published schema name a
+#: request uses for it. A validator takes the parsed document alone: what the
+#: path route reads beside a document is a cross-document check here.
+_DOCUMENT_VALIDATORS: dict[str, Callable[[Any], list[dict]]] = {}
+
+
+def register_document_validator(kind: str, validator: Callable[[Any], list[dict]]) -> None:
+    """Register the validator for documents of `kind`. Raises `ValueError` for a
+    kind already registered: two validators for one kind would leave which one
+    grades it to import order."""
+    if kind in _DOCUMENT_VALIDATORS:
+        raise ValueError(f"a document validator for {kind!r} is already registered")
+    _DOCUMENT_VALIDATORS[kind] = validator
+
+
+def register_document_kind(
+        kind: str, detector: Callable[[Any], bool], validator: Callable[[Any], list[dict]]) -> None:
+    """Register `validator` for documents of `kind` on both routes: named by a
+    request, and detected by `detector` on the path route, which for this kind
+    reads nothing beside the document."""
+    register_document_validator(kind, validator)
+    register_kind(detector, lambda doc, location=None: validator(doc))  # skipcq: PYL-W0613 — uniform registered-validator signature
+
+
+def validate_document_as(kind: str, doc: Any) -> list[dict]:
+    """Grade `doc` as a document of `kind`, the name a caller gave it, never
+    what its content resembles."""
+    return _run_guarded(_DOCUMENT_VALIDATORS[kind], doc, crash_label=f"{kind} document validation")
+
+
+class _Doc(NamedTuple):
+    """One parsed document as a cross-document check receives it."""
+
+    #: What a finding about the document is qualified by.
+    key: str
+    #: The directory of the package the document sits in, `""` outside one.
+    package: str
+    content: Any
+
+    @property
+    def package_id(self) -> str:
+        """The package's identity in a workspace: its directory's name."""
+        return PurePosixPath(self.package).name
 
 
 # ---------------------------------------------------------------------------
@@ -426,21 +473,6 @@ def _missing_schema_url_findings(doc: Any) -> list[dict]:
         path="/$schema",
         message="document declares no `$schema`; declare it with the published canonical URL for this family.",
     )]
-
-
-def register_model_and_schema_kind(detector: Callable[[Any], bool], adapter: TypeAdapter) -> None:
-    """Register a single-document kind whose entire validity is its contract model
-    plus the RULE-SHRD-003 `$schema`-omission check.
-
-    A kind with no further cross-file or referential checks needs only
-    `_model_findings(doc, adapter) + _missing_schema_url_findings(doc)` under the
-    per-kind `(doc, location)` signature. Packaging that here lets such a
-    module supply just its detector and adapter, so the combination is
-    defined once rather than reimplemented per kind.
-    """
-    def _validate(doc: Any, location: Location | None = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-        return _model_findings(doc, adapter) + _missing_schema_url_findings(doc)
-    register_kind(detector, _validate)
 
 
 # ---------------------------------------------------------------------------

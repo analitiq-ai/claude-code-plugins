@@ -23,25 +23,24 @@ Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
 pairs with the core dispatch registry — a new kind is a new module registering
 the same way, without touching `_core`. The public surface is re-exported here.
 
-`document_set` declares the path-free document-set API;
-`validate_pipeline_package` raises `NotImplementedError`. See that module's docstring and
-`__all__` below for what it contributes to this package's surface. Its entry
-points take the request models in `analitiq.contracts.validation_requests`,
-which own the document-set shape and are where a malformed argument is
-refused.
+`document_set` grades a document, a package or a workspace handed over in
+memory, graded as the kinds the request names. Its entry points take the
+request models in `analitiq.contracts.validation_requests`, which own the
+request shape and are where a malformed argument is refused. It is imported
+after the per-kind modules, whose checks it routes.
 """
 from ._core import finding, finding_costs_a_pass, main, validate_document
-from .document_set import (
-    Finding,
-    ValidationEnvelope,
-    validate_connector_package,
-    validate_pipeline_package,
-    validate_single_document,
-)
 from . import connectors  # noqa: F401  — imported for its self-registration side effect
 from . import pipelines  # noqa: F401  — imported for its self-registration side effect
 from . import connections  # noqa: F401  — imported for its self-registration side effect
 from . import streams  # noqa: F401  — imported for its self-registration side effect
+from .document_set import (
+    Finding,
+    ValidationEnvelope,
+    validate_package,
+    validate_single_document,
+    validate_workspace,
+)
 # The underscore names below are test-facing internals: packages/validator/tests
 # exercises them through the package root (see test_validation.py). Deliberately
 # NOT in __all__ — that would widen the published star-import surface.
@@ -76,9 +75,9 @@ __all__ = [
     "validate_document",
     "Finding",
     "ValidationEnvelope",
-    "validate_connector_package",
-    "validate_pipeline_package",
+    "validate_package",
     "validate_single_document",
+    "validate_workspace",
     "check_coverage",
     "endpoint_filename_findings",
     "type_map_findings",

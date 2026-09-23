@@ -6,20 +6,26 @@ generated from): `TypeAdapter(...).validate_python` enforces its structure *and*
 every cross-field rule (the storage-map / `secret_refs` scheme rules, the
 authored-top-level guard) offline, no schema fetch, no drift. There is no
 cross-file or referential check a connection document needs in isolation — its
-place in an assembled run is checked by the pipeline-bundle kind. The one check
+place among other documents is checked by `analitiq.validator.document_set` and
+the pipeline-bundle kind. The one check
 the model cannot carry is RULE-SHRD-003, which reports a `warning` — a severity
-no `@model_validator` can carry (`rules/SCHEMA.md`, `validator`) — so this kind
-registers a combined validator.
+no `@model_validator` can carry (`rules/SCHEMA.md`, `validator`) — so this kind's
+validator combines the two.
 
-At import this module registers its detector -> validator pair with the core
-dispatch registry, so `_core` never hard-codes a connection branch — a new kind
-is a new module.
+At import this module registers that validator with the core registries, for a
+connection named by a request and one detected on the path route, so `_core`
+never hard-codes a connection branch — a new kind is a new module.
 """
 from __future__ import annotations
 
 from typing import Any
 
-from ._core import contract_model_domain, register_model_and_schema_kind
+from ._core import (
+    _missing_schema_url_findings,
+    _model_findings,
+    contract_model_domain,
+    register_document_kind,
+)
 
 # Import the contract model under the shared DOMAIN guard (the model binds the
 # `$schema` host at import; see `contract_model_domain`).
@@ -44,4 +50,8 @@ def is_connection_doc(doc: Any) -> bool:
     )
 
 
-register_model_and_schema_kind(is_connection_doc, _CONNECTION_ADAPTER)
+def _validate_connection_document(doc: Any) -> list[dict]:
+    return _model_findings(doc, _CONNECTION_ADAPTER) + _missing_schema_url_findings(doc)
+
+
+register_document_kind("connection", is_connection_doc, _validate_connection_document)

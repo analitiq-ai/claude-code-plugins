@@ -774,7 +774,6 @@ def _p_pipeline_copied_default() -> list[dict]:
 def _staged_pipeline_bundle(
     status: str,
     mutate_stream: Callable[[dict], None] | None = None,
-    publish_connector_endpoints: bool = False,
 ) -> list[dict]:
     """The shipped examples laid out on disk as a bundle, graded at `status`.
 
@@ -787,14 +786,6 @@ def _staged_pipeline_bundle(
 
     `mutate_stream` runs after that repointing, so a probe can break exactly one
     cross-document agreement in a bundle that is otherwise the shipped set.
-
-    `publish_connector_endpoints` writes the source connector's endpoint set
-    under `connectors/<slug>/definition/endpoints/`, which is the only thing
-    that makes the plugin's `connector-endpoint-ref` check verify rather than
-    skip: it omits a connector whose endpoints are absent, because an unknown
-    set must not read as "no endpoints". The id published is the one the stream
-    example's source already names, read back rather than typed, so a probe
-    that mutates the ref still has a real endpoint to be measured against.
     """
     pipeline = json.loads(PIPELINE_EXAMPLE.read_text())
     stream = json.loads(STREAM_EXAMPLE.read_text())
@@ -807,7 +798,6 @@ def _staged_pipeline_bundle(
     destination_ref = stream["destinations"][0]["endpoint_ref"]
     destination_ref["endpoint_id"] = endpoint["endpoint_id"]
     destination_ref["database_object"] = endpoint["database_object"]
-    published = stream["source"]["endpoint_ref"]["endpoint_id"]
     if mutate_stream is not None:
         mutate_stream(stream)
 
@@ -828,12 +818,6 @@ def _staged_pipeline_bundle(
                      / "definition" / "endpoints")
         endpoints.mkdir(parents=True)
         (endpoints / f"{endpoint['endpoint_id']}.json").write_text(json.dumps(endpoint))
-        if publish_connector_endpoints:
-            published_dir = (root / "connectors" / source["connector_id"]
-                             / "definition" / "endpoints")
-            published_dir.mkdir(parents=True)
-            (published_dir / f"{published}.json").write_text(
-                json.dumps({"endpoint_id": published}))
         return _pipeline_adapter().diagnostics_for(
             "pipeline", document, bundle_root=root)["findings"]
 
@@ -872,17 +856,6 @@ def _unbacked_connection_endpoint(stream: dict) -> None:
         obj.get("catalog"), obj.get("schema"), obj["name"])
 
 
-def _near_miss_connector_endpoint(stream: dict) -> None:
-    """Misspell the connector endpoint the source names, by one character.
-
-    Derived from the id the connector publishes rather than written out, so the
-    probe states neither spelling and the closest-match suggestion has
-    something to find.
-    """
-    ref = stream["source"]["endpoint_ref"]
-    ref["endpoint_id"] = ref["endpoint_id"][:-1]
-
-
 def _p_stream_cross_document_unchecked_alone() -> list[dict]:
     """One stream document carrying both defects, graded as a stream document.
 
@@ -904,16 +877,6 @@ def _p_stream_connection_role_bundle() -> list[dict]:
 
 def _p_stream_connection_endpoint_bundle() -> list[dict]:
     return _staged_pipeline_bundle("draft", mutate_stream=_unbacked_connection_endpoint)
-
-
-def _p_connector_endpoint_ref_warned() -> list[dict]:
-    return _staged_pipeline_bundle(
-        "draft", mutate_stream=_near_miss_connector_endpoint,
-        publish_connector_endpoints=True)
-
-
-def _p_connector_endpoint_ref_skipped() -> list[dict]:
-    return _staged_pipeline_bundle("draft", mutate_stream=_near_miss_connector_endpoint)
 
 
 def _p_stream_filter_field_local() -> list[dict]:
@@ -1074,23 +1037,13 @@ PROBES: tuple[Probe, ...] = (
     # untouched document.
     Probe("stream-cross-document-unchecked-alone", "clean",
           _p_stream_cross_document_unchecked_alone,
-          forbid_re=r"connections\.source|bundled endpoint document"),
+          forbid_re=r"connections\.source|no matching endpoint document"),
     Probe("stream-connection-role-bundle-rejected", "error",
           _p_stream_connection_role_bundle,
           message_re=r"must match the pipeline's connections\.source"),
     Probe("stream-connection-endpoint-bundle-rejected", "error",
           _p_stream_connection_endpoint_bundle,
-          message_re=r"no matching bundled endpoint document"),
-    # The pair behind the endpoint-alignment warning: the same misspelled ref,
-    # with and without the connector's endpoints on disk. expect="clean" is
-    # what makes it a warning rather than a rejection, and require_re holds the
-    # suggestion in existence — an alignment the orchestrator offers a user is
-    # only offerable while the finding carries it.
-    Probe("connector-endpoint-ref-warned", "clean", _p_connector_endpoint_ref_warned,
-          require_re=r"Did you mean"),
-    Probe("connector-endpoint-ref-skipped-undownloaded", "clean",
-          _p_connector_endpoint_ref_skipped,
-          forbid_re=r"(?i)did you mean|published endpoints"),
+          message_re=r"no matching endpoint document"),
     Probe("stream-filter-field-unresolved-locally", "clean", _p_stream_filter_field_local,
           forbid_re=r"(?i)filter"),
     Probe("stream-selected-columns-unresolved-locally", "clean", _p_stream_selected_columns,

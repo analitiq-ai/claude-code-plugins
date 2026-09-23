@@ -117,13 +117,16 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator._core::_unreadable_document_finding", "unreadable-document"): (
         "the document could not be read or parsed at all, before any kind "
         "was even identified"),
-    ("analitiq.validator.document_set::_entity_mismatch_findings", "entity-mismatch"): (
-        "a structural precondition — the caller's declared entity disagrees "
-        "with, or nothing recognises, the document's own content — rejected "
-        "before any rule-specific check could run"),
-    ("analitiq.validator.document_set::validate_connector_package", "connector-document-missing"): (
-        "a structural precondition — the package carries no connector "
-        "document to grade — rejected before any rule-specific check could run"),
+    ("analitiq.validator.document_set::_graded_package", "package-root-missing"): (
+        "a structural precondition — the package carries no document at its "
+        "root location — rejected before any package check could run"),
+    ("analitiq.validator._core::validate_document_as", "check-crashed"): (
+        "grading one document as the kind a request named crashed, leaving "
+        "its model errors and every rule of that kind unevaluated together, "
+        "so the crash is attributable to no one of them"),
+    ("analitiq.validator.document_set::_check_findings", "check-crashed"): (
+        "a cross-document check crashed; a check may grade several rules, so "
+        "the crash is attributable to no one of them"),
     ("analitiq.validator._core::validate_document", "check-crashed"): (
         "top-level dispatch crashed before any kind was even identified, so "
         "the crash is not attributable to any one rule; a guarded check "
@@ -139,7 +142,7 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator.connectors::check_coverage", "coverage-check-skipped-no-path"): (
         "coverage needs a filesystem-anchored document path this call did "
         "not have"),
-    ("analitiq.validator.connectors::check_coverage", "coverage-check-skipped-bad-kind"): (
+    ("analitiq.validator.connectors::_unknown_kind_finding", "coverage-check-skipped-bad-kind"): (
         "the connector's kind is outside the closed enum the model already "
         "rejects, so coverage was never asked"),
     ("analitiq.validator.connectors::check_coverage", "endpoint-file-unreadable"): (

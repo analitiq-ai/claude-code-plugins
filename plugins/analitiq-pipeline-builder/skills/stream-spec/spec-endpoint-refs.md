@@ -12,7 +12,6 @@ each scope has its own shape and its own required fields, tabled below.
 - `connection_id`
 - Uniqueness
 - Cross-document consistency
-- Connector-side endpoint verification (`connector-endpoint-ref`)
 
 ## Prefer the ref discovery handed you
 
@@ -105,19 +104,3 @@ Destination `endpoint_ref`s must be unique within a single stream
 The connection roles (`RULE-STRM-033`) and connection-scoped endpoint
 resolution (`RULE-STRM-034`) are checked only with `--bundle-root`, since
 neither can be settled from the stream document alone.
-
-## Connector-side endpoint verification (`connector-endpoint-ref`)
-
-<!-- PROBE: connector-endpoint-ref-warned -->
-With `--bundle-root`, the plugin also checks each `scope: "connector"` ref
-against the connector's endpoint set on disk (`scripts/validate.py`, check id
-`connector-endpoint-ref`). It is a **warning**, carrying a closest-match
-alignment suggestion ("Did you mean `transfers`?"): the orchestrator surfaces
-it and, on the user's confirmation, aligns the stream's
-`endpoint_ref.endpoint_id` to the connector's endpoint name. The plugin never
-edits the connector — endpoint refs live only in streams, so alignment is
-always a stream edit.
-
-<!-- PROBE: connector-endpoint-ref-skipped-undownloaded -->
-A ref whose connector publishes no endpoints on disk is skipped, not warned — no
-warning is not proof the endpoint exists.

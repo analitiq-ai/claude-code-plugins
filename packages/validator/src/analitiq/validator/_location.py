@@ -1,23 +1,21 @@
 """Where a validated document sits, and what the checks may read beside it.
 
 A cross-file check reads a document's siblings through a `Location` — a key
-inside a `Tree` — never through the filesystem, so one implementation of each
-check serves a document found on disk and a package handed over as text.
+inside a `Tree` — never through the filesystem directly.
 Navigation (`parent`, `name`, joining a name) is lexical arithmetic on the key;
 every question a check asks about what is actually there goes to the tree.
 """
 from __future__ import annotations
 
 import errno
-import io
 import os
 import posixpath
 import stat
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from fnmatch import fnmatch, fnmatchcase
-from pathlib import Path, PurePath, PurePosixPath
-from typing import Iterable, Iterator, Mapping
+from fnmatch import fnmatch
+from pathlib import Path, PurePath
+from typing import Iterable, Iterator
 from urllib.parse import quote
 
 
@@ -114,45 +112,6 @@ def _mode(key: Path) -> int | None:
 DISK = DiskTree()
 
 
-class MemoryTree(Tree):
-    """A package handed over as text keyed by package-relative POSIX path.
-
-    Every key is a regular file, and a directory is every path some key sits
-    under — the package root included. The keys are those a `DocumentSet`
-    (`analitiq.contracts.validation_requests`) admits; this tree re-checks none
-    of them.
-    """
-
-    def __init__(self, texts: Mapping[str, str]) -> None:
-        # Read as a text-mode file is: `\r\n` and a lone `\r` become `\n`.
-        # A parse error quotes offsets into what it was handed, so a document
-        # read any other way is reported differently from the same file on disk.
-        self._texts = {PurePosixPath(key): io.StringIO(text, newline=None).read()
-                       for key, text in texts.items()}
-        self._dirs = {parent for key in self._texts for parent in key.parents}
-
-    def _entries(self) -> Iterator[PurePosixPath]:
-        yield from self._texts
-        yield from self._dirs
-
-    def is_file(self, key: PurePath) -> bool:
-        return key in self._texts
-
-    def is_dir(self, key: PurePath) -> bool:
-        return key in self._dirs
-
-    def read_text(self, key: PurePath) -> str:
-        return self._texts[key]
-
-    def glob(self, key: PurePath, pattern: str) -> list[PurePosixPath]:
-        return [entry for entry in self._entries()
-                if entry != key and entry.parent == key and fnmatchcase(entry.name, pattern)]
-
-    def rglob(self, key: PurePath, pattern: str) -> list[PurePosixPath]:
-        return [entry for entry in self._entries()
-                if key in entry.parents and fnmatchcase(entry.name, pattern)]
-
-
 @dataclass(frozen=True)
 class Location:
     """A key inside a tree: where one document sits, and the handle a check
@@ -197,14 +156,16 @@ class Location:
 
 
 def reference(target: Location, *, seen_from: Location) -> str:
-    """Where `target` sits, read from the directory holding `seen_from`: a
-    relative reference as RFC 3986 spells one.
+    """Where `target` sits, read from the directory holding `seen_from`."""
+    return relative_reference(
+        posixpath.relpath(target.key.as_posix(), seen_from.key.parent.as_posix()))
 
-    Percent-encoded, so a `#` in a name cannot end the reference early and a
-    `:` in its first segment cannot read as a scheme.
-    """
-    relative = posixpath.relpath(target.key.as_posix(), seen_from.key.parent.as_posix())
-    return quote(relative)
+
+def relative_reference(path: str) -> str:
+    """The POSIX `path` as the relative reference RFC 3986 spells it:
+    percent-encoded, so a `#` in a name cannot end the reference early and a
+    `:` in its first segment cannot read as a scheme."""
+    return quote(path)
 
 
 def _one_name(pattern: str) -> str:
