@@ -74,7 +74,7 @@ description is what an author reads, the waiver is what an auditor counts.
 
 `_RequestBase.transport_ref` is the worked example. Its NAME half —
 `transport_ref` resolving to a declared transport — is enforced cross-document
-by the validator's `endpoint-transport-ref` check. Its ORIGIN half — every URL
+by `RULE-ENDP-047`, checked by `analitiq-validator`. Its ORIGIN half — every URL
 a request produces landing on that transport's origin — is enforced by the
 engine at run time, never by this contract or by `analitiq-validator`, and the
 description says so rather than implying a guarantee it does not make.
