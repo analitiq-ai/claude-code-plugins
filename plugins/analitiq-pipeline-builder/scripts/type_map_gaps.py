@@ -160,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     from analitiq.validator._core import _JSON_READ_ERRORS
     try:
         raw = (Path(args.probes_file).read_bytes().decode("utf-8") if args.probes_file
-               else sys.stdin.read())
+               else sys.stdin.buffer.read().decode("utf-8"))
         probes = json.loads(raw)
     except _JSON_READ_ERRORS as exc:
         return _fail(f"cannot read probes: {exc}")
