@@ -9,7 +9,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="Workspace",
         prose_hash="8a44caeeaeb5",
         structural=(
-            "`_PACKAGE_LOCATIONS` pins each location to the published schema of "
+            "`_DOCUMENT_LOCATIONS` and `_PACKAGE_DIRECTORIES` pin each location to the published schema of "
             "the package or document at it, and `document_locations` publishes "
             "that table and refuses every other key"
         ),

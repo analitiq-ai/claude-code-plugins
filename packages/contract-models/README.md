@@ -52,7 +52,8 @@ The **validation request** contract: the arguments a validation of supplied
 documents takes.
 
 - `analitiq.contracts.validation_requests` — `DocumentSet`,
-  `ValidatePackageRequest`
+  `ValidateSingleDocumentRequest`, `ValidatePackageRequest`,
+  `ValidateWorkspaceRequest`
 
 Each is shape and rules only. Nothing here knows how Analitiq runs a pipeline,
 stores a run, or names a state internally — those live server-side and depend on

@@ -55,11 +55,11 @@ MALFORMED_KEYS = {
 
 def _validate(documents: dict) -> ValidatePackageRequest:
     return ValidatePackageRequest.model_validate(
-        {"package": "connector-package", "documents": documents})
+        {"package_kind": "connector", "documents": documents})
 
 
 def _publish_validate(documents: dict) -> None:
-    jsonschema.validate({"package": "connector-package", "documents": documents}, PUBLISHED_SCHEMA)
+    jsonschema.validate({"package_kind": "connector", "documents": documents}, PUBLISHED_SCHEMA)
 
 
 def test_accepts_relative_posix_keys():
@@ -132,7 +132,7 @@ def test_directory_conflict_check_is_not_quadratic_in_key_depth():
 def test_rejects_non_string_value(value):
     with pytest.raises(ValidationError):
         ValidatePackageRequest.model_validate_json(
-            f'{{"package": "connector-package", "documents": {{"connector.json": {value}}}}}')
+            f'{{"package_kind": "connector", "documents": {{"connector.json": {value}}}}}')
 
 
 @pytest.mark.parametrize("cast", [bytes, bytearray])
@@ -147,10 +147,10 @@ def test_bytes_like_value_is_coerced_to_text_with_its_byte_order_mark_intact(cas
     """
     text = "\ufeff{}"
     request = ValidatePackageRequest(
-        package="connector-package", documents={"connector.json": cast(text.encode())})
+        package_kind="connector", documents={"connector.json": cast(text.encode())})
     assert request.documents.root["connector.json"] == text
 
-    single = ValidateSingleDocumentRequest(document=cast(b"{}"), entity="connector")
+    single = ValidateSingleDocumentRequest(document=cast(b"{}"), document_kind="connector")
     assert single.document == "{}"
 
 
@@ -161,36 +161,47 @@ def test_other_buffer_shapes_are_still_refused():
     """
     with pytest.raises(ValidationError):
         ValidatePackageRequest(
-            package="connector-package", documents={"connector.json": memoryview(b"{}")})
+            package_kind="connector", documents={"connector.json": memoryview(b"{}")})
 
 
 def test_rejects_unknown_field():
     with pytest.raises(ValidationError):
         ValidatePackageRequest.model_validate(
-            {"package": "connector-package", "documents": {}, "entity": "connector"})
+            {"package_kind": "connector", "documents": {}, "document_kind": "connector"})
 
 
 def test_rejects_missing_documents():
     with pytest.raises(ValidationError):
-        ValidatePackageRequest.model_validate({"package": "connector-package"})
+        ValidatePackageRequest.model_validate({"package_kind": "connector"})
 
 
-def test_rejects_missing_package():
+def test_rejects_missing_package_kind():
     with pytest.raises(ValidationError):
         ValidatePackageRequest.model_validate({"documents": {}})
 
 
-def test_package_is_a_published_package_name():
-    ValidatePackageRequest.model_validate({"package": "pipeline-package", "documents": {}})
+@pytest.mark.parametrize("kind", ["connector", "connection", "pipeline"])
+def test_package_kind_is_the_root_kind_of_a_package(kind):
+    request = {"package_kind": kind, "documents": {}}
+    ValidatePackageRequest.model_validate(request)
+    jsonschema.validate(request, PUBLISHED_SCHEMA)
+
+
+@pytest.mark.parametrize("kind", ["connector-package", "workspace", "stream", ""])
+def test_package_kind_outside_the_package_kinds_is_refused(kind):
+    request = {"package_kind": kind, "documents": {}}
     with pytest.raises(ValidationError):
-        ValidatePackageRequest.model_validate({"package": "connector", "documents": {}})
+        ValidatePackageRequest.model_validate(request)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(request, PUBLISHED_SCHEMA)
+
 
 
 SECRET_KEY = ".secrets/credentials.json"
 
 
 def test_a_key_at_a_secret_location_of_the_named_package_is_refused():
-    request = {"package": "connection-package", "documents": {"connection.json": "{}", SECRET_KEY: "{}"}}
+    request = {"package_kind": "connection", "documents": {"connection.json": "{}", SECRET_KEY: "{}"}}
     with pytest.raises(ValidationError, match=re.escape(repr(SECRET_KEY))):
         ValidatePackageRequest.model_validate(request)
     with pytest.raises(jsonschema.ValidationError):
@@ -198,7 +209,7 @@ def test_a_key_at_a_secret_location_of_the_named_package_is_refused():
 
 
 def test_a_connection_package_request_without_a_secret_key_is_accepted():
-    request = {"package": "connection-package", "documents": {
+    request = {"package_kind": "connection", "documents": {
         "connection.json": "{}",
         "definition/type-map.json": "{}",
         "x/.secrets/credentials.json": "{}",
@@ -209,7 +220,7 @@ def test_a_connection_package_request_without_a_secret_key_is_accepted():
 
 
 def test_a_location_is_secret_only_in_the_package_that_marks_it():
-    request = {"package": "connector-package", "documents": {SECRET_KEY: "{}"}}
+    request = {"package_kind": "connector", "documents": {SECRET_KEY: "{}"}}
     ValidatePackageRequest.model_validate(request)
     jsonschema.validate(request, PUBLISHED_SCHEMA)
 

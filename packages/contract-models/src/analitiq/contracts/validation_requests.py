@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from collections.abc import Callable, Iterable
 from typing import Annotated, Any, Literal
 
 from pydantic import ConfigDict, Field, RootModel, StringConstraints, model_validator
 
-from analitiq.contracts.connection_package import ConnectionPackage
-from analitiq.contracts.connector_package import ConnectorPackage
 from analitiq.contracts.pipeline_package import PipelinePackage
 from analitiq.contracts.shared.common import (
     DOCUMENT_KEY_MAX_LENGTH,
@@ -26,6 +25,7 @@ from analitiq.contracts.shared.common import (
     closed_true_end_keys,
     true_ended,
 )
+from analitiq.contracts.workspace import PACKAGE_MODELS, Workspace
 
 # A coarse guard against an unbounded request, not a policy on package size:
 # set far above what a real connector or pipeline package needs, so exceeding
@@ -51,10 +51,10 @@ class DocumentSet(
         ]
     ],
 ):
-    """Authored documents keyed by the relative path each occupies in its
-    package, each value the document's file text.
+    """Authored documents keyed by relative path, each value the document's
+    file text. The request carrying the set names what a path is relative to.
 
-    A key is a package-relative POSIX path with exactly one spelling per
+    A key is a relative POSIX path with exactly one spelling per
     document; the key pattern carries the grammar. A key that names a
     document may not also be an ancestor directory of another key. The text
     is opaque to this model.
@@ -77,38 +77,77 @@ class DocumentSet(
         return self
 
 
-#: Each published package schema's name, and the model it renders from.
-PACKAGE_MODELS: dict[str, type[DocumentPackage]] = {
-    "connector-package": ConnectorPackage,
-    "connection-package": ConnectionPackage,
-    "pipeline-package": PipelinePackage,
-}
+#: Each package request's kind: the kind of the package's root document.
+PACKAGE_KINDS: dict[str, type[DocumentPackage]] = {
+    model.ROOT_KIND: model for model in PACKAGE_MODELS.values()}
+
+
+def _refuses(patterns: list[str]) -> dict[str, Any]:
+    return {"not": {"anyOf": [{"pattern": true_ended(pattern)} for pattern in patterns]}}
 
 
 def _refuse_secret_keys(schema: dict[str, Any]) -> None:
     schema["allOf"] = [
-        {"if": {"properties": {"package": {"const": name}}},
-         "then": {"properties": {"documents": {"propertyNames": {
-             "not": {"anyOf": [{"pattern": true_ended(pattern)} for pattern in sorted(model.SECRET_LOCATIONS)]}}}}}}
-        for name, model in PACKAGE_MODELS.items() if model.SECRET_LOCATIONS
+        {"if": {"properties": {"package_kind": {"const": kind}}},
+         "then": {"properties": {"documents": {"propertyNames": _refuses(sorted(model.SECRET_LOCATIONS))}}}}
+        for kind, model in PACKAGE_KINDS.items() if model.SECRET_LOCATIONS
     ]
 
 
+_PIPELINE_DIRECTORIES = Workspace.directory_patterns(PipelinePackage)
+
+
+def _publish_workspace_request(schema: dict[str, Any]) -> None:
+    properties = schema["properties"]
+    properties["documents"]["propertyNames"] = _refuses(Workspace.secret_patterns())
+    (directory, _) = properties["run_pipeline"]["anyOf"]
+    directory["pattern"] = "|".join(map(true_ended, _PIPELINE_DIRECTORIES))
+
+
+def _no_secret_key(keys: Iterable[str], secret_at: Callable[[str], bool], where: str) -> None:
+    held = sorted(key for key in keys if secret_at(key))
+    if held:
+        raise ValueError(f"keys at a secret location of {where}: {', '.join(map(repr, held))}")
+
+
 class ValidatePackageRequest(StrictModel):
-    """A request to validate one package, supplied as its documents."""
+    """A request to validate one package, supplied as its documents keyed by path from the package's own directory."""
 
     model_config = ConfigDict(json_schema_extra=_refuse_secret_keys)
 
-    package: Literal[tuple(PACKAGE_MODELS)] = Field(  # type: ignore[valid-type]
-        ..., description="Name of the published package schema the documents form.")
+    package_kind: Literal[tuple(PACKAGE_KINDS)] = Field(  # type: ignore[valid-type]
+        ..., description="The kind of the package the documents form, which is the kind of its root document.")
     documents: DocumentSet
 
     @model_validator(mode="after")
     def _no_document_at_a_secret_location(self) -> ValidatePackageRequest:
-        package = PACKAGE_MODELS[self.package]
-        held = sorted(key for key in self.documents.root if package.secret_at(key))
-        if held:
-            raise ValueError(f"keys at a secret location of {self.package}: {', '.join(map(repr, held))}")
+        _no_secret_key(self.documents.root, PACKAGE_KINDS[self.package_kind].secret_at, f"a {self.package_kind} package")
+        return self
+
+
+class ValidateWorkspaceRequest(StrictModel):
+    """A request to validate a workspace, supplied as its documents keyed by path from the workspace root."""
+
+    model_config = ConfigDict(json_schema_extra=_publish_workspace_request)
+
+    documents: DocumentSet
+    run_pipeline: Annotated[str, StringConstraints(pattern="|".join(_PIPELINE_DIRECTORIES))] | None = Field(
+        None,
+        description=(
+            "The directory, from the workspace root, of the pipeline package to be run. "
+            "Absent when the workspace is validated as authored content only."),
+    )
+
+    @model_validator(mode="after")
+    def _no_document_at_a_secret_location(self) -> ValidateWorkspaceRequest:
+        _no_secret_key(self.documents.root, Workspace.secret_at, "its package")
+        return self
+
+    @model_validator(mode="after")
+    def _the_pipeline_to_run_is_held(self) -> ValidateWorkspaceRequest:
+        if self.run_pipeline is not None and not any(
+                key.startswith(self.run_pipeline) for key in self.documents.root):
+            raise ValueError(f"no document in the pipeline to run, {self.run_pipeline!r}")
         return self
 
 
@@ -126,7 +165,7 @@ class ValidateSingleDocumentRequest(StrictModel):
 
     document: DocumentText = Field(
         ..., description="The document's file text, unparsed.")
-    entity: Literal[DOCUMENT_SCHEMA_NAMES] = Field(  # type: ignore[valid-type]
+    document_kind: Literal[DOCUMENT_SCHEMA_NAMES] = Field(  # type: ignore[valid-type]
         ...,
         description="Name of the published schema the document is written against.",
     )
