@@ -48,10 +48,6 @@ def test_accepts_documents_keyed_from_the_workspace_root():
     assert _accepted_by_both({"documents": DOCUMENTS}).documents.root == DOCUMENTS
 
 
-def test_the_pipeline_to_run_is_optional():
-    assert ValidateWorkspaceRequest.model_validate({"documents": DOCUMENTS}).run_pipeline is None
-
-
 def test_the_documents_are_a_document_set():
     _refused_by_both({"documents": {"/pipelines/manifest.json": "{}"}})
 
@@ -71,30 +67,6 @@ def test_a_key_at_a_secret_location_of_its_package_is_refused():
 ], ids=["other-package", "workspace-root", "below-the-location"])
 def test_a_secret_location_is_secret_only_in_its_own_package(key):
     _accepted_by_both({"documents": DOCUMENTS | {key: "{}"}})
-
-
-def test_names_a_pipeline_it_holds_to_run():
-    request = {"documents": DOCUMENTS, "run_pipeline": "pipelines/orders/"}
-    assert _accepted_by_both(request).run_pipeline == "pipelines/orders/"
-
-
-@pytest.mark.parametrize("run_pipeline", [
-    "pipelines/orders",
-    "pipelines/orders/pipeline.json",
-    "pipelines/manifest.json",
-    "connections/pg/",
-    "pipelines/a/b/",
-    "pipelines/orders/\n",
-    "",
-])
-def test_the_pipeline_to_run_is_a_pipeline_directory(run_pipeline):
-    _refused_by_both({"documents": DOCUMENTS, "run_pipeline": run_pipeline})
-
-
-def test_the_pipeline_to_run_is_one_the_request_holds():
-    # JSON Schema cannot relate one field's value to another's keys.
-    with pytest.raises(ValidationError, match=re.escape(repr("pipelines/billing/"))):
-        ValidateWorkspaceRequest.model_validate({"documents": DOCUMENTS, "run_pipeline": "pipelines/billing/"})
 
 
 def test_document_count_ceiling():

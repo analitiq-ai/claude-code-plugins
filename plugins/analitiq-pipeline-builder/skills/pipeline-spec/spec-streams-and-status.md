@@ -42,8 +42,7 @@ value means operationally:
 An `active` pipeline with an empty `streams` list is rejected from the pipeline
 document alone; that at least one referenced stream is runnable needs
 `--bundle-root`. A **draft** pipeline is legitimately not yet runnable, so
-runnability is not checked for a draft (`require_runnable=False`); it is
-enforced only once the pipeline is `active`.
+runnability is enforced only once the pipeline is `active`.
 
 ## Authoring sequence
 

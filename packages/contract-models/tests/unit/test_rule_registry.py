@@ -304,11 +304,6 @@ EXEMPT_MODEL_VALIDATORS = {
         "of the package holding it is a malformed request refused at construction, "
         "which no artifact author can violate or a finding cite"
     ),
-    ("analitiq.contracts.validation_requests", "ValidateWorkspaceRequest", "_the_pipeline_to_run_is_held"): (
-        "request argument, not an artifact obligation: naming a pipeline to run "
-        "that the request holds no document of is a malformed request refused at "
-        "construction, which no artifact author can violate or a finding cite"
-    ),
     ("analitiq.contracts.shared.common", "DocumentPackage", "_located"): (
         "structural, not an obligation a record names: it is the runtime form of "
         "the package schema's own `required` and `additionalProperties: false`, "

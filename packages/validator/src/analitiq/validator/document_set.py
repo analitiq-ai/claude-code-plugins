@@ -65,7 +65,6 @@ from .pipelines import (
     _check_connection_version_conflicts,
     _check_connections_present,
     _check_connector_scoped_endpoints,
-    _check_pipeline_active,
     _check_pipeline_active_gate,
     _check_pipeline_id,
     _check_stream_connection_roles,
@@ -140,8 +139,6 @@ class _Check(NamedTuple):
 
     run: Callable[[_Documents], list[tuple[str, dict]]]
     reads: frozenset[str]
-    #: Whether it decides only that a pipeline may run, not that it is sound.
-    gates_run: bool = False
 
 
 def _reads(*kinds: str) -> frozenset[str]:
@@ -161,8 +158,7 @@ _CHECKS: tuple[_Check, ...] = (
     _Check(_check_stream_refs, _reads("pipeline", "stream")),
     _Check(_check_stream_parent_pipeline, _reads("pipeline", "stream")),
     _Check(_check_stream_connection_roles, _reads("pipeline", "stream")),
-    _Check(_check_pipeline_active, _reads("pipeline"), gates_run=True),
-    _Check(_check_pipeline_active_gate, _reads("pipeline", "stream"), gates_run=True),
+    _Check(_check_pipeline_active_gate, _reads("pipeline", "stream")),
     _Check(_check_connections_present, _reads("pipeline", "connection")),
     _Check(_check_connection_connector_refs, _reads("connection", "connector")),
     _Check(_check_connection_scoped_endpoints, _reads("stream", "database-endpoint")),
@@ -178,16 +174,12 @@ def _package_kinds(model: type[DocumentPackage]) -> frozenset[str]:
 
 
 def _package_checks(model: type[DocumentPackage]) -> list[_Check]:
-    return [c for c in _CHECKS if not c.gates_run and c.reads <= _package_kinds(model)]
+    return [c for c in _CHECKS if c.reads <= _package_kinds(model)]
 
 
 def _workspace_checks() -> list[_Check]:
-    return [c for c in _CHECKS if not c.gates_run
-            and not any(c.reads <= _package_kinds(m) for m in PACKAGE_MODELS.values())]
-
-
-def _run_checks() -> list[_Check]:
-    return [c for c in _CHECKS if c.gates_run]
+    return [c for c in _CHECKS
+            if not any(c.reads <= _package_kinds(m) for m in PACKAGE_MODELS.values())]
 
 
 def _documents_for(check: _Check, documents: _Documents) -> _Documents:
@@ -280,8 +272,7 @@ def validate_package(request: ValidatePackageRequest) -> ValidationEnvelope:
 def validate_workspace(request: ValidateWorkspaceRequest) -> ValidationEnvelope:
     """Validate a workspace: every package's root presence, each located
     document, then — where every root is present and every located document
-    parsed — each package's checks, the workspace checks, and the run checks
-    over the pipeline `request.run_pipeline` names."""
+    parsed — each package's checks and the workspace checks."""
     texts = request.documents.root
     packages: dict[str, type[DocumentPackage]] = {}
     located: dict[str, tuple[str, str]] = {}
@@ -302,6 +293,4 @@ def validate_workspace(request: ValidateWorkspaceRequest) -> ValidationEnvelope:
         for directory, model in sorted(packages.items()):
             findings += _check_findings(_package_checks(model), _in_package(graded.documents, directory))
         findings += _check_findings(_workspace_checks(), graded.documents)
-        if request.run_pipeline is not None:
-            findings += _check_findings(_run_checks(), _in_package(graded.documents, request.run_pipeline))
     return _envelope(findings)

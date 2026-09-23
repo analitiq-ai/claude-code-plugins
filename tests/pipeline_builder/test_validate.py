@@ -177,8 +177,8 @@ def test_valid_draft_bundle(tmp_path):
     doc = _build_bundle(tmp_path)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert diag["passed"], diag["findings"]
-    # a draft pipeline is not yet runnable by design; require_runnable=False suppresses
-    # the runnability findings entirely — no /pipeline/status finding is emitted
+    # a draft pipeline is not yet runnable by design, and the runnability check
+    # gates on the pipeline's own status — no /pipeline/status finding is emitted
     assert not any(f["path"] == "/pipeline/status" for f in diag["findings"]), diag["findings"]
     # a correctly-named endpoint yields no RULE-PKG-031 finding (error or notApplicable)
     assert not any(f.get("rule") == "RULE-PKG-031" for f in diag["findings"]), diag["findings"]
@@ -296,8 +296,8 @@ def test_active_pipeline_not_runnable_stays_error(tmp_path):
     pipe["status"] = "active"
     doc.write_text(json.dumps(pipe))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    # an active pipeline with no runnable stream is a real error — require_runnable is
-    # True for an 'active' pipeline, so the runnability gate stays blocking
+    # an active pipeline with no runnable stream is a real error — the runnability
+    # check gates on the pipeline's own status, so it stays blocking here
     assert not diag["passed"]
     assert any(f.get("rule") == "RULE-PIPE-014" and f.get("severity") == "error"
                for f in diag["findings"]), diag["findings"]
@@ -305,7 +305,7 @@ def test_active_pipeline_not_runnable_stays_error(tmp_path):
 
 def test_active_pipeline_runnable_bundle_passes(tmp_path):
     # positive active path: an active pipeline whose referenced stream is itself
-    # active is runnable, so require_runnable=True must accept it (no false reject)
+    # active is runnable, so the runnability check must accept it (no false reject)
     doc = _build_bundle(tmp_path)
     stream_path = tmp_path / "pipelines/p/streams/orders.json"
     stream = json.loads(stream_path.read_text())
@@ -1075,11 +1075,10 @@ def test_bundle_unrelated_malformed_stream_skips_referential_pass_without_crash_
 
 def test_pipeline_document_error_survives_non_dict_bundle_enrichment(tmp_path):
     # a pipeline document that is not even an object earns its precise
-    # contract-model finding at the single-document stage; require_runnable's
-    # own field access on that non-dict document must not crash and discard
-    # it — isinstance-guarded rather than raising AttributeError, so bundle
-    # enrichment runs through cleanly and the published validator gets to add
-    # its own precise finding too, instead of both being replaced by one
+    # contract-model finding at the single-document stage; bundle enrichment
+    # never reads that document's own fields — it only carries it into the
+    # bundle — so it runs through cleanly and the published validator gets to
+    # add its own precise finding too, instead of both being replaced by one
     # opaque adapter-crash
     doc = _write(tmp_path, "pipelines/p/pipeline.json", [1, 2, 3])
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)

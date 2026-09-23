@@ -17,7 +17,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.analitiq.ai/validate-workspace-request/latest.json",
+  "$id": "https://schemas.analitiq.ai/validate-workspace-request/2.0.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Public JSON Schema contract for a request to validate a workspace, supplied as its documents: each document's file text keyed by its relative path from the workspace root, the packages it holds located by the workspace schema. The schema gates the request's shape only; the documents' content is not judged by it. Source of truth: analitiq.contracts.validation_requests.ValidateWorkspaceRequest (Pydantic).",

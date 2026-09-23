@@ -94,18 +94,4 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
             "content, which this model does not judge"
         ),
     ),
-    ProseObligation(
-        model="ValidateWorkspaceRequest", field="run_pipeline",
-        prose_hash="2d452fe45ad6",
-        structural=(
-            "optional; its pattern is the workspace's pipeline-package directory "
-            "patterns, and the `_the_pipeline_to_run_is_held` model validator "
-            "refuses a directory no document key sits under"
-        ),
-        waiver=(
-            "that the named pipeline is the one to be run is the caller's intent, "
-            "and what validating as authored content means is the validator's "
-            "grading; neither is judged by this model"
-        ),
-    ),
 )

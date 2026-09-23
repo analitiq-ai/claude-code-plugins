@@ -14,7 +14,6 @@ from typing import Annotated, Any, Literal
 
 from pydantic import ConfigDict, Field, RootModel, StringConstraints, model_validator
 
-from analitiq.contracts.pipeline_package import PipelinePackage
 from analitiq.contracts.shared.common import (
     DOCUMENT_KEY_MAX_LENGTH,
     DocumentPackage,
@@ -116,14 +115,9 @@ def _refuse_secret_keys(schema: dict[str, Any]) -> None:
     ]
 
 
-_PIPELINE_DIRECTORIES = Workspace.directory_patterns(PipelinePackage)
-
-
 def _publish_workspace_request(schema: dict[str, Any]) -> None:
     properties = schema["properties"]
     properties["documents"]["propertyNames"] = _refuses(Workspace.secret_patterns())
-    (directory, _) = properties["run_pipeline"]["anyOf"]
-    directory["pattern"] = "|".join(map(true_ended, _PIPELINE_DIRECTORIES))
 
 
 def _no_secret_key(keys: Iterable[str], secret_at: Callable[[str], bool], where: str) -> None:
@@ -153,23 +147,10 @@ class ValidateWorkspaceRequest(StrictModel):
     model_config = ConfigDict(json_schema_extra=_publish_workspace_request)
 
     documents: WorkspaceDocumentSet
-    run_pipeline: Annotated[str, StringConstraints(pattern="|".join(_PIPELINE_DIRECTORIES))] | None = Field(
-        None,
-        description=(
-            "The directory, from the workspace root, of the pipeline package to be run. "
-            "Absent when the workspace is validated as authored content only."),
-    )
 
     @model_validator(mode="after")
     def _no_document_at_a_secret_location(self) -> ValidateWorkspaceRequest:
         _no_secret_key(self.documents.root, Workspace.secret_at, "its package")
-        return self
-
-    @model_validator(mode="after")
-    def _the_pipeline_to_run_is_held(self) -> ValidateWorkspaceRequest:
-        if self.run_pipeline is not None and not any(
-                key.startswith(self.run_pipeline) for key in self.documents.root):
-            raise ValueError(f"no document in the pipeline to run, {self.run_pipeline!r}")
         return self
 
 

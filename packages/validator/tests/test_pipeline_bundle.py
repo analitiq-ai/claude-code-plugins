@@ -94,20 +94,6 @@ def test_missing_pipeline_id_flagged(validator):
     )
 
 
-@pytest.mark.parametrize("status", ["draft", "inactive", None])
-def test_non_active_pipeline_flagged(validator, status):
-    bundle = _valid_bundle()
-    if status is None:
-        del bundle["pipeline"]["status"]
-    else:
-        bundle["pipeline"]["status"] = status
-    findings = validator.validate_pipeline_bundle(bundle)
-    assert any(
-        f["rule"] == "RULE-PIPE-019" and f["path"] == "/pipeline/status"
-        for f in findings
-    )
-
-
 def test_active_pipeline_with_no_stream_refs_flagged(validator):
     bundle = _valid_bundle()
     bundle["pipeline"]["streams"] = []
@@ -485,67 +471,20 @@ def test_bundle_without_pipeline_flagged(validator):
 def test_multiple_defects_all_reported(validator):
     """Findings accumulate — one bad bundle surfaces every violated rule at once."""
     bundle = _valid_bundle()
-    bundle["pipeline"]["status"] = "draft"
+    bundle["streams"][0]["status"] = "draft"
     bundle["connectors"] = []
     bundle["endpoints"] = []
     findings = validator.validate_pipeline_bundle(bundle)
-    assert {"RULE-PIPE-019", "RULE-CONN-011", "RULE-STRM-034"} <= _rules(findings)
+    assert {"RULE-PIPE-014", "RULE-CONN-011", "RULE-STRM-034"} <= _rules(findings)
 
 
-# --- referential integrity vs runnability (require_runnable) -----------------
-# An authoring tool produces DRAFT bundles: it wants the referential checks
-# WITHOUT the active-status runnability gate.
-
-def test_draft_bundle_fails_runnable_by_default(validator):
-    """The default (require_runnable=True) still flags a draft pipeline — the
-    executor's contract is unchanged."""
-    bundle = _valid_bundle()
-    bundle["pipeline"]["status"] = "draft"
-    findings = validator.validate_pipeline_bundle(bundle)
-    assert any(
-        f["rule"] == "RULE-PIPE-019" and f["path"] == "/pipeline/status"
-        for f in findings
-    )
-
-
-def test_draft_bundle_passes_without_runnable_gate(validator):
-    """A referentially-sound DRAFT bundle passes when runnability is not required —
-    the authoring use case (no hand-downgrading of the status finding)."""
-    bundle = _valid_bundle()
-    bundle["pipeline"]["status"] = "draft"
-    bundle["streams"][0]["status"] = "draft"
-    assert validator.validate_pipeline_bundle(bundle, require_runnable=False) == []
-
-
-def test_require_runnable_false_skips_active_gate(validator):
-    """The active-gate (an active pipeline needs a runnable stream) is a runnability
-    check too, so it must not fire when runnability is not required."""
-    bundle = _valid_bundle()
-    bundle["streams"][0]["status"] = "draft"  # no runnable stream
-    assert validator.validate_pipeline_bundle(bundle, require_runnable=False) == []
-    # ...but with the default it is flagged.
-    assert any(
-        f["path"] == "/pipeline/streams" for f in validator.validate_pipeline_bundle(bundle)
-    )
-
-
-def test_referential_checks_still_run_without_runnable_gate(validator):
-    """Dropping the runnability gate must NOT drop referential integrity: a broken
-    connector reference is still flagged on a draft bundle."""
-    bundle = _valid_bundle()
-    bundle["pipeline"]["status"] = "draft"
-    bundle["connectors"] = ["stripe"]  # drop snowflake
-    findings = validator.validate_pipeline_bundle(bundle, require_runnable=False)
-    assert any(f["rule"] == "RULE-CONN-011" for f in findings)
-
-
-def test_missing_pipeline_id_flagged_even_without_runnable(validator):
+def test_missing_pipeline_id_flagged_on_a_draft(validator):
     """`pipeline_id` presence is REFERENTIAL (stream parent refs resolve against
-    it), not runnability — it is checked regardless of require_runnable."""
+    it), so a pipeline in any status answers for it."""
     bundle = _valid_bundle()
     bundle["pipeline"]["status"] = "draft"
     del bundle["pipeline"]["pipeline_id"]
-    findings = validator.validate_pipeline_bundle(bundle, require_runnable=False)
+    findings = validator.validate_pipeline_bundle(bundle)
     assert any(
         f["rule"] == "RULE-PIPE-018" and f["path"] == "/pipeline/pipeline_id"
         for f in findings
