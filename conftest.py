@@ -23,6 +23,7 @@ roots go on the path rather than one package importing the other.
 """
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
 
@@ -35,8 +36,10 @@ REPO_ROOT = Path(__file__).resolve().parent
 # public host before the first import.
 os.environ.setdefault("DOMAIN", "analitiq.ai")
 
-for _src in (REPO_ROOT / "packages" / "contract-models" / "src",
-             REPO_ROOT / "packages" / "validator" / "src",
+PACKAGE_SRC_ROOTS = (REPO_ROOT / "packages" / "contract-models" / "src",
+                     REPO_ROOT / "packages" / "validator" / "src")
+
+for _src in (*PACKAGE_SRC_ROOTS,
              # `census/` holds this repo's catalogues of the contract's own surface —
              # maintenance machinery, deliberately outside `src/` so it stays
              # out of the wheel, and on the path because the suite reads it.
@@ -78,3 +81,26 @@ def refuse():
     yield set_mode
     for path, mode in reversed(changed):
         path.chmod(mode)
+
+
+@pytest.fixture(scope="session")
+def ascii_locale_env():
+    """Environment overrides that run a child Python on this repo's package
+    source with ASCII as its locale encoding: how a test stands in for a host
+    whose default encoding is not UTF-8, which the parent process cannot become.
+
+    The child is asked what it decodes with, so a platform that coerces the
+    locale anyway fails here rather than passing every test using this vacuously.
+    """
+    env = {
+        "LC_ALL": "C", "LANG": "C",
+        "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0",
+        "PYTHONPATH": os.pathsep.join(str(root) for root in PACKAGE_SRC_ROOTS),
+    }
+    probe = subprocess.run(
+        [sys.executable, "-c", "import locale; print(locale.getpreferredencoding(False))"],
+        capture_output=True, text=True, env={**os.environ, **env}, check=True)
+    encoding = probe.stdout.strip()
+    if "utf" in encoding.lower():
+        pytest.fail(f"the child still decodes with {encoding} under {env}")
+    return env

@@ -66,7 +66,10 @@ class DiskTree(Tree):
         return mode is not None and stat.S_ISDIR(mode)
 
     def read_text(self, key: Path) -> str:
-        return key.read_text()
+        # Not `Path.read_text`: it decodes with the host's locale encoding and
+        # translates newlines, so the parser would see other text than an
+        # in-memory caller hands over for the same file.
+        return key.read_bytes().decode("utf-8")
 
     # Not `Path.glob`/`Path.rglob`: they drop a directory the kernel will not
     # list, which reads it as empty. `fnmatch` applies the platform's case

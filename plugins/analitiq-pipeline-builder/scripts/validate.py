@@ -471,7 +471,7 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
 
 
 def _read_json(path: Path):
-    return json.loads(Path(path).read_text())
+    return json.loads(Path(path).read_bytes().decode("utf-8"))
 
 
 # ---------------------------------------------------------------------------
