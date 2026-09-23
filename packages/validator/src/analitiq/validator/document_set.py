@@ -62,6 +62,7 @@ from .connectors import (
 from .pipelines import (
     _check_connection_connector_refs,
     _check_connection_scoped_endpoints,
+    _check_connection_type_map_shadow,
     _check_connection_version_conflicts,
     _check_connections_present,
     _check_connector_scoped_endpoints,
@@ -165,6 +166,7 @@ _CHECKS: tuple[_Check, ...] = (
     _Check(_check_pipeline_active_gate, _reads("pipeline", "stream"), gates_run=True),
     _Check(_check_connections_present, _reads("pipeline", "connection")),
     _Check(_check_connection_connector_refs, _reads("connection", "connector")),
+    _Check(_check_connection_type_map_shadow, _reads("connection", "connector", "type-map")),
     _Check(_check_connection_scoped_endpoints, _reads("stream", "database-endpoint")),
     _Check(_check_connector_scoped_endpoints, _reads("stream", "connection", "api-endpoint")),
 )

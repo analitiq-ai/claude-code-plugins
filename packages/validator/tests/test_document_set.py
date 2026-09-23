@@ -617,6 +617,75 @@ def test_a_connection_must_find_its_connector(validator):
     assert _at(result, "connector-ref-unresolved") == [f"connections/{_DST}/connection.json#/connector_id"]
 
 
+def test_a_connection_write_rule_shadowing_its_connector_is_reported(validator):
+    """The connector's map now renders every family; the connection restates
+    one it already covers, which RULE-TMAP-018 reports on the connection's map."""
+    documents = _workspace_documents()
+    documents["connectors/postgresql/definition/type-map.json"]["write"] = [
+        {"match": "regex", "native_type": "TEXT", "arrow_type": ".*"}]
+    documents[f"connections/{_DST}/definition/type-map.json"] = _type_map_doc(
+        write=[{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}])
+    result = validator.validate_workspace(_workspace_request(documents))
+    findings = [f for f in result["findings"]
+                if f["message_id"] == "connection-write-map-shadows-connector"]
+    assert [f["path"] for f in findings] == [f"connections/{_DST}/definition/type-map.json#/write"]
+    assert findings[0]["rule"] == "RULE-TMAP-018"
+    assert result["passed"] is False
+
+
+def test_a_connection_write_rule_covering_a_genuine_gap_is_not_reported(validator):
+    """The connector's map covers only `Int64`; the connection covers `Utf8`,
+    a family its connector leaves unresolved — the case RULE-TMAP-018 protects."""
+    documents = _workspace_documents()
+    documents["connectors/postgresql/definition/type-map.json"]["write"] = [
+        {"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}]
+    documents[f"connections/{_DST}/definition/type-map.json"] = _type_map_doc(
+        write=[{"match": "exact", "native_type": "text", "arrow_type": "Utf8"}])
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert "connection-write-map-shadows-connector" not in _ids(result)
+
+
+def test_the_shadow_check_never_runs_for_a_bare_package_request(validator):
+    """`ConnectionPackage.LOCATIONS` never carries a `connector` kind, so the
+    check cannot run outside a workspace, where both packages are in hand."""
+    connection_documents = {
+        "connection.json": _CONN_PG,
+        "definition/type-map.json": _type_map_doc(
+            write=[{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}]),
+    }
+    result = validator.validate_package(_package_request("connection", connection_documents))
+    assert "connection-write-map-shadows-connector" not in _ids(result)
+
+    connector_documents = {
+        "definition/connector.json": _pg_connector(),
+        "definition/type-map.json": _type_map_doc(
+            write=[{"match": "regex", "native_type": "TEXT", "arrow_type": ".*"}]),
+    }
+    result = validator.validate_package(_package_request("connector", connector_documents))
+    assert "connection-write-map-shadows-connector" not in _ids(result)
+
+
+def test_only_the_shadowing_connection_is_reported_among_several(validator):
+    """Two connections against two different connectors: one shadows, one
+    covers a genuine gap. The `connector_id` pairing reports only the first."""
+    other_connection_id = "55555555-5555-4555-8555-555555555556"
+    documents = _workspace_documents()
+    documents["connectors/postgresql/definition/type-map.json"]["write"] = [
+        {"match": "regex", "native_type": "TEXT", "arrow_type": ".*"}]
+    documents[f"connections/{_DST}/definition/type-map.json"] = _type_map_doc(
+        write=[{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}])
+    documents["connectors/mysql/definition/connector.json"] = _pg_connector() | {"connector_id": "mysql"}
+    documents["connectors/mysql/definition/type-map.json"] = _type_map_doc(
+        write=[{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}])
+    documents[f"connections/{other_connection_id}/connection.json"] = (
+        _CONN_PG | {"connection_id": other_connection_id, "connector_id": "mysql"})
+    documents[f"connections/{other_connection_id}/definition/type-map.json"] = _type_map_doc(
+        write=[{"match": "exact", "native_type": "text", "arrow_type": "Utf8"}])
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "connection-write-map-shadows-connector") == [
+        f"connections/{_DST}/definition/type-map.json#/write"]
+
+
 def test_a_package_check_in_a_workspace_is_reported_once(validator):
     documents = _workspace_documents()
     del documents[f"pipelines/{_PID}/streams/{_SID}.json"]
