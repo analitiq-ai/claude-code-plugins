@@ -104,15 +104,6 @@ def test_map_without_rules_key_rejected(tmp_path):
         assert field in str(exc.value), exc.value
 
 
-def test_a_connection_write_map_is_not_held_to_a_connector_vocabulary(tmp_path, capsys):
-    # A connection map fills the gaps its connector left, so holding it to the
-    # whole Arrow vocabulary earns the coverage warning on every run. The
-    # authoring agent is told to add rules for families the connector already
-    # renders, and shadows them.
-    G.resolve("write", ["Utf8"], [_map(tmp_path, "type-map.json", CONNECTOR_WRITE, "write")])
-    assert capsys.readouterr().err == ""
-
-
 def test_an_advisory_reaches_the_operator_over_a_map_that_resolves(tmp_path, capsys):
     # The gap and the rule that was meant to fill it are reported together: a
     # duplicate is unreachable, so the probe it was written for comes back
@@ -278,22 +269,19 @@ def test_a_non_fatal_finding_reaches_stderr_beside_the_gap_it_explains(tmp_path,
     assert str(m) in captured.err and "/read/" in captured.err
 
 
-def test_connection_scoped_write_map_probes_without_the_full_vocabulary(tmp_path, monkeypatch):
-    # a connection-scoped map fills the gaps its connector map leaves, so the
-    # connector scope's write vocabulary is coverage it can never reach.
+def test_connection_scoped_write_map_probes_despite_the_vocabulary_warning(tmp_path, capsys):
+    # a connection-scoped map fills the gaps its connector map leaves, so it
+    # earns the write-vocabulary warning; a warning costs no pass, so the map
+    # still resolves and the warning reaches the operator beside the gaps.
     gap_only = [{"match": "exact", "arrow_type": "Duration(SECOND)", "native_type": "INTERVAL"}]
     m = _map(tmp_path, "w.json", gap_only, "write")
-    assert [f.get("rule") for f in
-            type_map_findings(json.loads(m.read_text()), scope="connector")] \
+    assert [f.get("rule") for f in type_map_findings(json.loads(m.read_text()))] \
         == ["RULE-TMAP-017"]
 
-    # the scope the prober grades at is what keeps such a map probeable, not the
-    # coverage finding's severity: hold every finding fatal and a map graded at
-    # the connector scope is refused, while this one still resolves.
-    monkeypatch.setattr("analitiq.validator.finding_costs_a_pass", lambda f: True)
     result = G.resolve("write", ["Duration(SECOND)", "Utf8"], [m])
     assert result["resolved"] == {"Duration(SECOND)": "INTERVAL", "Utf8": None}
     assert result["gaps"] == ["Utf8"]
+    assert str(m) in capsys.readouterr().err
 
 
 def test_a_rule_is_graded_as_the_section_it_sits_under(tmp_path):

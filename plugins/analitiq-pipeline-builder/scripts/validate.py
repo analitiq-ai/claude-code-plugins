@@ -28,10 +28,9 @@ entry point. This adapter routes each entity as follows:
     "unrecognized artifact" finding. Routing by the caller-supplied ``--entity``,
     which is already known here, guarantees the right model runs and yields
     per-field findings instead.
-  * ``type-map`` -> ``analitiq.validator.type_map_findings`` at
-    ``scope="connection"``. ``scope`` is how the gap-only nature of a connection
-    map (``RULE-TMAP-018``) reaches the published check, which otherwise holds a
-    write map to a connector's full vocabulary (``RULE-TMAP-017``).
+  * ``type-map`` -> ``analitiq.validator.type_map_findings``, which grades a
+    connection's map as it grades a connector's, so a gap-only connection map
+    (``RULE-TMAP-018``) earns the write-vocabulary warning (``RULE-TMAP-017``).
   * ``pipeline`` with ``--bundle-root`` -> additionally
     ``analitiq.validator.validate_pipeline_bundle`` over the on-disk bundle, for the
     cross-document referential integrity no single document can verify. A draft
@@ -174,15 +173,15 @@ def _endpoint_findings(doc, document_path: Path) -> list[dict]:
 def _type_map_findings(doc) -> list[dict]:
     """Grade a connection-scoped type-map document."""
     from analitiq.validator import type_map_findings
-    return type_map_findings(doc, scope="connection")
+    return type_map_findings(doc)
 
 
 def _connection_type_map_findings(conn_dir: Path, findings: list[dict]) -> None:
     """The published validator's loading of the type map beside one
     connection.json, each finding rooted at the entry it concerns (the
     `definition` directory itself for one about the directory), and the map it
-    read graded at connection scope. The loading cites no rule: the record it
-    cites beside a connector binds a connector package.
+    read graded. The loading cites no rule: the record it cites beside a
+    connector binds a connector package.
 
     Appends to the caller's list rather than returning one so that a crash
     grading the map costs only that map's finding, never the findings already

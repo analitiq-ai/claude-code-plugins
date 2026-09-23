@@ -319,12 +319,7 @@ def measured_reachable_connectors_ids() -> set[str]:
     names. That allowlist previously went stale in ways nothing caught: by
     naming a function this adapter's entities never route to at all (an
     api-endpoint/connector-package check — this function never constructs
-    such a document, so those checks are never even probed), and separately
-    by naming one the adapter never surfaces because of the scope it grades a
-    connection map at (`_type_map_findings` in `validate.py`) — probing entity
-    `type-map` with a document carrying a write section, through the
-    adapter's own `diagnostics_for`, is what proves that exclusion instead of
-    asserting it.
+    such a document, so those checks are never even probed).
     """
     import json
     import tempfile
@@ -361,12 +356,8 @@ def measured_reachable_connectors_ids() -> set[str]:
         observed |= {f.get("rule") for f in adapter.diagnostics_for(
             "type-map", path)["findings"]}
 
-        # RULE-TMAP-017 (write-vocabulary coverage) fires in the published
-        # validator on a CONNECTOR write map covering too little — reachable at that layer
-        # — but the adapter grades a connection map at connection scope, where
-        # the check does not apply, so this measures whether the id survives to
-        # the adapter's own output. It does not: excluded below by what this
-        # probe observes, not by name.
+        # RULE-TMAP-017 (write-vocabulary coverage): a write map covering too
+        # little, a connection's included.
         path = root / "write-map.json"
         path.write_text(json.dumps({
             "$schema": TYPE_MAP_SCHEMA_URL,

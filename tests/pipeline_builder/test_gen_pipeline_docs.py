@@ -27,7 +27,6 @@ import gen_pipeline_docs as G  # noqa: E402
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
-from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL  # noqa: E402
 
 
 def test_generated_blocks_in_sync():
@@ -187,32 +186,8 @@ def test_measured_reachable_connectors_ids_matches_expectation():
     measurement calls through the live dispatch, not by name, so there is
     nothing here for a rename to go stale against."""
     assert G.measured_reachable_connectors_ids() == {
-        "RULE-DBEP-011", "RULE-PKG-031", "RULE-TMAP-014", "RULE-TMAP-022",
+        "RULE-DBEP-011", "RULE-PKG-031", "RULE-TMAP-014", "RULE-TMAP-017", "RULE-TMAP-022",
     }
-
-
-def test_write_vocabulary_finding_is_reachable_but_filtered_by_the_adapter():
-    """RULE-TMAP-017 is bound to `connectors.py` and genuinely fires in the
-    published validator, but `measured_reachable_connectors_ids` must not
-    include it: the adapter grades a connection map at `scope="connection"`,
-    where the rule does not apply, so it never reaches this adapter's output.
-    This is the case a hand-typed
-    allowlist got wrong once (excluded by name, correctly, but with nothing
-    checking the exclusion stayed correct) — asserting both halves here means
-    a future change that stops filtering it, or starts filtering something
-    else the same way, has to update this test consciously rather than drift
-    past it."""
-    from analitiq.validator import validate_document
-
-    raw = validate_document(
-        {"$schema": TYPE_MAP_SCHEMA_URL,
-         "write": [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}]},
-        doc_path=Path("type-map.json"))
-    assert "RULE-TMAP-017" in {f.get("rule") for f in raw}, (
-        "probe stopped triggering the write-vocabulary check at the package "
-        "level — this test no longer measures the filter it claims to"
-    )
-    assert "RULE-TMAP-017" not in G.measured_reachable_connectors_ids()
 
 
 def test_bundle_reach_follows_references_across_modules_and_splits_off_the_run_gate():

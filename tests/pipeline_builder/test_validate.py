@@ -392,14 +392,13 @@ def test_valid_type_map_entity(tmp_path, doc):
 
 def test_type_map_entity_forwards_the_published_findings_verbatim(tmp_path):
     # the adapter holds no type-map judgment of its own: what the published
-    # grader says at connection scope IS the output. A reintroduced filter,
-    # re-shape or scope drift fails here.
+    # grader says IS the output. A reintroduced filter or re-shape fails here.
     from analitiq.validator import type_map_findings
-    # The map earns a finding at connection scope, so the equality has content:
-    # over a clean document both sides are empty and a reintroduced filter passes.
+    # The map earns a finding, so the equality has content: over a clean
+    # document both sides are empty and a reintroduced filter passes.
     doc = _tm(write=TYPE_MAP_WRITE + [{"match": "exact", "arrow_type": "Json",
                                        "native_type": "JSON"}])
-    published = type_map_findings(doc, scope="connection")
+    published = type_map_findings(doc)
     assert published, "the document must earn a finding or this asserts nothing"
     diag = V.diagnostics_for("type-map", _write(tmp_path, TYPE_MAP_FILENAME, doc))
     assert diag["findings"] == published
@@ -512,22 +511,21 @@ def test_type_map_entity_rejects_bare_array(tmp_path):
                for f in diag["findings"]), diag["findings"]
 
 
-def test_connection_write_section_is_not_held_to_the_connector_vocabulary(tmp_path):
-    # RULE-TMAP-017 presumes a connector's full-vocabulary write section; a
-    # gap-only connection map never satisfies it by design, so the adapter says
-    # which scope it holds rather than filtering the finding back out — for the
-    # entity run and the bundle alike
+def test_connection_write_section_is_held_to_the_write_vocabulary(tmp_path):
+    # A type map is graded by its kind alone, so a gap-only connection map
+    # earns RULE-TMAP-017 as a connector's would — a warning, so it costs no
+    # pass — for the entity run and the bundle alike.
     diag = V.diagnostics_for(
         "type-map", _write(tmp_path, TYPE_MAP_FILENAME, _tm(write=TYPE_MAP_WRITE)))
     assert diag["passed"], diag["findings"]
-    assert not any(f.get("rule") == "RULE-TMAP-017" for f in diag["findings"])
+    assert any(f.get("rule") == "RULE-TMAP-017" for f in diag["findings"]), diag["findings"]
 
     root = tmp_path / "bundle"
     doc = _build_bundle(root)
     _write(root, PG_MAP, _tm(write=TYPE_MAP_WRITE))
     diag = V.diagnostics_for("pipeline", doc, bundle_root=root)
     assert diag["passed"], diag["findings"]
-    assert not any(f.get("rule") == "RULE-TMAP-017" for f in diag["findings"])
+    assert any(f.get("rule") == "RULE-TMAP-017" for f in diag["findings"]), diag["findings"]
 
 
 # Text the parser refuses without raising a decode error: nesting deeper than

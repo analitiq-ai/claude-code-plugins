@@ -80,10 +80,7 @@ def _load_rules(path: Path, direction: str) -> list | None:
         doc = json.loads(path.read_text())
     except _JSON_READ_ERRORS as exc:
         raise ValueError(f"{path}: {exc}") from exc
-    # The connection scope is the one either kind of map can meet: a connection
-    # map covers only the gaps it fills, and a connector map rendering the whole
-    # vocabulary clears the weaker bar too.
-    findings = type_map_findings(doc, scope="connection")
+    findings = type_map_findings(doc)
     fatal, advisory = [], []
     for f in findings:
         (fatal if finding_costs_a_pass(f) else advisory).append(f)

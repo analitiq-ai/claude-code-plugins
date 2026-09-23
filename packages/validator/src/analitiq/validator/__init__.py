@@ -12,8 +12,8 @@ at `severity: "error"`.
 
 `validate_document` detects a document's kind from its own body, for a caller
 holding an unidentified document. A caller holding a type map grades it with
-`type_map_findings(doc, scope)`, where `scope` says whether it is a connector's
-map or a connection's. A caller holding a `definition/` *directory* calls
+`type_map_findings(doc)`, the same for a connector's map and a connection's. A
+caller holding a `definition/` *directory* calls
 `load_type_map(parent, rule=...)`, which reads the directory's
 `TYPE_MAP_FILENAME`; where each caller roots the
 findings is its own.
