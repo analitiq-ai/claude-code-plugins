@@ -71,7 +71,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-CTOR-045 | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. | `connector` | error | — |
 | RULE-ENDP-043 | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. | `api-endpoint` `database-endpoint` | error | — |
 | RULE-PKG-031 | An endpoint document MUST ship at `endpoints/{endpoint_id}.json` under the connector release or the connection that carries it, directly in that directory rather than in a subdirectory of it. | `connector-package` | error | validator |
-| RULE-PKG-032 | Every endpoint document in a connector release MUST declare an `endpoint_id` no other document in that release declares. | `connector-package` | error | validator |
+| RULE-PKG-032 | Every endpoint document in a connector or connection package MUST declare an `endpoint_id` no other document in that package declares. | `connector-package` `connection-package` | error | validator |
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 

@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Covers: every rule this plugin owns whose artifact kind has no file of its own in this set, plus the rules that bind every authored document. For a document of one of those kinds, this file is the whole of what this plugin's rules ask of it; a document whose kind has its own file needs only that file, even where a rule graded for it also appears here under another of its kinds.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 10 of the 20 below have no validator, so nothing rejects
+all hold: 10 of the 21 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **9** shape · **2** coherence · **3** reference · **4** process · **2** choice.
+In this file: **9** shape · **2** coherence · **4** reference · **4** process · **2** choice.
 
 ## Contents
 
@@ -70,6 +70,7 @@ both artifacts, which is more than you are authoring at the moment.
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
 | RULE-CONN-008 | A connection selecting a TLS mode that verifies the server certificate MUST also supply the CA material the connector declares an input for. | `connection` | error | — |
+| RULE-PKG-032 | Every endpoint document in a connector or connection package MUST declare an `endpoint_id` no other document in that package declares. | `connector-package` `connection-package` | error | validator |
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 

@@ -5753,11 +5753,12 @@
   },
   {
    "id": "RULE-PKG-032",
-   "statement": "Every endpoint document in a connector release MUST declare an `endpoint_id` no other document in that release declares.\n",
+   "statement": "Every endpoint document in a connector or connection package MUST declare an `endpoint_id` no other document in that package declares.\n",
    "tier": "reference",
    "severity": "error",
    "artifact_kinds": [
-    "connector-package"
+    "connector-package",
+    "connection-package"
    ],
    "validator": "analitiq.validator.connectors::_duplicate_endpoint_id_findings",
    "enforcement_location": null,
@@ -5771,7 +5772,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The id is what a stream pins, and a release resolves it to one document, so two documents claiming it means every stream that pins it reads whichever the release happened to key last. The filename rule hides this rather than catching it: identical ids collide on the filesystem and one file overwrites the other, so the duplicate is gone before anything can report it, and ids that differ only where the filename is not case-sensitive land as a filename mismatch pointing at the wrong problem. Stating uniqueness on the ids themselves is what makes a duplicate report as a duplicate.\n",
+   "rationale": "The id is what a stream pins, and a package resolves it to one document, so two documents claiming it means every stream that pins it reads whichever the package happened to key last. The filename rule hides this rather than catching it: identical ids collide on the filesystem and one file overwrites the other, so the duplicate is gone before anything can report it, and ids that differ only where the filename is not case-sensitive land as a filename mismatch pointing at the wrong problem. Stating uniqueness on the ids themselves is what makes a duplicate report as a duplicate.\n",
    "status": "active",
    "superseded_by": null
   },
