@@ -616,7 +616,7 @@ class Param(_EndpointModel):
                 )
         if self.location == "query" and self.style is not None and self.explode is not None:
             self._reject_unserializable_query_style(self.style, self.explode)
-        self._reject_unsatisfiable_bounds()
+        self._reject_non_finite_numbers_or_inverted_interval()
         return self
 
     def _reject_unserializable_query_style(self, style: str, explode: bool) -> None:
@@ -643,7 +643,7 @@ class Param(_EndpointModel):
                 f"{' and '.join(sorted(serializes))}, not a param typed {self.type!r}"
             )
 
-    def _reject_unsatisfiable_bounds(self) -> None:
+    def _reject_non_finite_numbers_or_inverted_interval(self) -> None:
         for name in ("minimum", "maximum"):
             bound = getattr(self, name)
             if bound is not None and not math.isfinite(bound):
