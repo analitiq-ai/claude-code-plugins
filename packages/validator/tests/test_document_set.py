@@ -731,6 +731,22 @@ def test_a_connection_regex_narrower_than_every_family_probe_still_shadows_a_con
         f"connections/{_DST}/definition/type-map.json#/write"]
 
 
+def test_a_connection_regex_matching_only_an_excluded_write_family_is_detected(validator):
+    """`Time32` is excluded from `_WRITE_VOCABULARY_PROBES` (RULE-TMAP-017's
+    coverage-warning pool), but the shadow check draws from the unfiltered
+    `_ALL_WRITE_FAMILY_PROBES` instead — this fails if that pool were swapped
+    for the filtered one, since neither side here declares an `exact` literal
+    the connector-literal widening could fall back on."""
+    documents = _workspace_documents()
+    documents["connectors/postgresql/definition/type-map.json"]["write"] = [
+        {"match": "regex", "arrow_type": r"^Time32\(.*\)$", "native_type": "TIME"}]
+    documents[f"connections/{_DST}/definition/type-map.json"] = _type_map_doc(
+        write=[{"match": "regex", "arrow_type": r"^Time32\(SECOND\)$", "native_type": "TIME(0)"}])
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "connection-write-map-shadows-connector") == [
+        f"connections/{_DST}/definition/type-map.json#/write"]
+
+
 def test_a_package_check_in_a_workspace_is_reported_once(validator):
     documents = _workspace_documents()
     del documents[f"pipelines/{_PID}/streams/{_SID}.json"]

@@ -517,7 +517,7 @@ def _connection_write_shadow_probes(connection_rules: list, connector_rules: lis
             continue
         if rule.get("match") == "exact":
             value = rule.get("arrow_type")
-            if isinstance(value, str):
+            if isinstance(value, str) and _first_match_render(value, [rule], "arrow_type", "native_type") is not None:
                 yield value
             continue
         candidates = list(_ALL_WRITE_FAMILY_PROBES)

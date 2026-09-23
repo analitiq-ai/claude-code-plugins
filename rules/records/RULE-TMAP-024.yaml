@@ -16,11 +16,10 @@ rationale: >
   — it replaces the connector's rendering for every source read through that
   connection. `RULE-TMAP-018` enforces this for the write direction by
   pairing a connection to its connector and resolving each authored write
-  rule against the connector's map first
-  (`analitiq.validator.pipelines::_check_connection_type_map_shadow`); the
-  read direction needs the identical resolution over native_type matchers,
-  and nothing here performs it yet. Catching a violation today means reading
-  a connection's read section and its connector's side by side and checking
-  each authored native_type by hand.
+  rule against the connector's map first; the read direction needs the
+  identical resolution over native_type matchers, and nothing here performs
+  it yet. Catching a violation today means reading a connection's read
+  section and its connector's side by side and checking each authored
+  native_type by hand.
 status: active
 superseded_by: null

@@ -22,6 +22,10 @@ rationale: >
   resolves each authored write rule against the connector's map first, the
   same resolution the gap helper offers an author on demand. The read
   direction is the mirror obligation (`RULE-TMAP-024`) and is not covered
-  here.
+  here. If the engine's composition order changes so the connector's rules
+  resolve before the connection's, this check starts rejecting documents that
+  no longer shadow anything — a false positive, not a missed one — since a
+  restated connection rule would then sit harmlessly behind the connector's
+  own rendering instead of overriding it.
 status: active
 superseded_by: null
