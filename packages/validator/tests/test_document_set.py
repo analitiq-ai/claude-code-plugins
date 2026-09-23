@@ -754,12 +754,11 @@ def test_connection_write_shadow_probes_over_match_kind_render_and_family_exclus
     `_first_match_render`, on both its exact and regex branches, over the
     full behaviour matrix: match kind (exact/regex) x whether the connection
     rule can actually render a candidate x whether the shadowed value's
-    family is one RULE-TMAP-017's coverage pool excludes. Of the 8 rows, 4
-    have a connection rule that renders (2 exact, 2 regex) and 4 do not (2
-    exact, 2 regex); a row whose rule cannot render yields no probe. For the
-    2 regex-and-renders rows, the probe is found one of two ways: through the
-    connector's own authored exact literal, or through the unfiltered (not
-    coverage-warning-filtered) family pool."""
+    family is one RULE-TMAP-017's coverage pool excludes. A row whose
+    connection rule cannot render yields no probe. Where a regex rule does
+    render, its probe is found either through the connector's own authored
+    exact literal or through the unfiltered (not coverage-warning-filtered)
+    family pool."""
     got = set(_connection_write_shadow_probes(connection_rules, connector_rules))
     assert got == expected, name
 
