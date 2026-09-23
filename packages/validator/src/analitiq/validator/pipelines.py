@@ -573,9 +573,9 @@ def _check_connection_type_map_shadow(documents: _Documents) -> list[tuple[str, 
                 message_id="connection-write-map-shadows-connector", kind="fail", path="/write",
                 message=(
                     f"the write section restates rules for these Arrow types connector "
-                    f"{connector_id!r}'s map already renders: {shadowed}. The connection's "
-                    "rules run first in the engine's composed list, so this silently "
-                    "overrides the connector's rendering for every stream on the connection."),
+                    f"{connector_id!r}'s map already renders: {shadowed}. This silently "
+                    "overrides the connector's rendering for every stream on the "
+                    "connection — see RULE-TMAP-018 for why."),
             )))
     return findings
 
