@@ -1237,7 +1237,7 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
             "(1) NAME: the value must be one the sibling `connector.json` "
             "declares in `transports` — a request dispatches only through a "
             "transport the connector declares. This half is checked at author "
-            "time by the validator's `endpoint-transport-ref` check (the "
+            "time by `RULE-ENDP-047`, checked by `analitiq-validator` (the "
             "endpoint and the connector are separate documents, so no "
             "single-document model validator can see both sides). It is an "
             "ERROR only when the sibling `connector.json` is in hand; "

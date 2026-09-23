@@ -34,11 +34,10 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="_RequestBase", field="transport_ref",
-        prose_hash="04638b82e7fc",
+        prose_hash="eb4d8937e596",
+        rule_ids=("RULE-ENDP-047",),
         waiver=(
-            "the NAME half is cross-document — enforced by analitiq-validator's "
-            "endpoint-transport-ref check, which a single-document model cannot "
-            "run; the ORIGIN half is "
+            "the ORIGIN half is "
             + ENGINE_CONDUCT
             + " — the engine resolves the transport per operation and checks "
             "every URL the request produces against that transport's origin on "
