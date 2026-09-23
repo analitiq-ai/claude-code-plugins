@@ -3612,8 +3612,10 @@ def _validate_param_wiring(
             # resolve, and the placeholder it fills can never be substituted.
             # Such a document is contract-valid and dead at the engine
             # handshake. It is refused here, naming the binding that replaces
-            # it. Reads keep the old latitude: a read path param can be
-            # supplied by a stream filter.
+            # it. A read path param has more sources — its `default`, a
+            # `filters` entry landing on it, or pagination/replication — so a
+            # missing `default` proves nothing there; RULE-ENDP-066, not this
+            # check, refuses a required read param with none of them.
             if allow_from_input and param.default is None:
                 raise violation(
                     "RULE-ENDP-028",
