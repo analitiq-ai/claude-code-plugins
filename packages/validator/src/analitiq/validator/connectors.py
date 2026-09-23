@@ -562,12 +562,13 @@ _WRITE_VOCABULARY_PROBES: tuple[str, ...] = tuple(
     if name not in _WRITE_PROBE_EXCLUDED_FAMILIES
 )
 
-#: One representative probe per family, with none of the three above excluded.
-#: `_WRITE_VOCABULARY_PROBES` drops them because each exclusion's reason is
-#: specific to the write-coverage *warning* (a narrower rule that still fires,
-#: a variant a shared regex also reaches) — reasons that do not apply to
-#: resolving a specific authored rule against another map, which is what
-#: `_check_connection_type_map_shadow` uses this for.
+#: One representative probe per family in the vendored grammar, excluding none
+#: of `_WRITE_PROBE_EXCLUDED_FAMILIES`. `_WRITE_VOCABULARY_PROBES` drops those
+#: because each exclusion's reason is specific to the write-coverage *warning*
+#: (a narrower rule that still fires, a variant a shared regex also reaches) —
+#: reasons that do not apply to resolving a specific authored rule against
+#: another map, which is what `_check_connection_type_map_shadow` uses this
+#: for.
 _ALL_WRITE_FAMILY_PROBES: tuple[str, ...] = tuple(
     _family_probe(name) for name in arrow_grammar.FAMILY_NAMES
 )

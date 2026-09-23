@@ -497,14 +497,21 @@ def _check_connection_connector_refs(documents: _Documents) -> list[tuple[str, d
     return findings
 
 
-def _connection_write_shadow_probes(connection_rules: list) -> Iterator[str]:
+def _connection_write_shadow_probes(connection_rules: list, connector_rules: list) -> Iterator[str]:
     """One probe per rule in `connection_rules` that the rule itself actually
     matches: an `exact` rule's own literal `arrow_type`, tested exactly rather
     than approximated by a family's representative spelling — the shadow this
     guards against is a specific restated rule, and a narrower or differently
     parameterized exact rule than the family probe would otherwise miss it. A
-    `regex` rule names no single literal, so every family probe its own
-    pattern matches stands in for it."""
+    `regex` rule names no single literal, so it is tested against every family
+    probe AND every literal `connector_rules` itself declares via an `exact`
+    rule — a concrete value the connector's own map states is a real shadow
+    candidate whether or not it happens to be a family's representative
+    spelling. What this still cannot reach: a connection regex narrower than
+    every family probe and every connector literal, shadowing only a
+    connector `regex` rule's own matched range with no value either side
+    states concretely — deciding that needs a solve over both patterns, not a
+    probe, and is not attempted here."""
     for rule in connection_rules:
         if not isinstance(rule, dict):
             continue
@@ -512,10 +519,18 @@ def _connection_write_shadow_probes(connection_rules: list) -> Iterator[str]:
             value = rule.get("arrow_type")
             if isinstance(value, str):
                 yield value
-        else:
-            for probe in _ALL_WRITE_FAMILY_PROBES:
-                if _first_match_render(probe, [rule], "arrow_type", "native_type") is not None:
-                    yield probe
+            continue
+        candidates = list(_ALL_WRITE_FAMILY_PROBES)
+        candidates.extend(
+            connector_rule.get("arrow_type")
+            for connector_rule in connector_rules
+            if isinstance(connector_rule, dict)
+            and connector_rule.get("match") == "exact"
+            and isinstance(connector_rule.get("arrow_type"), str)
+        )
+        for probe in candidates:
+            if _first_match_render(probe, [rule], "arrow_type", "native_type") is not None:
+                yield probe
 
 
 def _check_connection_type_map_shadow(documents: _Documents) -> list[tuple[str, dict]]:
@@ -550,7 +565,7 @@ def _check_connection_type_map_shadow(documents: _Documents) -> list[tuple[str, 
         if not isinstance(connection_rules, list):
             continue
         shadowed = sorted({
-            probe for probe in _connection_write_shadow_probes(connection_rules)
+            probe for probe in _connection_write_shadow_probes(connection_rules, connector_rules)
             if _first_match_render(probe, connector_rules, "arrow_type", "native_type") is not None
         })
         if shadowed:

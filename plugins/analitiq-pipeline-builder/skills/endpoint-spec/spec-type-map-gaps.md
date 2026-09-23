@@ -6,8 +6,9 @@ deployment can surface — extension types (`citext`, `ltree`, `hstore`,
 `vector(N)`, PostGIS geometries), custom domains/enums, parameterized variants.
 The engine composes a **connection-scoped** map as primary over the connector
 map in each direction, and hard-errors on a type neither covers — which is why a
-connection rule may only close a gap the connector leaves (`RULE-TMAP-018`). Discovery is when the gap is visible and fixable: this file governs
-authoring the connection-scoped map that closes it.
+connection rule may only close a gap the connector leaves (`RULE-TMAP-018` for
+write, `RULE-TMAP-024` for read). Discovery is when the gap is visible and
+fixable: this file governs authoring the connection-scoped map that closes it.
 
 ## Contents
 
@@ -68,11 +69,11 @@ connect or run time.
 
 ## Authoring rules
 
-- **Gap-only** (`RULE-TMAP-018`). The probes to author for are
-  the ones `type_map_gaps.py` reports under `gaps`. A connection rule for
-  anything the connector already covers *overrides* the connector for every
-  stream on this connection — never shadow. A write-coverage warning is not a
-  reason to add one.
+- **Gap-only** (`RULE-TMAP-018` for write, `RULE-TMAP-024` for read). The
+  probes to author for are the ones `type_map_gaps.py` reports under `gaps`. A
+  connection rule for anything the connector already covers *overrides* the
+  connector for every stream on this connection — never shadow. A
+  write-coverage warning is not a reason to add one.
 - **No gaps → no section.** Never write an empty rule list; a direction with no
   gaps gets no section, and a map with no gaps in any direction is not written.
 - **Extend, never rewrite** (`RULE-TMAP-012`). Append after the rules a

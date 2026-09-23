@@ -686,6 +686,51 @@ def test_only_the_shadowing_connection_is_reported_among_several(validator):
         f"connections/{_DST}/definition/type-map.json#/write"]
 
 
+def test_a_connection_exact_rule_outside_the_family_probe_is_detected(validator):
+    """A parameterized value (`Decimal128(38, 9)`) the family's representative
+    probe (`Decimal128(1, 0)`) never tests on its own — resolved from the
+    connection rule's own literal, never approximated by the family sample."""
+    documents = _workspace_documents()
+    documents["connectors/postgresql/definition/type-map.json"]["write"] = [
+        {"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+), (?<s>\d+)\)$",
+         "native_type": "NUMERIC(${p},${s})"}]
+    documents[f"connections/{_DST}/definition/type-map.json"] = _type_map_doc(
+        write=[{"match": "exact", "arrow_type": "Decimal128(38, 9)", "native_type": "numeric(38,9)"}])
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "connection-write-map-shadows-connector") == [
+        f"connections/{_DST}/definition/type-map.json#/write"]
+
+
+def test_a_connection_regex_write_rule_shadowing_its_connector_is_reported(validator):
+    """The regex branch of `_connection_write_shadow_probes`: a connection
+    regex wide enough to match the family-probe vocabulary shadows the
+    connector's exact `Int64` rule."""
+    documents = _workspace_documents()
+    documents["connectors/postgresql/definition/type-map.json"]["write"] = [
+        {"match": "exact", "arrow_type": "Int64", "native_type": "bigint"}]
+    documents[f"connections/{_DST}/definition/type-map.json"] = _type_map_doc(
+        write=[{"match": "regex", "arrow_type": ".*", "native_type": "TEXT"}])
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "connection-write-map-shadows-connector") == [
+        f"connections/{_DST}/definition/type-map.json#/write"]
+
+
+def test_a_connection_regex_narrower_than_every_family_probe_still_shadows_a_connector_literal(validator):
+    """A connection regex matching only `Decimal128(38, 9)` — narrower than
+    the family's representative probe (`Decimal128(1, 0)`), so no family
+    probe falls inside it — still shadows a connector rule declaring that
+    exact value, because the probe pool also carries the connector's own
+    authored `exact` literals, not just the family sample."""
+    documents = _workspace_documents()
+    documents["connectors/postgresql/definition/type-map.json"]["write"] = [
+        {"match": "exact", "arrow_type": "Decimal128(38, 9)", "native_type": "numeric(38,9)"}]
+    documents[f"connections/{_DST}/definition/type-map.json"] = _type_map_doc(
+        write=[{"match": "regex", "arrow_type": r"^Decimal128\(38, 9\)$", "native_type": "NUMERIC(38,9)"}])
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "connection-write-map-shadows-connector") == [
+        f"connections/{_DST}/definition/type-map.json#/write"]
+
+
 def test_a_package_check_in_a_workspace_is_reported_once(validator):
     documents = _workspace_documents()
     del documents[f"pipelines/{_PID}/streams/{_SID}.json"]
