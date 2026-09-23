@@ -80,7 +80,7 @@ def test_valid_bundle_detected_and_dispatched(validator):
     assert [f for f in findings if f["severity"] == "error"] == []
 
 
-# --- pipeline runnable (RULE-PIPE-018/014) ----------------------------------
+# --- pipeline identity and its streams (RULE-PIPE-018/014) ------------------
 
 def test_missing_pipeline_id_flagged(validator):
     bundle = _valid_bundle()

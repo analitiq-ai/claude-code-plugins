@@ -69,7 +69,9 @@ SEVERITIES = ("error", "warning", "info")
 #: not the opposite of one thing. `draft` is written down but not yet in force;
 #: `deprecated` is still in force and on its way out, so prose citing it still
 #: resolves while authors are moved off it; `retired` no longer binds and its
-#: record survives only to keep the id from being reused.
+#: record survives to point that prose at the id that replaced it. An
+#: obligation withdrawn with nothing replacing it has no successor to name, so
+#: it leaves no record and its id is held by `RETIRED_WITHOUT_A_RECORD`.
 STATUSES = ("draft", "active", "deprecated", "retired")
 
 #: The statuses under which a record binds an author — `active` and
@@ -449,7 +451,9 @@ class RuleRecord:
             self._fail(
                 "a retired rule names the id that replaced it — a retirement "
                 "with no successor leaves every prose site citing it with "
-                "nowhere to go"
+                "nowhere to go. An obligation withdrawn rather than replaced "
+                "takes the other route: delete this record and add its id to "
+                "RETIRED_WITHOUT_A_RECORD, which holds it against reissue"
             )
         if self.superseded_by == self.id:
             self._fail("a rule cannot supersede itself")
