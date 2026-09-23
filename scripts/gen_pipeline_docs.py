@@ -319,12 +319,7 @@ def measured_reachable_connectors_ids() -> set[str]:
     names. That allowlist previously went stale in ways nothing caught: by
     naming a function this adapter's entities never route to at all (an
     api-endpoint/connector-package check — this function never constructs
-    such a document, so those checks are never even probed), and separately
-    by naming one the adapter never surfaces because of the scope it grades a
-    connection map at (`_type_map_findings` in `validate.py`) — probing entity
-    `type-map` with a document carrying a write section, through the
-    adapter's own `diagnostics_for`, is what proves that exclusion instead of
-    asserting it.
+    such a document, so those checks are never even probed).
     """
     import json
     import tempfile
