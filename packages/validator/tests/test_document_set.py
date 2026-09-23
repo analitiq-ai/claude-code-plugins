@@ -647,35 +647,42 @@ _PHASES = ("root", "document", "package-check", "workspace-check", "run-check")
 
 
 def _graded_phases(monkeypatch, grade) -> list[tuple[str, str]]:
-    """`grade()`'s findings in order, each as its phase and document key. A
-    check finding's phase is the unit whose checks produced it, read from the
-    check registry; any other finding is a document's, except a missing root."""
+    """`grade()`'s findings in order, each as its phase and the key it is
+    ordered by. A check finding's phase is the unit whose checks produced it,
+    read from the check registry, and a package check's key is the directory of
+    the package its documents came from; any other finding is a document's,
+    keyed by its document, except a missing root."""
     from analitiq.contracts.workspace import PACKAGE_MODELS
     from analitiq.validator import document_set
 
-    def unit(checks) -> str:
+    def unit(checks, documents) -> tuple[str, str]:
         if all(c.gates_run for c in checks):
-            return "run-check"
+            return "run-check", ""
         if all(c in document_set._workspace_checks() for c in checks):
-            return "workspace-check"
+            return "workspace-check", ""
         assert any(checks == document_set._package_checks(m) for m in PACKAGE_MODELS.values()), checks
-        return "package-check"
+        (directory,) = {d.package for docs in documents.values() for d in docs}
+        return "package-check", directory
 
-    produced: dict[int, str] = {}
+    produced: dict[int, tuple[str, str]] = {}
     check_findings = document_set._check_findings
 
     def recording(checks, documents):
         findings = check_findings(checks, documents)
-        produced.update((id(f), unit(checks)) for f in findings)
+        if findings:
+            produced.update((id(f), unit(checks, documents)) for f in findings)
         return findings
 
     monkeypatch.setattr(document_set, "_check_findings", recording)
     result = grade()
-    return [(produced.get(id(f), "root" if f["message_id"] == "package-root-missing" else "document"),
-             f["path"].split("#")[0]) for f in result["findings"]]
+    return [produced.get(id(f)) or ("root" if f["message_id"] == "package-root-missing" else "document",
+                                    f["path"].split("#")[0]) for f in result["findings"]]
 
 
 def _assert_graded_in_phase_order(phases: list[tuple[str, str]], expected: set[str]) -> None:
+    """Phases never go backwards, documents come in key order, and a package's
+    check findings come together, packages in directory order. Nothing is
+    claimed about order among one unit's check findings."""
     assert {phase for phase, _ in phases} == expected, phases
     ranks = [_PHASES.index(phase) for phase, _ in phases]
     assert ranks == sorted(ranks), phases
@@ -698,11 +705,28 @@ def test_a_workspace_is_graded_in_one_request_wide_phase_order(validator, monkey
     documents["connectors/wise/definition/endpoints/aaa.json"] = (
         copy.deepcopy(_WISE_TRANSFERS_ENDPOINT) | {"endpoint_id": "bbb"})
     documents[f"pipelines/{_PID}/streams/{_SID}.json"]["source"]["endpoint_ref"]["endpoint_id"] = "transfer"
+    orphan = "66666666-6666-4666-8666-666666666666"
+    documents[f"pipelines/{_PID}/streams/{orphan}.json"] = {
+        **documents[f"pipelines/{_PID}/streams/{_SID}.json"], "stream_id": orphan,
+        "pipeline_id": "55555555-5555-4555-8555-555555555555"}
     entry = documents["pipelines/manifest.json"]["pipelines"][0]
     documents["pipelines/manifest.json"]["pipelines"].append(dict(entry))
-    phases = _graded_phases(monkeypatch, lambda: validator.validate_workspace(
-        _workspace_request(documents, run_pipeline=f"pipelines/{_PID}/")))
-    _assert_graded_in_phase_order(phases, {"document", "package-check", "workspace-check", "run-check"})
+
+    results = []
+
+    def graded(arrival):
+        def grade():
+            results.append(validator.validate_workspace(
+                _workspace_request(arrival, run_pipeline=f"pipelines/{_PID}/")))
+            return results[-1]
+        return _graded_phases(monkeypatch, grade)
+
+    for arrival in (documents, dict(reversed(documents.items()))):
+        phases = graded(arrival)
+        assert {key for phase, key in phases if phase == "package-check"} == {
+            "connectors/wise/", f"pipelines/{_PID}/"}, phases
+        _assert_graded_in_phase_order(phases, {"document", "package-check", "workspace-check", "run-check"})
+    assert results[0] == results[1]
 
 
 def test_a_missing_root_is_reported_before_every_document(validator):
