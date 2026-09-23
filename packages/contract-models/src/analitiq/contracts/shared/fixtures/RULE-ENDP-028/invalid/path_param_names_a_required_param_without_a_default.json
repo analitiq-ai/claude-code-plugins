@@ -1,0 +1,35 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/items/{id}",
+    "body": {
+      "item": {
+        "from_input": "record"
+      }
+    },
+    "path_params": {
+      "id": {
+        "from_param": "id"
+      }
+    }
+  },
+  "input": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "native_type": "integer",
+          "arrow_type": "Int64"
+        }
+      }
+    }
+  },
+  "params": {
+    "id": {
+      "in": "path",
+      "type": "string",
+      "required": true
+    }
+  }
+}
