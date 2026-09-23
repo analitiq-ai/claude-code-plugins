@@ -40,11 +40,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Same bootstrap as render_rule_reference.py and render_validator_claims.py:
 # this repo is the contract's source, so put the in-repo trees on the path
-# rather than reaching for an installed wheel. This generator used to live
-# inside the plugin and bootstrap the published pin, while the rule renderer
-# read the in-repo source — so whenever the pin lagged the repo, this
-# plugin's rendered rules and its rendered enums came from two different
-# contract versions.
+# rather than reaching for an installed wheel, so this plugin's rendered enums
+# and its rendered rules come from one contract version. Bootstrapping the
+# published pin instead would render them from two whenever the pin lags the
+# repo.
 sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
 sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -314,12 +313,11 @@ def measured_reachable_connectors_ids() -> set[str]:
     entry points actually surface in its output — MEASURED by running
     documents engineered to trip each connectors.py-bound check through the
     same functions `plugins/analitiq-pipeline-builder/scripts/validate.py`
-    calls, and reading back which ids appear in the returned findings, rather
-    than reasoned about from a hand-typed allowlist of "reachable" function
-    names. That allowlist previously went stale in ways nothing caught: by
-    naming a function this adapter's entities never route to at all (an
-    api-endpoint/connector-package check — this function never constructs
-    such a document, so those checks are never even probed).
+    calls, and reading back which ids appear in the returned findings. A
+    hand-typed list of "reachable" functions can name a check this adapter's
+    entities never route to (an api-endpoint or connector-package check: this
+    function never builds such a document, so it is never probed); a
+    measurement cannot.
     """
     import json
     import tempfile
@@ -540,10 +538,9 @@ def render_validator_ids() -> str:
 def render_endpoint_id_derivation() -> str:
     """The derived database-endpoint handle, shown by calling the published helper.
 
-    Prose used to restate this formula by hand in every file that mentioned an
-    `endpoint_id`, and had already drifted — one site wrote `slug(table)` where
-    the rest wrote `slug(name)`. A worked example computed by the package settles
-    it, and cannot go stale.
+    A formula restated by hand in every file that mentions an `endpoint_id`
+    drifts — one site writing `slug(table)` where the rest write `slug(name)`.
+    A worked example computed by the package cannot go stale.
     """
     from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
 
@@ -971,9 +968,9 @@ def render_arrow_types() -> str:
     """The Arrow type vocabulary, split out of the published column pattern.
 
     `arrow_type` is one regex covering scalars, parameterized types and the
-    authored-shape container markers. Prose used to transcribe it as several
-    hand-kept tables; this splits the published pattern instead, so the
-    vocabulary cannot drift. The pattern itself is generated from the
+    authored-shape container markers. Hand-kept tables transcribing it would
+    drift; this splits the published pattern instead, so the vocabulary
+    cannot. The pattern itself is generated from the
     engine-published, vendored grammar manifest
     (`analitiq.contracts.arrow_grammar`), so it carries exactly the type
     families the engine executes end-to-end.
