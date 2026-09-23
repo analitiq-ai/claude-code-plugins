@@ -652,6 +652,13 @@ class Param(_EndpointModel):
                     f"{name}={bound!r} is not a finite number, so no value can be "
                     "compared against it"
                 )
+        for member in self.enum or ():
+            if isinstance(member, float) and not math.isfinite(member):
+                raise violation(
+                    "RULE-ENDP-076", "param-enum-member-not-finite",
+                    f"enum member {member!r} is not a finite number, so no value "
+                    "can equal it"
+                )
         for low_name, high_name in _PARAM_INTERVALS:
             low, high = getattr(self, low_name), getattr(self, high_name)
             if low is not None and high is not None and low > high:

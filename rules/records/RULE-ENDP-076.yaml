@@ -1,8 +1,8 @@
 id: RULE-ENDP-076
 statement: >
-  A parameter's declared numeric bounds MUST be finite, and no declared lower
-  bound — `minimum`, `minLength`, `minItems` — MUST exceed the upper bound it
-  pairs with.
+  A parameter's declared numeric bounds and numeric `enum` members MUST be
+  finite, and no declared lower bound — `minimum`, `minLength`, `minItems` —
+  MUST exceed the upper bound it pairs with.
 tier: shape
 severity: error
 artifact_kinds: [api-endpoint]
@@ -16,8 +16,10 @@ rationale: >
   value at all. Either way every value the param is given fails its own
   declaration, so the param is unsendable on every run; as the engine reads
   it today, it refuses such a declaration when it compiles the param's
-  rules, before any request. Refusing it here names the declaration at
-  authoring time. The predicate is a fact about the declaration itself and
-  holds whatever the engine does with it.
+  rules, before any request. An `enum` member that is not a finite number is
+  equal to no value the param can be given, so it declares a choice no
+  request can make. Refusing each here names the declaration at authoring
+  time. The predicate is a fact about the declaration itself and holds
+  whatever the engine does with it.
 status: active
 superseded_by: null
