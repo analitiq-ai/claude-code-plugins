@@ -468,12 +468,9 @@ def _require_runnable_gated_pipelines_ids() -> set[str]:
     """Rule ids whose only emitter `validate_pipeline_bundle` reaches under its
     `if require_runnable:` block. `validate_pipeline_bundle` always runs when
     this adapter validates a stitched pipeline, so every rule it can emit is
-    reachable UNLESS gating on `require_runnable` makes it structurally
-    impossible — which is exactly the failure `measured_reachable_connectors_ids`
-    already fixed on the connectors.py side of this same function, found here
-    too: RULE-PIPE-019 fires only when a pipeline's status is not 'active', but
-    this adapter's own `is_runnable_required` (`validate.py`) is true only when
-    status IS 'active' — a rule and its own gate that can never both hold.
+    reachable unless the `require_runnable` gate makes it impossible: RULE-PIPE-019
+    fires only when a pipeline's status is not 'active', while this adapter's
+    `is_runnable_required` (`validate.py`) is true only when it is.
     """
     from analitiq.contracts.shared.rules import all_rules
 
