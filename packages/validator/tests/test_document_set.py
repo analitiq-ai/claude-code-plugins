@@ -23,6 +23,7 @@ from analitiq.contracts.validation_requests import (
     ValidateSingleDocumentRequest,
     ValidateWorkspaceRequest,
 )
+from analitiq.validator.pipelines import _connection_write_shadow_probes
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 
@@ -686,62 +687,93 @@ def test_only_the_shadowing_connection_is_reported_among_several(validator):
         f"connections/{_DST}/definition/type-map.json#/write"]
 
 
-def test_a_connection_exact_rule_outside_the_family_probe_is_detected(validator):
-    """A parameterized value (`Decimal128(38, 9)`) the family's representative
-    probe (`Decimal128(1, 0)`) never tests on its own — resolved from the
-    connection rule's own literal, never approximated by the family sample."""
-    documents = _workspace_documents()
-    documents["connectors/postgresql/definition/type-map.json"]["write"] = [
-        {"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+), (?<s>\d+)\)$",
-         "native_type": "NUMERIC(${p},${s})"}]
-    documents[f"connections/{_DST}/definition/type-map.json"] = _type_map_doc(
-        write=[{"match": "exact", "arrow_type": "Decimal128(38, 9)", "native_type": "numeric(38,9)"}])
-    result = validator.validate_workspace(_workspace_request(documents))
-    assert _at(result, "connection-write-map-shadows-connector") == [
-        f"connections/{_DST}/definition/type-map.json#/write"]
+@pytest.mark.parametrize(
+    "name, connector_rules, connection_rules, expected",
+    [
+        (
+            "exact rule, renders, non-excluded family: tested against its own"
+            " literal, not the family's representative spelling",
+            [{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+), (?<s>\d+)\)$",
+              "native_type": "NUMERIC(${p},${s})"}],
+            [{"match": "exact", "arrow_type": "Decimal128(38, 9)", "native_type": "numeric(38,9)"}],
+            {"Decimal128(38, 9)"},
+        ),
+        (
+            "exact rule, renders, excluded family: the exact branch never"
+            " consults the family pool, so exclusion from it is irrelevant",
+            [{"match": "exact", "arrow_type": "Time32(SECOND)", "native_type": "TIME"}],
+            [{"match": "exact", "arrow_type": "Time32(SECOND)", "native_type": "TIME"}],
+            {"Time32(SECOND)"},
+        ),
+        (
+            "exact rule, cannot render (no native_type), non-excluded family:"
+            " no probe yielded for a rule that cannot render its own literal",
+            [{"match": "exact", "arrow_type": "Int64", "native_type": "bigint"}],
+            [{"match": "exact", "arrow_type": "Int64"}],
+            set(),
+        ),
+        (
+            "exact rule, cannot render, excluded family",
+            [{"match": "exact", "arrow_type": "Time32(SECOND)", "native_type": "TIME"}],
+            [{"match": "exact", "arrow_type": "Time32(SECOND)"}],
+            set(),
+        ),
+        (
+            "regex rule, renders, non-excluded family: narrower than the"
+            " family's representative spelling, found only through the"
+            " connector's own authored exact literal",
+            [{"match": "exact", "arrow_type": "Decimal128(38, 9)", "native_type": "numeric(38,9)"}],
+            [{"match": "regex", "arrow_type": r"^Decimal128\(38, 9\)$", "native_type": "NUMERIC(38,9)"}],
+            {"Decimal128(38, 9)"},
+        ),
+        (
+            "regex rule, renders, excluded family: found only through the"
+            " unfiltered family pool, since RULE-TMAP-017's coverage pool"
+            " excludes Time32",
+            [{"match": "regex", "arrow_type": r"^Time32\(.*\)$", "native_type": "TIME"}],
+            [{"match": "regex", "arrow_type": r"^Time32\(SECOND\)$", "native_type": "TIME(0)"}],
+            {"Time32(SECOND)"},
+        ),
+        (
+            "regex rule, cannot render (no native_type), non-excluded family",
+            [{"match": "exact", "arrow_type": "Int64", "native_type": "bigint"}],
+            [{"match": "regex", "arrow_type": "^Int64$"}],
+            set(),
+        ),
+        (
+            "regex rule, cannot render, excluded family",
+            [{"match": "regex", "arrow_type": r"^Time32\(.*\)$", "native_type": "TIME"}],
+            [{"match": "regex", "arrow_type": r"^Time32\(SECOND\)$"}],
+            set(),
+        ),
+    ],
+)
+def test_connection_write_shadow_probes_over_match_kind_render_and_family_exclusion(
+        name, connector_rules, connection_rules, expected):
+    """`_connection_write_shadow_probes` resolves a probe only through
+    `_first_match_render`, on both its exact and regex branches, over the
+    full behaviour matrix: match kind (exact/regex) x whether the connection
+    rule can actually render a candidate x whether the shadowed value's
+    family is one RULE-TMAP-017's coverage pool excludes. Each row is a
+    regression for a specific historical miss: the `renders=False` rows
+    catch a rule whose literal or match is yielded unchecked; the two
+    `renders=True` rows split the two ways a probe can be found for a regex
+    rule with no matching family-probe spelling of its own — the connector's
+    authored exact literal, or the unfiltered (not coverage-warning-filtered)
+    family pool."""
+    got = set(_connection_write_shadow_probes(connection_rules, connector_rules))
+    assert got == expected, name
 
 
 def test_a_connection_regex_write_rule_shadowing_its_connector_is_reported(validator):
-    """The regex branch of `_connection_write_shadow_probes`: a connection
-    regex wide enough to match the family-probe vocabulary shadows the
-    connector's exact `Int64` rule."""
+    """End-to-end: `_check_connection_type_map_shadow` surfaces the finding
+    `_connection_write_shadow_probes` computes, at the connection's own
+    document path."""
     documents = _workspace_documents()
     documents["connectors/postgresql/definition/type-map.json"]["write"] = [
         {"match": "exact", "arrow_type": "Int64", "native_type": "bigint"}]
     documents[f"connections/{_DST}/definition/type-map.json"] = _type_map_doc(
         write=[{"match": "regex", "arrow_type": ".*", "native_type": "TEXT"}])
-    result = validator.validate_workspace(_workspace_request(documents))
-    assert _at(result, "connection-write-map-shadows-connector") == [
-        f"connections/{_DST}/definition/type-map.json#/write"]
-
-
-def test_a_connection_regex_narrower_than_every_family_probe_still_shadows_a_connector_literal(validator):
-    """A connection regex matching only `Decimal128(38, 9)` — narrower than
-    the family's representative probe (`Decimal128(1, 0)`), so no family
-    probe falls inside it — still shadows a connector rule declaring that
-    exact value, because the probe pool also carries the connector's own
-    authored `exact` literals, not just the family sample."""
-    documents = _workspace_documents()
-    documents["connectors/postgresql/definition/type-map.json"]["write"] = [
-        {"match": "exact", "arrow_type": "Decimal128(38, 9)", "native_type": "numeric(38,9)"}]
-    documents[f"connections/{_DST}/definition/type-map.json"] = _type_map_doc(
-        write=[{"match": "regex", "arrow_type": r"^Decimal128\(38, 9\)$", "native_type": "NUMERIC(38,9)"}])
-    result = validator.validate_workspace(_workspace_request(documents))
-    assert _at(result, "connection-write-map-shadows-connector") == [
-        f"connections/{_DST}/definition/type-map.json#/write"]
-
-
-def test_a_connection_regex_matching_only_an_excluded_write_family_is_detected(validator):
-    """`Time32` is excluded from `_WRITE_VOCABULARY_PROBES` (RULE-TMAP-017's
-    coverage-warning pool), but the shadow check draws from the unfiltered
-    `_ALL_WRITE_FAMILY_PROBES` instead — this fails if that pool were swapped
-    for the filtered one, since neither side here declares an `exact` literal
-    the connector-literal widening could fall back on."""
-    documents = _workspace_documents()
-    documents["connectors/postgresql/definition/type-map.json"]["write"] = [
-        {"match": "regex", "arrow_type": r"^Time32\(.*\)$", "native_type": "TIME"}]
-    documents[f"connections/{_DST}/definition/type-map.json"] = _type_map_doc(
-        write=[{"match": "regex", "arrow_type": r"^Time32\(SECOND\)$", "native_type": "TIME(0)"}])
     result = validator.validate_workspace(_workspace_request(documents))
     assert _at(result, "connection-write-map-shadows-connector") == [
         f"connections/{_DST}/definition/type-map.json#/write"]

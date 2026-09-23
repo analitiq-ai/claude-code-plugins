@@ -512,22 +512,21 @@ def _connection_write_shadow_probes(connection_rules: list, connector_rules: lis
     connector `regex` rule's own matched range with no value either side
     states concretely — deciding that needs a solve over both patterns, not a
     probe, and is not attempted here."""
+    connector_literals = [
+        connector_rule.get("arrow_type")
+        for connector_rule in connector_rules
+        if isinstance(connector_rule, dict)
+        and connector_rule.get("match") == "exact"
+        and isinstance(connector_rule.get("arrow_type"), str)
+    ]
     for rule in connection_rules:
         if not isinstance(rule, dict):
             continue
         if rule.get("match") == "exact":
             value = rule.get("arrow_type")
-            if isinstance(value, str) and _first_match_render(value, [rule], "arrow_type", "native_type") is not None:
-                yield value
-            continue
-        candidates = list(_ALL_WRITE_FAMILY_PROBES)
-        candidates.extend(
-            connector_rule.get("arrow_type")
-            for connector_rule in connector_rules
-            if isinstance(connector_rule, dict)
-            and connector_rule.get("match") == "exact"
-            and isinstance(connector_rule.get("arrow_type"), str)
-        )
+            candidates = [value] if isinstance(value, str) else []
+        else:
+            candidates = list(_ALL_WRITE_FAMILY_PROBES) + connector_literals
         for probe in candidates:
             if _first_match_render(probe, [rule], "arrow_type", "native_type") is not None:
                 yield probe
