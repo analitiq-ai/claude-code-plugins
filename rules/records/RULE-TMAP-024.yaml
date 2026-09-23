@@ -1,0 +1,26 @@
+id: RULE-TMAP-024
+statement: >
+  A connection-scoped type map's read section MUST declare a rule only for
+  a native_type its connector's own read map does not already render.
+tier: reference
+severity: error
+artifact_kinds: [type-map]
+validator: null
+enforcement_location: unenforced
+owners: [connector-plugin, pipeline-plugin, engine]
+rationale: >
+  The mirror of `RULE-TMAP-018` on the read direction: the engine composes
+  the connection map as primary over the connector map by concatenating the
+  two rule lists into one first-match list, so a read rule repeating
+  something the connector already renders does not sit harmlessly beside it
+  — it replaces the connector's rendering for every source read through that
+  connection. `RULE-TMAP-018` enforces this for the write direction by
+  pairing a connection to its connector and resolving each authored write
+  rule against the connector's map first
+  (`analitiq.validator.pipelines::_check_connection_type_map_shadow`); the
+  read direction needs the identical resolution over native_type matchers,
+  and nothing here performs it yet. Catching a violation today means reading
+  a connection's read section and its connector's side by side and checking
+  each authored native_type by hand.
+status: active
+superseded_by: null

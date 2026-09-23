@@ -40,7 +40,7 @@ from ._core import (
     register_document_validator,
     register_kind,
 )
-from .connectors import _WRITE_VOCABULARY_PROBES, _check_endpoint_ids_unique, _first_match_render
+from .connectors import _ALL_WRITE_FAMILY_PROBES, _check_endpoint_ids_unique, _first_match_render
 
 # Import the single-document contract model under the shared DOMAIN guard (the
 # model binds the `$schema` host at import; see `contract_model_domain`).
@@ -497,15 +497,37 @@ def _check_connection_connector_refs(documents: _Documents) -> list[tuple[str, d
     return findings
 
 
+def _connection_write_shadow_probes(connection_rules: list) -> Iterator[str]:
+    """One probe per rule in `connection_rules` that the rule itself actually
+    matches: an `exact` rule's own literal `arrow_type`, tested exactly rather
+    than approximated by a family's representative spelling — the shadow this
+    guards against is a specific restated rule, and a narrower or differently
+    parameterized exact rule than the family probe would otherwise miss it. A
+    `regex` rule names no single literal, so every family probe its own
+    pattern matches stands in for it."""
+    for rule in connection_rules:
+        if not isinstance(rule, dict):
+            continue
+        if rule.get("match") == "exact":
+            value = rule.get("arrow_type")
+            if isinstance(value, str):
+                yield value
+        else:
+            for probe in _ALL_WRITE_FAMILY_PROBES:
+                if _first_match_render(probe, [rule], "arrow_type", "native_type") is not None:
+                    yield probe
+
+
 def _check_connection_type_map_shadow(documents: _Documents) -> list[tuple[str, dict]]:
     """RULE-TMAP-018: a connection's write map must declare a rule only for an
-    Arrow family its connector's own write map leaves unresolved. The engine
-    composes the connection's rules as primary over the connector's by
-    concatenating the two lists into one first-match list, so a family the
-    connection restates does not sit harmlessly beside the connector's rule —
-    it silently overrides it for every stream on that connection. A connector
-    that is unresolved, or a connection with no write section of its own, is
-    already another check's finding; this one is silent there."""
+    Arrow type its connector's own write map does not already render. The
+    engine composes the connection's rules as primary over the connector's by
+    concatenating the two lists into one first-match list, so a rule the
+    connection restates does not sit harmlessly beside the connector's — it
+    silently overrides it for every stream on that connection. Silent when
+    the connector is unresolved (RULE-CONN-011's finding instead) or when
+    either side carries no write section — nothing to compare there, not a
+    violation."""
     connector_write_rules = {
         connector.package_id: doc.content.get("write")
         for connector in documents["connector"]
@@ -527,17 +549,16 @@ def _check_connection_type_map_shadow(documents: _Documents) -> list[tuple[str, 
         connection_rules = connection_maps[0].content.get("write")
         if not isinstance(connection_rules, list):
             continue
-        shadowed = [
-            probe for probe in _WRITE_VOCABULARY_PROBES
-            if _first_match_render(probe, connection_rules, "arrow_type", "native_type") is not None
-            and _first_match_render(probe, connector_rules, "arrow_type", "native_type") is not None
-        ]
+        shadowed = sorted({
+            probe for probe in _connection_write_shadow_probes(connection_rules)
+            if _first_match_render(probe, connector_rules, "arrow_type", "native_type") is not None
+        })
         if shadowed:
             findings.append((connection_maps[0].key, finding(
                 rule="RULE-TMAP-018",
                 message_id="connection-write-map-shadows-connector", kind="fail", path="/write",
                 message=(
-                    f"the write section restates rules for these Arrow families connector "
+                    f"the write section restates rules for these Arrow types connector "
                     f"{connector_id!r}'s map already renders: {shadowed}. The connection's "
                     "rules run first in the engine's composed list, so this silently "
                     "overrides the connector's rendering for every stream on the connection."),

@@ -7701,7 +7701,7 @@
   },
   {
    "id": "RULE-TMAP-018",
-   "statement": "A connection-scoped type map MUST declare a rule only for a native_type or arrow_type its connector's own map leaves unresolved.\n",
+   "statement": "A connection-scoped type map's write section MUST declare a rule only for an arrow_type its connector's own write map does not already render.\n",
    "tier": "reference",
    "severity": "error",
    "artifact_kinds": [
@@ -7719,7 +7719,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine composes the connection map as primary over the connector map by concatenating the two rule lists into one first-match list, so a connection rule repeating something the connector already covers does not sit harmlessly beside it — it replaces the connector's rendering for every stream on that connection, including streams nobody was editing. An author closing a discovery gap has the connector's rules in front of them and it costs nothing to restate one, which is exactly how the override happens by accident. The connection and its connector are separate documents joined only at resolution time, so catching a shadow needs both in hand at once — a bare connection-package or connector-package grading never has the other side, only a workspace request pairs them by the connection's connector_id and resolves each family probe against the connector's map first, the same resolution the gap helper offers an author on demand.\n",
+   "rationale": "The engine composes the connection map as primary over the connector map by concatenating the two rule lists into one first-match list, so a write rule repeating something the connector already renders does not sit harmlessly beside it — it replaces the connector's rendering for every stream on that connection, including streams nobody was editing. An author closing a discovery gap has the connector's rules in front of them and it costs nothing to restate one, which is exactly how the override happens by accident. The connection and its connector are separate documents joined only at resolution time, so catching a shadow needs both in hand at once — a bare connection-package or connector-package grading never has the other side, only a workspace request pairs them by the connection's connector_id and resolves each authored write rule against the connector's map first, the same resolution the gap helper offers an author on demand. The read direction is the mirror obligation (`RULE-TMAP-024`) and is not covered here.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7819,6 +7819,30 @@
    "symbol": null,
    "fixture_model": null,
    "rationale": "A map carrying no section maps no type in any direction, so the file reads as coverage it does not provide. Omitting the direction a map has no rules for is the intended authoring — the rule only refuses omitting every section. The obligation is a presence requirement on one document, mirrored into the published schema.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-TMAP-024",
+   "statement": "A connection-scoped type map's read section MUST declare a rule only for a native_type its connector's own read map does not already render.\n",
+   "tier": "reference",
+   "severity": "error",
+   "artifact_kinds": [
+    "type-map"
+   ],
+   "validator": null,
+   "enforcement_location": "unenforced",
+   "owners": [
+    "engine",
+    "connector-plugin",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "The mirror of `RULE-TMAP-018` on the read direction: the engine composes the connection map as primary over the connector map by concatenating the two rule lists into one first-match list, so a read rule repeating something the connector already renders does not sit harmlessly beside it — it replaces the connector's rendering for every source read through that connection. `RULE-TMAP-018` enforces this for the write direction by pairing a connection to its connector and resolving each authored write rule against the connector's map first (`analitiq.validator.pipelines::_check_connection_type_map_shadow`); the read direction needs the identical resolution over native_type matchers, and nothing here performs it yet. Catching a violation today means reading a connection's read section and its connector's side by side and checking each authored native_type by hand.\n",
    "status": "active",
    "superseded_by": null
   }
