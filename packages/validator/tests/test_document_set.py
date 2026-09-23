@@ -642,19 +642,77 @@ def test_an_unparseable_document_withholds_the_workspace_checks(validator):
 
 
 
-def test_a_workspace_is_graded_in_one_request_wide_order(validator):
+
+_PHASES = ("root", "document", "package-check", "workspace-check", "run-check")
+
+
+def _graded_phases(monkeypatch, grade) -> list[tuple[str, str]]:
+    """`grade()`'s findings in order, each as its phase and document key. A
+    check finding's phase is the unit whose checks produced it, read from the
+    check registry; any other finding is a document's, except a missing root."""
+    from analitiq.contracts.workspace import PACKAGE_MODELS
+    from analitiq.validator import document_set
+
+    def unit(checks) -> str:
+        if all(c.gates_run for c in checks):
+            return "run-check"
+        if all(c in document_set._workspace_checks() for c in checks):
+            return "workspace-check"
+        assert any(checks == document_set._package_checks(m) for m in PACKAGE_MODELS.values()), checks
+        return "package-check"
+
+    produced: dict[int, str] = {}
+    check_findings = document_set._check_findings
+
+    def recording(checks, documents):
+        findings = check_findings(checks, documents)
+        produced.update((id(f), unit(checks)) for f in findings)
+        return findings
+
+    monkeypatch.setattr(document_set, "_check_findings", recording)
+    result = grade()
+    return [(produced.get(id(f), "root" if f["message_id"] == "package-root-missing" else "document"),
+             f["path"].split("#")[0]) for f in result["findings"]]
+
+
+def _assert_graded_in_phase_order(phases: list[tuple[str, str]], expected: set[str]) -> None:
+    assert {phase for phase, _ in phases} == expected, phases
+    ranks = [_PHASES.index(phase) for phase, _ in phases]
+    assert ranks == sorted(ranks), phases
+    for phase in ("document", "package-check"):
+        keys = [key for p, key in phases if p == phase]
+        assert keys == sorted(keys), phases
+
+
+def test_a_package_is_graded_documents_first_then_its_checks(validator, monkeypatch):
+    documents = {k.removeprefix("connectors/wise/"): v for k, v in _workspace_documents().items()
+                 if k.startswith("connectors/wise/")}
+    documents["definition/endpoints/aaa.json"] = copy.deepcopy(_WISE_TRANSFERS_ENDPOINT) | {"endpoint_id": "bbb"}
+    documents["definition/endpoints/transfers.json"]["unknown_field"] = True
+    phases = _graded_phases(monkeypatch, lambda: validator.validate_package(_package_request("connector", documents)))
+    _assert_graded_in_phase_order(phases, {"document", "package-check"})
+
+
+def test_a_workspace_is_graded_in_one_request_wide_phase_order(validator, monkeypatch):
+    documents = _workspace_documents()
+    documents["connectors/wise/definition/endpoints/aaa.json"] = (
+        copy.deepcopy(_WISE_TRANSFERS_ENDPOINT) | {"endpoint_id": "bbb"})
+    documents[f"pipelines/{_PID}/streams/{_SID}.json"]["source"]["endpoint_ref"]["endpoint_id"] = "transfer"
+    entry = documents["pipelines/manifest.json"]["pipelines"][0]
+    documents["pipelines/manifest.json"]["pipelines"].append(dict(entry))
+    phases = _graded_phases(monkeypatch, lambda: validator.validate_workspace(
+        _workspace_request(documents, run_pipeline=f"pipelines/{_PID}/")))
+    _assert_graded_in_phase_order(phases, {"document", "package-check", "workspace-check", "run-check"})
+
+
+def test_a_missing_root_is_reported_before_every_document(validator):
     documents = _workspace_documents()
     del documents["connectors/wise/definition/connector.json"]
     documents[f"connections/{_DST}/connection.json"] = {}
-    entry = documents["pipelines/manifest.json"]["pipelines"][0]
-    documents["pipelines/manifest.json"]["pipelines"].append(dict(entry))
     result = validator.validate_workspace(_workspace_request(documents))
-    keys = [f["path"].split("#")[0] for f in result["findings"]]
-    assert keys[0] == "connectors/wise/definition/connector.json"
     assert _ids(result)[0] == "package-root-missing"
-    assert keys[1:] == sorted(keys[1:])
-    assert {f"connections/{_DST}/connection.json", "pipelines/manifest.json"} <= set(keys[1:])
-
+    keys = [f["path"].split("#")[0] for f in result["findings"][1:]]
+    assert keys == sorted(keys) and f"connections/{_DST}/connection.json" in keys
 
 def test_an_unparseable_document_withholds_every_packages_checks_in_a_workspace(validator):
     documents = {k: json.dumps(v) for k, v in _workspace_documents().items()}
