@@ -68,8 +68,8 @@ than left to the reader.
   document's bytes on their own. The promise is not keyed on a path. Which
   location a call is pointed at changes without any release, so the input is
   what is found there — the content, names and layout — not where it was
-  found. The validator does not pass a document it cannot identify, so
-  nothing of a kind no detector claimed was ever accepted.
+  found. The kind or package a call names is one of its options, so the same
+  bytes graded as another kind are another input.
 
 ## Why the major carries it
 
