@@ -253,103 +253,6 @@ def test_diagnostics_fails_closed_on_a_published_notapplicable_finding():
     assert V._diagnostics([local_bad])["passed"] is False
 
 
-def _add_wise_endpoint(root: Path, endpoint_id: str = "transfers") -> None:
-    # Give the `wise` API connector a downloaded endpoint set on disk, so the plugin's
-    # scope='connector' verification has something to resolve against. (_build_bundle
-    # deliberately omits it — the connector's endpoint set is then 'unknown' and skipped.)
-    _write(root, f"connectors/wise/definition/endpoints/{endpoint_id}.json",
-           {"endpoint_id": endpoint_id})
-
-
-def test_bundle_connector_endpoint_ref_ok(tmp_path):
-    # a scope='connector' ref that names a real connector endpoint is clean — no warning
-    doc = _build_bundle(tmp_path)
-    _add_wise_endpoint(tmp_path, "transfers")  # matches STREAM's source endpoint_id
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert diag["passed"], diag["findings"]
-    assert not any(f.get("validator") == "connector-endpoint-ref" for f in diag["findings"]), diag["findings"]
-
-
-def test_bundle_connector_endpoint_ref_missing_warns(tmp_path):
-    # a scope='connector' ref to an endpoint the connector does not publish is a
-    # WARNING (not an error — connectors are trusted, pinned at runtime), carrying a
-    # closest-match alignment suggestion; the pipeline still passes
-    doc = _build_bundle(tmp_path)
-    _add_wise_endpoint(tmp_path, "transfers")
-    stream_path = tmp_path / "pipelines/p/streams/orders.json"
-    stream = json.loads(stream_path.read_text())
-    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # typo
-    stream_path.write_text(json.dumps(stream))
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    warn = [f for f in diag["findings"] if f.get("validator") == "connector-endpoint-ref"]
-    assert len(warn) == 1, diag["findings"]
-    assert warn[0]["severity"] == "warning"
-    assert warn[0]["path"] == "/streams/0/source/endpoint_ref"
-    assert "transfers" in warn[0]["message"]  # the suggested real endpoint name
-    assert diag["passed"], "a warning must not fail validation"
-
-
-def test_bundle_connector_endpoint_case_mismatch_suggests(tmp_path):
-    # a case-only mismatch surfaces the correctly-cased connector endpoint as the
-    # alignment target
-    doc = _build_bundle(tmp_path)
-    _add_wise_endpoint(tmp_path, "transfers")
-    stream_path = tmp_path / "pipelines/p/streams/orders.json"
-    stream = json.loads(stream_path.read_text())
-    stream["source"]["endpoint_ref"]["endpoint_id"] = "Transfers"
-    stream_path.write_text(json.dumps(stream))
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    warn = [f for f in diag["findings"] if f.get("validator") == "connector-endpoint-ref"]
-    assert len(warn) == 1 and "'transfers'" in warn[0]["message"], diag["findings"]
-
-
-def test_bundle_connector_endpoint_no_close_match_still_warns(tmp_path):
-    # a wrong ref against a KNOWN endpoint set must still warn even when no endpoint is
-    # a close match — the suggestion is simply omitted. This pins the `suggestion=None`
-    # branch so a "only append when there's a suggestion" refactor can't silently drop
-    # warnings on the most-wrong refs.
-    doc = _build_bundle(tmp_path)
-    _add_wise_endpoint(tmp_path, "transfers")
-    stream_path = tmp_path / "pipelines/p/streams/orders.json"
-    stream = json.loads(stream_path.read_text())
-    stream["source"]["endpoint_ref"]["endpoint_id"] = "zzz"  # no close match to 'transfers'
-    stream_path.write_text(json.dumps(stream))
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    warn = [f for f in diag["findings"] if f.get("validator") == "connector-endpoint-ref"]
-    assert len(warn) == 1 and warn[0]["severity"] == "warning", diag["findings"]
-    assert "Did you mean" not in warn[0]["message"], warn[0]["message"]
-    assert diag["passed"]
-
-
-def test_bundle_connector_endpoint_resolves_by_connector_id_not_dir_slug(tmp_path):
-    # the connector's directory slug (wise-live) differs from the connector_id (wise)
-    # the connection references; the endpoint set is keyed by connector_id too, so a
-    # wrong ref still resolves the set and warns. If resolution regressed to dir-slug
-    # only, the set would read as 'unknown' and the warning would vanish.
-    doc = _build_bundle(tmp_path)
-    (tmp_path / "connectors/wise").rename(tmp_path / "connectors/wise-live")
-    _write(tmp_path, "connectors/wise-live/definition/endpoints/transfers.json",
-           {"endpoint_id": "transfers"})  # connector.json still declares connector_id "wise"
-    stream_path = tmp_path / "pipelines/p/streams/orders.json"
-    stream = json.loads(stream_path.read_text())
-    stream["source"]["endpoint_ref"]["endpoint_id"] = "nope"
-    stream_path.write_text(json.dumps(stream))
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert any(f.get("validator") == "connector-endpoint-ref" for f in diag["findings"]), diag["findings"]
-
-
-def test_bundle_connector_endpoint_unknown_set_skips(tmp_path):
-    # no downloaded endpoint set for the connector => 'unknown', not 'empty': the check
-    # must skip rather than warn on a ref it cannot verify (false-positive guard)
-    doc = _build_bundle(tmp_path)  # no connectors/wise/definition/endpoints/
-    stream_path = tmp_path / "pipelines/p/streams/orders.json"
-    stream = json.loads(stream_path.read_text())
-    stream["source"]["endpoint_ref"]["endpoint_id"] = "does_not_exist"
-    stream_path.write_text(json.dumps(stream))
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert not any(f.get("validator") == "connector-endpoint-ref" for f in diag["findings"]), diag["findings"]
-
-
 def test_unreadable_document(tmp_path):
     diag = V.diagnostics_for("pipeline", tmp_path / "does_not_exist.json")
     assert not diag["passed"]
@@ -825,67 +728,6 @@ def test_bundle_per_connection_crash_preserves_earlier_findings(tmp_path, monkey
     assert "TypeError" in crash[0]["message"] and "simulated crash" in crash[0]["message"]
 
 
-def test_bundle_connector_endpoint_refs_crash_contained(tmp_path, monkeypatch):
-    # the combined _check_connector_endpoint_refs/_connector_endpoint_sets call
-    # is its own guarded unit — a crash there must not discard the referential
-    # findings the OTHER guarded unit (validate_pipeline_bundle) already decided
-    doc = _build_bundle(tmp_path)
-    stream_path = tmp_path / "pipelines/p/streams/orders.json"
-    stream = json.loads(stream_path.read_text())
-    stream["source"]["endpoint_ref"]["connection_id"] = "99999999-9999-4999-8999-999999999999"
-    stream_path.write_text(json.dumps(stream))
-
-    def boom(*a, **kw):
-        raise TypeError("simulated crash")
-
-    monkeypatch.setattr(V, "_check_connector_endpoint_refs", boom)
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert not diag["passed"]
-    validators = _ids(diag["findings"])
-    assert _BUNDLE_CONNECTION_REF_RULES & set(validators), diag["findings"]  # the other unit's result
-    assert "adapter-crash" in validators, diag["findings"]
-
-
-def test_connector_endpoint_ref_crash_preserves_earlier_ref_warning(tmp_path, monkeypatch):
-    # each connector-scope ref is its own independently-decidable unit inside
-    # _check_connector_endpoint_refs — a crash checking one ref (e.g. a
-    # validator regression while computing its alignment suggestion) must not
-    # discard the warning already decided for a ref checked earlier in the
-    # same loop, which building one local list and returning it once at the
-    # end would risk losing entirely
-    doc = _build_bundle(tmp_path)
-    _add_wise_endpoint(tmp_path, "transfers")
-    stream_path = tmp_path / "pipelines/p/streams/orders.json"
-    stream = json.loads(stream_path.read_text())
-    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # typo, resolves first
-    stream_path.write_text(json.dumps(stream))
-
-    second_stream = {**STREAM, "stream_id": "55555555-5555-4555-8555-555555555555",
-                     "source": {**STREAM["source"],
-                                "endpoint_ref": {**STREAM["source"]["endpoint_ref"],
-                                                 "endpoint_id": "wiring"}}}  # unrelated typo
-    _write(tmp_path, "pipelines/p/streams/second.json", second_stream)
-    pipeline_doc = json.loads(doc.read_text())
-    pipeline_doc["streams"].append(second_stream["stream_id"])
-    doc.write_text(json.dumps(pipeline_doc))
-
-    import difflib
-    original = difflib.get_close_matches
-
-    def boom(word, possibilities, *a, **kw):
-        if word == "wiring":
-            raise TypeError("simulated crash")
-        return original(word, possibilities, *a, **kw)
-
-    monkeypatch.setattr(difflib, "get_close_matches", boom)
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = _ids(diag["findings"])
-    assert "adapter-crash" in validators, diag["findings"]
-    # the first ref's warning, decided before the crashing second ref, survives
-    warnings = [f for f in diag["findings"] if f.get("validator") == "connector-endpoint-ref"]
-    assert any("transfers" in w["message"] for w in warnings), diag["findings"]
-
-
 def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, monkeypatch, capsys):
     # MemoryError re-raises through every per-stage guard so only the single
     # outermost guard in main() contains it — one finding, not one per
@@ -1103,66 +945,6 @@ def test_bundle_connector_loop_crash_preserves_other_connector_identity(tmp_path
     assert "wise-live" in bundle["connectors"], bundle["connectors"]
 
 
-def test_connector_endpoint_sets_directory_probe_crash_isolated_to_one_connector(tmp_path, monkeypatch):
-    # the is_dir() probe is inside the per-connector guard, not before it — a
-    # crash there must cost only that connector's endpoint set, not every
-    # connector processed after it in the same loop, and not (by extension)
-    # every other connector's connector-endpoint-ref check
-    doc = _build_bundle(tmp_path)
-    _add_wise_endpoint(tmp_path, "transfers")
-    # give postgresql a downloaded connector endpoint set too, so its
-    # directory is actually globbed and its is_dir() probe actually runs
-    _write(tmp_path, "connectors/postgresql/definition/endpoints/realid.json", {"endpoint_id": "realid"})
-    stream_path = tmp_path / "pipelines/p/streams/orders.json"
-    stream = json.loads(stream_path.read_text())
-    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # typo -> warning if wise's set survives
-    stream_path.write_text(json.dumps(stream))
-
-    original_is_dir = Path.is_dir
-
-    def boom(self):
-        if self.parent.parent.name == "postgresql":
-            raise TypeError("simulated crash")
-        return original_is_dir(self)
-
-    monkeypatch.setattr(Path, "is_dir", boom)
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = _ids(diag["findings"])
-    assert "adapter-crash" in validators, diag["findings"]
-    # wise, sorted after postgresql, still gets its endpoint set built and warns
-    assert any(f.get("validator") == "connector-endpoint-ref" and "transfers" in f["message"]
-               for f in diag["findings"]), diag["findings"]
-
-
-def test_connector_endpoint_sets_enumeration_crash_returns_partial_result(tmp_path, monkeypatch):
-    # the top-level enumeration (sorted(root.glob(...))) is its own guarded
-    # unit, same as _assemble_bundle's sections — a filesystem failure there
-    # must not escape every per-connector guard below it and abort the whole
-    # function; it should return whatever it has (nothing, if the enumeration
-    # itself never got going) instead of raising past its caller
-    doc = _build_bundle(tmp_path)
-
-    original_glob = Path.glob
-
-    def boom(self, pattern):
-        if pattern == "connectors/*/definition/endpoints":
-            raise TypeError("simulated crash")
-        return original_glob(self, pattern)
-
-    monkeypatch.setattr(Path, "glob", boom)
-    findings: list = []
-    sets = V._connector_endpoint_sets(tmp_path, findings)
-    assert sets == {}
-    crash = [f for f in findings if f.get("validator") == "adapter-crash" and f["path"] == "connectors"]
-    assert crash, findings
-
-    # confirmed the same way through the full pipeline: the crash is contained,
-    # not left to propagate out of _bundle_findings
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = _ids(diag["findings"])
-    assert "adapter-crash" in validators, diag["findings"]
-
-
 def test_bundle_connections_section_crash_preserves_streams_and_reaches_connectors(tmp_path, monkeypatch):
     # a failure enumerating the connections/ directory itself (not a single
     # connection's own read) must not abort _assemble_bundle before it can
@@ -1186,30 +968,6 @@ def test_bundle_connections_section_crash_preserves_streams_and_reaches_connecto
     assert crash, findings
     assert bundle["streams"], bundle["streams"]  # the earlier section's result survived
     assert bundle["connectors"], bundle["connectors"]  # the later section still ran
-
-
-def test_bundle_pipeline_validator_crash_preserves_other_unit_result(tmp_path, monkeypatch):
-    # the "pipeline" guarded unit (validate_pipeline_bundle) is not the only
-    # unit _bundle_findings decides — a crash in it must not discard the
-    # OTHER unit's (_check_connector_endpoint_refs) result
-    doc = _build_bundle(tmp_path)
-    _add_wise_endpoint(tmp_path, "transfers")
-    stream_path = tmp_path / "pipelines/p/streams/orders.json"
-    stream = json.loads(stream_path.read_text())
-    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # typo
-    stream_path.write_text(json.dumps(stream))
-
-    import analitiq.validator as validator_module
-
-    def boom(*a, **kw):
-        raise TypeError("simulated crash")
-
-    monkeypatch.setattr(validator_module, "validate_pipeline_bundle", boom)
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    assert not diag["passed"]
-    validators = _ids(diag["findings"])
-    assert "adapter-crash" in validators, diag["findings"]
-    assert "connector-endpoint-ref" in validators, diag["findings"]  # the other unit's result
 
 
 def test_bundle_stream_read_crash_preserves_sibling_stream_and_continues_assembly(tmp_path, monkeypatch):
@@ -1315,35 +1073,6 @@ def test_bundle_unrelated_malformed_stream_skips_referential_pass_without_crash_
     assert "document" in validators, diag["findings"]  # the orphaned malformed stream
     assert not _BUNDLE_CONNECTION_REF_RULES & set(validators), diag["findings"]  # referential pass skipped
     assert "adapter-crash" not in validators, diag["findings"]  # nothing actually crashed
-
-
-def test_connector_endpoint_sets_crash_isolated_to_one_connector(tmp_path, monkeypatch):
-    # a crash reading one connector's endpoint file must cost only that
-    # connector's endpoint set — every OTHER connector's set, and the
-    # connector-endpoint-ref checks it feeds, must still be computed
-    doc = _build_bundle(tmp_path)
-    _add_wise_endpoint(tmp_path, "transfers")
-    _write(tmp_path, "connectors/postgresql/definition/endpoints/orders.json", {"endpoint_id": "orders"})
-
-    original = V._read_json
-
-    def boom(path):
-        if path.parent.name == "endpoints" and path.parent.parent.parent.name == "postgresql":
-            raise TypeError("simulated crash")
-        return original(path)
-
-    monkeypatch.setattr(V, "_read_json", boom)
-    stream_path = tmp_path / "pipelines/p/streams/orders.json"
-    stream = json.loads(stream_path.read_text())
-    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # typo against wise's real "transfers"
-    stream_path.write_text(json.dumps(stream))
-
-    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
-    validators = _ids(diag["findings"])
-    assert "adapter-crash" in validators, diag["findings"]
-    # wise's connector-endpoint-ref check still ran despite postgresql's crash
-    warn = [f for f in diag["findings"] if f.get("validator") == "connector-endpoint-ref"]
-    assert len(warn) == 1 and "transfers" in warn[0]["message"], diag["findings"]
 
 
 def test_pipeline_document_error_survives_non_dict_bundle_enrichment(tmp_path):

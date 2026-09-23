@@ -9,7 +9,7 @@ directory. Each case here grades a package on disk from its `connector.json`
 whole `path` of the one finding the defect produces.
 """
 import json
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 import pytest
 
@@ -264,13 +264,9 @@ def test_an_unstable_locator_escapes_its_write_mode(validator):
     ("a:b.json", "connector.json", "a%3Ab.json"),
 ])
 def test_a_reference_is_relative_and_percent_encoded(tmp_path, target, seen_from, expected):
-    from analitiq.validator._location import DISK, Location, MemoryTree, reference
-    tree = MemoryTree({target: "{}", seen_from: "{}"})
-    in_memory = reference(Location(PurePosixPath(target), tree),
-                          seen_from=Location(PurePosixPath(seen_from), tree))
-    on_disk = reference(Location(tmp_path / target, DISK),
-                        seen_from=Location(tmp_path / seen_from, DISK))
-    assert in_memory == on_disk == expected
+    from analitiq.validator._location import DISK, Location, reference
+    assert reference(Location(tmp_path / target, DISK),
+                     seen_from=Location(tmp_path / seen_from, DISK)) == expected
 
 
 def test_a_qualified_path_splits_at_the_first_hash(validator):

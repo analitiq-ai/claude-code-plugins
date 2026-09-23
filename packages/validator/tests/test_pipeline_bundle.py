@@ -125,7 +125,7 @@ def test_active_pipeline_with_no_runnable_stream_flagged(validator):
     bundle["streams"][0]["status"] = "draft"
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["rule"] == "RULE-PIPE-014" and f["path"] == "/streams"
+        f["rule"] == "RULE-PIPE-014" and f["path"] == "/pipeline/streams"
         for f in findings
     )
 
@@ -154,7 +154,7 @@ def test_duplicate_stream_documents_flagged(validator):
     bundle["streams"].append(dict(bundle["streams"][0]))
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["rule"] == "RULE-PIPE-011" and "two bundled stream documents" in f["message"]
+        f["message_id"] == "duplicate-bundled-stream-id" and f["path"] == "/streams/1/stream_id"
         for f in findings
     )
 
@@ -208,7 +208,7 @@ def test_duplicate_connection_documents_flagged(validator):
     bundle["connections"].append({"connection_id": f"{SOURCE_CONN}_v2", "connector_id": "stripe"})
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["rule"] == "RULE-PIPE-012" and f["path"] == "/connections/2/connection_id"
+        f["rule"] == "RULE-PIPE-012" and f["path"] == "/connections/2"
         for f in findings
     )
 
@@ -346,7 +346,7 @@ def test_duplicate_connection_scoped_endpoint_documents_flagged(validator):
     )
     findings = validator.validate_pipeline_bundle(bundle)
     assert any(
-        f["rule"] == "RULE-STRM-034" and f["path"] == "/endpoints/1"
+        f["rule"] == "RULE-PKG-032" and f["path"] == "/endpoints/1/endpoint_id"
         for f in findings
     )
 
@@ -525,7 +525,7 @@ def test_require_runnable_false_skips_active_gate(validator):
     assert validator.validate_pipeline_bundle(bundle, require_runnable=False) == []
     # ...but with the default it is flagged.
     assert any(
-        f["path"] == "/streams" for f in validator.validate_pipeline_bundle(bundle)
+        f["path"] == "/pipeline/streams" for f in validator.validate_pipeline_bundle(bundle)
     )
 
 

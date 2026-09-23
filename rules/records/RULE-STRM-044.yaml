@@ -1,0 +1,19 @@
+id: RULE-STRM-044
+statement: >
+  A connector-scoped endpoint reference MUST resolve to an endpoint document
+  shipped by the connector of the connection it names.
+tier: reference
+severity: warning
+artifact_kinds: [stream]
+validator: "analitiq.validator.pipelines::_check_connector_scoped_endpoints"
+owners: [pipeline-plugin, engine]
+rationale: >
+  A connector-scoped reference names a connection and an endpoint id, and the
+  endpoint lives in the package of the connector that connection configures —
+  two hops no single document can follow. An id copied from a different
+  connector, or one the connector's next release renamed, reads as correct in
+  the stream and resolves to nothing. It is checked only where the connection
+  and the connector's endpoints are graded together; a connection that is
+  absent is `RULE-PIPE-012`'s finding, not this one.
+status: active
+superseded_by: null

@@ -5,21 +5,26 @@ the same model the published `stream` JSON Schema is generated from):
 `TypeAdapter(...).validate_python` enforces its structure *and* every cross-field
 rule (endpoint-ref shape, unique destinations, the authored-top-level guard)
 offline, no schema fetch, no drift. There is no cross-file or referential check a
-stream document needs in isolation — its wiring within an assembled run is checked
-by the pipeline-bundle kind. The one check the model cannot carry is
-RULE-SHRD-003, which reports a `warning` — a severity no `@model_validator` can
-carry (`rules/SCHEMA.md`, `validator`) — so this kind registers a combined
-validator.
+stream document needs in isolation — its wiring is checked across documents by
+`analitiq.validator.document_set` and the pipeline-bundle kind. The one check the
+model cannot carry is RULE-SHRD-003, which reports a `warning` — a severity no
+`@model_validator` can carry (`rules/SCHEMA.md`, `validator`) — so this kind's
+validator combines the two.
 
-At import this module registers its detector -> validator pair with the core
-dispatch registry, so `_core` never hard-codes a stream branch — a new kind is a
-new module.
+At import this module registers that validator with the core registries, for a
+stream named by a request and one detected on the path route, so `_core` never
+hard-codes a stream branch — a new kind is a new module.
 """
 from __future__ import annotations
 
 from typing import Any
 
-from ._core import contract_model_domain, register_model_and_schema_kind
+from ._core import (
+    _missing_schema_url_findings,
+    _model_findings,
+    contract_model_domain,
+    register_document_kind,
+)
 
 # Import the contract model under the shared DOMAIN guard (the model binds the
 # `$schema` host at import; see `contract_model_domain`).
@@ -37,4 +42,8 @@ def is_stream_doc(doc: Any) -> bool:
     return isinstance(doc, dict) and "source" in doc and "destinations" in doc
 
 
-register_model_and_schema_kind(is_stream_doc, _STREAM_ADAPTER)
+def _validate_stream_document(doc: Any) -> list[dict]:
+    return _model_findings(doc, _STREAM_ADAPTER) + _missing_schema_url_findings(doc)
+
+
+register_document_kind("stream", is_stream_doc, _validate_stream_document)

@@ -5712,7 +5712,7 @@
    "artifact_kinds": [
     "connector-package"
    ],
-   "validator": "analitiq.validator.connectors::check_coverage",
+   "validator": "analitiq.validator.connectors::_type_map_relation_findings",
    "enforcement_location": null,
    "owners": [
     "engine",
@@ -5759,11 +5759,12 @@
    "artifact_kinds": [
     "connector-package"
    ],
-   "validator": "analitiq.validator.connectors::check_coverage",
+   "validator": "analitiq.validator.connectors::_duplicate_endpoint_id_findings",
    "enforcement_location": null,
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "targets": [],
    "fields": [],
@@ -5782,7 +5783,7 @@
    "artifact_kinds": [
     "connector-package"
    ],
-   "validator": "analitiq.validator.connectors::check_coverage",
+   "validator": "analitiq.validator.connectors::_native_coverage_findings",
    "enforcement_location": null,
    "owners": [
     "engine",
@@ -7243,6 +7244,29 @@
    "symbol": null,
    "fixture_model": "StreamSource",
    "rationale": "A checkpoint records the cursor value of the last row of a page, and that value is the highest one read only when the page was ordered by the cursor. Declaring a different field orders the page by something else, so the run saves an arbitrary row's value and the next run resumes above rows it never read — data loss with no failure anywhere, visible only as records that never arrive. Declaring nothing is not that: an ordering the document does not name is the cursor's, because the cursor is what the read path orders a paged incremental source by when the stream names no other field. So the rule reaches exactly the disagreement an author can write down, which sits in one document and is decidable from it alone — refusing the stream is the only point at which the author still has both halves in front of them. A full-refresh source reads no cursor, so its ordering is free.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-STRM-044",
+   "statement": "A connector-scoped endpoint reference MUST resolve to an endpoint document shipped by the connector of the connection it names.\n",
+   "tier": "reference",
+   "severity": "warning",
+   "artifact_kinds": [
+    "stream"
+   ],
+   "validator": "analitiq.validator.pipelines::_check_connector_scoped_endpoints",
+   "enforcement_location": null,
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "A connector-scoped reference names a connection and an endpoint id, and the endpoint lives in the package of the connector that connection configures — two hops no single document can follow. An id copied from a different connector, or one the connector's next release renamed, reads as correct in the stream and resolves to nothing. It is checked only where the connection and the connector's endpoints are graded together; a connection that is absent is `RULE-PIPE-012`'s finding, not this one.\n",
    "status": "active",
    "superseded_by": null
   },

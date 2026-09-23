@@ -57,31 +57,16 @@ reference field (a connection naming no connector, a stream slot with no
 connection refs match on their base form, so a `{id}_v{n}` versioned ref resolves
 the document that declares the bare `{id}` (connector identities match whole).
 
-## Path-free document sets
+## In-memory requests
 
-`check_coverage` and the pipeline-builder plugin's own bundle assembly both
-resolve a document's siblings by reading real files off a filesystem path. A
-consumer with no local filesystem to put those files on — a hosted validator
-wrapping this package as a remote tool, registry CI, any caller handed
-document content directly — cannot use either route: it has the documents'
-content in hand, never a directory they can be read from.
-
-`analitiq.validator.document_set` fixes the contract such a consumer calls
-instead. `validate_pipeline_package` raises `NotImplementedError`.
-`packages/validator/tests/test_document_set.py` is the fixture corpus that
-fixes what an implementation must satisfy, a case `xfail` while the function
-it exercises raises. Read that module and that test file for the contract itself — it is
-not restated here.
-
-The contract is deliberately narrow. Each entry point takes the request model
-that names the unit being submitted — `ValidateSingleDocumentRequest` or
-`ValidatePackageRequest`, both from `analitiq.contracts.validation_requests`,
-which own the text-only document value type and, for a package, the
-document-key grammar, and are where a malformed argument is refused. A request
-never carries a directory to read from, and its keys are never resolved
-against a filesystem — the offline guarantee
-stated above for single-document validation, extended to a set of documents
-instead of one.
+`analitiq.validator.document_set` grades documents handed over as text, never
+read from a filesystem. `validate_single_document`, `validate_package` and
+`validate_workspace` each take the request model naming that unit, from
+`analitiq.contracts.validation_requests`; the model owns the request shape and
+is where a malformed argument is refused. A document is graded as the kind the
+request names, or the kind its location gives it inside a package or
+workspace. Checks spanning documents run where every document they read is
+held. That module's docstring is the contract; it is not restated here.
 
 ## Rule cases
 

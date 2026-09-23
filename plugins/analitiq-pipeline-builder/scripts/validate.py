@@ -43,20 +43,6 @@ entry point. This adapter routes each entity as follows:
     connector's map goes through — roots every finding at the entry it
     concerns, and grades the map it read as the ``type-map`` entity.
 
-One check is the adapter's own, because it reads files the published
-validator never receives:
-
-  * ``connector-endpoint-ref`` — the published bundle validator receives
-    connector *identity* only (slugs), never connector endpoint *contents*, so it
-    leaves ``scope='connector'`` endpoint refs unresolved by design
-    (``analitiq.validator.pipelines``: "out of scope for this check"). This plugin,
-    unlike the service, has the downloaded connector endpoint files on disk, so it
-    verifies each ``scope='connector'`` stream ref against the connector's on-disk
-    endpoint set and emits a **warning** (with an alignment suggestion) when the
-    referenced endpoint is absent. It never errors — connectors are trusted
-    registry artifacts pinned by ``connector_version`` at runtime — and it never
-    edits the connector; the orchestrator aligns the stream's ref instead.
-
 Validation is offline — no schema is fetched. Usage::
 
     python3 plugins/analitiq-pipeline-builder/scripts/validate.py --entity pipeline --document path/to/pipeline.json --bundle-root .
@@ -428,117 +414,6 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     return bundle, findings, complete, crashed
 
 
-def _connector_endpoint_sets(root: Path, findings: list[dict]) -> dict[str, set[str]]:
-    """Map each downloaded connector — by directory slug **and** its authored
-    `connector_id` — to the set of endpoint ids it publishes on disk (each
-    `connectors/<slug>/definition/endpoints/*.json` contributes both its filename
-    stem and its `endpoint_id` field, which the connector's own filename gate keeps
-    equal for well-formed registry connectors — this adapter records both to stay
-    correct even if a malformed connector let them diverge).
-
-    A connector whose `definition/endpoints/` directory is absent or empty is
-    **omitted**, not recorded as an empty set: its endpoint set is *unknown* here
-    (the plugin may not have downloaded endpoints for it), and an unknown set must
-    not read as "no endpoints", which would warn on every ref. Callers treat a
-    missing key as "cannot verify — skip" — the same treatment a crash reading
-    one connector's endpoints gets here (contained per connector, so it costs
-    only that connector's set, never every other connector's).
-
-    The enumeration itself (`sorted(root.glob(...))`, which materializes the
-    full listing before the loop runs) is wrapped in its own outer guard too:
-    a filesystem failure there would otherwise escape every per-connector
-    guard below and return nothing at all, rather than whatever connectors
-    were already found before it."""
-    from analitiq.validator._core import _JSON_READ_ERRORS
-    sets: dict[str, set[str]] = {}
-    with _contained(findings, "connectors"):
-        for ep_dir in sorted(root.glob("connectors/*/definition/endpoints")):
-            slug_dir = ep_dir.parent.parent  # connectors/<slug>
-            with _contained(findings, f"connectors/{slug_dir.name}/definition/endpoints"):
-                if not ep_dir.is_dir():
-                    continue
-                ids: set[str] = set()
-                for ep_json in sorted(ep_dir.glob("*.json")):
-                    ids.add(ep_json.stem)
-                    try:
-                        eid = _read_json(ep_json).get("endpoint_id")
-                    except (*_JSON_READ_ERRORS, AttributeError):
-                        eid = None
-                    if isinstance(eid, str) and eid:
-                        ids.add(eid)
-                if ids:
-                    keys = {slug_dir.name}
-                    try:
-                        cid = _read_json(slug_dir / "definition" / "connector.json").get("connector_id")
-                    except (*_JSON_READ_ERRORS, AttributeError):
-                        cid = None
-                    if isinstance(cid, str) and cid:
-                        keys.add(cid)
-                    for key in keys:
-                        sets[key] = ids
-    return sets
-
-
-def _check_connector_endpoint_refs(streams, connections,
-                                   connector_endpoint_sets: dict[str, set[str]],
-                                   findings: list[dict]) -> None:
-    """Verify every `scope='connector'` stream endpoint_ref names an endpoint that
-    actually exists in the referenced connector's on-disk endpoint set. Emits a
-    `connector-endpoint-ref` **warning** (never an error) per unresolved ref, with a
-    closest-match alignment suggestion so the orchestrator can retarget the stream to
-    the connector's real endpoint name (it never edits the connector).
-
-    Skipped silently when the endpoint set is unknown (connector not downloaded), so
-    absence never produces a false positive. Reuses the published ref iterator and
-    version-suffix normaliser so ref paths and connection-id matching stay identical
-    to the bundle validator's own resolution.
-
-    Appends directly to the caller's shared `findings` list: each ref is its own
-    independently-decidable unit, contained on its own, so a crash checking one
-    ref (a validator regression in `_base_id`, say) costs only that ref's
-    warning — never the warnings already decided for refs checked earlier in
-    this same loop, which building a local list and returning it once at the
-    end would risk losing entirely."""
-    import difflib
-    from analitiq.validator.pipelines import _base_id, _iter_endpoint_refs
-
-    conn_to_connector: dict = {}
-    with _contained(findings, "connector-endpoint-refs"):
-        for conn in connections if isinstance(connections, list) else []:
-            if not isinstance(conn, dict):
-                continue
-            cid, connector = conn.get("connection_id"), conn.get("connector_id")
-            if isinstance(cid, str) and isinstance(connector, str):
-                conn_to_connector[_base_id(cid)] = connector
-
-    for path, ref in _iter_endpoint_refs(streams):
-        with _contained(findings, path):
-            if ref.get("scope") != "connector":
-                continue
-            cid, eid = ref.get("connection_id"), ref.get("endpoint_id")
-            if not (isinstance(cid, str) and cid and isinstance(eid, str) and eid):
-                continue  # missing ids are the contract model's concern, or RULE-STRM-033/034's
-            connector = conn_to_connector.get(_base_id(cid))
-            if connector is None:
-                continue  # unresolved connection — already flagged by the connection check
-            endpoint_ids = connector_endpoint_sets.get(connector)
-            if not endpoint_ids:
-                continue  # endpoint set unknown (connector not downloaded) — cannot verify
-            if eid in endpoint_ids:
-                continue
-            available = sorted(endpoint_ids)
-            case_match = next((e for e in available if e.lower() == eid.lower()), None)
-            close = difflib.get_close_matches(eid, available, n=1, cutoff=0.6)
-            suggestion = case_match or (close[0] if close else None)
-            hint = f" Did you mean {suggestion!r}?" if suggestion else ""
-            findings.append(_finding(
-                "connector-endpoint-ref", "warning", path,
-                f"endpoint_id {eid!r} is not among connector {connector!r}'s published "
-                f"endpoints {available}.{hint} Align the stream's endpoint_ref to the "
-                f"connector's endpoint name; the plugin never edits the connector.",
-            ))
-
-
 def is_runnable_required(pipeline_doc: object) -> bool:
     """This plugin authors draft bundles by design: a draft pipeline is not yet
     runnable, so its runnability verdicts are an author-time expectation, not a
@@ -585,15 +460,6 @@ def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> lis
     # defect precisely. Skipping the referential pass here is the same caution as
     # the crash case, but adding a second, adapter-crash-labeled finding would
     # claim a containment guard fired when nothing actually crashed.
-    # Plugin-local aid the published bundle can't make: it receives connector identity
-    # only, so scope='connector' endpoint refs go unresolved. The plugin has the
-    # downloaded connector endpoint files, so verify those refs here and warn (with an
-    # alignment suggestion) rather than error — connectors are trusted, pinned at
-    # runtime. _check_connector_endpoint_refs contains each ref on its own; this
-    # outer guard is a backstop, e.g. against _connector_endpoint_sets itself.
-    with _contained(findings, "connector-endpoint-refs"):
-        _check_connector_endpoint_refs(
-            bundle["streams"], bundle["connections"], _connector_endpoint_sets(root, findings), findings)
     return findings
 
 

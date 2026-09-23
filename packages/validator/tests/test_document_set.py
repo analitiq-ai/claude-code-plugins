@@ -1,33 +1,17 @@
-"""Fixture corpus for the path-free document-set API (`analitiq.validator
-.document_set`). A case exercising an entry point that raises
-`NotImplementedError` is `xfail(strict=True)`; every other case carries no
-marker. An implementation turns such a case from `xfail` to passing by
-replacing the stub body it exercises and removing that case's marker;
-`strict=True` means a case that starts passing while its marker is still on it
-fails the suite, so a marker can never survive its own fix by accident.
+"""The in-memory request API (`analitiq.validator.document_set`).
 
-Two corpora already committed for the path-based routes are reused here
-rather than re-authored: `packages/validator/tests/corpus/` (a connector
-package) and `tests/pipeline_builder/test_validate.py`'s `_build_bundle`
-layout (a pipeline bundle) — both are content this suite already keeps
-model-valid, so the document-set versions built from them are testing the
-document-set mechanism, not guessing at contract shapes.
-
-The fixtures below build *parsed* documents, because the equivalence cases
-also write them to disk and hand them to the path-based route. A request
-carries file text, so `_package_request` / `_document_request` serialize at the
-call. Nothing here covers a malformed argument — a bad key, a value that is
-not text, a key that is also a directory, an `entity` outside the vocabulary.
-Those are refused by the request models at construction and belong to the
-contract package's own model tests; a case asserting one of them produces a
-*finding* would contradict the gate. `bytes` and `bytearray` holding UTF-8 pass
-that gate — pydantic decodes them in lax mode, byte-order mark included — and
-pinning that coercion belongs to the model tests too.
+The connector documents are reused from `packages/validator/tests/corpus/`,
+content this suite already keeps model-valid, so these cases test the request
+mechanism, not guesses at contract shapes. Fixtures are parsed documents; the
+request helpers serialize them to the text a request carries. A malformed
+argument — a bad key, a value that is not text, a key at a secret location, an
+unknown kind — is refused by the request models at construction and belongs to
+the contract package's own model tests.
 """
 from __future__ import annotations
 
+import copy
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -37,110 +21,73 @@ from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
 from analitiq.contracts.validation_requests import (
     ValidatePackageRequest,
     ValidateSingleDocumentRequest,
+    ValidateWorkspaceRequest,
 )
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 
-_PLUGIN_SCRIPTS = (
-    Path(__file__).resolve().parents[3] / "plugins" / "analitiq-pipeline-builder" / "scripts"
-)
-if str(_PLUGIN_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_PLUGIN_SCRIPTS))
 
-
-def _xfail(fn_name: str):
-    return pytest.mark.xfail(
-        strict=True, raises=NotImplementedError,
-        reason=f"{fn_name} raises NotImplementedError (analitiq.validator.document_set)")
-
-
-def _package_request(package: str, documents: dict) -> ValidatePackageRequest:
-    """A request to grade `documents` as `package`, each serialized to the file
-    text a request actually carries."""
+def _package_request(package_kind: str, documents: dict) -> ValidatePackageRequest:
     return ValidatePackageRequest(
-        package_kind=package,
+        package_kind=package_kind,
         documents={key: json.dumps(doc) for key, doc in documents.items()})
 
 
-def _expected_envelope(validator, findings: list) -> dict:
-    """The envelope a route must answer with for `findings`, reduced the one
-    way `finding_costs_a_pass` defines rather than by a second predicate that
-    can drift from it."""
-    return {"passed": not any(validator.finding_costs_a_pass(f) for f in findings),
-            "findings": findings}
+def _document_request(document, document_kind: str) -> ValidateSingleDocumentRequest:
+    return ValidateSingleDocumentRequest(document=json.dumps(document), document_kind=document_kind)
 
 
-def _document_request(document, entity: str) -> ValidateSingleDocumentRequest:
-    """A single-document request over one parsed document and the published
-    schema name its sender declares it is written against."""
-    return ValidateSingleDocumentRequest(document=json.dumps(document), document_kind=entity)
+def _workspace_request(documents: dict, run_pipeline: str | None = None) -> ValidateWorkspaceRequest:
+    return ValidateWorkspaceRequest(
+        documents={key: json.dumps(doc) for key, doc in documents.items()},
+        run_pipeline=run_pipeline)
+
+
+def _ids(result) -> list[str]:
+    return [f["message_id"] for f in result["findings"]]
+
+
+def _at(result, message_id: str) -> list[str]:
+    """The paths of every finding under `message_id`."""
+    return [f["path"] for f in result["findings"] if f["message_id"] == message_id]
 
 
 # ---------------------------------------------------------------------------
 # Finding — drift guard against the keys `analitiq.validator.finding` actually
-# produces (no marker: a type-contract fact). `finding()`'s own
-# docstring is the source: `rule` only when given, `severity` only for a
-# `fail` kind, everything else unconditional.
+# produces.
 # ---------------------------------------------------------------------------
 
 def test_finding_matches_the_keys_finding_builder_produces(validator):
     from typing import get_args, get_type_hints
 
+    from analitiq.validator._core import _KINDS
     from analitiq.validator.document_set import Finding
 
-    from analitiq.validator._core import _KINDS
-
-    # Every call `finding()` admits — each kind, with no rule and with rules of
-    # each severity a `fail` finding can report — rather than sampled calls: a
-    # key set only on a branch no sample visits would be invisible to both
-    # assertions below.
+    # Every call `finding()` admits, not a sample: a key set only on a branch
+    # no sample visits would be invisible to both assertions below.
     produced = [validator.finding(rule=rule, message_id="m", kind=kind, path="p", message="msg")
                 for kind in _KINDS for rule in (None, "RULE-PKG-030", "RULE-CTOR-043")]
     possible_keys = set().union(*(set(f) for f in produced))
     always_present = set.intersection(*(set(f) for f in produced))
-    with_rule_and_severity = validator.finding(
-        rule="RULE-PKG-030", message_id="m", kind="fail", path="p", message="msg")
     hints = get_type_hints(Finding)
-    # Set equality with no carve-out: every key this TypedDict declares is one
-    # `finding()` can produce, and every key `finding()` can produce is
-    # declared. A key added to either side alone fails here.
     assert set(hints) == possible_keys
-    # Required vs. optional tracks what those calls agreed on: a key every one
-    # of them carries is one `finding()` always sets; a key only some carry
-    # (`rule`, `severity`) is conditional.
     assert Finding.__required_keys__ == always_present
     assert Finding.__optional_keys__ == possible_keys - always_present
-
-    # `kind`: pinned directly against `finding()`'s own vocabulary constant,
-    # not just against the members this test happens to try — a member
-    # landing in one and not the other fails here rather than staying invisible.
     assert set(get_args(hints["kind"])) == set(_KINDS)
-    for k in _KINDS:
-        assert validator.finding(message_id="m", kind=k, path="p", message="msg")["kind"] == k
-    with pytest.raises(ValueError):
-        validator.finding(message_id="m", kind="not-a-real-kind", path="p", message="msg")
 
-    # `severity`: only ever set on a `fail` finding, derived from the named
-    # rule's own severity. RULE-PKG-030 is error-tier, RULE-CTOR-043 is
-    # warning-tier — real records, not hand-picked strings — and RULE-CTOR-032
-    # (info-tier) proves the third real severity a rule record can declare
-    # never reaches a Finding's severity field at all (finding() itself
-    # refuses to report an info-tier violation as `kind: fail`).
-    warning_finding = validator.finding(
-        rule="RULE-CTOR-043", message_id="m", kind="fail", path="p", message="msg")
-    observed_severities = {with_rule_and_severity["severity"], warning_finding["severity"]}
-    assert observed_severities == set(get_args(hints["severity"]))
+    # RULE-PKG-030 is error-tier and RULE-CTOR-043 warning-tier; an info-tier
+    # rule (RULE-CTOR-032) never reaches a `fail` finding at all.
+    observed = {validator.finding(rule=rule, message_id="m", kind="fail", path="p", message="msg")["severity"]
+                for rule in ("RULE-PKG-030", "RULE-CTOR-043")}
+    assert observed == set(get_args(hints["severity"]))
     with pytest.raises(ValueError):
         validator.finding(rule="RULE-CTOR-032", message_id="m", kind="fail", path="p", message="msg")
 
 
 # ---------------------------------------------------------------------------
-# The entry-point signatures — the surface this module exists to declare (not
-# marker: a type-contract fact). The request models are imported
-# under `TYPE_CHECKING` and no type checker runs over this repo, so without
-# this case a misspelled model name, a deferred import of a module that does
-# not exist, or an annotation naming the other request model reaches a release
-# unnoticed — as does a parameter reappearing beside `request`.
+# Entry-point signatures. The request models are imported under
+# `TYPE_CHECKING` and no type checker runs over this repo, so without this case
+# a wrong annotation reaches a release unnoticed.
 # ---------------------------------------------------------------------------
 
 def test_entry_points_are_annotated_with_their_request_models(validator):
@@ -150,10 +97,8 @@ def test_entry_points_are_annotated_with_their_request_models(validator):
     from typing import get_type_hints
 
     document_set = validator.document_set
-    # The namespace is built by executing the module's OWN deferred imports,
-    # never by importing the request models here: a namespace this test chose
-    # would resolve the annotation strings whatever that block says, leaving a
-    # wrong module path or a deleted import green.
+    # The namespace is built from the module's OWN deferred imports, so a wrong
+    # module path or a deleted import fails here.
     source = Path(document_set.__file__).read_text(encoding="utf-8")
     deferred = [statement
                 for node in ast.parse(source).body
@@ -169,67 +114,53 @@ def test_entry_points_are_annotated_with_their_request_models(validator):
 
     for entry_point, request_model in (
         (document_set.validate_single_document, ValidateSingleDocumentRequest),
-        (document_set.validate_connector_package, ValidatePackageRequest),
-        (document_set.validate_pipeline_package, ValidatePackageRequest),
+        (document_set.validate_package, ValidatePackageRequest),
+        (document_set.validate_workspace, ValidateWorkspaceRequest),
     ):
         hints = get_type_hints(entry_point, localns=namespace)
         assert hints["request"] is request_model, entry_point.__name__
         assert hints["return"] is document_set.ValidationEnvelope, entry_point.__name__
-        # The kind is carried by the function, so nothing may select between
-        # kinds from the argument list: no `schema_url`, `direction`, `probes`,
-        # `entity` or package-kind parameter beside `request`.
         assert tuple(inspect.signature(entry_point).parameters) == ("request",), entry_point.__name__
 
 
 # ---------------------------------------------------------------------------
-# Fixtures: a connector package and a pipeline package, each built from
-# content this suite already keeps model-valid. Values are parsed documents;
-# `_package_request` serializes them into the file text a request carries.
+# Fixtures. Values are parsed documents.
 # ---------------------------------------------------------------------------
 
+_H = "https://schemas.analitiq.ai"
+
+
+def _type_map_doc(**sections) -> dict:
+    return {"$schema": TYPE_MAP_SCHEMA_URL, **sections}
+
+
 def _connector_package_documents(*, native="STRING", arrow="Utf8") -> dict:
-    """A model-valid, coverage-clean connector package as parsed documents
-    keyed by package-relative path:
-    `connector.json` (`corpus/valid_connector.json`, kind=api), a sibling read
-    map covering the one native/arrow pair below, and one endpoint
-    (`corpus/valid_read.json`) declaring it."""
+    """A model-valid, coverage-clean api connector package: the connector, a
+    read map covering the one native/arrow pair below, and one endpoint
+    declaring it."""
     connector = json.loads((CORPUS / "valid_connector.json").read_text())
     endpoint = json.loads((CORPUS / "valid_read.json").read_text())
     endpoint["operations"]["read"]["response"]["schema"]["items"]["properties"] = {
         "a": {"type": "string", "native_type": native, "arrow_type": arrow},
     }
     return {
-        "connector.json": connector,
-        "type-map.json": _type_map_doc(
+        "definition/connector.json": connector,
+        "definition/type-map.json": _type_map_doc(
             read=[{"match": "exact", "native_type": native, "arrow_type": arrow}]),
-        "endpoints/v1__records.json": endpoint,
+        f"definition/endpoints/{endpoint['endpoint_id']}.json": endpoint,
     }
 
 
-def _uncovered_endpoint_document(*, endpoint_id="v2__widgets", request_path="/v2/widgets",
-                                  native="BOOLEAN", arrow="Boolean") -> dict:
-    """A model-valid endpoint declaring a native type `_connector_package_documents`'s
-    read map does not cover — a real, distinguishable `native-type-unresolved`
-    finding (RULE-PKG-033). Used where a test must tell "this document was
-    reached and validated" apart from "this document was never reached" — a
-    clean fixture can't distinguish the two, since both look like zero
-    findings — or must show more than one real finding to make an
-    order-sensitive comparison non-vacuous."""
+def _uncovered_endpoint_document(*, endpoint_id="v2__widgets", request_path="/v2/widgets") -> dict:
+    """A model-valid endpoint declaring a native type the package's read map
+    does not cover: a distinguishable `native-type-unresolved` finding."""
     endpoint = json.loads((CORPUS / "valid_read.json").read_text())
     endpoint["endpoint_id"] = endpoint_id
     endpoint["operations"]["read"]["request"]["path"] = request_path
     endpoint["operations"]["read"]["response"]["schema"]["items"]["properties"] = {
-        "b": {"type": "string", "native_type": native, "arrow_type": arrow},
+        "b": {"type": "string", "native_type": "BOOLEAN", "arrow_type": "Boolean"},
     }
     return endpoint
-
-
-_H = "https://schemas.analitiq.ai"
-
-
-def _type_map_doc(**sections) -> dict:
-    """A type-map document carrying the given `read` / `write` rule lists."""
-    return {"$schema": TYPE_MAP_SCHEMA_URL, **sections}
 
 
 _SRC, _DST, _PID, _SID = (
@@ -280,12 +211,6 @@ _DB_ENDPOINT = {
     ],
     "primary_keys": ["id"],
 }
-# A connection's `connector_id` must resolve among the bundle's connector
-# identities for the bundle's own referential check to pass at all, so the
-# equivalence fixture's embedded connectors below are fully model-valid and
-# coverage-clean documents, not identity-only stand-ins: closing the
-# embedded-connector coverage gap must not make `validate_pipeline_package`
-# report findings against them that the path-based route never produces.
 _CONNECTOR_WISE = {
     "$schema": f"{_H}/connector/latest.json", "connector_id": "wise", "kind": "api",
     "display_name": "Wise",
@@ -305,8 +230,6 @@ _CONNECTOR_WISE = {
             "ui": {"label": "API Token", "widget": "password", "help_text": "Wise API token."}}},
         "required_for_activation": ["secrets.api_token"]},
 }
-_CONNECTOR_WISE_TYPE_MAP = _type_map_doc(
-    read=[{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])
 _WISE_TRANSFERS_ENDPOINT = {
     "$schema": f"{_H}/api-endpoint/latest.json", "endpoint_id": "transfers",
     "operations": {"read": {
@@ -319,547 +242,587 @@ _WISE_TRANSFERS_ENDPOINT = {
                 "items": {"type": "object", "properties": {
                     "id": {"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}}}}}}},
 }
-_CONNECTOR_PG = {
-    "$schema": f"{_H}/connector/latest.json", "kind": "database", "connector_id": "postgresql",
-    "display_name": "PostgreSQL",
-    "description": "Relational database.",
-    "version": "1.0.0", "default_transport": "database",
-    "transports": {"database": {
-        "transport_type": "sqlalchemy", "driver": "postgresql+psycopg",
-        "dsn": {
-            "kind": "url_template",
-            "template": "postgresql+psycopg://{username}:{password}@{host}:{port}/{database}",
-            "bindings": {
-                "username": {"value": {"ref": "connection.parameters.username"}, "encoding": "url_userinfo"},
-                "password": {"value": {"ref": "secrets.password"}, "encoding": "url_userinfo"},
-                "host": {"value": {"ref": "connection.parameters.host"}, "encoding": "host"},
-                "port": {"value": {"ref": "connection.parameters.port"}, "encoding": "raw"},
-                "database": {"value": {"ref": "connection.parameters.database"}, "encoding": "url_path_segment"},
-            }}}},
-    "auth": {"type": "db"},
-    "connection_contract": {"inputs": {
-        "host": {"source": "user", "phase": "pre_auth", "storage": "connection.parameters",
-                 "type": "string", "required": True},
-        "port": {"source": "user", "phase": "pre_auth", "storage": "connection.parameters",
-                 "type": "integer", "required": True, "default": 5432},
-        "database": {"source": "user", "phase": "pre_auth", "storage": "connection.parameters",
-                     "type": "string", "required": True},
-        "username": {"source": "user", "phase": "auth", "storage": "connection.parameters",
-                     "type": "string", "required": True},
-        "password": {"source": "user", "phase": "auth", "storage": "secrets",
-                     "type": "string", "required": True, "secret": True},
-    }},
-    "resource_discovery": {
-        "strategy": "information_schema", "transport_ref": "database",
-        "implementation": {"type": "builtin"},
-        "produces": ["connection.endpoints", "connection.type_map"],
-        "triggers": {"list_resources": "on_activation", "describe_resource": "on_resource_selected"}},
-}
+_WISE_TYPE_MAP = _type_map_doc(read=[{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}])
 _CONNECTOR_PG_TYPE_MAP = _type_map_doc(
     read=[{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}],
     write=[
         {"match": "exact", "native_type": "bigint", "arrow_type": "Int64"},
         {"match": "regex", "native_type": "TEXT", "arrow_type": ".*"},
     ])
-def _pipeline_core_documents() -> dict:
-    """The connection, stream, pipeline, and destination-endpoint documents a
-    pipeline package carries regardless of what its embedded
-    `connectors/` subtree looks like."""
-    return {
-        "connections/wise/connection.json": _CONN_WISE,
-        "connections/postgresql/connection.json": _CONN_PG,
-        f"connections/postgresql/definition/endpoints/{_EID}.json": _DB_ENDPOINT,
-        "pipelines/p/streams/orders.json": _STREAM,
-        "pipelines/p/pipeline.json": _PIPELINE,
-    }
 
 
-def _pipeline_package_documents() -> dict:
-    """A model-valid draft pipeline bundle as parsed documents, laid out at the
-    same relative paths `_assemble_bundle`
-    (`plugins/analitiq-pipeline-builder/scripts/validate.py`) already resolves
-    from a filesystem root — so the document-set route and that function's
-    on-disk route are given byte-identical content, just supplied two
-    different ways. `wise`'s and `postgresql`'s embedded
-    `connectors/<slug>/definition/...` subtrees are fully model-valid and
-    coverage-clean: this is the fixture the equivalence test uses, so
-    validating an embedded subtree as a connector package of its own must
-    contribute no findings the path-based route doesn't already produce."""
-    return {
-        **_pipeline_core_documents(),
+def _pg_connector() -> dict:
+    connector = json.loads((CORPUS / "valid_connector_sync_driver.json").read_text())
+    connector["connector_id"] = "postgresql"
+    return connector
+
+
+def _workspace_documents() -> dict:
+    """A workspace every check passes: a pipeline reading a Wise connector
+    endpoint and writing a Postgres connection endpoint, every package it
+    references, and the manifest listing it."""
+    return copy.deepcopy({
         "connectors/wise/definition/connector.json": _CONNECTOR_WISE,
-        "connectors/wise/definition/type-map.json": _CONNECTOR_WISE_TYPE_MAP,
+        "connectors/wise/definition/type-map.json": _WISE_TYPE_MAP,
         "connectors/wise/definition/endpoints/transfers.json": _WISE_TRANSFERS_ENDPOINT,
-        "connectors/postgresql/definition/connector.json": _CONNECTOR_PG,
+        "connectors/postgresql/definition/connector.json": _pg_connector(),
         "connectors/postgresql/definition/type-map.json": _CONNECTOR_PG_TYPE_MAP,
-    }
-
-
-def _pipeline_package_documents_with_two_findings() -> dict:
-    """`_pipeline_package_documents` with one unresolvable connection id on the
-    pipeline's own `connections.destinations`, and `wise`'s connection document
-    naming a connector no bundled subtree defines — a `connection-ref-unresolved`
-    finding against the pipeline document and a `connector-ref-unresolved`
-    finding against a connection document.
-
-    The two findings come from two *different* documents deliberately. Findings
-    originating in one document are emitted in that document's own internal
-    order whatever order the caller built its mapping in, so a route that
-    emitted findings in caller-mapping order would still compare equal — the
-    order and equivalence comparisons below can only detect that with content
-    whose order the mapping genuinely decides."""
-    documents = _pipeline_package_documents()
-    pipeline = {**documents["pipelines/p/pipeline.json"]}
-    pipeline["connections"] = {
-        **pipeline["connections"],
-        "destinations": [*pipeline["connections"]["destinations"], "missing-connection-a"],
-    }
-    connection = {**documents["connections/wise/connection.json"],
-                  "connector_id": "not-a-bundled-connector"}
-    return {**documents,
-            "pipelines/p/pipeline.json": pipeline,
-            "connections/wise/connection.json": connection}
-
-
-def _pipeline_package_documents_with_embedded_connectors() -> dict:
-    """`_pipeline_core_documents` plus `wise`'s and `postgresql`'s own
-    model-valid `connector.json` (the same documents the equivalence fixture
-    ships fully covered) shipped alone — no sibling type-map or `endpoints/`
-    directory — so a resolver that closes the embedded-connector coverage gap
-    has something real to report for each: today's plugin reads only a
-    connection's connector identity (for the referential check that its
-    `connector_id` is bundled) and `wise`'s endpoint ids (for stream-ref
-    resolution) from an embedded `connectors/<slug>/definition/...` subtree,
-    never `check_coverage`'s own findings against it. `wise`'s own
-    RULE-PKG-030/035 findings prove the gap is closed, and `postgresql`'s own
-    RULE-PKG-030 finding proves each embedded subtree is reported on its
-    own rather than the walk stopping at the first one."""
-    return {
-        **_pipeline_core_documents(),
-        "connectors/wise/definition/connector.json": _CONNECTOR_WISE,
-        "connectors/postgresql/definition/connector.json": _CONNECTOR_PG,
-    }
-
-
-def _write_package(root: Path, documents: dict) -> None:
-    for rel, doc in documents.items():
-        path = root / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(doc))
+        f"connections/{_SRC}/connection.json": _CONN_WISE,
+        f"connections/{_DST}/connection.json": _CONN_PG,
+        f"connections/{_DST}/definition/endpoints/{_EID}.json": _DB_ENDPOINT,
+        f"pipelines/{_PID}/pipeline.json": _PIPELINE,
+        f"pipelines/{_PID}/streams/{_SID}.json": _STREAM,
+        "pipelines/manifest.json": {"pipelines": [
+            {"pipeline_id": _PID, "status": "draft", "path": f"{_PID}/pipeline.json"}]},
+    })
 
 
 # ---------------------------------------------------------------------------
-# validate_single_document — one document, the caller's declared schema name
-# checked against detection rather than trusted.
+# validate_single_document — graded as the kind the caller names.
 # ---------------------------------------------------------------------------
 
-def test_single_document_wraps_the_path_based_route(validator):
-    """A document consistent with its declared `entity` reports exactly what
-    `validate_document` reports for it with no path, wrapped in one envelope.
-    With no path there are no siblings to read, so a connector's coverage check
-    is skipped, and the skip costs the pass."""
+def test_a_valid_connector_passes_alone(validator):
+    """A connector is graded by its own kind's rules: nothing asks for siblings
+    a single document cannot carry."""
     document = json.loads((CORPUS / "valid_connector.json").read_text())
-    expected_findings = validator.validate_document(document)
     result = validator.validate_single_document(_document_request(document, "connector"))
-    assert json.dumps(result) == json.dumps(_expected_envelope(validator, expected_findings))
+    assert result == {"passed": True, "findings": []}
+
+
+def test_an_endpoint_naming_a_transport_passes_alone(validator):
+    """Resolving `transport_ref` needs the connector, so it is a package check,
+    not a rule of the endpoint alone."""
+    document = copy.deepcopy(_WISE_TRANSFERS_ENDPOINT)
+    document["operations"]["read"]["request"]["transport_ref"] = "api"
+    result = validator.validate_single_document(_document_request(document, "api-endpoint"))
+    assert result == {"passed": True, "findings": []}
+
+
+def test_a_document_is_graded_as_the_named_kind_never_as_what_it_resembles(validator):
+    """A stream named `connector` is graded against the connector model: its
+    findings are the connector model's, never a verdict about what it resembles."""
+    from analitiq.validator.connectors import _validate_connector_document
+
+    result = validator.validate_single_document(_document_request(_STREAM, "connector"))
     assert result["passed"] is False
-    assert [f["message_id"] for f in result["findings"]] == ["coverage-check-skipped-no-path"]
+    assert result["findings"] == _validate_connector_document(copy.deepcopy(_STREAM))
 
 
-def test_declared_entity_that_disagrees_with_the_document_is_a_finding(validator):
-    """The caller's declaration is checked, not trusted: a stream document sent
-    as a connector is reported, not silently validated as whatever it looks
-    like. The same document sent under its real schema name is not."""
-    mismatched = validator.validate_single_document(_document_request(_STREAM, "connector"))
-    assert mismatched["passed"] is False
-    # Exactly one: an implementation that trusted the declaration and validated
-    # the stream against the connector model would report a pile of model
-    # errors and never the mismatch, which passes an `any(...)` check.
-    assert [f["kind"] for f in mismatched["findings"]].count("fail") == 1, mismatched
-
-    matched = validator.validate_single_document(_document_request(_STREAM, "stream"))
-    assert not any(f["kind"] == "fail" for f in matched["findings"]), matched
+def test_a_malformed_endpoint_gets_findings_about_its_defects(validator):
+    """An endpoint missing `operations` is not recognised by its shape; named
+    as `api-endpoint`, its defect is what is reported."""
+    document = {k: v for k, v in _WISE_TRANSFERS_ENDPOINT.items() if k != "operations"}
+    result = validator.validate_single_document(_document_request(document, "api-endpoint"))
+    assert result["passed"] is False
+    assert any("operations" in f["path"] or "operations" in f["message"] for f in result["findings"]), result
+    assert "unrecognized-document" not in _ids(result)
 
 
-# Each of these rules is valid in one direction only — a regex `arrow_type` a
-# read rule may not render, an exact `native_type` placeholder a write rule may
-# not leave unclosed — so each section's model reports a rule the other never
-# does, and which one fired shows the section a rule was graded as.
-_RULES_VALID_IN_ONE_DIRECTION = [
-    {"match": "regex", "native_type": "TEXT", "arrow_type": ".*"},
-    {"match": "exact", "native_type": "VARCHAR(${", "arrow_type": "Utf8"},
-]
-_GRADED_ONLY_AS = {"read": "read-regex-arrow-type-invalid", "write": "write-exact-malformed-placeholder"}
-
-
-@pytest.mark.parametrize("section", ["read", "write"])
-def test_type_map_is_graded_as_validate_document_grades_it(validator, section):
-    """A type map sent as `type-map` is graded exactly as `validate_document`
-    grades it: each rule as the section it sits under."""
-    document = _type_map_doc(**{section: _RULES_VALID_IN_ONE_DIRECTION})
+def test_a_type_map_is_held_to_the_write_vocabulary_alone(validator):
+    """A type map is graded the same wherever it sits: a write section that
+    renders too little of the write vocabulary earns RULE-TMAP-017's warning."""
+    document = _type_map_doc(write=[{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}])
     result = validator.validate_single_document(_document_request(document, "type-map"))
-    assert result == _expected_envelope(validator, validator.validate_document(document))
-    ids = [f["message_id"] for f in result["findings"]]
-    for direction, only_that_section_reports in _GRADED_ONLY_AS.items():
-        assert (only_that_section_reports in ids) == (direction == section), result
-
-
-def test_a_type_map_entity_mismatch_is_reported(validator):
-    """A map sent under another kind's name is reported — its `$schema` names
-    the type map, not the kind the caller declared."""
-    result = validator.validate_single_document(
-        _document_request(_CONNECTOR_PG_TYPE_MAP, "connector"))
-    assert result["passed"] is False
-    assert [f["message_id"] for f in result["findings"]] == ["entity-mismatch"], result
+    assert "RULE-TMAP-017" in {f.get("rule") for f in result["findings"]}, result
+    assert result["passed"] is True
 
 
 def test_unparseable_document_text_is_a_finding_not_a_raise(validator):
-    """Document *content* is what this API judges, so text the JSON parser
-    cannot read comes back as a finding under `unreadable-document`, the
-    message id `analitiq.validator._core`'s CLI already mints when it cannot
-    read a document off disk — never as a raised error, which is reserved for a
-    defect in this package."""
     request = ValidateSingleDocumentRequest(document="{not json", document_kind="connector")
-    result = validator.validate_single_document(request)
-    assert result["passed"] is False
-    assert any(f["message_id"] == "unreadable-document" for f in result["findings"]), result
+    assert _ids(validator.validate_single_document(request)) == ["unreadable-document"]
 
 
 def test_text_refused_outside_jsondecodeerror_is_a_finding_not_a_raise(
         validator, text_refused_outside_jsondecodeerror):
-    """The parser refuses some text with an exception that is not a
-    `JSONDecodeError`. That text is still content a caller sent, so it is
-    reported like any other unreadable document rather than raised as though it
-    were a defect in this package."""
     result = validator.validate_single_document(ValidateSingleDocumentRequest(
         document=text_refused_outside_jsondecodeerror, document_kind="connector"))
-    assert [f["message_id"] for f in result["findings"]] == ["unreadable-document"], result
+    assert _ids(result) == ["unreadable-document"]
+
+
+def test_a_crash_while_validating_a_document_is_one_finding(validator, monkeypatch):
+    from analitiq.validator import _core
+
+    def _explodes(doc):
+        raise RuntimeError("boom")
+
+    monkeypatch.setitem(_core._DOCUMENT_VALIDATORS, "connector", _explodes)
+    result = validator.validate_single_document(_document_request({}, "connector"))
+    assert _ids(result) == ["check-crashed"]
 
 
 # ---------------------------------------------------------------------------
-# `_consistent_entities`'s tables restate a vocabulary the contract package
-# generates, and nothing else in the validator package reads that owner. Per
-# `.claude/rules/no-drift-surfaces.md` a copy is pinned by a test that reads the
-# owner, or it is a defect — so the pin below reads `DOCUMENT_SCHEMA_NAMES`
-# itself. A kind registering with no name there cannot be declared as an
-# `entity` at all, so the vocabulary is what the tables have to track.
+# The document validator registry answers to the contract (FR-015a/d/e).
 # ---------------------------------------------------------------------------
 
-#: A document for every registration a published document-schema name resolves
-#: from, built from the fixtures above — a connector missing its `kind` is
-#: claimed by a registration of its own. The names are asserted against
-#: `DOCUMENT_SCHEMA_NAMES` itself, so a name added or renamed there fails here
-#: rather than silently going undetected.
-_DOCUMENT_FOR_ENTITY = (
-    ("connector", _CONNECTOR_WISE),
-    ("connector", {k: v for k, v in _CONNECTOR_WISE.items() if k != "kind"}),
-    ("connection", _CONN_WISE),
-    ("pipeline", _PIPELINE),
-    ("stream", _STREAM),
-    ("api-endpoint", _WISE_TRANSFERS_ENDPOINT),
-    ("database-endpoint", _DB_ENDPOINT),
-    ("type-map", _CONNECTOR_PG_TYPE_MAP),
-)
+def _located_kinds(model) -> set[str]:
+    secret = {model.LOCATIONS[pattern] for pattern in model.SECRET_LOCATIONS}
+    return set(model.LOCATIONS.values()) - secret
 
 
-def test_every_published_document_schema_name_is_detected(validator):
-    """Each name the contract publishes resolves from a document of that kind,
-    and only that name does. A name the contract adds or renames lands here as a
-    missing entry, rather than as every document of that kind drawing a spurious
-    `entity-mismatch`."""
+def test_every_located_kind_has_one_named_document_validator(validator):
+    """Keyed by every kind any request locates: a kind the contract adds to a
+    location table fails here, never as a crash in a consumer."""
+    from analitiq.contracts.workspace import _DOCUMENT_LOCATIONS, PACKAGE_MODELS
+    from analitiq.validator._core import _DOCUMENT_VALIDATORS
+
+    located = set().union(*(_located_kinds(m) for m in PACKAGE_MODELS.values()))
+    located |= set(_DOCUMENT_LOCATIONS.values())
+    assert set(_DOCUMENT_VALIDATORS) == located
+    for kind, validate in _DOCUMENT_VALIDATORS.items():
+        assert validate.__name__ == f"_validate_{kind.replace('-', '_')}_document", kind
+
+
+def test_every_nameable_document_kind_is_located(validator):
+    """Every kind a single-document request can name is one a location holds,
+    so each has its validator."""
     from analitiq.contracts.validation_requests import DOCUMENT_SCHEMA_NAMES
-    from analitiq.validator.document_set import _consistent_entities
+    from analitiq.validator._core import _DOCUMENT_VALIDATORS
 
-    assert {entity for entity, _ in _DOCUMENT_FOR_ENTITY} == set(DOCUMENT_SCHEMA_NAMES)
-    for entity, document in _DOCUMENT_FOR_ENTITY:
-        assert _consistent_entities(document) == {entity}, (entity, document)
-
-
-def test_an_assembled_bundle_resolves_to_no_published_name(validator):
-    """A bundle is not a single document and no published schema names one, so
-    it is deliberately absent from `_consistent_entities`'s tables. Sent to this
-    entry point it is reported as matching no published schema — never
-    validated as the `pipeline` its core carries."""
-    bundle = {"pipeline": _PIPELINE, "streams": [_STREAM], "connections": {_SRC: _CONN_WISE}}
-    result = validator.validate_single_document(_document_request(bundle, "pipeline"))
-    assert result["passed"] is False
-    assert [f["message_id"] for f in result["findings"] if f["kind"] == "fail"] == ["entity-mismatch"]
+    assert set(DOCUMENT_SCHEMA_NAMES) <= set(_DOCUMENT_VALIDATORS)
 
 
 # ---------------------------------------------------------------------------
-# The package entry points — each called directly for the kind it names.
+# validate_package
 # ---------------------------------------------------------------------------
 
-def test_validate_connector_package_validates_its_own_root_shape(validator):
-    result = validator.validate_connector_package(
-        _package_request("connector", _connector_package_documents()))
-    # Findings empty, not merely `passed` — a route emitting a `notApplicable`
-    # finding and still reporting a pass would satisfy the weaker assertion.
-    assert result == _expected_envelope(validator, []), result
+def test_a_valid_connector_package_passes(validator):
+    result = validator.validate_package(_package_request("connector", _connector_package_documents()))
+    assert result == {"passed": True, "findings": []}
 
 
-def test_unparseable_document_in_a_package_is_a_finding_not_a_raise(validator):
-    """One document's text being unreadable is package *content*, not a
-    malformed argument — the request model accepts any text — so the package
-    comes back as a failing envelope rather than a raised error."""
-    documents = {key: json.dumps(doc)
-                 for key, doc in _connector_package_documents().items()}
-    documents["endpoints/v2__widgets.json"] = "{not json"
-    result = validator.validate_connector_package(
-        ValidatePackageRequest(package_kind="connector", documents=documents))
-    assert result["passed"] is False
-    # Naming the document, not merely failing: the rest of this package is
-    # clean, so a bare `any(kind == "fail")` cannot tell "reported as
-    # unreadable" from "reported as something else entirely". The message id is
-    # deliberately not pinned — this route may mint its own.
-    unreadable = [f for f in result["findings"]
-                  if f["kind"] == "fail" and "v2__widgets" in (f["message"] + f["path"])]
-    assert unreadable, result
-
-
-@_xfail("validate_pipeline_package")
-def test_validate_pipeline_package_validates_its_own_root_shape(validator):
-    result = validator.validate_pipeline_package(
-        _package_request("pipeline", _pipeline_package_documents()))
-    assert result == _expected_envelope(validator, []), result
-
-
-@_xfail("validate_pipeline_package")
-def test_embedded_connector_subtree_gets_its_own_coverage_findings(validator):
-    """`connectors/wise/definition/connector.json` (kind=api) ships no sibling
-    type-map or `endpoints/` directory — today's plugin never notices:
-    `_assemble_bundle` reads such a subtree's `connector.json` only for its
-    `connector_id`, and `_connector_endpoint_sets` reads its endpoint ids only
-    for stream-ref resolution. `validate_pipeline_package` calls
-    `validate_connector_package`
-    on the subtree and reports its OWN coverage findings (RULE-PKG-030 missing
-    read map, RULE-PKG-035 missing endpoints/), scoped under the subtree's key
-    prefix."""
-    result = validator.validate_pipeline_package(
-        _package_request("pipeline", _pipeline_package_documents_with_embedded_connectors()))
-    # Containment, not a prefix spelling: what is fixed is that the finding is
-    # scoped to its subtree, and `rule` is optional on a `Finding`, so neither
-    # a leading slash nor a ruleless finding turns this into a failure about
-    # something other than what it names.
-    scoped = [f for f in result["findings"] if "connectors/wise/" in f["path"]]
-    assert any(f.get("rule") == "RULE-PKG-030" for f in scoped), result["findings"]
-    assert any(f.get("rule") == "RULE-PKG-035" for f in scoped), result["findings"]
-    # Both subtrees: a walk that stopped at whichever it reached first satisfies
-    # the assertions for that one alone.
-    pg_scoped = [f for f in result["findings"] if "connectors/postgresql/" in f["path"]]
-    assert any(f.get("rule") == "RULE-PKG-030" for f in pg_scoped), result["findings"]
-
-
-def test_a_connector_package_finding_names_the_document_it_is_about(validator):
-    documents = {**_connector_package_documents(),
-                 "endpoints/v2__widgets.json": _uncovered_endpoint_document()}
-    documents["connector.json"]["display_name"] = 7
-    result = validator.validate_connector_package(_package_request("connector", documents))
-    assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
-        ("string_type", "connector.json#/display_name"),
-        ("native-type-unresolved",
-         "endpoints/v2__widgets.json#/operations/read/response/schema/items/properties/b"),
-    ], result
-
-
-def test_a_connector_package_obligation_is_about_the_whole_connector(validator):
+def test_a_package_without_its_root_fails_about_the_package(validator):
     documents = _connector_package_documents()
-    del documents["type-map.json"]
-    result = validator.validate_connector_package(_package_request("connector", documents))
-    [found] = [f for f in result["findings"] if f["message_id"] == "read-map-missing"]
-    assert found["path"] == "connector.json#", found
-
-
-def test_a_connector_package_key_is_percent_encoded_in_a_finding(validator):
-    documents = {**_connector_package_documents(),
-                 "endpoints/v2 widgets.json": _uncovered_endpoint_document()}
-    result = validator.validate_connector_package(_package_request("connector", documents))
-    [found] = [f for f in result["findings"] if f["message_id"] == "native-type-unresolved"]
-    assert found["path"] == (
-        "endpoints/v2%20widgets.json#/operations/read/response/schema/items/properties/b"), found
-
-
-def test_a_connector_package_without_a_connector_document_fails(validator):
-    documents = _connector_package_documents()
-    del documents["connector.json"]
-    result = validator.validate_connector_package(_package_request("connector", documents))
+    del documents["definition/connector.json"]
+    documents["definition/endpoints/v2__widgets.json"] = _uncovered_endpoint_document()
+    result = validator.validate_package(_package_request("connector", documents))
     assert result["passed"] is False
-    [found] = result["findings"]
-    assert (found["message_id"], found["kind"], found["path"]) == (
-        "connector-document-missing", "fail", "connector.json#"), found
-    assert "rule" not in found, found
+    assert _at(result, "package-root-missing") == ["definition/connector.json#"]
+    # Without the root, no check needing the connector runs.
+    assert "native-type-unresolved" not in _ids(result)
 
 
-def test_a_connector_document_that_does_not_parse_is_a_finding(validator):
+def test_a_key_at_no_location_is_not_graded(validator):
+    documents = _connector_package_documents()
+    documents["README.json"] = {"not": "a document"}
+    documents["connector.json"] = {"not": "located either"}
+    result = validator.validate_package(_package_request("connector", documents))
+    assert result == {"passed": True, "findings": []}
+
+
+def test_an_unparseable_document_withholds_the_cross_document_checks(validator):
     documents = {key: json.dumps(doc) for key, doc in _connector_package_documents().items()}
-    documents["connector.json"] = "{not json"
-    result = validator.validate_connector_package(ValidatePackageRequest(package_kind="connector", documents=documents))
-    assert result["passed"] is False
-    assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
-        ("unreadable-document", "connector.json#")], result
+    documents["definition/endpoints/v2__widgets.json"] = json.dumps(_uncovered_endpoint_document())
+    documents["definition/endpoints/v3__gadgets.json"] = "{not json"
+    result = validator.validate_package(ValidatePackageRequest(package_kind="connector", documents=documents))
+    assert _ids(result) == ["unreadable-document"]
 
 
-def test_a_connector_document_holding_another_entity_is_a_mismatch(validator):
+def test_a_package_finding_names_its_document_by_key(validator):
     documents = _connector_package_documents()
-    documents["connector.json"] = documents["type-map.json"]
-    result = validator.validate_connector_package(_package_request("connector", documents))
-    assert result["passed"] is False
-    assert [(f["message_id"], f["path"]) for f in result["findings"]] == [
-        ("entity-mismatch", "connector.json#")], result
+    documents["definition/endpoints/v2__widgets.json"] = _uncovered_endpoint_document()
+    result = validator.validate_package(_package_request("connector", documents))
+    assert [p.split("#")[0] for p in _at(result, "native-type-unresolved")] == [
+        "definition/endpoints/v2__widgets.json"]
 
 
-
-def _package_texts(documents: dict, **texts: str) -> dict:
-    """`documents` serialized to request text, with `texts` (keyed by a
-    package key spelt with `__` for `/`) sent verbatim instead."""
-    return {**{key: json.dumps(doc) for key, doc in documents.items()},
-            **{key.replace("__", "/"): text for key, text in texts.items()}}
-
-
-def _without(documents: dict, *keys: str) -> dict:
-    return {key: doc for key, doc in documents.items() if key not in keys}
-
-
-def _mistyped_endpoint() -> dict:
-    endpoint = _uncovered_endpoint_document()
-    endpoint["endpoint_id"] = 7
-    return endpoint
-
-
-# Each package reports at least one finding, between them about the connector
-# itself, a sibling map, an endpoint, a key that needs encoding, and a document
-# that never parsed.
-_PACKAGES_WITH_FINDINGS = {
-    "mistyped connector, uncovered endpoint": {
-        **_connector_package_documents(),
-        "connector.json": {**_connector_package_documents()["connector.json"], "display_name": 7},
-        "endpoints/v2__widgets.json": _uncovered_endpoint_document()},
-    "key needing encoding": {**_connector_package_documents(),
-                             "endpoints/v2 widgets.json": _uncovered_endpoint_document()},
-    "mistyped endpoint": {**_connector_package_documents(),
-                          "endpoints/v2__widgets.json": _mistyped_endpoint()},
-    "read map missing": _without(_connector_package_documents(), "type-map.json"),
-    "endpoints missing": _without(_connector_package_documents(), "endpoints/v1__records.json"),
-    "endpoint nested": {**_without(_connector_package_documents(), "endpoints/v1__records.json"),
-                        "endpoints/sub/v1__records.json":
-                            _connector_package_documents()["endpoints/v1__records.json"]},
-    "database write section missing": {
-        "connector.json": _CONNECTOR_PG,
-        "type-map.json": _type_map_doc(
-            read=[{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}])},
-    "connector holding another entity": {**_connector_package_documents(),
-                                         "connector.json": _CONNECTOR_PG_TYPE_MAP},
-}
-_PACKAGE_TEXTS_WITH_FINDINGS = {
-    **{name: _package_texts(documents) for name, documents in _PACKAGES_WITH_FINDINGS.items()},
-    "map unparseable": _package_texts(_connector_package_documents(),
-                                      **{"type-map.json": "{not json"}),
-    "connector unparseable": _package_texts(_connector_package_documents(),
-                                            **{"connector.json": "{not json"}),
-}
-
-
-def _assert_every_path_names_a_submitted_document(findings: list, keys: set) -> None:
-    # A package has no validated document, so a finding is located only by a
-    # key the caller sent. No document here carries a member keyed "", so a
-    # pointer of `/` can only be the whole document misspelt.
-    assert findings, "no findings: nothing was measured"
-    from urllib.parse import unquote
-    for f in findings:
-        reference, sep, pointer = f["path"].partition("#")
-        assert sep and unquote(reference) in keys, f
-        assert pointer == "" or (pointer.startswith("/") and pointer != "/"), f
-
-
-@pytest.mark.parametrize("texts", _PACKAGE_TEXTS_WITH_FINDINGS.values(),
-                         ids=_PACKAGE_TEXTS_WITH_FINDINGS.keys())
-def test_every_package_finding_names_a_submitted_document(validator, texts):
-    result = validator.validate_connector_package(ValidatePackageRequest(package_kind="connector", documents=texts))
-    _assert_every_path_names_a_submitted_document(result["findings"], set(texts))
-
-
-def test_a_finding_about_the_package_directory_names_the_connector(validator, tmp_path, refuse):
-    # A package in memory can always be listed, so only a directory on disk
-    # reaches the finding that is about the directory rather than a document
-    # in it. Both routes read that finding from the package root.
-    from analitiq.validator.document_set import _from_package_root
+def test_a_package_key_is_percent_encoded_in_a_finding(validator):
     documents = _connector_package_documents()
-    _write_package(tmp_path, documents)
-    refuse(tmp_path, 0o300)
-    findings = validator.validate_document(documents["connector.json"],
-                                           doc_path=tmp_path / "connector.json")
-    assert "type-map-dir-unlisted" in [f["message_id"] for f in findings], findings
-    _assert_every_path_names_a_submitted_document(_from_package_root(findings), set(documents))
+    endpoint = _uncovered_endpoint_document(endpoint_id="v2 widgets#x")
+    documents["definition/endpoints/v2 widgets#x.json"] = endpoint
+    result = validator.validate_package(_package_request("connector", documents))
+    assert any(p.startswith("definition/endpoints/v2%20widgets%23x.json#")
+               for p in _at(result, "native-type-unresolved")), result
 
-# ---------------------------------------------------------------------------
-# Deterministic output: findings do not depend on the order the caller happened
-# to build its mapping in.
-# ---------------------------------------------------------------------------
 
-def test_connector_package_finding_order_is_independent_of_input_order(validator):
-    # Two distinct uncovered endpoints, not the clean package: comparing two
-    # empty findings lists cannot detect order-sensitivity at all.
-    documents = {
-        **_connector_package_documents(),
-        "endpoints/v2__widgets.json": _uncovered_endpoint_document(
-            endpoint_id="v2__widgets", request_path="/v2/widgets", native="BOOLEAN", arrow="Boolean"),
-        "endpoints/v3__gadgets.json": _uncovered_endpoint_document(
-            endpoint_id="v3__gadgets", request_path="/v3/gadgets", native="INTEGER", arrow="Int64"),
-    }
-    forward = validator.validate_connector_package(_package_request("connector", documents))
-    assert len(forward["findings"]) >= 2, forward  # non-vacuous: order genuinely matters below
-    reversed_documents = dict(reversed(list(documents.items())))
-    backward = validator.validate_connector_package(_package_request("connector", reversed_documents))
+def test_package_findings_do_not_depend_on_key_order(validator):
+    documents = _connector_package_documents()
+    documents["definition/endpoints/v2__widgets.json"] = _uncovered_endpoint_document()
+    documents["definition/endpoints/v3__gadgets.json"] = _uncovered_endpoint_document(
+        endpoint_id="v3__gadgets", request_path="/v3/gadgets")
+    forward = validator.validate_package(_package_request("connector", documents))
+    backward = validator.validate_package(_package_request("connector", dict(reversed(documents.items()))))
+    assert len(forward["findings"]) > 1
     assert forward == backward
 
 
-@_xfail("validate_pipeline_package")
-def test_pipeline_package_finding_order_is_independent_of_input_order(validator):
-    # The same determinism rule on the other package entry point, over a
-    # fixture that reports real findings down both orders.
-    documents = _pipeline_package_documents_with_two_findings()
-    forward = validator.validate_pipeline_package(_package_request("pipeline", documents))
-    assert len(forward["findings"]) >= 2, forward  # non-vacuous: order genuinely matters below
-    reversed_documents = dict(reversed(list(documents.items())))
-    backward = validator.validate_pipeline_package(_package_request("pipeline", reversed_documents))
+@pytest.mark.parametrize("package_kind, documents, endpoint", [
+    ("connector", _connector_package_documents(), _uncovered_endpoint_document()),
+    ("connection", {"connection.json": _CONN_PG}, _DB_ENDPOINT),
+])
+def test_endpoint_ids_are_unique_in_every_package(validator, package_kind, documents, endpoint):
+    """RULE-PKG-032 holds in a connection package as in a connector package,
+    by one check whose message names the package."""
+    documents = {**documents, "definition/endpoints/a.json": endpoint, "definition/endpoints/b.json": endpoint}
+    result = validator.validate_package(_package_request(package_kind, documents))
+    duplicates = [f for f in result["findings"] if f["message_id"] == "duplicate-endpoint-id"]
+    assert [f["path"] for f in duplicates] == ["definition/endpoints/b.json#/endpoint_id"]
+    assert duplicates[0]["rule"] == "RULE-PKG-032"
+    assert "package" in duplicates[0]["message"] and "release" not in duplicates[0]["message"]
+
+
+@pytest.mark.parametrize("package_kind, documents, endpoint", [
+    ("connector", _connector_package_documents(), _uncovered_endpoint_document()),
+    ("connection", {"connection.json": _CONN_PG}, _DB_ENDPOINT),
+])
+def test_an_endpoint_file_is_named_by_its_id(validator, package_kind, documents, endpoint):
+    documents = {**documents, "definition/endpoints/misnamed.json": endpoint}
+    result = validator.validate_package(_package_request(package_kind, documents))
+    assert _at(result, "filename-id-mismatch") == ["definition/endpoints/misnamed.json#/endpoint_id"]
+
+
+def test_an_api_connector_package_without_endpoints_fails(validator):
+    documents = _connector_package_documents()
+    documents = {k: v for k, v in documents.items() if "/endpoints/" not in k}
+    result = validator.validate_package(_package_request("connector", documents))
+    assert _at(result, "endpoints-missing") == ["definition/connector.json#"]
+
+
+def test_an_endpoint_transport_ref_resolves_against_its_connector(validator):
+    documents = _connector_package_documents()
+    (key,) = [k for k in documents if "/endpoints/" in k]
+    documents[key]["operations"]["read"]["request"]["transport_ref"] = "nowhere"
+    result = validator.validate_package(_package_request("connector", documents))
+    assert [f.get("rule") for f in result["findings"]] == ["RULE-ENDP-047"]
+    assert result["findings"][0]["path"].startswith(f"{key}#")
+
+
+def test_an_api_map_carrying_write_is_reported_on_the_map(validator):
+    documents = _connector_package_documents()
+    documents["definition/type-map.json"]["write"] = [
+        {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
+    result = validator.validate_package(_package_request("connector", documents))
+    assert _at(result, "write-map-not-allowed") == ["definition/type-map.json#/write"]
+
+
+def test_a_database_connector_without_a_write_map_is_reported_on_the_connector(validator):
+    documents = {"definition/connector.json": _pg_connector(),
+                 "definition/type-map.json": _type_map_doc(
+                     read=[{"match": "exact", "native_type": "bigint", "arrow_type": "Int64"}])}
+    result = validator.validate_package(_package_request("connector", documents))
+    assert _at(result, "write-map-missing") == ["definition/connector.json#"]
+
+
+def test_a_connector_of_no_known_kind_skips_what_its_kind_decides(validator):
+    documents = _connector_package_documents()
+    documents["definition/connector.json"]["kind"] = "carrier-pigeon"
+    result = validator.validate_package(_package_request("connector", documents))
+    assert _at(result, "coverage-check-skipped-bad-kind") == ["definition/connector.json#/kind"]
+    assert "endpoints-missing" not in _ids(result)
+
+
+def test_a_defect_in_each_located_document_is_reported_under_its_key(validator):
+    documents = {
+        "connection.json": {**_CONN_PG, "connector_id": 7},
+        "definition/type-map.json": _type_map_doc(read="not a list"),
+        f"definition/endpoints/{_EID}.json": {**_DB_ENDPOINT, "columns": []},
+    }
+    result = validator.validate_package(_package_request("connection", documents))
+    about = {f["path"].split("#")[0] for f in result["findings"] if f["kind"] == "fail"}
+    assert about == set(documents)
+
+
+def test_a_valid_connection_package_passes(validator):
+    documents = {"connection.json": _CONN_PG, f"definition/endpoints/{_EID}.json": _DB_ENDPOINT}
+    assert validator.validate_package(_package_request("connection", documents)) == {
+        "passed": True, "findings": []}
+
+
+def test_a_pipeline_package_catches_a_stream_it_does_not_carry(validator):
+    documents = {"pipeline.json": _PIPELINE}
+    result = validator.validate_package(_package_request("pipeline", documents))
+    assert result["passed"] is False
+    assert _at(result, "stream-ref-unresolved") == ["pipeline.json#/streams/0"]
+
+
+def test_a_pipeline_package_catches_a_stream_under_another_pipeline(validator):
+    stream = {**_STREAM, "pipeline_id": "55555555-5555-4555-8555-555555555555"}
+    documents = {"pipeline.json": _PIPELINE, f"streams/{_SID}.json": stream}
+    result = validator.validate_package(_package_request("pipeline", documents))
+    assert _at(result, "stream-wrong-parent-pipeline") == [f"streams/{_SID}.json#/pipeline_id"]
+
+
+def test_a_draft_pipeline_package_passes(validator):
+    """Runnability is not a package property: a draft is authored content."""
+    documents = {"pipeline.json": _PIPELINE, f"streams/{_SID}.json": _STREAM}
+    assert validator.validate_package(_package_request("pipeline", documents)) == {
+        "passed": True, "findings": []}
+
+
+def test_a_crash_in_a_cross_document_check_costs_only_that_check(validator, monkeypatch):
+    from analitiq.validator import document_set
+
+    def _explodes(documents):
+        raise RuntimeError("boom")
+
+    (check,) = [c for c in document_set._CHECKS if c.run.__name__ == "_check_stream_refs"]
+    crashed = [document_set._Check(_explodes, c.reads, c.gates_run) if c is check else c
+               for c in document_set._CHECKS]
+    monkeypatch.setattr(document_set, "_CHECKS", tuple(crashed))
+    stream = {**_STREAM, "pipeline_id": "55555555-5555-4555-8555-555555555555"}
+    documents = {"pipeline.json": _PIPELINE, f"streams/{_SID}.json": stream}
+    result = validator.validate_package(_package_request("pipeline", documents))
+    assert "check-crashed" in _ids(result)
+    assert "stream-wrong-parent-pipeline" in _ids(result)
+
+
+# ---------------------------------------------------------------------------
+# validate_workspace
+# ---------------------------------------------------------------------------
+
+def test_a_valid_workspace_passes(validator):
+    assert validator.validate_workspace(_workspace_request(_workspace_documents())) == {
+        "passed": True, "findings": []}
+
+
+def test_a_connection_scoped_endpoint_must_be_in_its_connection(validator):
+    documents = _workspace_documents()
+    del documents[f"connections/{_DST}/definition/endpoints/{_EID}.json"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "endpoint-ref-unresolved") == [
+        f"pipelines/{_PID}/streams/{_SID}.json#/destinations/0/endpoint_ref"]
+
+
+def test_a_connector_scoped_endpoint_must_be_in_the_connections_connector(validator):
+    documents = _workspace_documents()
+    documents[f"pipelines/{_PID}/streams/{_SID}.json"]["source"]["endpoint_ref"]["endpoint_id"] = "transfer"
+    result = validator.validate_workspace(_workspace_request(documents))
+    findings = [f for f in result["findings"] if f["message_id"] == "connector-endpoint-ref-unresolved"]
+    assert [f["path"] for f in findings] == [
+        f"pipelines/{_PID}/streams/{_SID}.json#/source/endpoint_ref"]
+    assert findings[0]["severity"] == "warning"
+    assert result["passed"] is True
+
+
+
+def test_a_connector_scoped_endpoint_from_another_connector_is_unresolved(validator):
+    documents = _workspace_documents()
+    balances = copy.deepcopy(_WISE_TRANSFERS_ENDPOINT) | {"endpoint_id": "balances"}
+    documents["connectors/postgresql/definition/endpoints/balances.json"] = balances
+    documents[f"pipelines/{_PID}/streams/{_SID}.json"]["source"]["endpoint_ref"]["endpoint_id"] = "balances"
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "connector-endpoint-ref-unresolved") == [
+        f"pipelines/{_PID}/streams/{_SID}.json#/source/endpoint_ref"]
+
+def test_a_pipeline_must_find_its_connections(validator):
+    documents = _workspace_documents()
+    documents = {k: v for k, v in documents.items() if not k.startswith(f"connections/{_SRC}/")}
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "connection-ref-unresolved") == [f"pipelines/{_PID}/pipeline.json#/connections"]
+
+
+def test_a_connection_must_find_its_connector(validator):
+    documents = _workspace_documents()
+    documents = {k: v for k, v in documents.items() if not k.startswith("connectors/postgresql/")}
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "connector-ref-unresolved") == [f"connections/{_DST}/connection.json#/connector_id"]
+
+
+def test_a_package_check_in_a_workspace_is_reported_once(validator):
+    documents = _workspace_documents()
+    del documents[f"pipelines/{_PID}/streams/{_SID}.json"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "stream-ref-unresolved") == [f"pipelines/{_PID}/pipeline.json#/streams/0"]
+
+
+def test_an_unparseable_document_withholds_its_packages_checks_in_a_workspace(validator):
+    documents = {k: json.dumps(v) for k, v in _workspace_documents().items()}
+    documents["connectors/wise/definition/endpoints/v2__widgets.json"] = json.dumps(_uncovered_endpoint_document())
+    documents["connectors/wise/definition/endpoints/v3__gadgets.json"] = "{not json"
+    result = validator.validate_workspace(ValidateWorkspaceRequest(documents=documents))
+    assert _ids(result) == ["unreadable-document"]
+
+
+def test_an_unparseable_document_withholds_the_workspace_checks(validator):
+    documents = {k: json.dumps(v) for k, v in _workspace_documents().items()}
+    del documents[f"connections/{_DST}/definition/endpoints/{_EID}.json"]
+    documents[f"connections/{_SRC}/connection.json"] = "{not json"
+    result = validator.validate_workspace(ValidateWorkspaceRequest(documents=documents))
+    assert _at(result, "unreadable-document") == [f"connections/{_SRC}/connection.json#"]
+    assert "endpoint-ref-unresolved" not in _ids(result)
+
+
+
+
+_PHASES = ("root", "document", "package-check", "workspace-check", "run-check")
+
+
+def _graded_phases(monkeypatch, grade) -> list[tuple[str, str]]:
+    """`grade()`'s findings in order, each as its phase and the key it is
+    ordered by. A check finding's phase is the unit whose checks produced it,
+    read from the check registry, and a package check's key is the directory of
+    the package its documents came from; any other finding is a document's,
+    keyed by its document, except a missing root."""
+    from analitiq.contracts.workspace import PACKAGE_MODELS
+    from analitiq.validator import document_set
+
+    def unit(checks, documents) -> tuple[str, str]:
+        if all(c.gates_run for c in checks):
+            return "run-check", ""
+        if all(c in document_set._workspace_checks() for c in checks):
+            return "workspace-check", ""
+        assert any(checks == document_set._package_checks(m) for m in PACKAGE_MODELS.values()), checks
+        (directory,) = {d.package for docs in documents.values() for d in docs}
+        return "package-check", directory
+
+    produced: dict[int, tuple[str, str]] = {}
+    check_findings = document_set._check_findings
+
+    def recording(checks, documents):
+        findings = check_findings(checks, documents)
+        if findings:
+            produced.update((id(f), unit(checks, documents)) for f in findings)
+        return findings
+
+    monkeypatch.setattr(document_set, "_check_findings", recording)
+    result = grade()
+    return [produced.get(id(f)) or ("root" if f["message_id"] == "package-root-missing" else "document",
+                                    f["path"].split("#")[0]) for f in result["findings"]]
+
+
+def _assert_graded_in_phase_order(phases: list[tuple[str, str]], expected: set[str]) -> None:
+    """Phases never go backwards, documents come in key order, and a package's
+    check findings come together, packages in directory order. Nothing is
+    claimed about order among one unit's check findings."""
+    assert {phase for phase, _ in phases} == expected, phases
+    ranks = [_PHASES.index(phase) for phase, _ in phases]
+    assert ranks == sorted(ranks), phases
+    for phase in ("document", "package-check"):
+        keys = [key for p, key in phases if p == phase]
+        assert keys == sorted(keys), phases
+
+
+def test_a_package_is_graded_documents_first_then_its_checks(validator, monkeypatch):
+    documents = {k.removeprefix("connectors/wise/"): v for k, v in _workspace_documents().items()
+                 if k.startswith("connectors/wise/")}
+    documents["definition/endpoints/aaa.json"] = copy.deepcopy(_WISE_TRANSFERS_ENDPOINT) | {"endpoint_id": "bbb"}
+    documents["definition/endpoints/transfers.json"]["unknown_field"] = True
+    phases = _graded_phases(monkeypatch, lambda: validator.validate_package(_package_request("connector", documents)))
+    _assert_graded_in_phase_order(phases, {"document", "package-check"})
+
+
+def test_a_workspace_is_graded_in_one_request_wide_phase_order(validator, monkeypatch):
+    documents = _workspace_documents()
+    documents["connectors/wise/definition/endpoints/aaa.json"] = (
+        copy.deepcopy(_WISE_TRANSFERS_ENDPOINT) | {"endpoint_id": "bbb"})
+    documents[f"pipelines/{_PID}/streams/{_SID}.json"]["source"]["endpoint_ref"]["endpoint_id"] = "transfer"
+    orphan = "66666666-6666-4666-8666-666666666666"
+    documents[f"pipelines/{_PID}/streams/{orphan}.json"] = {
+        **documents[f"pipelines/{_PID}/streams/{_SID}.json"], "stream_id": orphan,
+        "pipeline_id": "55555555-5555-4555-8555-555555555555"}
+    entry = documents["pipelines/manifest.json"]["pipelines"][0]
+    documents["pipelines/manifest.json"]["pipelines"].append(dict(entry))
+
+    results = []
+
+    def graded(arrival):
+        def grade():
+            results.append(validator.validate_workspace(
+                _workspace_request(arrival, run_pipeline=f"pipelines/{_PID}/")))
+            return results[-1]
+        return _graded_phases(monkeypatch, grade)
+
+    for arrival in (documents, dict(reversed(documents.items()))):
+        phases = graded(arrival)
+        assert {key for phase, key in phases if phase == "package-check"} == {
+            "connectors/wise/", f"pipelines/{_PID}/"}, phases
+        _assert_graded_in_phase_order(phases, {"document", "package-check", "workspace-check", "run-check"})
+    assert results[0] == results[1]
+
+
+def test_a_missing_root_is_reported_before_every_document(validator):
+    documents = _workspace_documents()
+    del documents["connectors/wise/definition/connector.json"]
+    documents[f"connections/{_DST}/connection.json"] = {}
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ids(result)[0] == "package-root-missing"
+    keys = [f["path"].split("#")[0] for f in result["findings"][1:]]
+    assert keys == sorted(keys) and f"connections/{_DST}/connection.json" in keys
+
+def test_an_unparseable_document_withholds_every_packages_checks_in_a_workspace(validator):
+    documents = {k: json.dumps(v) for k, v in _workspace_documents().items()}
+    del documents[f"pipelines/{_PID}/streams/{_SID}.json"]
+    documents["connectors/wise/definition/endpoints/v3__gadgets.json"] = "{not json"
+    result = validator.validate_workspace(ValidateWorkspaceRequest(documents=documents))
+    assert _ids(result) == ["unreadable-document"]
+
+def test_an_unparseable_manifest_withholds_the_workspace_checks(validator):
+    documents = {k: json.dumps(v) for k, v in _workspace_documents().items()}
+    del documents[f"connections/{_DST}/definition/endpoints/{_EID}.json"]
+    documents["pipelines/manifest.json"] = "{not json"
+    result = validator.validate_workspace(ValidateWorkspaceRequest(documents=documents))
+    assert _ids(result) == ["unreadable-document"]
+
+
+def test_a_workspace_package_without_its_root_fails_about_that_package(validator):
+    documents = _workspace_documents()
+    del documents[f"connections/{_DST}/connection.json"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _at(result, "package-root-missing") == [f"connections/{_DST}/connection.json#"]
+
+
+def test_the_pipeline_named_to_run_must_be_active(validator):
+    documents = _workspace_documents()
+    ran = validator.validate_workspace(_workspace_request(documents, run_pipeline=f"pipelines/{_PID}/"))
+    assert _at(ran, "pipeline-not-active") == [f"pipelines/{_PID}/pipeline.json#/status"]
+    assert ran["passed"] is False
+    assert "pipeline-not-active" not in _ids(validator.validate_workspace(_workspace_request(documents)))
+
+
+def test_an_active_pipeline_named_to_run_needs_a_runnable_stream(validator):
+    documents = _workspace_documents()
+    documents[f"pipelines/{_PID}/pipeline.json"]["status"] = "active"
+    result = validator.validate_workspace(_workspace_request(documents, run_pipeline=f"pipelines/{_PID}/"))
+    assert _at(result, "active-pipeline-no-runnable-stream") == [f"pipelines/{_PID}/pipeline.json#/streams"]
+
+
+def test_only_the_pipeline_named_to_run_is_held_to_running(validator):
+    other = "66666666-6666-4666-8666-666666666666"
+    documents = _workspace_documents()
+    documents[f"pipelines/{other}/pipeline.json"] = {**_PIPELINE, "pipeline_id": other, "streams": []}
+    documents[f"pipelines/{_PID}/pipeline.json"]["status"] = "active"
+    result = validator.validate_workspace(_workspace_request(documents, run_pipeline=f"pipelines/{_PID}/"))
+    assert "pipeline-not-active" not in _ids(result)
+
+
+def test_the_manifest_is_graded_by_its_model(validator):
+    documents = _workspace_documents()
+    entry = documents["pipelines/manifest.json"]["pipelines"][0]
+    documents["pipelines/manifest.json"]["pipelines"].append(dict(entry))
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert result["passed"] is False
+    assert all(f["path"].startswith("pipelines/manifest.json") for f in result["findings"]), result
+
+
+def test_workspace_findings_do_not_depend_on_key_order(validator):
+    documents = {k: v for k, v in _workspace_documents().items() if not k.startswith("connectors/")}
+    forward = validator.validate_workspace(_workspace_request(documents))
+    backward = validator.validate_workspace(_workspace_request(dict(reversed(documents.items()))))
+    assert len(forward["findings"]) > 1
     assert forward == backward
 
 
 # ---------------------------------------------------------------------------
-# Acceptance — equivalence: the path-based route and the document-set route
-# produce byte-identical results for the same content, per package kind.
+# Routing (FR-010): where each check runs is computed from what it reads.
 # ---------------------------------------------------------------------------
 
-def test_connector_package_equivalence_with_the_path_based_route(validator, tmp_path):
-    # Two distinct uncovered endpoints, not just a clean package: a route
-    # producing zero findings would make "findings order included" vacuous.
-    documents = {
-        **_connector_package_documents(),
-        "endpoints/v2__widgets.json": _uncovered_endpoint_document(
-            endpoint_id="v2__widgets", request_path="/v2/widgets", native="BOOLEAN", arrow="Boolean"),
-        "endpoints/v3__gadgets.json": _uncovered_endpoint_document(
-            endpoint_id="v3__gadgets", request_path="/v3/gadgets", native="INTEGER", arrow="Int64"),
-    }
-    from analitiq.validator.document_set import _from_package_root
-    _write_package(tmp_path, documents)
-    path_based = validator.validate_document(documents["connector.json"], doc_path=tmp_path / "connector.json")
-    assert len(path_based) >= 2, path_based  # non-vacuous: order genuinely matters below
-    package_based = validator.validate_connector_package(_package_request("connector", documents))
-    # The disk route reads a finding about `connector.json` itself as a bare
-    # pointer: that is the document it validated. A package has no validated
-    # document, so the package route names it, and does nothing else.
-    expected = _from_package_root(path_based)
-    assert json.dumps(package_based) == json.dumps(_expected_envelope(validator, expected))
+def test_every_check_runs_at_exactly_one_kind_of_unit(validator):
+    """A check no unit runs is a defect, and one run by a package is never run
+    again by the workspace."""
+    from analitiq.contracts.workspace import PACKAGE_MODELS
+    from analitiq.validator import document_set
+
+    for check in document_set._CHECKS:
+        packages = [m for m in PACKAGE_MODELS.values() if check in document_set._package_checks(m)]
+        at_workspace = check in document_set._workspace_checks()
+        at_run = check in document_set._run_checks()
+        assert (bool(packages), at_workspace, at_run).count(True) == 1, check
 
 
-@_xfail("validate_pipeline_package")
-def test_pipeline_package_equivalence_with_the_path_based_route(validator, tmp_path):
-    import validate as pipeline_adapter  # plugins/analitiq-pipeline-builder/scripts/validate.py
+def test_a_check_is_handed_only_the_kinds_it_reads(validator):
+    from analitiq.validator import document_set
 
-    documents = _pipeline_package_documents_with_two_findings()
-    _write_package(tmp_path, documents)
-    path_based = pipeline_adapter.diagnostics_for(
-        "pipeline", tmp_path / "pipelines" / "p" / "pipeline.json", bundle_root=tmp_path)
-    assert len(path_based["findings"]) >= 2, path_based  # non-vacuous: order genuinely matters below
-    package_based = validator.validate_pipeline_package(_package_request("pipeline", documents))
-    assert json.dumps(package_based) == json.dumps(path_based)
+    everything = {kind: (document_set._Doc(f"{kind}.json", "", {}),)
+                  for check in document_set._CHECKS for kind in check.reads} | {
+        "type-map": (document_set._Doc("t.json", "", {}),)}
+    for check in document_set._CHECKS:
+        assert set(document_set._documents_for(check, everything)) == set(check.reads), check

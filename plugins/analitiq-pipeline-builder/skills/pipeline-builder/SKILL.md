@@ -373,17 +373,6 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
     A draft pipeline produces no not-runnable finding (runnability is
     enforced only once it is `active`).
 
-    **`connector-endpoint-ref` findings.** The bundle validation (run with
-    `bundle_root: .`) may return `connector-endpoint-ref` findings
-    (`references/io-contracts.md`). Do not ignore them: surface each one
-    and, when the finding carries a "Did you mean `X`?" suggestion, offer to
-    **align** the stream's `endpoint_ref.endpoint_id` to the connector's real
-    endpoint name. Apply the alignment only on the user's
-    confirmation — it is a surgical edit to that stream (change nothing else),
-    then re-validate. Never edit the connector; only the stream ref moves. If
-    there is no confident suggestion, report the connector's available endpoints
-    and ask the user which one the stream should target.
-
 10. **Drift (optional)** — if `previous_release_path` was supplied,
     invoke `pipeline-drift-classifier`. It surfaces structural changes
     (added/removed streams, changed write mode, mapping target drift)
@@ -435,13 +424,6 @@ and leaves everything else — including `.secrets/` — untouched.
    surface at edit time instead of at engine runtime. Write only once
    validation is clean.
 
-   **Aligning a connector-scoped endpoint ref** is itself an edit intent ("align
-   the endpoint names to the connector", "fix the endpoint reference"): on a
-   `connector-endpoint-ref` finding, retarget the offending stream's
-   `endpoint_ref.endpoint_id` to the connector's real endpoint name (the finding's
-   suggestion, or — if none is confident — a name the user picks from the
-   connector's endpoint set), then re-validate. This is a surgical stream edit;
-   never touch the connector, and change nothing else in the stream.
 5. Report exactly which files changed and which were left untouched.
 
 ## Output

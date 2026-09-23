@@ -1,70 +1,86 @@
-"""The path-free document-set API.
+"""The in-memory request API.
 
-`analitiq.validator._core.validate_document` reads the files beside a
-document from the path it is given: `analitiq.validator.connectors
-.check_coverage` walks a connector's sibling type map and endpoints from the
-directory holding it, and the pipeline-builder plugin's own `_assemble_bundle`
-(`plugins/analitiq-pipeline-builder/scripts/validate.py`) globs an entire
-pipeline directory. A consumer that never has those files on a local
-filesystem — a hosted validator wrapping this package as a remote tool,
-registry CI, any caller handed document content directly rather than a
-directory to read it from — has no path to give either one.
+Each entry point takes the request model naming the unit submitted
+(`analitiq.contracts.validation_requests`) — one document, one package, or a
+workspace of packages — and answers in one `ValidationEnvelope`. Nothing here
+reads a file: a caller holding files reads them and builds the request. A caller
+states what it is sending by choosing the function, so nothing reads content to
+work out what it was handed.
 
-This module fixes the contract such a consumer calls instead. Each entry point
-takes the request model that names the unit being submitted
-(`analitiq.contracts.validation_requests`) and answers in one
-`ValidationEnvelope`. A caller states what it is sending by choosing the
-function: nothing here reads content to work out whether it was handed one
-document or a package, or which kind of package, and no entry point takes a
-parameter that selects between them. One package request model serves every
-package entry point precisely because the function carries the kind.
+**Kinds come from the request, never from content.** A single document is graded
+as the kind the caller names. A package or workspace key is graded as the kind
+its location table (`kind_at`) gives it, and a key no location matches is not
+graded. A package's root document is required.
+
+**Cross-document checks are routed by what they read.** Each entry of `_CHECKS`
+declares the document kinds it reads. A check reading only kinds one package
+holds is a package check, run on each package alone; any other is a workspace
+check; a check that gates running a pipeline runs only for the pipeline a
+workspace request names to run. A check runs only over documents that all parsed,
+and in a unit whose every package has its root: it cannot tell a missing document
+from one it could not read.
 
 **The request model is the argument gate.** A key outside the document-key
-grammar, a value that is not text, a key that is also a directory of another,
-a package past the document ceiling, a `document_kind` outside the published document
-schema names — each is a `pydantic.ValidationError` raised at construction, for
-an in-process caller and a remote one alike, so there is one gate rather than
-one per transport. `bytes` and `bytearray` holding UTF-8 pass that gate:
-pydantic decodes them to `str` in lax mode, so a caller that read its files as
-bytes is validated as though it had sent the text — except that a byte-order
-mark survives the decoding, and a document starting with one is reported as
-unreadable *content*. Nothing below re-checks an argument the model already
-refuses, and a malformed argument never becomes a finding.
-Document *content* is the opposite and is what this module exists to judge:
-unparseable text, a wrong shape, a contract-model failure or a cross-file
-inconsistency is a finding rather than a raised error.
+grammar, a value that is not text, a key at a secret location, an unknown kind —
+each is a `pydantic.ValidationError` raised at construction, for an in-process
+caller and a remote one alike. `bytes` holding UTF-8 pass that gate, decoded to
+`str` in lax mode, except that a byte-order mark survives the decoding and a
+document starting with one is reported as unreadable *content*. Document content
+is what this module judges: unparseable text, a wrong shape, a contract-model
+failure or a cross-document inconsistency is a finding, never a raised error.
 
-An exception raised by this module's own assembly or scoping is a defect in
-this package: it propagates. Turning one into a finding would fail an author's
-document for a bug the author cannot fix. `_run_guarded` in
-`analitiq.validator._core` is a separate mechanism: it contains a crash inside
-a check bound to one rule, and inside the grading of a whole document, as a
-`check-crashed` `notApplicable` finding — so a crash while grading a single
-document still comes back as a finding.
-
-`validate_pipeline_package` raises `NotImplementedError`; the behaviour it
-must satisfy is fixed by `packages/validator/tests/test_document_set.py`.
+An exception raised by this module's own assembly is a defect in this package
+and propagates. A crash inside grading one document, or inside one check, is
+contained by `_run_guarded` in `analitiq.validator._core` as a `check-crashed`
+finding, so the other checks still report.
 """
 from __future__ import annotations
 
 import json
-from pathlib import PurePosixPath
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, Callable, Literal, Mapping, NamedTuple, TypedDict
+
+from analitiq.contracts.validation_requests import PACKAGE_KINDS
+from analitiq.contracts.workspace import PACKAGE_MODELS, Workspace
+
+from ._core import (
+    _JSON_TEXT_REFUSALS,
+    _Doc,
+    _passed,
+    _run_guarded,
+    _unreadable_document_finding,
+    finding,
+    qualified,
+    validate_document_as,
+)
+from ._location import relative_reference
+from .connectors import (
+    _check_connector_endpoints,
+    _check_endpoint_filenames,
+    _check_endpoint_ids_unique,
+    _check_type_map_relation,
+)
+from .pipelines import (
+    _check_connection_connector_refs,
+    _check_connection_scoped_endpoints,
+    _check_connection_version_conflicts,
+    _check_connections_present,
+    _check_connector_scoped_endpoints,
+    _check_pipeline_active,
+    _check_pipeline_active_gate,
+    _check_pipeline_id,
+    _check_stream_connection_roles,
+    _check_stream_endpoint_targets,
+    _check_stream_parent_pipeline,
+    _check_stream_refs,
+)
 
 if TYPE_CHECKING:
-    # Annotation-only. `from __future__ import annotations` defers every
-    # annotation here to a string, and no body below needs a model at runtime,
-    # so nothing imports the contract package when this module loads. That is
-    # what keeps the import order safe: this module is imported before
-    # `connectors`, whose `try/except ImportError` around its contract-model
-    # imports turns a missing `analitiq-contract-models` into the structured
-    # "missing dependency" diagnostic, and an unconditional import here would
-    # pre-empt that guard with a raw traceback instead. The cost is that these
-    # annotations do not resolve at run time: `typing.get_type_hints` on the
-    # entry points below needs the request models handed to it as a namespace.
+    # Annotation-only: no body below needs a request model at run time.
+    from analitiq.contracts.shared.common import DocumentPackage
     from analitiq.contracts.validation_requests import (
         ValidatePackageRequest,
         ValidateSingleDocumentRequest,
+        ValidateWorkspaceRequest,
     )
 
 
@@ -113,173 +129,179 @@ def _envelope(findings: list[Finding]) -> ValidationEnvelope:
     """Wrap `findings` in the one `ValidationEnvelope` shape every entry point
     in this module answers with, via `_core._passed` so `main()` and this
     module answer "did this document pass" identically."""
-    from analitiq.validator._core import _passed
     return {"passed": _passed(findings), "findings": findings}
 
 
-def _consistent_entities(document: object) -> frozenset[str]:
-    """The published document-schema names `document`'s own content is
-    consistent with — empty when no registered kind claims it, or when the kind
-    that does has no published name (an assembled pipeline bundle, say).
+_Documents = Mapping[str, tuple[_Doc, ...]]
 
-    Walks the live `_KIND_REGISTRY` in registration order, so which kind claims
-    a document is always the registry's own answer. A `register_kind` call
-    names its validator, while `register_model_and_schema_kind` builds an
-    anonymous validator closure and names only its detector, so each
-    registration is looked up by whichever half is a stable importable name.
-    """
-    from analitiq.validator import _core, is_connection_doc, is_pipeline_doc, is_stream_doc
-    from analitiq.validator.connectors import (
-        _validate_api_endpoint,
-        _validate_connector,
-        _validate_database_endpoint,
-        _validate_kindless_connector,
-        _validate_type_map,
-    )
 
-    entity_by_validator = {
-        _validate_connector: "connector",
-        _validate_api_endpoint: "api-endpoint",
-        _validate_database_endpoint: "database-endpoint",
-        _validate_type_map: "type-map",
-        _validate_kindless_connector: "connector",
-    }
-    entity_by_detector = {
-        is_connection_doc: "connection",
-        is_stream_doc: "stream",
-        is_pipeline_doc: "pipeline",
-    }
+class _Check(NamedTuple):
+    """A cross-document check and the document kinds it reads."""
 
-    for detector, validator in _core._KIND_REGISTRY:  # skipcq: PYL-W0212 — same-package read of the live kind registry
-        if not detector(document):
-            continue
-        entity = entity_by_validator.get(validator) or entity_by_detector.get(detector)
-        return frozenset({entity}) if entity else frozenset()
-    return frozenset()
+    run: Callable[[_Documents], list[tuple[str, dict]]]
+    reads: frozenset[str]
+    #: Whether it decides only that a pipeline may run, not that it is sound.
+    gates_run: bool = False
+
+
+def _reads(*kinds: str) -> frozenset[str]:
+    return frozenset(kinds)
+
+
+_CHECKS: tuple[_Check, ...] = (
+    _Check(_check_type_map_relation, _reads("connector", "type-map")),
+    _Check(_check_connector_endpoints, _reads("connector", "type-map", "api-endpoint")),
+    _Check(_check_endpoint_ids_unique, _reads("api-endpoint")),
+    _Check(_check_endpoint_ids_unique, _reads("database-endpoint")),
+    _Check(_check_endpoint_filenames, _reads("api-endpoint")),
+    _Check(_check_endpoint_filenames, _reads("database-endpoint")),
+    _Check(_check_pipeline_id, _reads("pipeline")),
+    _Check(_check_connection_version_conflicts, _reads("pipeline")),
+    _Check(_check_stream_endpoint_targets, _reads("stream")),
+    _Check(_check_stream_refs, _reads("pipeline", "stream")),
+    _Check(_check_stream_parent_pipeline, _reads("pipeline", "stream")),
+    _Check(_check_stream_connection_roles, _reads("pipeline", "stream")),
+    _Check(_check_pipeline_active, _reads("pipeline"), gates_run=True),
+    _Check(_check_pipeline_active_gate, _reads("pipeline", "stream"), gates_run=True),
+    _Check(_check_connections_present, _reads("pipeline", "connection")),
+    _Check(_check_connection_connector_refs, _reads("connection", "connector")),
+    _Check(_check_connection_scoped_endpoints, _reads("stream", "database-endpoint")),
+    _Check(_check_connector_scoped_endpoints, _reads("stream", "connection", "api-endpoint")),
+)
+
+
+def _package_kinds(model: type[DocumentPackage]) -> frozenset[str]:
+    """The kinds a request can carry in a package of `model`: a secret
+    location's document is never carried."""
+    secret = {model.LOCATIONS[pattern] for pattern in model.SECRET_LOCATIONS}
+    return frozenset(model.LOCATIONS.values()) - secret
+
+
+def _package_checks(model: type[DocumentPackage]) -> list[_Check]:
+    return [c for c in _CHECKS if not c.gates_run and c.reads <= _package_kinds(model)]
+
+
+def _workspace_checks() -> list[_Check]:
+    return [c for c in _CHECKS if not c.gates_run
+            and not any(c.reads <= _package_kinds(m) for m in PACKAGE_MODELS.values())]
+
+
+def _run_checks() -> list[_Check]:
+    return [c for c in _CHECKS if c.gates_run]
+
+
+def _documents_for(check: _Check, documents: _Documents) -> _Documents:
+    return {kind: documents.get(kind, ()) for kind in check.reads}
+
+
+def _check_findings(checks: list[_Check], documents: _Documents) -> list[Finding]:
+    """Every finding `checks` report over `documents`, each naming its document
+    by key. A crash costs only the check that crashed."""
+    def _run(check: _Check) -> Callable[[], list[dict]]:
+        return lambda: [qualified(f, relative_reference(key)) for key, f in check.run(_documents_for(check, documents))]
+    return [f for check in checks for f in _run_guarded(_run(check), crash_label=check.run.__name__)]
+
+
+def _parsed(text: str) -> tuple[object, list[Finding]]:
+    """`text` parsed, or the finding saying it could not be."""
+    try:
+        return json.loads(text), []
+    except _JSON_TEXT_REFUSALS as exc:
+        return None, [_unreadable_document_finding(exc)]
+
+
+def _graded(kind: str, key: str, package: str, text: str) -> tuple[_Doc | None, list[Finding]]:
+    """The document at `key` parsed and graded as `kind`, its findings named by
+    key; no document when its text could not be parsed."""
+    content, unreadable = _parsed(text)
+    findings = unreadable or validate_document_as(kind, content)
+    named = [qualified(f, relative_reference(key)) for f in findings]
+    return (None if unreadable else _Doc(key, package, content)), named
+
+
+class _GradedRequest(NamedTuple):
+    findings: list[Finding]
+    documents: dict[str, tuple[_Doc, ...]]
+    #: Whether every package has its root and every located document parsed.
+    complete: bool
+
+
+def _graded_request(texts: Mapping[str, str], packages: Mapping[str, type[DocumentPackage]],
+                    located: Mapping[str, tuple[str, str]]) -> _GradedRequest:
+    """Root presence for every package, keyed by the directory it sits in, then
+    each located document in key order; `located` gives each key its kind and
+    the directory of the package holding it."""
+    findings: list[Finding] = [
+        qualified(finding(
+            message_id="package-root-missing", kind="fail", path="",
+            message=f"a {model.ROOT_KIND} package carries its root document at {model.ROOT!r}; none is there."),
+            relative_reference(directory + model.ROOT))
+        for directory, model in sorted(packages.items()) if directory + model.ROOT not in texts]
+    complete = not findings
+    documents: dict[str, list[_Doc]] = {}
+    for key in sorted(located):
+        kind, package = located[key]
+        doc, graded = _graded(kind, key, package, texts[key])
+        findings += graded
+        if doc is None:
+            complete = False
+        else:
+            documents.setdefault(kind, []).append(doc)
+    return _GradedRequest(findings, {kind: tuple(docs) for kind, docs in documents.items()}, complete)
+
+
+def _in_package(documents: _Documents, directory: str) -> _Documents:
+    return {kind: tuple(d for d in docs if d.package == directory) for kind, docs in documents.items()}
 
 
 def validate_single_document(
         request: ValidateSingleDocumentRequest) -> ValidationEnvelope:
-    """Validate one document supplied as its file text.
-
-    `request.document_kind` names the published document schema the caller says the
-    text is written against. It is checked, not trusted: a document whose own
-    content is inconsistent with the declared name is reported as an
-    `entity-mismatch` finding rather than validated as whatever it resembles.
-    A consistent document is graded exactly as `validate_document` grades it,
-    since the name it declares is the registration that claims it. Text
-    the JSON parser cannot read is a finding on the document, not a raised
-    error.
-
-    Nothing anchors the document to a path, so a connector declaring its
-    `kind` has no siblings for its cross-file coverage check to read: that
-    check reports `coverage-check-skipped-no-path`, which costs the pass. The
-    siblings belong in a `validate_connector_package` request.
-    """
-    from analitiq.validator._core import (
-        _JSON_TEXT_REFUSALS, _unreadable_document_finding, validate_document)
-
-    try:
-        document = json.loads(request.document)
-    except _JSON_TEXT_REFUSALS as exc:
-        return _envelope([_unreadable_document_finding(exc)])
-
-    mismatch = _entity_mismatch_findings(document, request.document_kind)
-    return _envelope(mismatch or validate_document(document))
+    """Validate one document, graded as the kind `request.document_kind`
+    names. Checks needing another document belong to a package or workspace
+    request, so none runs here."""
+    content, unreadable = _parsed(request.document)
+    return _envelope(unreadable or validate_document_as(request.document_kind, content))
 
 
-def _entity_mismatch_findings(document: object, entity: str) -> list[Finding]:
-    """The finding refusing `document` as `entity` when its own content is
-    inconsistent with that name, and none when it is consistent."""
-    from analitiq.validator._core import finding
-
-    consistent = _consistent_entities(document)
-    if entity in consistent:
-        return []
-    if consistent:
-        detected = " or ".join(repr(name) for name in sorted(consistent))
-        message = (f"declared entity {entity!r}, but this document's "
-                   f"content is detected as {detected}.")
-    else:
-        message = (f"declared entity {entity!r}, but this document's "
-                   "content matches no published document schema.")
-    return [finding(message_id="entity-mismatch", kind="fail", path="", message=message)]
+def validate_package(request: ValidatePackageRequest) -> ValidationEnvelope:
+    """Validate one package: its root presence, each located document, then —
+    where the root is present and every located document parsed — the package
+    checks."""
+    model = PACKAGE_KINDS[request.package_kind]
+    texts = request.documents.root
+    located = {key: (kind, "") for key in texts if (kind := model.kind_at(key)) is not None}
+    graded = _graded_request(texts, {"": model}, located)
+    findings = list(graded.findings)
+    if graded.complete:
+        findings += _check_findings(_package_checks(model), graded.documents)
+    return _envelope(findings)
 
 
-#: The key a connector package's root document sits at. The package root is
-#: the directory holding it, and every other key is read relative to that.
-_CONNECTOR_KEY = "connector.json"
+def validate_workspace(request: ValidateWorkspaceRequest) -> ValidationEnvelope:
+    """Validate a workspace: every package's root presence, each located
+    document, then — where every root is present and every located document
+    parsed — each package's checks, the workspace checks, and the run checks
+    over the pipeline `request.run_pipeline` names."""
+    texts = request.documents.root
+    packages: dict[str, type[DocumentPackage]] = {}
+    located: dict[str, tuple[str, str]] = {}
+    for key in texts:
+        held = Workspace.package_at(key)
+        if held is None:
+            kind, directory = Workspace.kind_at(key), ""
+        else:
+            directory, model, inner = held
+            packages[directory] = model
+            kind = model.kind_at(inner)
+        if kind is not None:
+            located[key] = (kind, directory)
 
-
-def validate_connector_package(request: ValidatePackageRequest) -> ValidationEnvelope:
-    """Validate a connector package supplied as in-memory documents instead of
-    files on disk: the connector document at `connector.json`, its sibling
-    type map, and — for an api connector — its `endpoints/*.json` files.
-
-    The connector is graded exactly as it is from a path on disk, by the same
-    checks reading the same siblings, so the two routes cannot disagree about
-    a package whose `connector.json` holds a connector. One that holds anything
-    else is refused as an `entity-mismatch`, where the disk route grades
-    whatever it detects. What differs is where a finding says it applies: a package has
-    no one validated document, so every finding names the document it is
-    about by its percent-encoded key. A document the connector's checks never read is not graded.
-    """
-    from analitiq.validator._core import (
-        _JSON_TEXT_REFUSALS,
-        _unreadable_document_finding,
-        finding,
-        qualified,
-        validate_document,
-    )
-    from analitiq.validator._location import Location, MemoryTree
-
-    if _CONNECTOR_KEY not in request.documents.root:
-        return _envelope([qualified(finding(
-            message_id="connector-document-missing", kind="fail", path="",
-            message=(f"a connector package carries its connector document at "
-                     f"{_CONNECTOR_KEY!r}; no document has that key.")), _CONNECTOR_KEY)])
-    tree = MemoryTree(request.documents.root)
-    anchor = Location(PurePosixPath(_CONNECTOR_KEY), tree)
-    try:
-        document = json.loads(anchor.read_text())
-    except _JSON_TEXT_REFUSALS as exc:
-        return _envelope([qualified(_unreadable_document_finding(exc), _CONNECTOR_KEY)])
-    mismatch = _entity_mismatch_findings(document, "connector")
-    if mismatch:
-        return _envelope(_from_package_root(mismatch))
-    return _envelope(_from_package_root(validate_document(document, doc_path=anchor)))
-
-
-def _from_package_root(findings: list[Finding]) -> list[Finding]:
-    """`findings` from grading the connector document, each read from the
-    package root: a pointer into the connector itself gains its key, and a
-    finding about a sibling already names it from the directory both share."""
-    from analitiq.validator._core import is_bare_pointer, qualified
-
-    return [qualified(f, _CONNECTOR_KEY) if is_bare_pointer(f["path"]) else f
-            for f in findings]
-
-
-def validate_pipeline_package(request: ValidatePackageRequest) -> ValidationEnvelope:
-    """Validate a pipeline package supplied as in-memory documents instead of
-    files on disk: the pipeline document, its sibling `streams/*.json`, and
-    every `connections/*/connection.json` (plus their scoped endpoints and type
-    map) — assembled the way `plugins/analitiq-pipeline-builder/scripts/
-    validate.py`'s `_assemble_bundle` already does from a filesystem root, then
-    checked for referential integrity.
-
-    A `connectors/<slug>/definition/...` subtree is validated by calling
-    `validate_connector_package` on it and scoping the returned findings'
-    `path` under the subtree's key prefix, so an embedded connector reports its
-    own coverage findings — native-type coverage, `transport_ref` resolution,
-    duplicate endpoint ids. The plugin's `_assemble_bundle` reports none of
-    those: it reads such a subtree's `connector.json` only for its
-    `connector_id`, and `_connector_endpoint_sets` reads the subtree's endpoint
-    ids only for stream-ref resolution.
-
-    Raises `NotImplementedError`. Signature and behaviour are fixed by
-    `packages/validator/tests/test_document_set.py`.
-    """
-    raise NotImplementedError(
-        "validate_pipeline_package is not implemented — see "
-        "packages/validator/tests/test_document_set.py for the fixed contract.")
+    graded = _graded_request(texts, packages, located)
+    findings = list(graded.findings)
+    if graded.complete:
+        for directory, model in sorted(packages.items()):
+            findings += _check_findings(_package_checks(model), _in_package(graded.documents, directory))
+        findings += _check_findings(_workspace_checks(), graded.documents)
+        if request.run_pipeline is not None:
+            findings += _check_findings(_run_checks(), _in_package(graded.documents, request.run_pipeline))
+    return _envelope(findings)
