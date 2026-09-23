@@ -246,6 +246,23 @@ def test_bundle_reach_follows_references_across_modules_and_splits_off_the_run_g
     assert gated == {"analitiq.validator.pipelines::gated_check"}
 
 
+def test_bundle_reach_follows_a_re_export_to_the_defining_module():
+    sources = {
+        "analitiq.validator.pipelines": (
+            "from .connectors import check\n"
+            "def validate_pipeline_bundle(bundle, *, require_runnable=True):\n"
+            "    checks = [check]\n"
+        ),
+        "analitiq.validator.connectors": "from .streams import check\n",
+        "analitiq.validator.streams": (
+            "def check(d):\n    return inner(d)\n"
+            "def inner(d):\n    return []\n"
+        ),
+    }
+    always, _ = G._bundle_reach(sources)
+    assert always == {"analitiq.validator.streams::check", "analitiq.validator.streams::inner"}
+
+
 def test_pipeline_active_gate_is_excluded_but_active_stream_gate_is_not():
     """RULE-PIPE-019 (`_check_pipeline_active`) and RULE-PIPE-014
     (`_check_pipeline_active_gate`) are both computed as `require_runnable`-gated

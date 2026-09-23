@@ -429,12 +429,20 @@ def _bundle_reach(sources: dict[str, str]) -> tuple[set[str], set[str]]:
     if _BUNDLE not in functions:
         raise RuntimeError(f"{_BUNDLE} no longer exists — this measurement has nothing to walk")
 
+    def defined(symbol: str) -> str:
+        # A name re-exported from module to module resolves where it is defined;
+        # `seen` stops an import cycle.
+        seen = set()
+        while symbol in imported and symbol not in seen:
+            seen.add(symbol)
+            symbol = imported[symbol]
+        return symbol
+
     def referenced(module: str, nodes) -> set[str]:
         found = set()
         for node in nodes:
             if isinstance(node, ast.Name):
-                symbol = f"{module}::{node.id}"
-                symbol = imported.get(symbol, symbol)
+                symbol = defined(f"{module}::{node.id}")
                 if symbol in functions:
                     found.add(symbol)
         return found
