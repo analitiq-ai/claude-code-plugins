@@ -88,7 +88,7 @@ def is_pipeline_doc(doc: Any) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Field extraction (defensive — documents are already per-document validated)
+# Field extraction (defensive — a document read here may have failed its own model)
 # ---------------------------------------------------------------------------
 
 def _pipeline_connection_ids(pipeline: dict) -> set[str]:

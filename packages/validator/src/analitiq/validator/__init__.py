@@ -19,9 +19,8 @@ map or a connection's. A caller holding a `definition/` *directory* calls
 findings is its own.
 
 Importing this package pulls in the per-kind modules (`connectors`, `pipelines`,
-`connections`, `streams`), each of which self-registers its detector→validator
-pairs with the core dispatch registry — a new kind is a new module registering
-the same way, without touching `_core`. The public surface is re-exported here.
+`connections`, `streams`), each of which registers its kinds with `_core`'s
+registries at import. The public surface is re-exported here.
 
 `document_set` grades a document, a package or a workspace handed over in
 memory, graded as the kinds the request names. Its entry points take the

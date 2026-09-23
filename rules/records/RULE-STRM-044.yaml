@@ -14,9 +14,6 @@ rationale: >
   connector, or one the connector's next release renamed, reads as correct in
   the stream and resolves to nothing. It is checked only where the connection
   and the connector's endpoints are graded together; a connection that is
-  absent is `RULE-PIPE-012`'s finding, not this one. It arrives as a warning
-  because a workspace graded before the check existed could pass with such a
-  reference, and a new rejection of an input an earlier release accepted is a
-  major version.
+  absent is `RULE-PIPE-012`'s finding, not this one.
 status: active
 superseded_by: null

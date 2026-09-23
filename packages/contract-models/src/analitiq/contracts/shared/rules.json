@@ -7266,7 +7266,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A connector-scoped reference names a connection and an endpoint id, and the endpoint lives in the package of the connector that connection configures — two hops no single document can follow. An id copied from a different connector, or one the connector's next release renamed, reads as correct in the stream and resolves to nothing. It is checked only where the connection and the connector's endpoints are graded together; a connection that is absent is `RULE-PIPE-012`'s finding, not this one. It arrives as a warning because a workspace graded before the check existed could pass with such a reference, and a new rejection of an input an earlier release accepted is a major version.\n",
+   "rationale": "A connector-scoped reference names a connection and an endpoint id, and the endpoint lives in the package of the connector that connection configures — two hops no single document can follow. An id copied from a different connector, or one the connector's next release renamed, reads as correct in the stream and resolves to nothing. It is checked only where the connection and the connector's endpoints are graded together; a connection that is absent is `RULE-PIPE-012`'s finding, not this one.\n",
    "status": "active",
    "superseded_by": null
   },
