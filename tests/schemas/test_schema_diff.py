@@ -114,3 +114,37 @@ def test_the_digest_pins_the_exact_lines():
     assert diff_sha256(lines) == diff_sha256(list(lines))
     assert diff_sha256(lines) != diff_sha256([*lines, "ADDED x = 1"])
     assert diff_sha256(lines) != diff_sha256(list(reversed([*lines, "ADDED x = 1"])))
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [
+        pytest.param({"const": True}, {"const": 1}, ["CHANGED const: true -> 1"], id="const-true-to-1"),
+        pytest.param(
+            {"properties": {"x": {"const": False}}}, {"properties": {"x": {"const": 0}}},
+            ["CHANGED properties/x/const: false -> 0"], id="nested-false-to-0",
+        ),
+        pytest.param({"enum": [True, "a"]}, {"enum": [1, "a"]}, ['LIST-ADDED enum: [1]', 'LIST-REMOVED enum: [true]'], id="enum"),
+        pytest.param({"examples": [True]}, {"examples": [1]}, ["DOC-CHANGED examples: [true] -> [1]"], id="doc"),
+    ],
+)
+def test_a_boolean_never_equals_a_number(old, new, expected):
+    assert diff_lines(old, new) == expected
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        pytest.param({"maximum": 1}, {"maximum": 1.0}, id="scalar"),
+        pytest.param({"enum": [1, 2]}, {"enum": [1.0, 2]}, id="list-member"),
+        pytest.param({"examples": [1]}, {"examples": [1.0]}, id="doc"),
+    ],
+)
+def test_an_integral_float_equals_its_integer(old, new):
+    assert diff_lines(old, new) == []
+
+
+def test_an_integral_float_inside_a_listed_object_equals_its_integer():
+    old = {"anyOf": [{"maximum": 1}]}
+    new = {"anyOf": [{"maximum": 1.0}, {"type": "null"}]}
+    assert diff_lines(old, new) == ['ITEM-ADDED anyOf: {"type":"null"}']

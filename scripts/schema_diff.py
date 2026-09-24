@@ -78,7 +78,22 @@ def _child_context(context: str, key: str) -> str:
 
 
 def _json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    """The canonical text of a JSON value; two values are equal exactly when it is.
+
+    Python's `==` counts `True == 1`, which JSON does not, so equality is taken
+    here; an integral float is its integer, as JSON Schema compares numbers.
+    """
+    return json.dumps(_canonical(value), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _canonical(value: Any) -> Any:
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {key: _canonical(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_canonical(item) for item in value]
+    return value
 
 
 def _emit(changes: list[Change], path: tuple[str, ...], tag: str, rest: str = "") -> None:
@@ -90,7 +105,7 @@ def _is_doc(context: str, key: str) -> bool:
 
 
 def _diff(old: Any, new: Any, path: tuple[str, ...], context: str, changes: list[Change]) -> None:
-    if old == new:
+    if _json(old) == _json(new):
         return
     if isinstance(old, dict) and isinstance(new, dict):
         _diff_dicts(old, new, path, context, changes)
@@ -109,7 +124,7 @@ def _diff_dicts(old: dict, new: dict, path: tuple[str, ...], context: str, chang
         elif key not in old:
             _emit(changes, child, f"{doc}ADDED", f" = {_json(new[key])}")
         elif doc:
-            if old[key] != new[key]:
+            if _json(old[key]) != _json(new[key]):
                 _emit(changes, child, "DOC-CHANGED", f": {_json(old[key])} -> {_json(new[key])}")
         else:
             _diff(old[key], new[key], child, _child_context(context, key), changes)
