@@ -35,7 +35,7 @@
 * contain every crash route in the pipeline validator adapter ([aa74f83](https://github.com/analitiq-ai/claude-code-plugins/commit/aa74f83e01b23f0c5666f0b1dd5b4ad816375e53))
 * convert every accumulate-then-return finding builder to mutate in place ([0471422](https://github.com/analitiq-ai/claude-code-plugins/commit/047142247c99d31f995fcd9397b674112e0eaa1f))
 * drop one more exhaustiveness claim found by a proactive sweep ([58df24f](https://github.com/analitiq-ai/claude-code-plugins/commit/58df24fe659d2fe1281bae60aca08c93b3a7c0c9))
-* exclude RULE-PIPE-019 from the generated block, same reachability bug ([da1c4c4](https://github.com/analitiq-ai/claude-code-plugins/commit/da1c4c4f17fd97b5a44de78551c27ff79666a949))
+* exclude the since-retired active-pipeline runnability rule from the generated block, same reachability bug ([da1c4c4](https://github.com/analitiq-ai/claude-code-plugins/commit/da1c4c4f17fd97b5a44de78551c27ff79666a949))
 * guard _connector_endpoint_sets's own top-level enumeration ([4340e00](https://github.com/analitiq-ai/claude-code-plugins/commit/4340e0086572d7cc1ab89b53eb9cbdfb461492a8))
 * guard section-level enumeration and halt the fix loop on adapter-crash ([39a1dbb](https://github.com/analitiq-ai/claude-code-plugins/commit/39a1dbb5b87f11aab96ec18d3fa82cc4bd3a0a75))
 * harden crash containment against three edge cases Codex found ([aa17c13](https://github.com/analitiq-ai/claude-code-plugins/commit/aa17c1300857cd4efe4f877a36fce163f5510370))
