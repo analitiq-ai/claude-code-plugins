@@ -10,6 +10,7 @@ discriminated-union refactors of `Predicate` and `CursorMapping`.
 import itertools
 import json
 import re
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -893,7 +894,10 @@ class TestParamValidate:
                 bound: value,
             })
 
-    @pytest.mark.parametrize("member", [float("nan"), float("inf"), float("-inf")])
+    @pytest.mark.parametrize("member", [
+        float("nan"), float("inf"), float("-inf"),
+        Decimal("NaN"), Decimal("sNaN"), Decimal("Infinity"), Decimal("-Infinity"),
+    ])
     def test_a_non_finite_enum_member_is_refused(self, member):
         # A unit test for the same reason as the non-finite bound above.
         with pytest.raises(ValidationError, match="RULE-ENDP-076"):
@@ -905,7 +909,7 @@ class TestParamValidate:
     def test_a_finite_numeric_enum_is_accepted(self):
         Param(**{
             "in": "query", "type": "number", "required": False,
-            "enum": [1.0, 2, -0.5],
+            "enum": [1.0, 2, -0.5, Decimal("2.5")],
         })
 
     def test_default_must_not_use_from_input(self):

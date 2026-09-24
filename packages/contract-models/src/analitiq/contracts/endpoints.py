@@ -25,6 +25,7 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import Enum
 from collections.abc import Iterator
 from typing import Annotated, Any, Literal, NamedTuple, Union, get_args
@@ -652,7 +653,9 @@ class Param(_EndpointModel):
                     f"{name}={bound!r} is not a finite number"
                 )
         for member in self.enum or ():
-            if isinstance(member, float) and not math.isfinite(member):
+            # Decimal.is_finite, not math.isfinite: the latter raises on sNaN.
+            if ((isinstance(member, float) and not math.isfinite(member))
+                    or (isinstance(member, Decimal) and not member.is_finite())):
                 raise violation(
                     "RULE-ENDP-076", "param-enum-member-not-finite",
                     f"enum member {member!r} is not a finite number"
