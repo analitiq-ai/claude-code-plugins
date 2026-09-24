@@ -4,27 +4,15 @@ every entry whose name starts with `.`, and a file it would send but cannot
 carry refuses the request."""
 from __future__ import annotations
 
-import importlib.util
 import os
 import re
-import sys
 from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from _eval_grade import REPO_ROOT, grade  # noqa: E402  (pytest puts this dir on sys.path)
+
 PLUGINS = REPO_ROOT / "plugins"
-
-
-def _grade():
-    spec = importlib.util.spec_from_file_location("eval_grade", REPO_ROOT / "evals" / "grade.py")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-grade = _grade()
 
 
 def _write(root: Path, files: dict[str, str | bytes]) -> None:

@@ -1,6 +1,7 @@
 ---
 name: connector-schema-validator
 description: Validate one draft connector-builder document, or a whole connector package, by submitting it to the analitiq-validator MCP server. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Output is the server's Diagnostics envelope, or a validation-not-run finding when the server never graded the request, as defined in connector-builder/references/io-contracts.md.
+tools: Read, Bash, Grep, mcp__plugin_analitiq-connector-builder_analitiq-validator__validate_single_document, mcp__plugin_analitiq-connector-builder_analitiq-validator__validate_package, mcp__plugin_analitiq-connector-builder_analitiq-validator__validate_workspace
 color: orange
 ---
 

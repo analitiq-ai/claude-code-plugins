@@ -1,6 +1,7 @@
 ---
 name: pipeline-schema-validator
 description: Validate authored pipeline-plugin documents — one document, one package, or the pipeline's workspace — by submitting them to the analitiq-validator MCP server. Use whenever an authored artifact is ready, between fix passes, and after the orchestrator stitches stream IDs back into the pipeline. Returns the server's Diagnostics envelope, or a validation-not-run finding when the server never graded the request.
+tools: Bash, Read, mcp__plugin_analitiq-pipeline-builder_analitiq-validator__validate_single_document, mcp__plugin_analitiq-pipeline-builder_analitiq-validator__validate_package, mcp__plugin_analitiq-pipeline-builder_analitiq-validator__validate_workspace
 ---
 
 # pipeline-schema-validator
