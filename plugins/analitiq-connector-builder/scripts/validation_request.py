@@ -15,10 +15,13 @@ name starts with `.` — that is what keeps `.secrets/` out of every request —
 every link or other non-regular entry, whatever its name; no link is followed.
 The server grades only the keys its location table matches.
 
-A carried file that cannot be read or is not UTF-8, and a directory that cannot
-be listed, exit non-zero, naming it. So do a document that is a link or not a
-regular file, a target directory that is a link or missing, and an argument list
-no mode takes.
+What exits non-zero, naming the path:
+
+- an argument list no mode takes;
+- a document argument that is missing, a link or not a regular file, and a
+  directory argument that is missing, a link or not a directory;
+- any path whose type cannot be read, a directory that cannot be listed, and a
+  carried file that cannot be read or is not UTF-8.
 
 Standard library only: the plugin installs nothing.
 """
@@ -26,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 
@@ -45,9 +49,19 @@ def _read(path: Path) -> str:
         raise RequestError(f"{path}: unreadable: {exc.strerror}") from None
 
 
+def _mode(path: Path) -> int:
+    """The path's own file type and mode, never a link's target's; 0, no type at all, when it does not exist."""
+    try:
+        return os.lstat(path).st_mode
+    except FileNotFoundError:
+        return 0
+    except OSError as exc:
+        raise RequestError(f"{path}: unreadable: {exc.strerror}") from None
+
+
 def _document(target: str) -> str:
     path = Path(target)
-    if path.is_symlink() or not path.is_file():
+    if not stat.S_ISREG(_mode(path)):
         raise RequestError(f"{target}: not a regular file, or a link")
     return _read(path)
 
@@ -63,16 +77,17 @@ def _documents(directory: Path, prefix: str = "") -> dict[str, str]:
         path, key = Path(entry.path), prefix + entry.name
         if entry.name.startswith("."):
             continue
-        if entry.is_dir(follow_symlinks=False):
+        mode = _mode(path)
+        if stat.S_ISDIR(mode):
             documents |= _documents(path, f"{key}/")
-        elif entry.is_file(follow_symlinks=False) and entry.name.endswith(tuple(VALIDATOR_ALLOWED_EXTENSIONS)):
+        elif stat.S_ISREG(mode) and entry.name.endswith(tuple(VALIDATOR_ALLOWED_EXTENSIONS)):
             documents[key] = _read(path)
     return documents
 
 
 def _directory(target: str) -> Path:
     path = Path(target)
-    if path.is_symlink() or not path.is_dir():
+    if not stat.S_ISDIR(_mode(path)):
         raise RequestError(f"{target}: not a directory, or a link")
     return path
 

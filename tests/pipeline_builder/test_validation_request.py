@@ -209,3 +209,18 @@ def test_a_target_that_is_not_a_directory_is_refused(tmp_path, argv):
     for target in (tmp_path / "missing", tmp_path / "linked"):
         assert _refused(*[str(target) if a == "{}" else a for a in argv]) == (
             f"{target}: not a directory, or a link")
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads anything")
+@pytest.mark.parametrize("argv", [
+    ["document", "{}/pipeline.json", "pipeline"], ["package", "{}/package", "connection"], ["workspace", "{}/package"],
+])
+def test_a_target_under_an_unreadable_directory_is_refused(tmp_path, argv):
+    locked = tmp_path / "locked"
+    _write(locked, {"pipeline.json": "{}", "package/connection.json": "{}"})
+    locked.chmod(0)
+    try:
+        refusal = _refused(*[a.format(locked) for a in argv])
+    finally:
+        locked.chmod(0o755)
+    assert refusal == f"{argv[1].format(locked)}: unreadable: Permission denied"
