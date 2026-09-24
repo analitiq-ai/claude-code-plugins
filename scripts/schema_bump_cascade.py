@@ -68,9 +68,10 @@ LUNA_SYSTEM = (
     "You classify the semantic-version bump a JSON Schema change requires.\n"
     "The payload has `changes` (every difference between the OLD and NEW schema of `resource`), "
     "and for each side the root keywords (everything except $defs), the full body of every "
-    "definition the changes touch, and the definitions those bodies reference. Use the bodies "
-    "to judge context the change lines omit: whether an enclosing object forbids additional "
-    "properties, whether a removed definition is still referenced, what a $ref now points at.\n"
+    "definition the changes touch, and the definitions those bodies or the changed values "
+    "reference. Use the bodies to judge context the change lines omit: whether an enclosing "
+    "object forbids additional properties, whether a removed definition is still referenced, "
+    "what a $ref now points at.\n"
     "Pick the most severe category that any single change falls into.\n"
     "\n"
     f"{LEGEND}\n"
@@ -318,14 +319,17 @@ def _ask_luna(payload: dict, post: Post) -> tuple[dict, float]:
 
 def stage2_payload(resource: str, old: dict, new: dict, changes: list[Change]) -> dict:
     """What Luna reads: the diff, and per side the root keywords, the bodies of
-    the touched definitions and of the definitions those bodies `$ref`."""
+    the touched definitions and of the definitions `$ref`ed by those bodies or
+    by a changed value — a retargeted root `$ref` names its target, and the
+    body is what says whether the target accepts less."""
     touched = sorted({c.path[1] for c in changes if len(c.path) >= 2 and c.path[0] == "$defs"})
     payload: dict[str, Any] = {"resource": resource, "changes": [c.line for c in changes]}
     for side, schema in (("old", unstamped(old)), ("new", unstamped(new))):
         defs = schema.get("$defs", {})
         bodies = {name: defs[name] for name in touched if name in defs}
+        sources = [*bodies.values(), *(_value_at(schema, c.path) for c in changes)]
         referenced = sorted({
-            name for body in bodies.values() for name in _defs_refs(body)
+            name for source in sources for name in _defs_refs(source)
             if name not in bodies and name in defs
         })
         payload[f"{side}_root_keywords"] = {k: v for k, v in schema.items() if k != "$defs"}
@@ -335,6 +339,23 @@ def stage2_payload(resource: str, old: dict, new: dict, changes: list[Change]) -
 
 
 _DEFS_REF_PREFIX = "#/$defs/"
+
+
+def _value_at(schema: dict, path: tuple[str, ...]) -> Any:
+    """The value at a change path on one side, None where that side lacks it.
+
+    A path ending in `$ref` yields the one-key object holding it, so the
+    reference reads the same as one found inside a body.
+    """
+    node: Any = schema
+    for key in path:
+        if isinstance(node, dict) and key in node:
+            node = node[key]
+        elif isinstance(node, list) and key.isdigit() and int(key) < len(node):
+            node = node[int(key)]
+        else:
+            return None
+    return {"$ref": node} if path[-1:] == ("$ref",) else node
 
 
 def _defs_refs(node: Any) -> set[str]:

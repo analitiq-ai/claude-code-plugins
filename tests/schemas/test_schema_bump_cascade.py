@@ -184,6 +184,30 @@ def test_luna_reads_the_touched_definitions_and_what_they_reference():
     assert payload["new_definitions_they_reference"] == {"B": new["$defs"]["B"], "Untouched": {"type": "integer"}}
 
 
+
+@pytest.mark.parametrize(
+    ("edit", "new_referenced"),
+    [
+        pytest.param(lambda s: s["properties"]["src"].update({"$ref": "#/$defs/B"}), {"B"}, id="ref-retargeted"),
+        pytest.param(
+            lambda s: s["properties"].update(src={"anyOf": [{"$ref": "#/$defs/A"}, {"$ref": "#/$defs/B"}]}),
+            {"A", "B"}, id="branch-added",
+        ),
+    ],
+)
+def test_luna_reads_the_definitions_a_changed_root_value_references(edit, new_referenced):
+    old = {
+        "type": "object",
+        "properties": {"src": {"$ref": "#/$defs/A"}, "other": {"$ref": "#/$defs/Untouched"}},
+        "$defs": {"A": {"type": "string"}, "B": {"type": "integer"}, "Untouched": {"type": "null"}},
+    }
+    new = copy.deepcopy(old)
+    edit(new)
+    payload = cascade.stage2_payload("probe", old, new, diff(old, new))
+    assert payload["old_touched_definitions"] == payload["new_touched_definitions"] == {}
+    assert payload["old_definitions_they_reference"] == {"A": {"type": "string"}}
+    assert set(payload["new_definitions_they_reference"]) == new_referenced
+
 class _Response(io.BytesIO):
     status = 200
 
