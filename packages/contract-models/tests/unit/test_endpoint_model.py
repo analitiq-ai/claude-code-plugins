@@ -1981,6 +1981,12 @@ class TestPublishedSchemaIdempotencyRule:
         ("application/x-www-form-urlencoded", {"max_records": 100}, False),
         # Case-insensitive and parameter-tolerant, as the model reads it.
         ("Application/X-WWW-Form-URLEncoded; charset=utf-8", {"max_records": 100}, False),
+        # The pattern's end: trailing space is still the form type (`MediaType`
+        # admits it, leading space it refuses outright), a longer subtype
+        # sharing the form type's prefix is not.
+        ("application/x-www-form-urlencoded  ", {"max_records": 100}, False),
+        ("application/x-www-form-urlencoded  ", "omit", True),
+        ("application/x-www-form-urlencodedx", {"max_records": 100}, True),
         ("application/json", {"max_records": 100}, True),
         ("omit", {"max_records": 100}, True),
         ("application/x-www-form-urlencoded", "omit", True),
