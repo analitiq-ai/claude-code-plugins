@@ -133,10 +133,10 @@ DOC_KEYS = {"description", "title", "examples", "$comment"}
 # Keys stamped by this script that must be ignored when comparing schemas.
 STAMP_KEYS = {"$id", "version"}
 
-# How `_schema_is_additive` reads each JSON Schema 2020-12 keyword. A keyword in
-# none of these sets is compared by equality, so an unknown keyword, a value
-# keyword (`const`, `default`) or a bound (`maxLength`) is additive only when
-# unchanged.
+# How `_schema_is_additive` reads each JSON Schema 2020-12 keyword. A keyword
+# neither in these sets nor handled by name in `_keyword_is_additive` is
+# compared by equality: an unknown keyword, a value (`const`, `default`), a
+# bound (`maxLength`), and a subschema whose effect is not covariant.
 #
 # Annotations do not take part in validation: any change to one is additive.
 _ANNOTATION_KEYWORDS = frozenset({
@@ -146,10 +146,12 @@ _ANNOTATION_KEYWORDS = frozenset({
 # document valid: definitions, new optional properties, and a default, which
 # no validator reads but consumers act on, so changing one is not additive.
 _ADDITIVE_WHEN_INTRODUCED = frozenset({"$defs", "properties", "default"})
-# Keywords holding one subschema.
-_SUBSCHEMA_KEYWORDS = frozenset({
-    "items", "additionalProperties", "not", "if", "then", "else", "contains",
-    "propertyNames", "unevaluatedProperties", "unevaluatedItems", "contentSchema",
+# Keywords holding one subschema whose widening always widens the parent.
+# `not` works the other way, and `if` (which picks where `then` applies) and
+# `contains` (bounded by `maxContains`) either way, so they are not here.
+_COVARIANT_SUBSCHEMA_KEYWORDS = frozenset({
+    "items", "additionalProperties", "then", "else", "propertyNames",
+    "unevaluatedProperties", "unevaluatedItems", "contentSchema",
 })
 # Keywords holding a list a document satisfies by matching ANY member, and a
 # list it satisfies only by matching EVERY member.
@@ -2034,18 +2036,16 @@ def _strip_doc_and_stamp(obj: Any) -> Any:
 def _schema_is_additive(old: Any, new: Any, root: dict) -> bool:
     """True when every document valid under schema `old` is valid under `new`.
 
-    Heuristic in one direction only: it may call an additive change breaking,
-    so the caller errs on the side of MAJOR, but never the reverse. Each
-    keyword is graded by what it means, per the keyword sets above. A keyword
-    newly introduced is additive only when it is an annotation or in
+    Each keyword is graded by what it means, per the keyword sets above; what
+    cannot be graded is compared by equality, so the doubt goes to MAJOR. A
+    keyword newly introduced is additive only when it is an annotation or in
     `_ADDITIVE_WHEN_INTRODUCED`, and a keyword removed only when it is an
-    annotation. A new property counts as additive by convention, although it
-    constrains a key the old schema left open. `root` resolves `$ref`s in the
-    new schema.
+    annotation. `root` resolves `$ref`s in the new schema.
 
-    Additive means additive for a document's author. For a schema describing
-    output, a widening such as a new `enum` member breaks readers; escalate
-    via `--bump` when that distinction matters.
+    Two changes are called additive although they can reject a document:
+    a new property, by convention, constrains a key the old schema left open;
+    and for a schema describing output, a widening such as a new `enum` member
+    breaks readers. Escalate via `--bump` when either matters.
     """
     if old == new:
         return True
@@ -2071,7 +2071,7 @@ def _keyword_is_additive(keyword: str, old: Any, new: Any, root: dict) -> bool:
     """Whether changing `keyword`'s value from `old` to `new` is additive."""
     if old == new or _is_annotation(keyword):
         return True
-    if keyword in _SUBSCHEMA_KEYWORDS:
+    if keyword in _COVARIANT_SUBSCHEMA_KEYWORDS:
         return _schema_is_additive(old, new, root)
     if keyword in _OPEN_SCHEMA_MAPS | _CLOSED_SCHEMA_MAPS:
         if keyword in _CLOSED_SCHEMA_MAPS and new.keys() - old.keys():

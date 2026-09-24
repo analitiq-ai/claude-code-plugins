@@ -160,6 +160,36 @@ def _obj(**node) -> dict:
         pytest.param(
             _obj(items={"enum": ["a", "b"]}), _obj(items={"enum": ["a"]}), "major", id="items-narrows"
         ),
+        # A subschema whose effect on the parent runs the other way (`not`), or
+        # either way (`if`, `contains` beside `maxContains`), is not graded as
+        # a schema of its own: any change to it is major.
+        pytest.param(_obj(**{"not": {"enum": ["a"]}}), _obj(**{"not": {"enum": ["a", "b"]}}), "major", id="not-widens"),
+        pytest.param(
+            _obj(**{"not": {"type": "string"}}),
+            _obj(**{"not": {"type": ["string", "null"]}}),
+            "major",
+            id="not-type-widens",
+        ),
+        pytest.param(
+            _obj(**{"if": {"enum": ["a"]}, "then": PATTERN}),
+            _obj(**{"if": {"enum": ["a", "b"]}, "then": PATTERN}),
+            "major",
+            id="if-widens",
+        ),
+        pytest.param(
+            _obj(contains={"enum": ["a"]}, maxContains=1),
+            _obj(contains={"enum": ["a", "b"]}, maxContains=1),
+            "major",
+            id="contains-widens-under-maxContains",
+        ),
+        # Removals and the tightenings a closed object or a bound makes.
+        pytest.param({"properties": {"a": STR, "b": INT}}, {"properties": {"a": STR}}, "major", id="property-removed"),
+        pytest.param({"$defs": {"A": STR, "B": INT}}, {"$defs": {"A": STR}}, "major", id="defs-entry-removed"),
+        pytest.param(_obj(), _obj(additionalProperties=False), "major", id="additionalProperties-false-introduced"),
+        pytest.param(
+            _obj(additionalProperties=True), _obj(additionalProperties=False), "major", id="additionalProperties-closes"
+        ),
+        pytest.param(_obj(maxLength=10), _obj(maxLength=5), "major", id="bound-changes"),
         # A value, not a set of subschemas: any change is a different value.
         pytest.param(_obj(const=["a"]), _obj(const=["a", "b"]), "major", id="const-grows"),
         pytest.param(_obj(const={"a": 1}), _obj(const={"a": 1, "b": 2}), "major", id="const-dict-grows"),
