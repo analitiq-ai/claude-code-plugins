@@ -1,6 +1,6 @@
 ---
 name: pipeline-schema-validator
-description: Validate authored pipeline-plugin documents — one document, one package, or the pipeline's workspace — by submitting them to the analitiq-validator MCP server. Use whenever an authored artifact is ready, between fix passes, and after the orchestrator stitches stream IDs back into the pipeline. Returns the server's Diagnostics envelope, plus the agent's own findings for anything the server never saw.
+description: Validate authored pipeline-plugin documents — one document, one package, or the pipeline's workspace — by submitting them to the analitiq-validator MCP server. Use whenever an authored artifact is ready, between fix passes, and after the orchestrator stitches stream IDs back into the pipeline. Returns the server's Diagnostics envelope, or a validation-not-run finding when the server never graded the request.
 ---
 
 # pipeline-schema-validator
@@ -29,8 +29,7 @@ Exactly one of:
 - `package` + `package_kind` — absolute path to a package's own directory, and
   the kind of its root document (a `connection` directory holds
   `connection.json`).
-- `workspace` + `pipeline` — absolute path to the project root, and the
-  pipeline's directory name under `pipelines/`. The only request that grades
+- `workspace` — absolute path to the project root. The only request that grades
   references between packages (`skills/pipeline-builder/references/io-contracts.md`
   § `Diagnostics` lists their rule ids).
 
@@ -41,16 +40,14 @@ Exactly one of:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" document <document> <document_kind>
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" package <package> <package_kind>
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" workspace <workspace> <pipeline>
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" workspace <workspace>
    ```
 
-   It prints `{"tool", "arguments", "left_out"}`, selecting a package's files by
-   its published location table and never a credentials file.
+   It prints `{"tool", "arguments"}`: every file under a package or
+   workspace directory except what sits inside a directory whose name starts
+   with `.`, which keeps `.secrets/` out.
 2. Call the server's tool named by `tool` with `arguments`, verbatim.
-3. Return the envelope the tool answers, with one `file-left-out` finding
-   appended per `left_out` entry — `path` its `key`, `message` its `reason` —
-   and `passed` set to `false` when there is one. The server never saw that
-   entry, so the verdict cannot stand without it.
+3. Return the envelope the tool answers.
 
 ## Hard rules
 
@@ -62,8 +59,7 @@ Exactly one of:
   § "Fix-and-revalidate loop").
 - Never filter by severity. A warning-only result still returns every warning,
   alignment suggestion intact; the orchestrator decides what to act on.
-- Never assemble `arguments` by hand, and never add a file the builder left
-  out: the location table decides what a request carries.
+- Never assemble or edit `arguments` by hand.
 - If the builder fails, or the tool call is refused (the result is an error),
   return no envelope of your own making: report a single finding carrying the
   builder's stderr or the refusal text verbatim, as `message`:

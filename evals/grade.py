@@ -1,14 +1,13 @@
 """Grade what an eval run wrote the way the plugin submits it: the plugin's own
-request builder selects the files, reading the location tables this checkout
-renders, and the validator's request entry point grades them in-process.
+request builder assembles the request, and the validator's request entry point
+grades it in-process.
 
     grade.py package <directory> <package_kind>
     grade.py workspace <directory>
 
 (or any other argument list the builder takes).
 
-Prints the validation envelope and exits 1 when it did not pass or a file was
-left out of the request.
+Prints the validation envelope and exits 1 when it did not pass.
 """
 from __future__ import annotations
 
@@ -45,18 +44,17 @@ def _load_builder():
 builder = _load_builder()
 
 
-def rendered_schema(url: str) -> dict:
-    """The schema this checkout renders at a published URL."""
-    path = url.removeprefix(builder.SCHEMA_HOST + "/")
-    return json.loads((REPO_ROOT / "schemas" / path).read_text())
+def request(built: dict):
+    """The built arguments as the request model their tool takes."""
+    model, _ = _TOOLS[built["tool"]]
+    return model.model_validate(built["arguments"])
 
 
 def main(argv: list[str]) -> int:
-    built = builder.build(argv, rendered_schema)
-    model, validate = _TOOLS[built["tool"]]
-    envelope = validate(model.model_validate(built["arguments"]))
-    print(json.dumps({**envelope, "left_out": built["left_out"]}, indent=2))
-    return 0 if envelope["passed"] and not built["left_out"] else 1
+    built = builder.build(argv)
+    envelope = _TOOLS[built["tool"]][1](request(built))
+    print(json.dumps(envelope, indent=2))
+    return 0 if envelope["passed"] else 1
 
 
 if __name__ == "__main__":

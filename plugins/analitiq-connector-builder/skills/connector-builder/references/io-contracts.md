@@ -358,13 +358,8 @@ access and may not guess field types).
 }
 ```
 
-The validator agent adds findings of its own, for what never reached the server:
+The validator agent adds a finding of its own when the server never graded the request:
 
-- `file-left-out` — `fail`, **error**: an entry a location could hold that the
-  request could not carry — a link (never followed), a directory it could not
-  read, or an entry at a document's location that is not a regular file, is
-  unreadable, or is not UTF-8 text. `path` is the document's key where a
-  location names the entry, else the directory's, ending in `/`.
 - `validation-not-run` — `notApplicable`: the request could not be built, or
   the server refused it. `message` carries the reason verbatim.
 

@@ -48,13 +48,10 @@ Validation runs on the `analitiq-validator` MCP server this plugin ships.
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" package <package> connector
    ```
 
-   It prints `{"tool", "arguments", "left_out"}`, selecting a package's files by
-   its published location table.
+   It prints `{"tool", "arguments"}`: every file under a package or
+   workspace directory except what sits inside a directory whose name starts
+   with `.`, which keeps `.secrets/` out.
 2. Call the server's tool named by `tool` with `arguments`, verbatim.
-3. Append one `file-left-out` finding per `left_out` entry — `path` its
-   `key`, `message` its `reason` — and set `passed` to `false` when there is
-   one. The server never saw that entry, so the verdict cannot stand without
-   it.
 
 ## Findings
 
@@ -93,16 +90,14 @@ do not rely on them, and treat these as author-side discipline:
 
 ## Output
 
-Print the envelope the tool answered, with only the `file-left-out` findings
-appended — it is already a `Diagnostics` document. Do not summarize, do not add
+Print the envelope the tool answered — it is already a `Diagnostics` document. Do not summarize, do not add
 prose, do not reformat.
 
 ## Hard rules
 
 - Never modify the document under validation.
 - Never silence warnings. If `passed` is false, return the full finding list.
-- Never assemble `arguments` by hand, and never add a file the builder left
-  out: the location table decides what a request carries.
+- Never assemble or edit `arguments` by hand.
 - If the builder fails, or the tool call is refused (the result is an error),
   report a single `validation-not-run` finding, `path: ""`, carrying the
   builder's stderr or the refusal text verbatim as `message`. Never forward

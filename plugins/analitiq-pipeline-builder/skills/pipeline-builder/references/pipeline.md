@@ -27,8 +27,7 @@ For each artifact:
 
 1. Run the validator.
 2. If `passed: true`, accept and move on.
-3. If any finding's `message_id` is `validation-not-run` or `file-left-out`,
-   halt immediately and surface it instead of entering the fix loop below: it
+3. If any finding's `message_id` is `validation-not-run`, halt immediately and surface it instead of entering the fix loop below: it
    names a failure to submit, not an authored-document defect, so the creator
    has no correction to make — feeding it in would re-invoke the creator
    against an artifact that may already be valid.

@@ -355,7 +355,7 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
 
 8. **Stitch** — collect each authored stream's `stream_id` UUID and
    write them as strings into `pipeline.json#/streams`. Validate the
-   workspace (the project root, naming this pipeline) so the cross-document
+   workspace (the project root) so the cross-document
    checks run.
 
 9. **Validate** — invoke `pipeline-schema-validator` once per authored

@@ -154,7 +154,7 @@ stop. There is no fix loop and no creator re-dispatch (phases 1–3 and 5
 were skipped, so there is no `CreatorOutput` to revise). The fix loop
 below applies to `build` and `update` only.
 
-If any finding's `message_id` is `validation-not-run` or `file-left-out`, halt
+If any finding's `message_id` is `validation-not-run`, halt
 and surface it, in every mode: it names a failure to submit, not a defect a
 creator can correct.
 
