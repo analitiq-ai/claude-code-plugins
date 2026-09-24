@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("--runs", type=_positive_int, default=3)
     parser.add_argument("--corpus", choices=("all", "historical", "synthetic"), default="all")
-    parser.add_argument("--workers", type=int, default=8)
+    parser.add_argument("--workers", type=_positive_int, default=8)
     parser.add_argument("--out", type=Path, help="write every scored result as JSON here")
     args = parser.parse_args(argv)
 
