@@ -34,6 +34,8 @@ from collections.abc import Iterator
 from typing import Any
 from urllib.parse import quote
 
+from analitiq.contracts.shared.ecma_pattern import case_insensitive_ecma
+
 LOG = logging.getLogger(__name__)
 
 # Reserved entry in the connection secret blob holding the opaque OAuth
@@ -641,7 +643,7 @@ def is_form_content_type(content_type: str | None) -> bool:
 # since `str.strip()` and ECMA-262 `\s` disagree on Unicode whitespace.
 FORM_CONTENT_TYPE_PATTERN = (
     r"^[ \t]*"
-    + "".join(f"[{c.upper()}{c.lower()}]" if c.isalpha() else c for c in FORM_CONTENT_TYPE)
+    + case_insensitive_ecma(FORM_CONTENT_TYPE)
     + r"[ \t]*(;|$)"
 )
 

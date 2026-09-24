@@ -1715,44 +1715,6 @@ class TestPublishedSchemaConflictKeysRule:
 # ---------------------------------------------------------------------------
 
 
-class TestBatchedWriteContentType:
-    """A batched write binds `records`, a list, and a form body carries only
-    flat name/value pairs, so batching excludes a form-encoded `content_type`."""
-
-    @staticmethod
-    def _write_op(content_type, body, batching=None):
-        op = {
-            "request": {
-                "method": "POST",
-                "path": "/items",
-                "content_type": content_type,
-                "body": body,
-            },
-            "input": {"schema": {"type": "object", "properties": {
-                "id": {"type": "integer", "native_type": "integer", "arrow_type": "Int64"},
-            }}},
-        }
-        if batching is not None:
-            op["batching"] = batching
-        return op
-
-    @pytest.mark.parametrize("content_type", [
-        "application/x-www-form-urlencoded",
-        "Application/X-WWW-Form-Urlencoded; charset=utf-8",
-    ])
-    def test_batched_form_write_rejected(self, content_type):
-        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-082\]"):
-            WriteOperation.model_validate(self._write_op(
-                content_type, {"items": {"from_input": "records"}},
-                batching={"max_records": 50},
-            ))
-
-    def test_unbatched_form_write_accepted(self):
-        WriteOperation.model_validate(self._write_op(
-            "application/x-www-form-urlencoded", {"item": {"from_input": "record"}},
-        ))
-
-
 class TestWriteIdempotency:
     """`idempotency` declares provider idempotency-key *placement* only (the
     key value is engine-owned): allowed on any write mode, forbidden together
@@ -2028,6 +1990,49 @@ class TestPublishedSchemaIdempotencyRule:
         except ValidationError:
             model_ok = False
         assert model_ok == valid, f"model/schema disagree for {label}"
+
+
+# ---------------------------------------------------------------------------
+# §Write Modes: batching × form content_type
+# ---------------------------------------------------------------------------
+
+
+class TestBatchedWriteContentType:
+    """A batched write binds `records`, a list, and a form body carries only
+    flat name/value pairs, so batching excludes a form-encoded `content_type`."""
+
+    @staticmethod
+    def _write_op(content_type, body, batching=None):
+        op = {
+            "request": {
+                "method": "POST",
+                "path": "/items",
+                "content_type": content_type,
+                "body": body,
+            },
+            "input": {"schema": {"type": "object", "properties": {
+                "id": {"type": "integer", "native_type": "integer", "arrow_type": "Int64"},
+            }}},
+        }
+        if batching is not None:
+            op["batching"] = batching
+        return op
+
+    @pytest.mark.parametrize("content_type", [
+        "application/x-www-form-urlencoded",
+        "Application/X-WWW-Form-Urlencoded; charset=utf-8",
+    ])
+    def test_batched_form_write_rejected(self, content_type):
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-082\]"):
+            WriteOperation.model_validate(self._write_op(
+                content_type, {"items": {"from_input": "records"}},
+                batching={"max_records": 50},
+            ))
+
+    def test_unbatched_form_write_accepted(self):
+        WriteOperation.model_validate(self._write_op(
+            "application/x-www-form-urlencoded", {"item": {"from_input": "record"}},
+        ))
 
 
 # ---------------------------------------------------------------------------
