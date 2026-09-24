@@ -95,12 +95,16 @@ def ascii_locale_env():
     env = {
         "LC_ALL": "C", "LANG": "C",
         "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0",
+        # Empty, not absent: CPython ignores an empty value, and an inherited
+        # one would set the child's stdio encoding behind the locale's back.
+        "PYTHONIOENCODING": "",
         "PYTHONPATH": os.pathsep.join(str(root) for root in PACKAGE_SRC_ROOTS),
     }
     probe = subprocess.run(
-        [sys.executable, "-c", "import locale; print(locale.getpreferredencoding(False))"],
+        [sys.executable, "-c",
+         "import locale, sys; print(locale.getpreferredencoding(False)); print(sys.stdin.encoding)"],
         capture_output=True, text=True, env={**os.environ, **env}, check=True)
-    encoding = probe.stdout.strip()
-    if "utf" in encoding.lower():
-        pytest.fail(f"the child still decodes with {encoding} under {env}")
+    for encoding in probe.stdout.split():
+        if "utf" in encoding.lower():
+            pytest.fail(f"the child still decodes with {encoding} under {env}")
     return env
