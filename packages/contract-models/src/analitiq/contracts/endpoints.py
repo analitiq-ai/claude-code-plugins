@@ -25,6 +25,7 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import Enum
 from collections.abc import Iterator
 from typing import Annotated, Any, Literal, NamedTuple, Union, get_args
@@ -616,7 +617,7 @@ class Param(_EndpointModel):
                 )
         if self.location == "query" and self.style is not None and self.explode is not None:
             self._reject_unserializable_query_style(self.style, self.explode)
-        self._reject_unsatisfiable_bounds()
+        self._reject_non_finite_numbers_or_inverted_interval()
         return self
 
     def _reject_unserializable_query_style(self, style: str, explode: bool) -> None:
@@ -643,14 +644,21 @@ class Param(_EndpointModel):
                 f"{' and '.join(sorted(serializes))}, not a param typed {self.type!r}"
             )
 
-    def _reject_unsatisfiable_bounds(self) -> None:
+    def _reject_non_finite_numbers_or_inverted_interval(self) -> None:
         for name in ("minimum", "maximum"):
             bound = getattr(self, name)
             if bound is not None and not math.isfinite(bound):
                 raise violation(
                     "RULE-ENDP-076", "param-bound-not-finite",
-                    f"{name}={bound!r} is not a finite number, so no value can be "
-                    "compared against it"
+                    f"{name}={bound!r} is not a finite number"
+                )
+        for member in self.enum or ():
+            # Decimal.is_finite, not math.isfinite: the latter raises on sNaN.
+            if ((isinstance(member, float) and not math.isfinite(member))
+                    or (isinstance(member, Decimal) and not member.is_finite())):
+                raise violation(
+                    "RULE-ENDP-076", "param-enum-member-not-finite",
+                    f"enum member {member!r} is not a finite number"
                 )
         for low_name, high_name in _PARAM_INTERVALS:
             low, high = getattr(self, low_name), getattr(self, high_name)

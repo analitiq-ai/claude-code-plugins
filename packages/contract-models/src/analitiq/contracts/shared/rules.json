@@ -4422,7 +4422,7 @@
   },
   {
    "id": "RULE-ENDP-076",
-   "statement": "A parameter's declared numeric bounds MUST be finite, and no declared lower bound — `minimum`, `minLength`, `minItems` — MUST exceed the upper bound it pairs with.\n",
+   "statement": "A parameter's declared numeric bounds and numeric `enum` members MUST be finite, and no declared lower bound — `minimum`, `minLength`, `minItems` — MUST exceed the upper bound it pairs with.\n",
    "tier": "shape",
    "severity": "error",
    "artifact_kinds": [
@@ -4441,7 +4441,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": "Param",
-   "rationale": "A bound that is not a finite number orders nothing — every comparison against NaN is false — and a lower bound above its upper bound admits no value at all. Either way every value the param is given fails its own declaration, so the param is unsendable on every run; as the engine reads it today, it refuses such a declaration when it compiles the param's rules, before any request. Refusing it here names the declaration at authoring time. The predicate is a fact about the declaration itself and holds whatever the engine does with it.\n",
+   "rationale": "No non-finite number has an RFC 8259 JSON number spelling, so a bound or `enum` member holding one cannot be written as standard JSON. A lower bound above its upper bound admits no value at all, so every value the param is given fails its own declaration and the param is unsendable on every run. As the engine reads it today, it refuses a non-finite bound or an inverted interval when it compiles the param's rules, before any request. Refusing each here names the declaration at authoring time. The predicate is a fact about the declaration itself and holds whatever the engine does with it.\n",
    "status": "active",
    "superseded_by": null
   },
