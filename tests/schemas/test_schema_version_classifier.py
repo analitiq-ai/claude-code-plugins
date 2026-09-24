@@ -4,9 +4,9 @@
 can only raise it, so a change classified below its real severity publishes
 under a version that promises compatibility it does not have.
 
-Each row pairs two schemas that differ only in one list. What a list's growth
-means depends on the keyword holding it: a new member of a disjunction widens
-what validates, a new member of a conjunction narrows it.
+Each row pairs two schemas that differ in one keyword's value. What a change
+means depends on the keyword: a new member of a disjunction widens what
+validates, a new member of a conjunction narrows it.
 """
 from __future__ import annotations
 
@@ -30,12 +30,9 @@ INT = {"type": "integer"}
 PATTERN = {"pattern": "^a"}
 
 
-def _kind(value: str, *, required: bool = True) -> dict:
-    return {
-        "type": "object",
-        "properties": {"kind": {"const": value}},
-        "required": ["kind"] if required else [],
-    }
+def _kind(value: str, *, required: bool = True, typed: bool = True) -> dict:
+    branch = {"properties": {"kind": {"const": value}}, "required": ["kind"] if required else []}
+    return {"type": "object", **branch} if typed else branch
 
 
 def _union(*kinds: str) -> dict:
@@ -52,10 +49,29 @@ def _obj(**node) -> dict:
 @pytest.mark.parametrize(
     ("old", "new", "expected"),
     [
+        # Introducing a keyword: only annotations, definitions and optional
+        # properties leave every valid document valid.
+        pytest.param(_obj(), _obj(allOf=[PATTERN]), "major", id="allOf-introduced"),
+        pytest.param(
+            {"type": "object"}, {"type": "object", "required": ["a"]}, "major", id="required-introduced"
+        ),
+        pytest.param(_obj(), _obj(**PATTERN), "major", id="pattern-introduced"),
+        pytest.param({"type": "object"}, _obj(**STR), "minor", id="properties-introduced"),
+        pytest.param(_obj(), _obj(readOnly=True), "minor", id="annotation-introduced"),
+        pytest.param(_obj(**{"x-secret": True}), _obj(**{"x-secret": False}), "minor", id="extension-changes"),
+        pytest.param(_obj(readOnly=True), _obj(), "minor", id="annotation-removed"),
+        pytest.param(_obj(**PATTERN), _obj(), "major", id="validation-keyword-removed"),
+        pytest.param(
+            {"patternProperties": {"^a": STR}},
+            {"patternProperties": {"^a": STR, "^b": INT}},
+            "major",
+            id="patternProperties-gains-pattern",
+        ),
         # Disjunctions: a new member widens, a lost member narrows.
         pytest.param(_obj(enum=["a"]), _obj(enum=["a", "b"]), "minor", id="enum-grows"),
         pytest.param(_obj(enum=["a", "b"]), _obj(enum=["a"]), "major", id="enum-shrinks"),
         pytest.param(_obj(type=["string"]), _obj(type=["string", "null"]), "minor", id="type-grows"),
+        pytest.param(_obj(type="string"), _obj(type=["string", "null"]), "minor", id="type-string-widens"),
         pytest.param(_obj(anyOf=[STR]), _obj(anyOf=[STR, INT]), "minor", id="anyOf-grows"),
         pytest.param(_obj(anyOf=[STR, INT]), _obj(anyOf=[STR]), "major", id="anyOf-shrinks"),
         # Conjunctions: a new member narrows, a lost member widens.
@@ -74,6 +90,18 @@ def _obj(**node) -> dict:
             {"dependentRequired": {"a": ["b"]}},
             "minor",
             id="dependentRequired-shrinks",
+        ),
+        pytest.param(
+            {"dependentRequired": {"a": ["b"]}},
+            {"dependentRequired": {"a": ["b"], "c": ["d"]}},
+            "major",
+            id="dependentRequired-gains-key",
+        ),
+        pytest.param(
+            {"dependentSchemas": {"a": STR}},
+            {"dependentSchemas": {"a": STR, "c": INT}},
+            "major",
+            id="dependentSchemas-gains-key",
         ),
         pytest.param(
             {"properties": {"dependentRequired": {"enum": ["a", "b"]}}},
@@ -105,6 +133,12 @@ def _obj(**node) -> dict:
             "major",
             id="oneOf-grows-with-repeated-discriminator-value",
         ),
+        pytest.param(
+            _obj(oneOf=[_kind("a", typed=False)]),
+            _obj(oneOf=[_kind("a", typed=False), _kind("b", typed=False)]),
+            "major",
+            id="oneOf-grows-without-object-type",
+        ),
         pytest.param(_obj(oneOf=[STR, INT]), _obj(oneOf=[STR]), "major", id="oneOf-shrinks"),
         # Positional: each member constrains its own index.
         pytest.param(
@@ -119,9 +153,17 @@ def _obj(**node) -> dict:
             "minor",
             id="prefixItems-member-widens",
         ),
+        # A subschema is graded as a schema of its own.
+        pytest.param(
+            _obj(items={"enum": ["a"]}), _obj(items={"enum": ["a", "b"]}), "minor", id="items-widens"
+        ),
+        pytest.param(
+            _obj(items={"enum": ["a", "b"]}), _obj(items={"enum": ["a"]}), "major", id="items-narrows"
+        ),
         # A value, not a set of subschemas: any change is a different value.
         pytest.param(_obj(const=["a"]), _obj(const=["a", "b"]), "major", id="const-grows"),
+        pytest.param(_obj(const={"a": 1}), _obj(const={"a": 1, "b": 2}), "major", id="const-dict-grows"),
     ],
 )
-def test_list_change_classifies_by_the_keyword_holding_it(old, new, expected):
+def test_change_classifies_by_the_keyword_holding_it(old, new, expected):
     assert render_schemas.classify(old, new) == expected
