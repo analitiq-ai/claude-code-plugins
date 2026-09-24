@@ -133,33 +133,33 @@ DOC_KEYS = {"description", "title", "examples", "$comment"}
 # Keys stamped by this script that must be ignored when comparing schemas.
 STAMP_KEYS = {"$id", "version"}
 
-# JSON Schema 2020-12 keywords that, *when newly introduced* on a node, tighten
-# validation. Adding any of these to a property/object that previously didn't
-# have them rejects payloads that previously validated, so the change is MAJOR.
-# (Mutating an *existing* such keyword's value is already caught by the scalar
-# fall-through in `_is_additive`.)
-_TIGHTENING_NEW_KEYWORDS = frozenset({
-    "dependentRequired", "dependencies",
-    "minProperties", "maxProperties",
-    "minItems", "maxItems", "minContains", "uniqueItems",
-    "minLength", "maxLength",
-    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
-    "multipleOf", "pattern",
-    "propertyNames",
-    "not", "if", "then", "else",
-    "unevaluatedProperties", "unevaluatedItems",
+# How `_schema_is_additive` reads each JSON Schema 2020-12 keyword. A keyword in
+# none of these sets is compared by equality, so an unknown keyword, a value
+# keyword (`const`, `default`) or a bound (`maxLength`) is additive only when
+# unchanged.
+#
+# Annotations do not take part in validation: any change to one is additive.
+_ANNOTATION_KEYWORDS = frozenset({
+    "$schema", "$anchor", "deprecated", "readOnly", "writeOnly", "discriminator",
 })
-
-# List-valued keywords a document satisfies by matching ANY member, and those it
-# satisfies only by matching EVERY member. `dependentRequired` holds its lists
-# one level down, under each property name.
+# Non-annotation keywords whose introduction on a schema leaves every valid
+# document valid: definitions, new optional properties, and a default, which
+# no validator reads but consumers act on, so changing one is not additive.
+_ADDITIVE_WHEN_INTRODUCED = frozenset({"$defs", "properties", "default"})
+# Keywords holding one subschema.
+_SUBSCHEMA_KEYWORDS = frozenset({
+    "items", "additionalProperties", "not", "if", "then", "else", "contains",
+    "propertyNames", "unevaluatedProperties", "unevaluatedItems", "contentSchema",
+})
+# Keywords holding a list a document satisfies by matching ANY member, and a
+# list it satisfies only by matching EVERY member.
 _DISJUNCTIVE_LIST_KEYWORDS = frozenset({"enum", "type", "anyOf"})
-_CONJUNCTIVE_LIST_KEYWORDS = frozenset({"required", "allOf", "dependentRequired"})
-# Keywords whose keys are author-chosen names, so a key under them is a name
-# that may happen to spell a keyword.
-_NAME_KEYED_KEYWORDS = frozenset(
-    {"properties", "patternProperties", "$defs", "dependentSchemas", "dependentRequired"}
-)
+_CONJUNCTIVE_LIST_KEYWORDS = frozenset({"required", "allOf"})
+# Keywords mapping names to subschemas. Under the first, a new name is a new
+# optional property or definition; under the second, a new name constrains
+# documents that already validated.
+_OPEN_SCHEMA_MAPS = frozenset({"properties", "$defs"})
+_CLOSED_SCHEMA_MAPS = frozenset({"patternProperties", "dependentSchemas"})
 
 
 # ---------------------------------------------------------------------------
@@ -2031,99 +2031,86 @@ def _strip_doc_and_stamp(obj: Any) -> Any:
     return obj
 
 
-def _is_additive(old: Any, new: Any, new_root: dict, path: tuple = ()) -> bool:
-    """True when `new` only adds keys / list elements compared to `old`.
+def _schema_is_additive(old: Any, new: Any, root: dict) -> bool:
+    """True when every document valid under schema `old` is valid under `new`.
 
-    Heuristic — returns False (≈ MAJOR) for the changes we explicitly know
-    are tightening:
+    Heuristic in one direction only: it may call an additive change breaking,
+    so the caller errs on the side of MAJOR, but never the reverse. Each
+    keyword is graded by what it means, per the keyword sets above. A keyword
+    newly introduced is additive only when it is an annotation or in
+    `_ADDITIVE_WHEN_INTRODUCED`, and a keyword removed only when it is an
+    annotation. A new property counts as additive by convention, although it
+    constrains a key the old schema left open. `root` resolves `$ref`s in the
+    new schema.
 
-    - Removing a key from a dict node (e.g. dropping a property).
-    - Mutating a scalar value (e.g. tightening minLength from 5 to 10).
-    - Removing a member of a disjunctive list (`enum`, `type`, `anyOf`).
-    - Adding a member to a conjunctive list (`required`, `allOf`, a
-      `dependentRequired` entry).
-    - Any change to `oneOf` other than adding branches that are provably
-      disjoint, to the length or order of `prefixItems`, or to another
-      list-valued keyword.
-    - Introducing any of `_TIGHTENING_NEW_KEYWORDS` (`pattern`,
-      `minProperties`, `dependentRequired`, …) on a node where it didn't
-      previously exist.
-    - Introducing `additionalProperties: false` where it was previously
-      absent or truthy.
-
-    Returns True (≈ MINOR) for the changes we know are additive:
-
-    - Adding a key to a dict node (new optional property, new $defs entry,
-      new oneOf branch as a discrete dict key).
-    - Removing a member of a conjunctive list (loosening).
-    - Adding a member to a disjunctive list (extra `enum` values, extra
-      union members) — note this is the permissive direction for *input*
-      enums and may be wrong for *output* enums; developers must escalate
-      via `--bump` when that distinction matters.
-    - Widening a `prefixItems` member in place.
-    - Adding a `oneOf` branch when every branch requires one property with a
-      distinct `const` (a discriminated union), so no document can match more
-      than one.
-
-    Anything not matched above falls through to False, so the caller errs
-    on the side of MAJOR.
+    Additive means additive for a document's author. For a schema describing
+    output, a widening such as a new `enum` member breaks readers; escalate
+    via `--bump` when that distinction matters.
     """
     if old == new:
         return True
-    if isinstance(old, dict) and isinstance(new, dict):
-        return _dict_is_additive(old, new, new_root, path)
-    if isinstance(old, list) and isinstance(new, list):
-        return _list_is_additive(old, new, new_root, path)
-    return False
-
-
-def _dict_is_additive(old: dict, new: dict, new_root: dict, path: tuple) -> bool:
-    """The dict half of `_is_additive` — pure extraction, same rules."""
-    for k in set(new) - set(old):
-        if k in _TIGHTENING_NEW_KEYWORDS:
-            return False
-    if (new.get("additionalProperties", True) is False
-            and old.get("additionalProperties", True) is not False):
+    if not (isinstance(old, dict) and isinstance(new, dict)):
         return False
-    for k, v in old.items():
-        if k not in new:
+    for keyword in new.keys() - old.keys():
+        if not (_is_annotation(keyword) or keyword in _ADDITIVE_WHEN_INTRODUCED):
             return False
-        if not _is_additive(v, new[k], new_root, path + (k,)):
+    for keyword, old_value in old.items():
+        if keyword not in new:
+            if not _is_annotation(keyword):
+                return False
+        elif not _keyword_is_additive(keyword, old_value, new[keyword], root):
             return False
     return True
 
 
-def _list_is_additive(old: list, new: list, new_root: dict, path: tuple) -> bool:
-    """The list half of `_is_additive`: the keyword holding the list decides.
+def _is_annotation(keyword: str) -> bool:
+    return keyword in _ANNOTATION_KEYWORDS or keyword.startswith("x-")
 
-    A disjunction accepts more as it grows and a conjunction accepts less, so
-    each is additive in the opposite direction. Members are compared whole: a
-    member edited in place reads as one removed and one added. `oneOf` grows
-    additively only while its branches stay disjoint, since a document matching
-    a new branch as well as an old one matches neither. Any other list (`const`,
-    an unknown keyword) is additive only when unchanged.
-    """
-    keyword = path[-1] if path else None
-    if (len(path) >= 2 and path[-2] == "dependentRequired"
-            and (len(path) < 3 or path[-3] not in _NAME_KEYED_KEYWORDS)):
-        keyword = "dependentRequired"
+
+def _keyword_is_additive(keyword: str, old: Any, new: Any, root: dict) -> bool:
+    """Whether changing `keyword`'s value from `old` to `new` is additive."""
+    if old == new or _is_annotation(keyword):
+        return True
+    if keyword in _SUBSCHEMA_KEYWORDS:
+        return _schema_is_additive(old, new, root)
+    if keyword in _OPEN_SCHEMA_MAPS | _CLOSED_SCHEMA_MAPS:
+        if keyword in _CLOSED_SCHEMA_MAPS and new.keys() - old.keys():
+            return False
+        return all(
+            name in new and _schema_is_additive(schema, new[name], root)
+            for name, schema in old.items()
+        )
+    if keyword == "dependentRequired":
+        return not new.keys() - old.keys() and all(
+            name in new and all(dep in deps for dep in new[name])
+            for name, deps in old.items()
+        )
+    if keyword == "type":
+        old, new = _as_list(old), _as_list(new)
     if keyword in _DISJUNCTIVE_LIST_KEYWORDS:
-        return all(item in new for item in old)
+        return all(member in new for member in old)
     if keyword in _CONJUNCTIVE_LIST_KEYWORDS:
-        return all(item in old for item in new)
+        return all(member in old for member in new)
     if keyword == "oneOf":
-        return all(item in new for item in old) and _branches_are_disjoint(new, new_root)
+        # A document matching a new branch as well as an old one fails oneOf,
+        # which requires exactly one match.
+        return all(branch in new for branch in old) and _branches_are_disjoint(new, root)
     if keyword == "prefixItems":
         return len(old) == len(new) and all(
-            _is_additive(o, n, new_root, path + (i,)) for i, (o, n) in enumerate(zip(old, new))
+            _schema_is_additive(o, n, root) for o, n in zip(old, new)
         )
     return False
 
 
+def _as_list(value: Any) -> list:
+    return value if isinstance(value, list) else [value]
+
+
 def _branches_are_disjoint(branches: list, root: dict) -> bool:
-    """True when some property is required by every branch with a distinct `const`."""
+    """True when every branch is an object requiring one shared property with a
+    distinct `const` per branch, so no document can match more than one."""
     resolved = [_resolve_local_ref(b, root) for b in branches]
-    if not resolved or any(b is None for b in resolved):
+    if not resolved or any(b is None or b.get("type") != "object" for b in resolved):
         return False
     shared = set.intersection(*(
         {p for p in b.get("required", []) if "const" in b.get("properties", {}).get(p, {})}
@@ -2171,7 +2158,7 @@ def classify(old: dict | None, new: dict) -> str:
     stripped_new = _strip_doc_and_stamp(new)
     if stripped_old == stripped_new:
         return "patch"
-    if _is_additive(stripped_old, stripped_new, stripped_new):
+    if _schema_is_additive(stripped_old, stripped_new, stripped_new):
         return "minor"
     return "major"
 
