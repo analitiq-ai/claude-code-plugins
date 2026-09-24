@@ -246,8 +246,8 @@ Run, never read: `scripts/endpoint_id.py` and `scripts/type_map_gaps.py`.
   database name as `--catalog` to `endpoint_id.py` (`RULE-DBEP-005`).
 - If the connection cannot be reached (network error, bad credentials), surface
   the underlying error verbatim and stop. Do not retry.
-- Connection type-map rules are **gap-only** (`RULE-TMAP-018`) and append-only
-  (`RULE-TMAP-012`).
+- Connection type-map rules are **gap-only** (`RULE-TMAP-018` for write,
+  `RULE-TMAP-024` for read) and append-only (`RULE-TMAP-012`).
 - Author only the fields the endpoint model declares — the model is closed, and
   the server-managed fields are rejected, not ignored
   (`skills/endpoint-spec/SKILL.md` §"Top-level shape").

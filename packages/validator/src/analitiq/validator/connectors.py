@@ -88,12 +88,9 @@ try:
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TYPE_MAP_DIRECTIONS, TYPE_MAP_SCHEMA_URL, TypeMapDoc
-        # Reuse the contract's matcher compilation, `${name}` placeholder
-        # syntax and container test from the model so the validator's
-        # rule-rendering and warnings can't drift from the model's rule-validation.
-        from analitiq.contracts.type_map import (
-            _PLACEHOLDER_RE, _guard_container_not_collapsed, compile_matcher,
-        )
+        # The contract's resolution and container test, so the validator's
+        # rendering and warnings can't drift from the model's rule-validation.
+        from analitiq.contracts.type_map import TypeResolver, _guard_container_not_collapsed
         # The executable Arrow vocabulary — the write-coverage probe set is
         # derived from it rather than sampled by hand.
         from analitiq.contracts import arrow_grammar
@@ -148,53 +145,6 @@ def is_database_endpoint_doc(doc: Any) -> bool:
 # ---------------------------------------------------------------------------
 
 _NARROWING_ARROW_TYPES = {"Object", "List"}
-
-
-def _first_match_render(value: str, rules: list, matcher_key: str, render_key: str,
-                        normalize: Callable[[str], str] | None = None) -> str | None:
-    """First-match-wins render; substitutes `${name}` from regex captures.
-
-    For read maps `normalize` is `normalize_native_type` (imported as
-    `_normalize_native`) and is applied to BOTH sides of an `exact`
-    comparison — the incoming probe and the rule's `native_type` matcher —
-    because every runtime reader normalizes an exact rule's `native_type` the
-    same way it normalizes the lookup value, so the two must agree here too. A
-    `regex` matcher is never normalized (uppercasing would turn `\\d` into
-    `\\D`); only its probe is. `normalize` is None for write maps, where the
-    `arrow_type` matcher is compared as authored.
-    """
-    probe = normalize(value) if normalize else value
-    for rule in rules:
-        if not isinstance(rule, dict):
-            continue
-        matcher_value = rule.get(matcher_key)
-        render_value = rule.get(render_key)
-        if not isinstance(matcher_value, str) or not isinstance(render_value, str):
-            continue
-        if rule.get("match") == "exact":
-            matcher = normalize(matcher_value) if normalize else matcher_value
-            if matcher == probe:
-                return render_value
-        elif rule.get("match") == "regex":
-            try:
-                compiled = compile_matcher(matcher_value)
-            except ValueError:
-                # The model reports a matcher the contract refuses; it renders nothing.
-                continue
-            m = compiled.fullmatch(probe)
-            if not m:
-                continue
-            groups = m.groupdict()
-            return _PLACEHOLDER_RE.sub(
-                lambda ph: groups.get(ph.group(1)) or "" if ph.group(1) in groups else ph.group(0),
-                render_value,
-            )
-    return None
-
-
-def _render_arrow_type(native_type: str, rules: list) -> str | None:
-    return _first_match_render(native_type, rules, "native_type", "arrow_type",
-                               normalize=_normalize_native)
 
 
 # Collapse whitespace ONLY around Arrow separators — not inside identifiers.
@@ -562,13 +512,22 @@ _WRITE_VOCABULARY_PROBES: tuple[str, ...] = tuple(
     if name not in _WRITE_PROBE_EXCLUDED_FAMILIES
 )
 
+#: One representative probe per family in the vendored grammar, excluding none
+#: of `_WRITE_PROBE_EXCLUDED_FAMILIES`. `_WRITE_VOCABULARY_PROBES` drops those
+#: because each exclusion's reason is specific to the write-coverage *warning*
+#: (a narrower rule that still fires, a variant a shared regex also reaches) —
+#: reasons that do not apply to resolving a specific authored rule against
+#: another map, which is what `_check_connection_type_map_shadow` uses this
+#: for.
+_ALL_WRITE_FAMILY_PROBES: tuple[str, ...] = tuple(
+    _family_probe(name) for name in arrow_grammar.FAMILY_NAMES
+)
+
 
 def _write_vocabulary_findings(rules: list) -> list[dict]:
     """Warn when a write map renders no rule for an Arrow family."""
-    missing = [
-        probe for probe in _WRITE_VOCABULARY_PROBES
-        if _first_match_render(probe, rules, "arrow_type", "native_type") is None
-    ]
+    resolver = TypeResolver(rules, "write")
+    missing = [probe for probe in _WRITE_VOCABULARY_PROBES if resolver.resolve(probe) is None]
     if not missing:
         return []
     return [finding(
@@ -1286,8 +1245,9 @@ def _native_coverage_findings(ep_doc: dict, read_rules: list) -> list[dict]:
     """RULE-PKG-033: every native type the endpoint declares renders, through
     the connector's read rules, to the Arrow type it declares beside it."""
     findings: list[dict] = []
+    resolver = TypeResolver(read_rules, "read")
     for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
-        rendered = _render_arrow_type(native, read_rules)
+        rendered = resolver.resolve(native)
         if rendered is None:
             findings.append(finding(
                 rule="RULE-PKG-033",

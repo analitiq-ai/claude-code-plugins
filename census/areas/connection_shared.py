@@ -257,4 +257,34 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="TypeMapDoc", field="write", descriptive=True,
         prose_hash="c5273bedc326",
     ),
+    ProseObligation(
+        model="ResolveTypesRequest",
+        prose_hash="7961838273da",
+        structural=(
+            "`direction`, `types` and `maps` are required under extra='forbid'; the "
+            "`_maps_are_type_maps_carrying_the_direction` model validator parses each "
+            "map as a TypeMapDoc and refuses a request where none carries the "
+            "direction's section"
+        ),
+    ),
+    ProseObligation(
+        model="ResolveTypesRequest", field="direction",
+        prose_hash="70525eaec9e0",
+        structural="typed TypeMapDirection, the Literal TYPE_MAP_DIRECTIONS is derived from",
+    ),
+    ProseObligation(
+        model="ResolveTypesRequest", field="types",
+        prose_hash="d44143d47860",
+        structural="a length-bounded list of non-empty, length-bounded strings",
+        waiver=(
+            "how the caller spells a type is its content: a type spelled in the "
+            "other direction's vocabulary matches no rule and is reported as a gap"
+        ),
+    ),
+    ProseObligation(
+        model="ResolveTypesRequest", field="maps",
+        prose_hash="9a62ecceae66",
+        structural="a length-bounded list of DocumentText, each parsed as a TypeMapDoc",
+        waiver="which map the caller ranks first is its choice, which this model does not judge",
+    ),
 )

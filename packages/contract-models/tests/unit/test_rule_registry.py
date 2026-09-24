@@ -304,6 +304,12 @@ EXEMPT_MODEL_VALIDATORS = {
         "of the package holding it is a malformed request refused at construction, "
         "which no artifact author can violate or a finding cite"
     ),
+    ("analitiq.contracts.type_map", "ResolveTypesRequest", "_maps_are_type_maps_carrying_the_direction"): (
+        "request argument, not an artifact obligation: a map that is not a type "
+        "map, or no map carrying the direction's section, is a malformed request "
+        "refused at construction, which no artifact author can violate or a "
+        "finding cite"
+    ),
     ("analitiq.contracts.shared.common", "DocumentPackage", "_located"): (
         "structural, not an obligation a record names: it is the runtime form of "
         "the package schema's own `required` and `additionalProperties: false`, "

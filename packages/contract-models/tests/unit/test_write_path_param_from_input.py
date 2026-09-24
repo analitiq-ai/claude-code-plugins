@@ -1,15 +1,12 @@
 """A write `path_params` binding may read the record being written.
 
-`PUT /Contact/{id}` — where `{id}` is the id of the record being written — was
-contract-valid and unimplementable: `path_params` accepted only `{from_param}`
-expressions, write params resolve through the connection/secrets/runtime scopes,
-and *no scope reaches the record*. The shipped `sevdesk` connector declares this
-shape in 21 of its 22 write endpoints; each one bound `{id}` to a param with no
-`default`, so the placeholder could never be substituted. Once the engine began
-honouring `path_params`, those 21 endpoints went from silently wrong to loudly
-blocked, with no fix available inside the engine or the connector.
+`PUT /Contact/{id}` — where `{id}` is the id of the record being written, the
+shape `sevdesk`'s write endpoints take — needs a value no param can supply: write
+params resolve through the connection/secrets/runtime scopes, and *no scope
+reaches the record*. A `{from_param}` binding to a param with no `default` leaves
+the placeholder unsubstituted, so the endpoint cannot run.
 
-The contract now permits `{"from_input": "record.<dotted>"}` in
+The contract permits `{"from_input": "record.<dotted>"}` in
 `request.path_params`, **on write operations only**, binding directly with no
 declared param. This file is the proof that the sevdesk shape validates, plus
 the fence around it:
@@ -21,10 +18,10 @@ the fence around it:
     `batching`: a path segment takes one record's value, and a multi-record
     request has no single record to take it from.
 
-The must-not-regress half matters as much as the new capability: `path_params`
-still accepts `{from_param}` (mixable with `{from_input}` in one path), param
-binding uniqueness is untouched, and the batching *arity* rules stay a statement
-about `request.body` alone.
+The fence has a second half: `path_params` accepts `{from_param}` (mixable with
+`{from_input}` in one path), param binding uniqueness is unaffected by
+`from_input`, and the batching *arity* rules are a statement about `request.body`
+alone.
 """
 import json
 from pathlib import Path
@@ -114,8 +111,7 @@ def _write_op(
 
 
 class TestSevdeskPutContactById:
-    """The exact document that was contract-valid and unimplementable. It now
-    validates."""
+    """The exact document sevdesk's `PUT /Contact/{id}` needs. It validates."""
 
     # The binding sevdesk needs, fleshed out only with the surrounding
     # fields any write mode requires (a body that references the record, and the
@@ -385,8 +381,8 @@ class TestFromInputInPathParamsRejected:
 
 
 class TestPathParamBindingNotRegressed:
-    """Everything `path_params` did before the record scope reached it, it must
-    still do."""
+    """`path_params` binding that does not read the record behaves the same
+    alongside a record-reading binding."""
 
     def test_from_param_and_from_input_mix_in_one_path(self):
         # A path can need both: one segment from the record, one from a param
@@ -483,8 +479,8 @@ class TestPathParamBindingNotRegressed:
         assert "path_params" not in message
 
     def test_upsert_conflict_keys_unchanged(self):
-        # `conflict_keys` still required on upsert, still checked against
-        # `input.schema`, still forbidden elsewhere — with a record-reading path.
+        # With a record-reading path, `conflict_keys` is required on upsert,
+        # checked against `input.schema`, and forbidden elsewhere.
         parse_endpoint(_api_payload({"upsert": _write_op(conflict_keys=["id"])}))
 
         with pytest.raises(
@@ -632,18 +628,17 @@ class TestPathSegmentEncodingIsEngineOwned:
 
 
 class TestAWritePathParamMustBeAbleToResolve:
-    """RULE-ENDP-028. The shape this class refuses used to be contract-valid and
-    unimplementable: a write binding `{id}` to an `in: path`
-    param that carries no `default`. On a write a param has exactly ONE source —
+    """RULE-ENDP-028. A write binding `{id}` to an `in: path` param that carries
+    no `default` is refused. On a write a param has exactly ONE source —
     its own `default`.
     A `filters` map entry makes a param a stream's landing site, and
     `controlled_by` hands it to pagination or replication; both are read-side
     and neither is reachable from a write. So the placeholder provably can
     never be substituted, and the
-    endpoint is dead at the engine handshake while validating green.
+    endpoint would be dead at the engine handshake while validating green.
 
-    That is the sevdesk shape. It is refused here, naming the binding that
-    replaces it, so the 21 blocked endpoints get told what to do instead.
+    The refusal names the `from_input` binding to write instead, so an author
+    with this shape is told how to fix it.
     """
 
     def test_sourceless_path_param_on_a_write_is_rejected(self):
@@ -674,11 +669,10 @@ class TestAWritePathParamMustBeAbleToResolve:
         )}))
 
     def test_a_read_path_param_needs_no_default(self):
-        # Reads keep the old latitude: a read path param can be supplied by a
-        # stream filter (via `filters`), so a missing `default` is not proof
-        # it cannot resolve. RULE-ENDP-066 is what reads this — a required
-        # read param declaring neither a `default` nor a source is refused,
-        # so this shape holds because it names one, not because reads are
+        # On a read, a `filters` entry landing on a path param is a source,
+        # so a missing `default` is not proof it cannot resolve. RULE-ENDP-066
+        # refuses a required read param with no source; this shape passes
+        # because the `filters` entry lands on `id`, not because reads are
         # ungraded.
         payload = {
             "$schema": API_SCHEMA_URL,
@@ -709,24 +703,24 @@ class TestAWritePathParamMustBeAbleToResolve:
 
 
 # ---------------------------------------------------------------------------
-# Review finding: the membership rule no-opped on the very shape
+# `input.schema` membership holds through `$ref` and `allOf` — the shape
 # RULE-ENDP-026's rejection message tells authors to write.
 # ---------------------------------------------------------------------------
 
 
 class TestMembershipHoldsThroughRefsAndAllOf:
-    """`_json_schema_top_level_fields` read `properties` raw, so an
-    `input.schema` written as `{"$ref": "#/$defs/Rec"}` — exactly what
-    RULE-ENDP-026 instructs when it refuses a non-local ref — made
-    RULE-ENDP-024's membership check, the body `from_input` check and
-    `conflict_keys` all silently pass. A `{id}` placeholder bound to a field the
-    record does not declare then ships, and every write goes to a URL whose id
-    segment cannot be substituted from the record — the exact failure the record
-    binding exists to make expressible and checkable.
+    """An `input.schema` written as `{"$ref": "#/$defs/Rec"}` is exactly what
+    RULE-ENDP-026 instructs when it refuses a non-local ref. Reading its
+    `properties` raw would let RULE-ENDP-024's membership check, the body
+    `from_input` check and `conflict_keys` all silently pass: a `{id}`
+    placeholder bound to a field the record does not declare would ship, and
+    every write would go to a URL whose id segment cannot be substituted from
+    the record — the exact failure the record binding exists to make
+    expressible and checkable.
 
-    The read half — `response_path` resolution — is already tested against a
-    `$ref`-and-`allOf` schema for exactly this reason; the write path was not,
-    and every other test in this module uses an inline schema.
+    The read half — `response_path` resolution — is tested against a
+    `$ref`-and-`allOf` schema for the same reason; every other test in this
+    module uses an inline schema.
     """
 
     REF_SCHEMA = {

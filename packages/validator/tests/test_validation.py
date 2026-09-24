@@ -757,36 +757,6 @@ def test_coverage_checks_field_named_like_a_keyword(tmp_path, connector_base, va
     assert any("WEIRDTYPE" in e["message"] and "no matching rule" in e["message"] for e in errors)
 
 
-def test_coverage_exact_match_normalizes_both_sides(validator):
-    # Mirrors the runtime reader: an `exact` rule's `native_type` is
-    # normalized the same way as the probe — trim, collapse internal whitespace
-    # runs, uppercase — on BOTH sides. So a lowercase or extra-spaced matcher
-    # covers the (normalized) endpoint native, exactly as the runtime resolves
-    # it — the validator is no longer stricter than the runtime.
-    assert validator._render_arrow_type("STRING", [{"match": "exact", "native_type": "string", "arrow_type": "Utf8"}]) == "Utf8"
-    assert validator._render_arrow_type("STRING", [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]) == "Utf8"
-    # Whitespace: a two-space matcher covers a single-space native.
-    assert validator._render_arrow_type("character varying", [{"match": "exact", "native_type": "CHARACTER  VARYING", "arrow_type": "Utf8"}]) == "Utf8"
-    # A genuinely different native is still uncovered.
-    assert validator._render_arrow_type("STRING", [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}]) is None
-
-
-def test_coverage_matches_a_regex_rule_with_re2_semantics(validator):
-    # RE2's `\d` is ASCII, so a rule spelling digits with it does not cover a
-    # non-ASCII digit.
-    rules = [{"match": "regex", "native_type": r"^N\d$", "arrow_type": "Int8"}]
-    assert validator._render_arrow_type("N3", rules) == "Int8"
-    assert validator._render_arrow_type("N٣", rules) is None
-
-
-def test_coverage_matches_no_regex_rule_against_a_native_re2_cannot_read(validator):
-    # An endpoint's raw JSON can spell a lone surrogate, which has no UTF-8
-    # encoding for RE2 to read, so the native is left uncovered rather than
-    # crashing the check.
-    rules = [{"match": "regex", "native_type": r"^A.*$", "arrow_type": "Utf8"}]
-    assert validator._render_arrow_type("A\ud800", rules) is None
-
-
 def _within(seconds, call):
     """`call()`, failed rather than stalled when it has not returned in time."""
     def _stalled(_signum, _frame):
@@ -802,14 +772,6 @@ def _within(seconds, call):
 
 
 _NEAR_MATCH = "A" * 10_000 + "B"
-
-
-def test_write_render_returns_promptly_on_a_nested_quantifier():
-    from analitiq.validator.connectors import _first_match_render
-
-    rules = [{"match": "regex", "arrow_type": r"(A+)+$", "native_type": "TEXT"}]
-    assert _within(5, lambda: _first_match_render(
-        _NEAR_MATCH, rules, "arrow_type", "native_type")) is None
 
 
 def test_read_coverage_returns_promptly_on_a_nested_quantifier(tmp_path, connector_base, validator):

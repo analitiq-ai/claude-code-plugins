@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/items",
+    "body": {
+      "item": {
+        "from_input": "record"
+      }
+    },
+    "query": {
+      "mode": {
+        "from_param": "mode"
+      }
+    }
+  },
+  "input": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "native_type": "integer",
+          "arrow_type": "Int64"
+        }
+      }
+    }
+  },
+  "params": {
+    "mode": {
+      "in": "query",
+      "type": "string",
+      "required": true,
+      "default": {
+        "literal": "upsert"
+      }
+    }
+  }
+}

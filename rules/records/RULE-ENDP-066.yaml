@@ -10,6 +10,7 @@ artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [ReadOperation, WriteOperation]
+fixture_model: WriteOperation
 rationale: >
   `required` says the operation is wrong without the value, and the document is
   what has to be able to supply it. Every declared param is bound by exactly

@@ -1,0 +1,9 @@
+{
+  "transport_type": "http",
+  "base_url": "https://api.example.test/v1",
+  "headers": {
+    "X-Tenant": {
+      "template": "tenant-${connection.parameters.tenant_id}"
+    }
+  }
+}

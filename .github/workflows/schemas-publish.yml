@@ -7,8 +7,9 @@ name: Publish schemas to schemas.analitiq.ai
 # and applied on the infra side, granting list/get/put on the bucket. This
 # workflow is the external uploader that Terraform hands the objects to.
 #
-# Auth is OIDC only — this repo is public and stores no static credentials
-# (CLAUDE.md → Credentials). The `schemas` GitHub Environment supplies:
+# Auth is OIDC only — this repo is public and stores no static credential for
+# this publish (CLAUDE.md → Releases and credentials). The `schemas` GitHub
+# Environment supplies:
 #   AWS_ROLE_ARN     assumable role, trust pinned to repo:analitiq-ai/
 #                    claude-code-plugins:environment:schemas (variable)
 #   AWS_REGION       the bucket's region                     (variable)
