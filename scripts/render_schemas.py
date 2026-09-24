@@ -1912,15 +1912,11 @@ def parse_semver(version: str) -> tuple[int, int, int]:
 
 
 def bump_version(base: str, severity: str) -> str:
-    """Advance `base` by `severity` ('none'/'patch'/'minor'/'major').
-
-    'none' returns `base` unchanged. A higher severity zeroes the lower
+    """Advance `base` by a bump in `cascade.BUMPS`, zeroing the lower
     components per semver (a minor bump resets patch; a major bump resets
     minor and patch).
     """
     major, minor, patch = parse_semver(base)
-    if severity == "none":
-        return base
     if severity == "patch":
         return f"{major}.{minor}.{patch + 1}"
     if severity == "minor":

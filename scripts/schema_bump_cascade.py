@@ -2,8 +2,9 @@
 
 Stage 1 (Jev) classifies the structural diff; a confidence below
 `CONFIDENCE_FLOOR`, or a diff too large for Jev, escalates to stage 2 (Luna),
-which also reads the bodies of every definition the diff touches. Every other
-failure raises `BumpClassificationError`: there is no fallback severity.
+which also reads the bodies of the definitions the diff touches or references.
+Any other failure stops classification with an exception: there is no fallback
+severity.
 
 The model pins, the floor and every prompt text are stated here once. They are
 the values the evaluation (`scripts/eval_schema_bumps.py`) measured; changing
