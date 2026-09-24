@@ -2142,7 +2142,7 @@ def _check_bump_records(resource: Resource) -> list[str]:
             problems.append(f"{where}: names a version with no pinned schema")
             continue
         old, new = (json.loads(p.read_text()) for p in pinned)
-        digest = diff_sha256([c.line for c in diff(old, new)])
+        digest = diff_sha256(diff(old, new))
         problem = bump_record_problem(record, resource, base_version, match.group(1), digest)
         if problem:
             problems.append(f"{where}: {problem}")
@@ -2181,8 +2181,8 @@ def cmd_write(args: argparse.Namespace) -> int:
 
     # Rendered at the base version so only the model's change enters the diff.
     probe = render_latest(resource, base_version)
-    changes = diff(committed, probe) if committed is not None else []
-    if override is not None and not changes:
+    diff_text = diff(committed, probe) if committed is not None else ""
+    if override is not None and not diff_text:
         print(
             f"{resource.name}: there is no change to classify, so --bump has nothing to override.",
             file=sys.stderr,
@@ -2191,7 +2191,7 @@ def cmd_write(args: argparse.Namespace) -> int:
     record = None
     if committed is None:
         version = bump_version(base_version, "major")
-    elif not changes:
+    elif not diff_text:
         if previous is None:
             print(f"{resource.name}: no change vs. committed {base_version} — nothing to write.")
             return 0
@@ -2206,13 +2206,13 @@ def cmd_write(args: argparse.Namespace) -> int:
             return 2
         try:
             decision = cascade.decide(
-                resource.name, committed, probe, changes, cascade.openrouter_post(api_key)
+                resource.name, committed, probe, diff_text, cascade.openrouter_post(api_key)
             )
         except cascade.BumpClassificationError as exc:
             print(f"{resource.name}: the change could not be classified: {exc}", file=sys.stderr)
             return 2
         record = build_bump_record(
-            resource, base_version, decision, diff_sha256([c.line for c in changes]), override
+            resource, base_version, decision, diff_sha256(diff_text), override
         )
         version = record["to"]
         print(f"{resource.name}: the models decided {decision.final!r} (cost ${decision.cost:.4f}).")
@@ -2386,9 +2386,9 @@ def cmd_bump_check(args: argparse.Namespace) -> int:
             )
             return 2
 
-    changes = diff(previous, current)
+    diff_text = diff(previous, current)
     if head_version == base_version:
-        if changes:
+        if diff_text:
             print(
                 f"::error::{resource.name}: the schema changed but its version is still "
                 f"{head_version}. Run {_rewrite_hint(resource)}.",
@@ -2412,7 +2412,7 @@ def cmd_bump_check(args: argparse.Namespace) -> int:
         print(f"::error::{_shown(record_path)} is not valid JSON ({exc}).", file=sys.stderr)
         return 1
     problem = bump_record_problem(
-        record, resource, base_version, head_version, diff_sha256([c.line for c in changes])
+        record, resource, base_version, head_version, diff_sha256(diff_text)
     )
     if problem:
         print(

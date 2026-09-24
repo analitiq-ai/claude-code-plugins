@@ -89,14 +89,16 @@ def test_the_requests_carry_the_pins_and_the_prompt_texts():
     _decide(post)
     (_, jev), (_, luna) = post.requests
     assert jev["model"] == cascade.JEV_MODEL
-    assert jev["state"] == {"resource": "probe", "legend": cascade.LEGEND, "changes": ['ADDED required = ["a"]']}
+    assert jev["state"] == {"resource": "probe", "diff": diff(OLD, NEW)}
     assert jev["questions"]["bump"]["criteria"] == cascade.CRITERIA
     assert luna["model"] == cascade.LUNA_MODEL
     assert luna["max_tokens"] == cascade.LUNA_MAX_TOKENS
     assert luna["usage"] == {"include": True}
     assert luna["response_format"] == cascade.LUNA_RESPONSE_FORMAT
     assert luna["messages"][0] == {"role": "system", "content": cascade.LUNA_SYSTEM}
-    assert json.loads(luna["messages"][1]["content"])["changes"] == ['ADDED required = ["a"]']
+    assert json.loads(luna["messages"][1]["content"]) == {
+        "resource": "probe", "diff": diff(OLD, NEW), "old_schema": OLD, "new_schema": NEW,
+    }
 
 
 def _luna_with(mutate) -> dict:
@@ -158,55 +160,21 @@ def test_a_failed_jev_call_fails_loud(jev):
 
 def test_an_empty_diff_is_never_classified():
     with pytest.raises(ValueError):
-        cascade.decide("probe", OLD, OLD, [], FakeOpenRouter())
+        cascade.decide("probe", OLD, OLD, "", FakeOpenRouter())
 
 
-def test_luna_reads_the_touched_definitions_and_what_they_reference():
-    old = {
-        "$id": "x", "version": "1.0.0", "type": "object",
-        "$defs": {
-            "A": {"properties": {"b": {"$ref": "#/$defs/B"}}},
-            "B": {"properties": {"c": {"$ref": "#/$defs/C"}}},
-            "C": {"type": "string"},
-            "Untouched": {"type": "integer"},
-        },
-    }
-    new = copy.deepcopy(old)
-    new["$defs"]["A"]["required"] = ["b"]
-    new["$defs"]["D"] = {"anyOf": [{"$ref": "#/$defs/A"}, {"$ref": "#/$defs/Untouched"}]}
+def test_luna_reads_both_whole_schemas_without_their_stamps():
+    old = {"$id": "x", "version": "1.0.0", "$ref": "#/$defs/A",
+           "$defs": {"A": {"$ref": "#/$defs/B"}, "B": {"type": "string"}, "C": {"type": "integer"}}}
+    new = {**old, "version": "2.0.0", "$ref": "#/$defs/C"}
     payload = cascade.stage2_payload("probe", old, new, diff(old, new))
-    assert payload["old_root_keywords"] == {"type": "object"}
-    assert payload["new_root_keywords"] == {"type": "object"}
-    assert payload["old_touched_definitions"] == {"A": old["$defs"]["A"]}
-    assert payload["new_touched_definitions"] == {"A": new["$defs"]["A"], "D": new["$defs"]["D"]}
-    # One level, and never a name already touched.
-    assert payload["old_definitions_they_reference"] == {"B": old["$defs"]["B"]}
-    assert payload["new_definitions_they_reference"] == {"B": new["$defs"]["B"], "Untouched": {"type": "integer"}}
-
-
-
-@pytest.mark.parametrize(
-    ("edit", "new_referenced"),
-    [
-        pytest.param(lambda s: s["properties"]["src"].update({"$ref": "#/$defs/B"}), {"B"}, id="ref-retargeted"),
-        pytest.param(
-            lambda s: s["properties"].update(src={"anyOf": [{"$ref": "#/$defs/A"}, {"$ref": "#/$defs/B"}]}),
-            {"A", "B"}, id="branch-added",
-        ),
-    ],
-)
-def test_luna_reads_the_definitions_a_changed_root_value_references(edit, new_referenced):
-    old = {
-        "type": "object",
-        "properties": {"src": {"$ref": "#/$defs/A"}, "other": {"$ref": "#/$defs/Untouched"}},
-        "$defs": {"A": {"type": "string"}, "B": {"type": "integer"}, "Untouched": {"type": "null"}},
+    assert payload == {
+        "resource": "probe",
+        "diff": diff(old, new),
+        "old_schema": {k: v for k, v in old.items() if k not in ("$id", "version")},
+        "new_schema": {k: v for k, v in new.items() if k not in ("$id", "version")},
     }
-    new = copy.deepcopy(old)
-    edit(new)
-    payload = cascade.stage2_payload("probe", old, new, diff(old, new))
-    assert payload["old_touched_definitions"] == payload["new_touched_definitions"] == {}
-    assert payload["old_definitions_they_reference"] == {"A": {"type": "string"}}
-    assert set(payload["new_definitions_they_reference"]) == new_referenced
+
 
 class _Response(io.BytesIO):
     status = 200

@@ -74,16 +74,20 @@ def _rename_def(schema: dict) -> None:
     schema["properties"]["source"]["anyOf"][1] = {"$ref": "#/$defs/Sql"}
 
 
-def _with_strict_query(schema: dict) -> None:
-    schema["$defs"]["StrictQuery"] = {
-        "type": "object", "additionalProperties": False, "required": ["sql", "dialect"],
-        "properties": {"sql": {"type": "string"}, "dialect": {"type": "string"}},
-    }
+def _with_dialect_queries(schema: dict) -> None:
+    """Closed query definitions that differ only in whether `dialect` is required."""
+    for name, required in (("StrictQuery", ["sql", "dialect"]), ("LooseQuery", ["sql"])):
+        schema["$defs"][name] = {
+            "type": "object", "additionalProperties": False, "required": required,
+            "properties": {"sql": {"type": "string"}, "dialect": {"type": "string"}},
+        }
 
 
-def _source_to_strict_query(schema: dict) -> None:
-    _with_strict_query(schema)
-    schema["properties"]["source"]["anyOf"][1] = {"$ref": "#/$defs/StrictQuery"}
+def _source_to(definition: str) -> Callable[[dict], None]:
+    def edit(schema: dict) -> None:
+        _with_dialect_queries(schema)
+        schema["properties"]["source"]["anyOf"][1] = {"$ref": f"#/$defs/{definition}"}
+    return edit
 
 
 def _open(schema: dict) -> None:
@@ -158,14 +162,14 @@ PAIRS: list[Pair] = [
         "schema declared for a key an open object accepted",
         _edited(_open), _edited(_declare_on_open), "major",
     ),
-    # Only the $ref changes, so what it now points at is in no change line.
+    # Only the $ref changes, so what it now points at is in no diff hunk.
     Pair(
         "anyOf branch retargeted to a stricter definition",
-        _edited(_with_strict_query), _edited(_source_to_strict_query), "major",
+        _edited(_source_to("LooseQuery")), _edited(_source_to("StrictQuery")), "major",
     ),
     Pair(
         "anyOf branch retargeted to a looser definition",
-        _edited(_source_to_strict_query), _edited(_with_strict_query), "minor",
+        _edited(_source_to("StrictQuery")), _edited(_source_to("LooseQuery")), "minor",
     ),
     # Policy: a $defs name is addressable, so renaming one breaks.
     Pair("$defs entry renamed with its $refs", _base(), _edited(_rename_def), "major"),

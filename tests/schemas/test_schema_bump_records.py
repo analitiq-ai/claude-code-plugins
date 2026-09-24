@@ -18,7 +18,7 @@ require_contract_models("analitiq.contracts", "render_schemas")
 
 import render_schemas  # noqa: E402
 import schema_bump_cascade as cascade  # noqa: E402
-from schema_diff import diff_lines, diff_sha256  # noqa: E402
+from schema_diff import diff, diff_sha256  # noqa: E402
 
 RESOURCE = "workspace"
 FIXTURES = Path(__file__).parent / "fixtures" / "schema_bumps"
@@ -114,7 +114,7 @@ def test_write_records_the_decision_and_both_gates_accept_it(tree, models):
         "resource": RESOURCE,
         "from": "1.0.0",
         "to": "2.0.0",
-        "diff_sha256": diff_sha256(diff_lines(json.loads(base.read_text()), head)),
+        "diff_sha256": diff_sha256(diff(json.loads(base.read_text()), head)),
         "stage1": {
             "model": "typesafe/jev-1.13-20260917",
             "choice": "major",

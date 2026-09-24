@@ -1,150 +1,40 @@
-"""The structural diff the bump models classify and bump records hash."""
+"""The text diff the bump models classify and bump records hash."""
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
-
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from schema_diff import diff, diff_lines, diff_sha256  # noqa: E402
+from schema_diff import diff, diff_sha256  # noqa: E402
 
 
-@pytest.mark.parametrize(
-    ("old", "new", "expected"),
-    [
-        pytest.param({}, {"minLength": 1}, ["ADDED minLength = 1"], id="added"),
-        pytest.param({"minLength": 1}, {}, ["REMOVED minLength = 1"], id="removed"),
-        pytest.param({"type": "string"}, {"type": "integer"}, ['CHANGED type: "string" -> "integer"'], id="changed"),
-        pytest.param(
-            {"type": "string"}, {"type": ["string", "null"]},
-            ['CHANGED type: "string" -> ["string","null"]'], id="changed-kind",
-        ),
-        pytest.param({"enum": ["a"]}, {"enum": ["a", "b"]}, ['LIST-ADDED enum: ["b"]'], id="list-added"),
-        pytest.param({"enum": ["a", "b"]}, {"enum": ["a"]}, ['LIST-REMOVED enum: ["b"]'], id="list-removed"),
-        pytest.param(
-            {"enum": ["a", "b"]}, {"enum": ["a", "c"]},
-            ['LIST-ADDED enum: ["c"]', 'LIST-REMOVED enum: ["b"]'], id="list-added-and-removed",
-        ),
-        pytest.param({"enum": ["a", "b"]}, {"enum": ["b", "a"]}, ["LIST-REORDERED enum"], id="list-reordered"),
-        pytest.param(
-            {"anyOf": [{"type": "string"}]}, {"anyOf": [{"type": "string"}, {"type": "null"}]},
-            ['ITEM-ADDED anyOf: {"type":"null"}'], id="item-added",
-        ),
-        pytest.param(
-            {"anyOf": [{"type": "string"}, {"type": "null"}]}, {"anyOf": [{"type": "string"}]},
-            ['ITEM-REMOVED anyOf: {"type":"null"}'], id="item-removed",
-        ),
-        pytest.param(
-            {"allOf": [{"minLength": 1}, {"maxLength": 5}]}, {"allOf": [{"minLength": 1}, {"maxLength": 3}]},
-            ["CHANGED allOf/1/maxLength: 5 -> 3"], id="equal-length-lists-recurse-positionally",
-        ),
-        pytest.param(
-            {"anyOf": [{"type": "string"}, {"type": "string"}, {"type": "null"}]},
-            {"anyOf": [{"type": "string"}, {"type": "null"}]},
-            ['ITEM-REMOVED anyOf: {"type":"string"}'], id="item-duplicate-removed",
-        ),
-        pytest.param({}, {"title": "T"}, ['DOC-ADDED title = "T"'], id="doc-added"),
-        pytest.param({"$comment": "c"}, {}, ['DOC-REMOVED $comment = "c"'], id="doc-removed"),
-        pytest.param(
-            {"description": "a"}, {"description": "b"}, ['DOC-CHANGED description: "a" -> "b"'], id="doc-changed",
-        ),
-        pytest.param(
-            {"examples": [1]}, {"examples": [1, 2]}, ["DOC-CHANGED examples: [1] -> [1,2]"], id="doc-list-changed",
-        ),
-    ],
-)
-def test_each_difference_renders_as_its_tag(old, new, expected):
-    assert diff_lines(old, new) == expected
+def test_the_diff_is_a_unified_diff_of_the_sorted_key_renders():
+    old = {"type": "object", "properties": {"a": {"type": "string"}}}
+    new = {"properties": {"a": {"type": "integer"}}, "type": "object"}
+    assert diff(old, new) == "\n".join([
+        "--- old",
+        "+++ new",
+        "@@ -1,7 +1,7 @@",
+        " {",
+        '   "properties": {',
+        '     "a": {',
+        '-      "type": "string"',
+        '+      "type": "integer"',
+        "     }",
+        "   },",
+        '   "type": "object"',
+    ])
 
 
-def test_a_property_named_like_a_doc_keyword_is_a_schema_change():
-    old = {"properties": {"title": {"type": "string"}}}
-    new = {"properties": {"title": {"type": "integer"}, "description": {"type": "string"}}}
-    assert diff_lines(old, new) == [
-        'ADDED properties/description = {"type":"string"}',
-        'CHANGED properties/title/type: "string" -> "integer"',
-    ]
+def test_stamps_and_key_order_are_no_change():
+    old = {"$id": "a", "version": "1.0.0", "type": "object", "title": "T"}
+    new = {"title": "T", "type": "object", "version": "2.0.0", "$id": "b"}
+    assert diff(old, new) == ""
 
 
-def test_a_doc_keyword_inside_a_value_is_part_of_the_value():
-    old = {"default": {"description": "a"}, "const": {"title": "x"}}
-    new = {"default": {"description": "b"}, "const": {"title": "y"}}
-    assert diff_lines(old, new) == [
-        'CHANGED const/title: "x" -> "y"',
-        'CHANGED default/description: "a" -> "b"',
-    ]
-
-
-def test_stamps_are_not_differences():
-    assert diff_lines({"$id": "a", "version": "1.0.0"}, {"$id": "b", "version": "2.0.0"}) == []
-
-
-def test_a_nested_key_named_version_is_a_difference():
-    old = {"properties": {"version": {"type": "string"}}}
-    new = {"properties": {"version": {"type": "integer"}}}
-    assert diff_lines(old, new) == ['CHANGED properties/version/type: "string" -> "integer"']
-
-
-def test_keys_are_walked_in_sorted_order():
-    assert diff_lines({}, {"b": 1, "a": 1, "c": {"z": 1, "y": 1}}) == [
-        "ADDED a = 1", "ADDED b = 1", 'ADDED c = {"y":1,"z":1}',
-    ]
-
-
-def test_no_value_is_truncated():
-    required = [f"field_{i}" for i in range(400)]
-    added = {"type": "object", "properties": {"x": {"description": "d" * 5000}}, "required": required}
-    [line] = diff_lines({"$defs": {}}, {"$defs": {"Big": added}})
-    assert '"field_399"' in line
-    assert "d" * 5000 in line
-
-
-def test_changes_carry_their_key_path():
-    old = {"$defs": {"A/B": {"type": "string"}}}
-    new = {"$defs": {"A/B": {"type": "integer"}}}
-    [change] = diff(old, new)
-    assert change.path == ("$defs", "A/B", "type")
-
-
-def test_the_digest_pins_the_exact_lines():
-    lines = diff_lines({"enum": ["a"]}, {"enum": ["a", "b"]})
-    assert diff_sha256(lines) == diff_sha256(list(lines))
-    assert diff_sha256(lines) != diff_sha256([*lines, "ADDED x = 1"])
-    assert diff_sha256(lines) != diff_sha256(list(reversed([*lines, "ADDED x = 1"])))
-
-
-@pytest.mark.parametrize(
-    ("old", "new", "expected"),
-    [
-        pytest.param({"const": True}, {"const": 1}, ["CHANGED const: true -> 1"], id="const-true-to-1"),
-        pytest.param(
-            {"properties": {"x": {"const": False}}}, {"properties": {"x": {"const": 0}}},
-            ["CHANGED properties/x/const: false -> 0"], id="nested-false-to-0",
-        ),
-        pytest.param({"enum": [True, "a"]}, {"enum": [1, "a"]}, ['LIST-ADDED enum: [1]', 'LIST-REMOVED enum: [true]'], id="enum"),
-        pytest.param({"examples": [True]}, {"examples": [1]}, ["DOC-CHANGED examples: [true] -> [1]"], id="doc"),
-    ],
-)
-def test_a_boolean_never_equals_a_number(old, new, expected):
-    assert diff_lines(old, new) == expected
-
-
-@pytest.mark.parametrize(
-    ("old", "new"),
-    [
-        pytest.param({"maximum": 1}, {"maximum": 1.0}, id="scalar"),
-        pytest.param({"enum": [1, 2]}, {"enum": [1.0, 2]}, id="list-member"),
-        pytest.param({"examples": [1]}, {"examples": [1.0]}, id="doc"),
-    ],
-)
-def test_an_integral_float_equals_its_integer(old, new):
-    assert diff_lines(old, new) == []
-
-
-def test_an_integral_float_inside_a_listed_object_equals_its_integer():
-    old = {"anyOf": [{"maximum": 1}]}
-    new = {"anyOf": [{"maximum": 1.0}, {"type": "null"}]}
-    assert diff_lines(old, new) == ['ITEM-ADDED anyOf: {"type":"null"}']
+def test_the_digest_is_the_sha256_of_the_diff_text():
+    text = diff({"type": "string"}, {"type": "integer"})
+    assert diff_sha256(text) == hashlib.sha256(text.encode("utf-8")).hexdigest()

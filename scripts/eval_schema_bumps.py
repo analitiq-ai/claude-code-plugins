@@ -81,10 +81,10 @@ def synthetic_cases() -> list[Case]:
 
 
 def _score(case: Case, post: cascade.Post) -> dict:
-    changes = diff(case.old, case.new)
-    if not changes:
+    diff_text = diff(case.old, case.new)
+    if not diff_text:
         raise SystemExit(f"{case.corpus}: {case.name} has an empty diff; label it null or remove it")
-    decision = cascade.decide(case.name, case.old, case.new, changes, post)
+    decision = cascade.decide(case.name, case.old, case.new, diff_text, post)
     stage1 = decision.stage1
     return {
         "corpus": case.corpus,

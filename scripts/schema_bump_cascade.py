@@ -1,8 +1,8 @@
 """The model cascade that decides the semver bump a schema change requires.
 
-Stage 1 (Jev) classifies the structural diff; a confidence below
-`CONFIDENCE_FLOOR`, or a diff too large for Jev, escalates to stage 2 (Luna),
-which also reads the bodies of the definitions the diff touches or references.
+Stage 1 (Jev) classifies the diff; a confidence below `CONFIDENCE_FLOOR`, or a
+diff too large for Jev, escalates to stage 2 (Luna), which also reads both
+whole schemas.
 Any other failure stops classification with an exception: there is no fallback
 severity.
 
@@ -19,7 +19,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from schema_diff import Change, unstamped
+from schema_diff import unstamped
 
 JEV_MODEL = "typesafe/jev-1.13"
 LUNA_MODEL = "openai/gpt-6-luna"
@@ -31,14 +31,6 @@ JEV_URL = "https://openrouter.ai/api/alpha/decisions"
 CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 BUMPS = ("major", "minor", "patch")
-
-LEGEND = (
-    "Each change line is `TAG path ...`. Tags: ADDED/REMOVED (a JSON key under that path), "
-    "CHANGED (a scalar value old -> new), LIST-ADDED/LIST-REMOVED (values added to/removed "
-    "from an array such as `required`, `enum` or `type`), ITEM-ADDED/ITEM-REMOVED (a "
-    "subschema added to/removed from an array such as `anyOf`/`oneOf`), DOC-* "
-    "(description/title/examples only)."
-)
 
 CRITERIA = {
     "major": (
@@ -60,22 +52,19 @@ CRITERIA = {
 }
 
 JEV_INSTRUCTIONS = (
-    "`changes` lists every difference between the OLD and NEW JSON Schema of `resource`. Which "
-    "semantic-version bump does the NEW schema require? Pick the most severe category that any "
-    "single change falls into."
+    "`diff` is a unified diff between the OLD and NEW JSON Schema of `resource`, each printed "
+    "with sorted keys and without `$id`/`version`. Which semantic-version bump does the NEW "
+    "schema require? Pick the most severe category that any single change falls into."
 )
 
 LUNA_SYSTEM = (
     "You classify the semantic-version bump a JSON Schema change requires.\n"
-    "The payload has `changes` (every difference between the OLD and NEW schema of `resource`), "
-    "and for each side the root keywords (everything except $defs), the full body of every "
-    "definition the changes touch, and the definitions those bodies or the changed values "
-    "reference. Use the bodies to judge context the change lines omit: whether an enclosing "
-    "object forbids additional properties, whether a removed definition is still referenced, "
-    "what a $ref now points at.\n"
+    "The payload has `diff` (a unified diff between the OLD and NEW schema of `resource`, each "
+    "printed with sorted keys and without $id/version) and the full `old_schema` and "
+    "`new_schema`. Use the schemas to judge context the diff omits: which definition a hunk "
+    "sits in, whether an enclosing object forbids additional properties, whether a removed "
+    "definition is still referenced, what a $ref now points at.\n"
     "Pick the most severe category that any single change falls into.\n"
-    "\n"
-    f"{LEGEND}\n"
     "\n"
     "Categories:\n"
     + "".join(f"- {bump}: {CRITERIA[bump]}\n" for bump in BUMPS)
@@ -165,15 +154,14 @@ def _error_body(error: urllib.error.HTTPError) -> Any:
         return {"error": {"message": raw.decode("utf-8", "replace"), "code": error.code}}
 
 
-def decide(resource: str, old: dict, new: dict, changes: list[Change], post: Post) -> Decision:
-    """Classify the change from `old` to `new`, whose diff is `changes`."""
-    if not changes:
+def decide(resource: str, old: dict, new: dict, diff: str, post: Post) -> Decision:
+    """Classify the change from `old` to `new`, whose diff is `diff`."""
+    if not diff:
         raise ValueError("an empty diff needs no classification")
-    lines = [change.line for change in changes]
-    stage1, cost = _ask_jev(resource, lines, post)
+    stage1, cost = _ask_jev(resource, diff, post)
     if stage1_is_final(stage1):
         return Decision(stage1, None, routed_bump(stage1, None, None), cost)
-    stage2, luna_cost = _ask_luna(stage2_payload(resource, old, new, changes), post)
+    stage2, luna_cost = _ask_luna(stage2_payload(resource, old, new, diff), post)
     return Decision(stage1, stage2, routed_bump(stage1, stage2, None), cost + luna_cost)
 
 
@@ -242,10 +230,10 @@ def _is_stage2(stage2: Any) -> bool:
     )
 
 
-def _ask_jev(resource: str, lines: list[str], post: Post) -> tuple[dict, float]:
+def _ask_jev(resource: str, diff: str, post: Post) -> tuple[dict, float]:
     status, body = post(JEV_URL, {
         "model": JEV_MODEL,
-        "state": {"resource": resource, "legend": LEGEND, "changes": lines},
+        "state": {"resource": resource, "diff": diff},
         "questions": {"bump": {
             "type": "choice",
             "instructions": JEV_INSTRUCTIONS,
@@ -318,58 +306,9 @@ def _ask_luna(payload: dict, post: Post) -> tuple[dict, float]:
     return stage2, cost
 
 
-def stage2_payload(resource: str, old: dict, new: dict, changes: list[Change]) -> dict:
-    """What Luna reads: the diff, and per side the root keywords, the bodies of
-    the touched definitions and of the definitions `$ref`ed by those bodies or
-    by a changed value — a retargeted root `$ref` names its target, and the
-    body is what says whether the target accepts less."""
-    touched = sorted({c.path[1] for c in changes if len(c.path) >= 2 and c.path[0] == "$defs"})
-    payload: dict[str, Any] = {"resource": resource, "changes": [c.line for c in changes]}
-    for side, schema in (("old", unstamped(old)), ("new", unstamped(new))):
-        defs = schema.get("$defs", {})
-        bodies = {name: defs[name] for name in touched if name in defs}
-        sources = [*bodies.values(), *(_value_at(schema, c.path) for c in changes)]
-        referenced = sorted({
-            name for source in sources for name in _defs_refs(source)
-            if name not in bodies and name in defs
-        })
-        payload[f"{side}_root_keywords"] = {k: v for k, v in schema.items() if k != "$defs"}
-        payload[f"{side}_touched_definitions"] = bodies
-        payload[f"{side}_definitions_they_reference"] = {name: defs[name] for name in referenced}
-    return payload
-
-
-_DEFS_REF_PREFIX = "#/$defs/"
-
-
-def _value_at(schema: dict, path: tuple[str, ...]) -> Any:
-    """The value at a change path on one side, None where that side lacks it.
-
-    A path ending in `$ref` yields the one-key object holding it, so the
-    reference reads the same as one found inside a body.
-    """
-    node: Any = schema
-    for key in path:
-        if isinstance(node, dict) and key in node:
-            node = node[key]
-        elif isinstance(node, list) and key.isdigit() and int(key) < len(node):
-            node = node[int(key)]
-        else:
-            return None
-    return {"$ref": node} if path[-1:] == ("$ref",) else node
-
-
-def _defs_refs(node: Any) -> set[str]:
-    """The `$defs` names every `$ref` inside `node` points at."""
-    if isinstance(node, list):
-        return set().union(*map(_defs_refs, node)) if node else set()
-    if not isinstance(node, dict):
-        return set()
-    found = set().union(*map(_defs_refs, node.values())) if node else set()
-    ref = node.get("$ref")
-    if isinstance(ref, str) and ref.startswith(_DEFS_REF_PREFIX):
-        found.add(ref[len(_DEFS_REF_PREFIX):].split("/", 1)[0])
-    return found
+def stage2_payload(resource: str, old: dict, new: dict, diff: str) -> dict:
+    """What Luna reads: the diff and both whole schemas, stamps excluded."""
+    return {"resource": resource, "diff": diff, "old_schema": unstamped(old), "new_schema": unstamped(new)}
 
 
 def _compact(value: Any) -> str:

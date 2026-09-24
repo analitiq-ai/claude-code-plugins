@@ -21,6 +21,7 @@ require_contract_models("analitiq.contracts", "render_schemas")
 import eval_schema_bumps  # noqa: E402
 import schema_bump_cascade as cascade  # noqa: E402
 from schema_diff import diff  # noqa: E402
+from synthetic import PAIRS as SYNTHETIC_PAIRS  # noqa: E402
 
 CASES = eval_schema_bumps.historical_cases() + eval_schema_bumps.synthetic_cases()
 
@@ -66,3 +67,12 @@ def test_a_count_below_one_is_refused_before_any_call(monkeypatch, flag, count):
     with pytest.raises(SystemExit) as refused:
         eval_schema_bumps.main([flag, count])
     assert refused.value.code == 2
+
+
+def test_the_looser_retarget_pair_rejects_no_document_its_old_side_accepted():
+    from jsonschema import Draft202012Validator
+
+    [pair] = [p for p in SYNTHETIC_PAIRS if p.name == "anyOf branch retargeted to a looser definition"]
+    document = {"id": "00000000-0000-0000-0000-000000000000", "kind": "a", "source": {"sql": "x", "dialect": "ansi"}}
+    assert Draft202012Validator(pair.old).is_valid(document)
+    assert Draft202012Validator(pair.new).is_valid(document)
