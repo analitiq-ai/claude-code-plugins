@@ -11,6 +11,8 @@ reporting, and the CLI envelope.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -400,7 +402,39 @@ def test_cli_reads_probes_from_stdin(tmp_path, capsys, monkeypatch):
     # stdin is the documented primary invocation (spec-type-map-gaps.md)
     import io
     m = _map(tmp_path, "type-map.json", CONNECTOR_READ)
-    monkeypatch.setattr("sys.stdin", io.StringIO('["citext"]'))
+    monkeypatch.setattr("sys.stdin", io.TextIOWrapper(io.BytesIO(b'["citext"]'), encoding="utf-8"))
     rc = G.main(["--direction", "read", "--map", str(m)])
     assert rc == 0
     assert json.loads(capsys.readouterr().out)["resolved"] == {"citext": "Utf8"}
+
+
+def test_cli_reads_maps_and_probes_as_utf8_whatever_the_host_locale(tmp_path, ascii_locale_env):
+    native = "CARACTÈRE"
+    m = tmp_path / "type-map.json"
+    m.write_bytes(json.dumps(_tm_doc([{"match": "exact", "native_type": native, "arrow_type": "Utf8"}], "read"),
+                             ensure_ascii=False).encode("utf-8"))
+    probes = tmp_path / "probes.json"
+    probes.write_bytes(json.dumps([native], ensure_ascii=False).encode("utf-8"))
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "type_map_gaps.py"),
+         "--direction", "read", "--map", str(m), "--probes-file", str(probes)],
+        capture_output=True, text=True, env={**os.environ, **ascii_locale_env}, check=False)
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {"direction": "read", "resolved": {native: "Utf8"}, "gaps": []}
+
+
+def test_cli_reads_stdin_probes_as_utf8_whatever_the_host_locale(tmp_path, ascii_locale_env):
+    native = "CARACTÈRE"
+    m = tmp_path / "type-map.json"
+    m.write_bytes(json.dumps(_tm_doc([{"match": "exact", "native_type": native, "arrow_type": "Utf8"}], "read"),
+                             ensure_ascii=False).encode("utf-8"))
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "type_map_gaps.py"), "--direction", "read", "--map", str(m)],
+        input=json.dumps([native], ensure_ascii=False).encode("utf-8"),
+        capture_output=True, env={**os.environ, **ascii_locale_env}, check=False)
+
+    assert result.returncode == 0, result.stderr.decode("utf-8")
+    assert json.loads(result.stdout.decode("utf-8")) == {"direction": "read", "resolved": {native: "Utf8"}, "gaps": []}

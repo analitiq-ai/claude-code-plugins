@@ -573,7 +573,7 @@ def main() -> int:
         # Read as given, so a path the kernel refuses is refused for the
         # kernel's own reason, then located, which refuses a path it would
         # grade somewhere other than where that read opened it.
-        document = json.loads(Path(args.document).read_text())
+        document = json.loads(Path(args.document).read_bytes().decode("utf-8"))
         location = located(Path(args.document))
     except _JSON_READ_ERRORS as exc:
         print(json.dumps({"passed": False, "findings": [_unreadable_document_finding(exc)]}))

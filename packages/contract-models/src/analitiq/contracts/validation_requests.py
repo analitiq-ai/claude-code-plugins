@@ -160,7 +160,7 @@ class ValidateWorkspaceRequest(StrictModel):
 DOCUMENT_SCHEMAS_PATH = Path(__file__).with_name("document_schemas.json")
 DOCUMENT_SCHEMAS_KEY = "document_schemas"
 DOCUMENT_SCHEMA_NAMES: tuple[str, ...] = tuple(
-    json.loads(DOCUMENT_SCHEMAS_PATH.read_text())[DOCUMENT_SCHEMAS_KEY])
+    json.loads(DOCUMENT_SCHEMAS_PATH.read_text(encoding="utf-8"))[DOCUMENT_SCHEMAS_KEY])
 
 
 class ValidateSingleDocumentRequest(StrictModel):

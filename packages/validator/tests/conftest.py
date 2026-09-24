@@ -72,11 +72,12 @@ def validator_cli(tmp_path):
         "DOMAIN": "analitiq.ai",
     }
 
-    def run(*argv, timeout=CLI_DEADLINE_SECONDS):
+    def run(*argv, timeout=CLI_DEADLINE_SECONDS, env_overrides=None):
         try:
             return subprocess.run(
                 [sys.executable, "-c", _CLI_PROGRAM, *argv],
-                capture_output=True, text=True, env=env, check=False, timeout=timeout)
+                capture_output=True, text=True, env={**env, **(env_overrides or {})},
+                check=False, timeout=timeout)
         except subprocess.TimeoutExpired:
             pytest.fail(f"the validator did not return within {timeout}s: {argv}")
 

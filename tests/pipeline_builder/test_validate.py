@@ -14,6 +14,7 @@ import copy
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -1356,3 +1357,14 @@ def test_scripts_borrow_private_names_that_still_exist():
         assert hasattr(importlib.import_module(module), name), f"{module}.{name}"
 
 
+
+
+def test_a_document_is_read_as_utf8_whatever_the_host_locale(tmp_path, ascii_locale_env):
+    doc = tmp_path / "pipeline.json"
+    doc.write_bytes(json.dumps({**PIPELINE, "display_name": "Wise → Café"}, ensure_ascii=False).encode("utf-8"))
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "validate.py"), "--entity", "pipeline", "--document", str(doc)],
+        capture_output=True, text=True, env={**os.environ, **ascii_locale_env}, check=False)
+
+    assert json.loads(result.stdout)["passed"], result.stdout

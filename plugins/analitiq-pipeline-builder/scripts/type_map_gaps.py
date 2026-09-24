@@ -73,7 +73,7 @@ def _load_rules(path: Path, direction: str) -> list | None:
     from analitiq.validator import finding_costs_a_pass, type_map_findings
     from analitiq.validator._core import _JSON_READ_ERRORS
     try:
-        doc = json.loads(path.read_text())
+        doc = json.loads(path.read_bytes().decode("utf-8"))
     except _JSON_READ_ERRORS as exc:
         raise ValueError(f"{path}: {exc}") from exc
     findings = type_map_findings(doc)
@@ -148,7 +148,8 @@ def main(argv: list[str] | None = None) -> int:
 
     from analitiq.validator._core import _JSON_READ_ERRORS
     try:
-        raw = Path(args.probes_file).read_text() if args.probes_file else sys.stdin.read()
+        raw = (Path(args.probes_file).read_bytes().decode("utf-8") if args.probes_file
+               else sys.stdin.buffer.read().decode("utf-8"))
         probes = json.loads(raw)
     except _JSON_READ_ERRORS as exc:
         return _fail(f"cannot read probes: {exc}")

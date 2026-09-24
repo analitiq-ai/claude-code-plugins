@@ -418,3 +418,66 @@ def test_a_linked_directory_under_endpoints_is_not_walked(tmp_path, validator):
     findings = validator.validate_document(_API, doc_path=tmp_path / "pkg/connector.json")
 
     assert _passed(findings), findings
+
+
+# ---------------------------------------------------------------------------
+# A file is read as the exact UTF-8 text it holds. Neither the host's locale
+# encoding nor its newline convention reaches the parser, so a document on disk
+# is parsed as the same text an in-memory caller hands over.
+# ---------------------------------------------------------------------------
+
+def _write_utf8(root: Path, package: dict) -> None:
+    for key, doc in package.items():
+        path = root / key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(json.dumps(doc, ensure_ascii=False).encode("utf-8"))
+
+
+def test_a_package_is_read_as_utf8_whatever_the_host_locale(tmp_path, validator_cli, ascii_locale_env):
+    """The document and the sibling type map each carry text outside ASCII,
+    so a read decoding either with the locale refuses the package."""
+    native = "CARACTÈRE"
+    _write_utf8(tmp_path, {
+        "connector.json": {**_API, "description": "Café records"},
+        "type-map.json": {"$schema": f"{_H}/type-map/latest.json",
+                          "read": [{"match": "exact", "native_type": native, "arrow_type": "Utf8"}]},
+        "endpoints/v1__records.json": _endpoint("v1__records", native=native),
+    })
+    document = str(tmp_path / "connector.json")
+
+    want = validator_cli.run("--document", document)
+    have = validator_cli.run("--document", document, env_overrides=ascii_locale_env)
+
+    assert json.loads(want.stdout)["passed"], want.stdout
+    assert (have.returncode, json.loads(have.stdout)) == (want.returncode, json.loads(want.stdout))
+
+
+_UNPARSEABLE_BY_NEWLINE = {
+    "CRLF": '{\r\n  "$schema": "x",\r\n  "read": [,]\r\n}',
+    "lone CR": '{\r  "$schema": "x",\r  "read": [,]\r}',
+}
+
+
+@pytest.mark.parametrize("text", _UNPARSEABLE_BY_NEWLINE.values(), ids=_UNPARSEABLE_BY_NEWLINE.keys())
+def test_a_parse_error_quotes_offsets_into_the_text_as_written(tmp_path, validator, text):
+    """Newlines translated before parsing would move every offset the error
+    quotes off the file the author holds."""
+    (tmp_path / validator.TYPE_MAP_FILENAME).write_bytes(text.encode("utf-8"))
+    with pytest.raises(json.JSONDecodeError) as as_written:
+        json.loads(text)
+
+    [(_, found)] = validator.load_type_map(tmp_path, rule=None).findings
+
+    assert found["message_id"] == "type-map-unparseable", found
+    assert f"({as_written.value})" in found["message"], found
+
+
+def test_a_byte_order_mark_is_content_not_encoding(tmp_path, validator):
+    """An in-memory caller's document keeps its byte-order mark and is refused
+    for it, so a disk read that stripped one would pass the same bytes."""
+    (tmp_path / validator.TYPE_MAP_FILENAME).write_bytes(
+        b"\xef\xbb\xbf" + json.dumps(_map("read")).encode("utf-8"))
+
+    [(_, found)] = validator.load_type_map(tmp_path, rule=None).findings
+
+    assert found["message_id"] == "type-map-unparseable", found
