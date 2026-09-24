@@ -2,8 +2,8 @@
 
 The diff is the evidence the bump models classify and the value a bump record
 is hashed over. It is a plain unified diff of the two schemas printed with
-sorted keys: no JSON-aware matching, so every byte the render changed is in
-it and nothing decides what counts as a change.
+sorted keys, `$id` and `version` removed: no JSON-aware matching, so every
+other change is in it and nothing decides what counts as a change.
 """
 from __future__ import annotations
 

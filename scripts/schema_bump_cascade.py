@@ -6,9 +6,9 @@ whole schemas.
 Any other failure stops classification with an exception: there is no fallback
 severity.
 
-The model pins, the floor and every prompt text are stated here once. They are
-the values the evaluation (`scripts/eval_schema_bumps.py`) measured; changing
-any of them means re-running it.
+The model pins, the floor and every prompt text are stated here once; the
+evaluation (`scripts/eval_schema_bumps.py`) grades them, and changing any of
+them means re-running it.
 """
 from __future__ import annotations
 

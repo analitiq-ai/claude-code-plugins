@@ -171,6 +171,20 @@ PAIRS: list[Pair] = [
         "anyOf branch retargeted to a looser definition",
         _edited(_source_to("StrictQuery")), _edited(_source_to("LooseQuery")), "minor",
     ),
+    # Deep in a list longer than the diff's context, a hunk shows only sibling
+    # members, never the keyword that owns the list.
+    Pair(
+        "last property added to a long required list",
+        _edited(lambda s: s.update(required=["id", "kind", "name", "count", "mode", "source"])),
+        _edited(lambda s: s.update(required=["id", "kind", "name", "count", "mode", "source", "tags"])),
+        "major",
+    ),
+    Pair(
+        "value appended to a long enum",
+        _edited(lambda s: _props(s)["kind"].update(enum=list("abcdefgh"))),
+        _edited(lambda s: _props(s)["kind"].update(enum=list("abcdefghi"))),
+        "minor",
+    ),
     # Policy: a $defs name is addressable, so renaming one breaks.
     Pair("$defs entry renamed with its $refs", _base(), _edited(_rename_def), "major"),
     # Annotations do not change what validates.
