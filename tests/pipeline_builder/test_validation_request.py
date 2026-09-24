@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -94,6 +95,17 @@ def test_an_added_extension_is_picked_up(tmp_path, monkeypatch):
         "connection.json", "src/connector.py"]
 
 
+def test_every_location_the_validator_grades_has_an_allowed_extension():
+    from analitiq.contracts.validation_requests import PACKAGE_KINDS
+    from analitiq.contracts.workspace import _DOCUMENT_LOCATIONS
+
+    endings = tuple(re.escape(extension) + "$" for extension in grade.builder.VALIDATOR_ALLOWED_EXTENSIONS)
+    locations = [pattern for model in PACKAGE_KINDS.values() for pattern in model.LOCATIONS]
+    locations += list(_DOCUMENT_LOCATIONS)
+    for pattern in locations:
+        assert pattern.endswith(endings), pattern
+
+
 def test_every_secret_location_sits_under_a_dot_entry():
     """The dot-entry exclusion is what keeps secrets out of every request."""
     from analitiq.contracts.validation_requests import PACKAGE_KINDS
@@ -104,11 +116,19 @@ def test_every_secret_location_sits_under_a_dot_entry():
         assert pattern.startswith("^\\."), pattern
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads anything")
 def test_an_entry_the_request_never_sends_is_never_read(tmp_path):
-    _write(tmp_path, {"connection.json": "{}"})
-    (tmp_path / "linked.md").symlink_to(tmp_path / "missing")
-    os.mkfifo(tmp_path / "pipe")
-    assert list(_build("package", tmp_path, "connection")["arguments"]["documents"]) == ["connection.json"]
+    package = tmp_path / "package"
+    _write(tmp_path, {"package/connection.json": "{}", "elsewhere/locked/type-map.json": "{}"})
+    (package / "linked.md").symlink_to(tmp_path / "missing")
+    (package / "definition").symlink_to(tmp_path / "elsewhere" / "locked")
+    (tmp_path / "elsewhere").chmod(0)
+    os.mkfifo(package / "pipe")
+    try:
+        documents = _build("package", package, "connection")["arguments"]["documents"]
+    finally:
+        (tmp_path / "elsewhere").chmod(0o755)
+    assert list(documents) == ["connection.json"]
 
 
 def test_nothing_inside_a_dot_directory_is_read(tmp_path):
@@ -131,11 +151,6 @@ def _link(root: Path) -> None:
     (root / "definition" / "type-map.json").symlink_to(root / "connection.json")
 
 
-def _linked_directory(root: Path) -> None:
-    (root / "elsewhere").mkdir()
-    (root / "definition").symlink_to(root / "elsewhere")
-
-
 def _not_utf8(root: Path) -> None:
     (root / "latin1.json").write_bytes(b'{"a": "\xe9"}')
 
@@ -146,7 +161,6 @@ def _fifo(root: Path) -> None:
 
 @pytest.mark.parametrize("make,entry,reason", [
     (_link, "definition/type-map.json", "a link, never followed"),
-    (_linked_directory, "definition", "a link, never followed"),
     (_not_utf8, "latin1.json", "not UTF-8 text"),
     (_fifo, "pipe.json", "not a regular file"),
 ])

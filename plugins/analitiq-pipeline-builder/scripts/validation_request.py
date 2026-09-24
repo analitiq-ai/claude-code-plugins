@@ -14,10 +14,10 @@ relative path, and leaves out every file or directory whose name starts with
 `.` — that is what keeps `.secrets/` out of every request. The server grades
 only the keys its location table matches.
 
-What the request would carry but cannot exits non-zero, naming it, rather than
-being dropped: a link (never followed) with an allowed extension or to a
-directory, an allowed entry that is not a regular file, an unreadable file or
-directory, a file that is not UTF-8, and an argument list no mode takes.
+Only real directories are walked; a link is never followed. A file the request
+would carry but cannot exits non-zero, naming it, rather than being dropped: a
+link, an entry that is not a regular file, an unreadable file, a file that is
+not UTF-8. So do an unreadable directory and an argument list no mode takes.
 
 Standard library only: the plugin installs nothing.
 """
@@ -59,13 +59,9 @@ def _documents(directory: Path, prefix: str = "") -> dict[str, str]:
         path, key = Path(entry.path), prefix + entry.name
         if entry.name.startswith("."):
             continue
-        allowed = entry.name.endswith(tuple(VALIDATOR_ALLOWED_EXTENSIONS))
-        if entry.is_symlink():
-            if allowed or entry.is_dir():
-                raise RequestError(f"{path}: a link, never followed")
-        elif entry.is_dir(follow_symlinks=False):
+        if entry.is_dir(follow_symlinks=False):
             documents |= _documents(path, f"{key}/")
-        elif allowed:
+        elif entry.name.endswith(tuple(VALIDATOR_ALLOWED_EXTENSIONS)):
             documents[key] = _text(path)
     return documents
 
