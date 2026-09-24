@@ -18,5 +18,6 @@ rationale: >
   outside the rule. RFC 9110 makes a media type's type and subtype
   case-insensitive and lets it carry parameters, so the match reads the value
   the same way the body encoder does rather than comparing the raw string.
+  The exclusion is mirrored declaratively into the published schema.
 status: active
 superseded_by: null

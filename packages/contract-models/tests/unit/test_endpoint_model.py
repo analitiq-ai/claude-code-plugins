@@ -1910,9 +1910,10 @@ class TestWriteIdempotency:
 
 class TestPublishedSchemaIdempotencyRule:
     """The PUBLISHED api-endpoint JSON Schema must enforce the same
-    idempotency rules the Pydantic model does — the shape itself and the
-    idempotency×batching exclusion, including agreeing with the model on
-    the fields' nullable defaults (`idempotency: null` / `batching: null`)."""
+    write-mode rules the Pydantic model does — the idempotency shape, the
+    idempotency×batching and batching×form-content-type exclusions, including
+    agreeing with the model on the fields' nullable defaults
+    (`idempotency: null` / `batching: null`)."""
 
     @staticmethod
     def _validator():
@@ -1920,7 +1921,7 @@ class TestPublishedSchemaIdempotencyRule:
         return Draft202012Validator(schema)
 
     @staticmethod
-    def _doc(idempotency="omit", batching="omit", body="default"):
+    def _doc(idempotency="omit", batching="omit", body="default", content_type="omit"):
         batched = isinstance(batching, dict)
         block = {
             "request": {"method": "POST", "path": "/v1/x",
@@ -1933,6 +1934,8 @@ class TestPublishedSchemaIdempotencyRule:
                 body if body != "default"
                 else {"r": {"from_input": "records" if batched else "record"}}
             )
+        if content_type != "omit":
+            block["request"]["content_type"] = content_type
         if idempotency != "omit":
             block["idempotency"] = idempotency
         if batching != "omit":
@@ -1973,6 +1976,20 @@ class TestPublishedSchemaIdempotencyRule:
     def test_published_schema_body_guard_matches_model(self, idempotency, body, valid):
         self._assert_agreement(self._doc(idempotency, body=body), valid,
                                f"idempotency={idempotency!r} body={body!r}")
+
+    @pytest.mark.parametrize("content_type,batching,valid", [
+        ("application/x-www-form-urlencoded", {"max_records": 100}, False),
+        # Case-insensitive and parameter-tolerant, as the model reads it.
+        ("Application/X-WWW-Form-URLEncoded; charset=utf-8", {"max_records": 100}, False),
+        ("application/json", {"max_records": 100}, True),
+        ("omit", {"max_records": 100}, True),
+        ("application/x-www-form-urlencoded", "omit", True),
+    ])
+    def test_published_schema_batched_form_rule_matches_model(
+        self, content_type, batching, valid,
+    ):
+        self._assert_agreement(self._doc(batching=batching, content_type=content_type),
+                               valid, f"content_type={content_type!r} batching={batching!r}")
 
     def _assert_agreement(self, doc, valid, label):
         errors = list(self._validator().iter_errors(doc))

@@ -635,6 +635,17 @@ def is_form_content_type(content_type: str | None) -> bool:
     return _media_type_essence(content_type) == FORM_CONTENT_TYPE
 
 
+# `is_form_content_type` as a JSON Schema `pattern`, for a published schema
+# that must refuse what that predicate accepts. Every string it matches is one
+# the predicate accepts, never the reverse: whitespace is ASCII space/tab only,
+# since `str.strip()` and ECMA-262 `\s` disagree on Unicode whitespace.
+FORM_CONTENT_TYPE_PATTERN = (
+    r"^[ \t]*"
+    + "".join(f"[{c.upper()}{c.lower()}]" if c.isalpha() else c for c in FORM_CONTENT_TYPE)
+    + r"[ \t]*(;|$)"
+)
+
+
 def select_transport(connector: dict, template: dict) -> dict | None:
     """Pick the operation's transport: explicit `transport_ref`, else the
     connector's `default_transport`. Returns None when neither resolves.

@@ -96,6 +96,7 @@ from analitiq.contracts.shared.types import (
     StrictPositiveInt,
 )
 from analitiq.contracts.value_expression import (
+    FORM_CONTENT_TYPE_PATTERN,
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
     header_name_key,
@@ -2534,6 +2535,18 @@ class WriteOperation(_EndpointModel):
                             "properties": {"body": {"type": "object"}},
                             "required": ["body"],
                         }}},
+                    ],
+                },
+                # Published-schema mirror of the `_wiring` batched-write ×
+                # form-content-type guard: a batched body binds the `records`
+                # list, which has no flat name/value form encoding. A null or
+                # absent `content_type` fails the `not`'s `type` and passes.
+                {
+                    "anyOf": [
+                        {"properties": {"batching": {"type": "null"}}},
+                        {"properties": {"request": {"properties": {"content_type": {
+                            "not": {"type": "string", "pattern": FORM_CONTENT_TYPE_PATTERN},
+                        }}}}},
                     ],
                 },
             ],
