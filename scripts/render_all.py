@@ -41,8 +41,8 @@ PIPELINE = [
     # is rendered from the vendored engine grammar, and contracts-version is
     # the tree's provenance stamp. One check covers every one of them.
     # Checked in BOTH modes, never written here: `render_schemas.py write`
-    # cuts a new schema version (--resource, --bump), a judgment about what
-    # kind of contract change this is — its own failure output says how.
+    # cuts a new schema version and calls the bump models, which need
+    # OPENROUTER_API_KEY — its own failure output says how.
     ("render_schemas.py", [["check"]], ["check"]),
     # Validates every rules/records/*.yaml, resolves every `validator` binding
     # against the live models, and compiles the rules.json the wheel ships.

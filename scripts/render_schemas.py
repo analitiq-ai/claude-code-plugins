@@ -2,10 +2,13 @@
 """Render and publish versioned JSON Schema documents for Analitiq contracts.
 
 Source of truth: Pydantic models in `analitiq.contracts.*`. The version is NEVER picked
-by hand. `write` classifies the
-structural diff against the committed `latest.json` and advances the version
-itself (`--bump` raises it, upward only); CI's `bump-check` re-derives the same
-floor and rejects any committed bump below it.
+by hand. `write` diffs the new render against the committed `latest.json`, has
+the model cascade in `schema_bump_cascade` classify the diff, advances the
+version, and commits the decision as a bump record under
+`schema-bumps/<resource>/<version>.json` (`--bump` with `--reason` overrides it
+in either direction). CI's `bump-check` verifies the record offline: its diff
+digest must match the base→head diff and the head version must follow from its
+bump.
 
 Output trees:
     Rendered into the committed tree, uploaded to the serving bucket behind
@@ -23,13 +26,15 @@ Resources are declared in the `RESOURCES` registry below. Adding a schema is one
 entry there.
 
 Subcommands:
-    write       Auto-compute the next version (classify → advance) and write
-                {version}.json + latest.json + index.json for one resource.
+    write       Classify the change, advance the version, and write
+                {version}.json + latest.json + index.json + the bump record
+                for one resource. Needs OPENROUTER_API_KEY.
     check       Render every registered resource and exit 1 if any checked-in
-                {version}.json/latest.json differs from rendered (CI gate).
-    classify    Print detected severity vs. checked-in/base latest.json.
-    bump-check  Exit 1 if the committed version bump (base→head) is below the
-                detected floor or is a rollback (CI gate; replaces labels).
+                {version}.json/latest.json differs from rendered, or any bump
+                record disagrees with the pinned versions it names (CI gate).
+    bump-check  Exit 1 if the base→head version change has no bump record
+                matching its diff, or the head version does not follow from
+                the record (CI gate).
     list        Print registered resource names (one per line) — used by CI.
     arrow-types
                 Render schemas/arrow-types.json from the vendored engine
@@ -66,6 +71,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # tree never leaves `analitiq.contracts`.
 CONTRACTS_SRC = REPO_ROOT / "packages" / "contract-models" / "src"
 sys.path.insert(0, str(CONTRACTS_SRC))
+
+import schema_bump_cascade as cascade  # noqa: E402
+from schema_diff import diff, diff_sha256  # noqa: E402
 
 SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
 # `DOMAIN` selects the host stamped into every `$id`. Set it BEFORE the contract
@@ -124,31 +132,12 @@ from analitiq.contracts.validation_requests import (  # noqa: E402
     ValidateWorkspaceRequest,
 )
 SCHEMAS_ROOT = REPO_ROOT / "schemas"
+# Outside `schemas/`, so the publish never ships a record.
+BUMP_RECORDS_ROOT = REPO_ROOT / "schema-bumps"
 
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 VERSIONED_FILENAME_RE = re.compile(r"^(\d+\.\d+\.\d+)\.json$")
 
-# Keys whose changes are documentation-only and warrant a PATCH bump.
-DOC_KEYS = {"description", "title", "examples", "$comment"}
-# Keys stamped by this script that must be ignored when comparing schemas.
-STAMP_KEYS = {"$id", "version"}
-
-# JSON Schema 2020-12 keywords that, *when newly introduced* on a node, tighten
-# validation. Adding any of these to a property/object that previously didn't
-# have them rejects payloads that previously validated, so the change is MAJOR.
-# (Mutating an *existing* such keyword's value is already caught by the scalar
-# fall-through in `_is_additive`.)
-_TIGHTENING_NEW_KEYWORDS = frozenset({
-    "dependentRequired", "dependencies",
-    "minProperties", "maxProperties",
-    "minItems", "maxItems", "minContains", "uniqueItems",
-    "minLength", "maxLength",
-    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
-    "multipleOf", "pattern",
-    "propertyNames",
-    "not", "if", "then", "else",
-    "unevaluatedProperties", "unevaluatedItems",
-})
 
 
 # ---------------------------------------------------------------------------
@@ -1922,29 +1911,6 @@ def parse_semver(version: str) -> tuple[int, int, int]:
     return int(match.group(1)), int(match.group(2)), int(match.group(3))
 
 
-# Severity ordering shared by the structural classifier and the bump checker.
-SEVERITY_RANK: dict[str, int] = {"none": 0, "patch": 1, "minor": 2, "major": 3}
-
-
-def semver_delta(old: str, new: str) -> str:
-    """Classify the version bump from `old` to `new`.
-
-    Returns 'rollback' when new < old, else 'none'/'patch'/'minor'/'major'
-    for the highest component that changed. Used to validate that an in-code
-    `Resource.version` bump meets the structurally-detected severity floor.
-    """
-    o, n = parse_semver(old), parse_semver(new)
-    if n < o:
-        return "rollback"
-    if n == o:
-        return "none"
-    if n[0] != o[0]:
-        return "major"
-    if n[1] != o[1]:
-        return "minor"
-    return "patch"
-
-
 def bump_version(base: str, severity: str) -> str:
     """Advance `base` by `severity` ('none'/'patch'/'minor'/'major').
 
@@ -2003,112 +1969,6 @@ def render_latest(resource: Resource, version: str) -> dict[str, Any]:
     return render_schema(
         resource, version, identity=f"{resource.base_url()}/latest.json"
     )
-
-
-# ---------------------------------------------------------------------------
-# Diff / classification
-# ---------------------------------------------------------------------------
-
-
-def _strip_doc_and_stamp(obj: Any) -> Any:
-    """Strip documentation/identity keys for structural comparison."""
-    drop = DOC_KEYS | STAMP_KEYS
-    if isinstance(obj, dict):
-        return {k: _strip_doc_and_stamp(v) for k, v in obj.items() if k not in drop}
-    if isinstance(obj, list):
-        return [_strip_doc_and_stamp(v) for v in obj]
-    return obj
-
-
-def _is_additive(old: Any, new: Any, path: tuple = ()) -> bool:
-    """True when `new` only adds keys / list elements compared to `old`.
-
-    Heuristic — returns False (≈ MAJOR) for the changes we explicitly know
-    are tightening:
-
-    - Removing a key from a dict node (e.g. dropping a property).
-    - Mutating a scalar value (e.g. tightening minLength from 5 to 10).
-    - Removing an element from a list other than `required` (e.g. dropping an
-      `enum` value, narrowing a `type` union, removing a `oneOf` branch).
-    - Adding to a JSON Schema `required` array.
-    - Introducing any of `_TIGHTENING_NEW_KEYWORDS` (`pattern`,
-      `minProperties`, `dependentRequired`, …) on a node where it didn't
-      previously exist.
-    - Introducing `additionalProperties: false` where it was previously
-      absent or truthy.
-
-    Returns True (≈ MINOR) for the changes we know are additive:
-
-    - Adding a key to a dict node (new optional property, new $defs entry,
-      new oneOf branch as a discrete dict key).
-    - Removing entries from `required` (loosening).
-    - Adding entries to multiset-style lists (extra `enum` values, extra
-      union members) — note this is the permissive direction for *input*
-      enums and may be wrong for *output* enums; developers must escalate
-      via `--bump` when that distinction matters.
-
-    Anything not matched above falls through to False, so the caller errs
-    on the side of MAJOR.
-    """
-    if old == new:
-        return True
-    if isinstance(old, dict) and isinstance(new, dict):
-        return _dict_is_additive(old, new, path)
-    if isinstance(old, list) and isinstance(new, list):
-        return _list_is_additive(old, new, path)
-    return False
-
-
-def _dict_is_additive(old: dict, new: dict, path: tuple) -> bool:
-    """The dict half of `_is_additive` — pure extraction, same rules."""
-    for k in set(new) - set(old):
-        if k in _TIGHTENING_NEW_KEYWORDS:
-            return False
-    if (new.get("additionalProperties", True) is False
-            and old.get("additionalProperties", True) is not False):
-        return False
-    for k, v in old.items():
-        if k not in new:
-            return False
-        if not _is_additive(v, new[k], path + (k,)):
-            return False
-    return True
-
-
-def _list_is_additive(old: list, new: list, path: tuple) -> bool:
-    """The list half of `_is_additive` — pure extraction, same rules."""
-    if path and path[-1] == "required":
-        return set(new).issubset(set(old))
-    for item in old:
-        if item not in new:
-            return False
-    return True
-
-
-def classify(old: dict | None, new: dict) -> str:
-    """Return 'none', 'patch', 'minor', or 'major' for severity vs. previous schema.
-
-    Heuristic — errs on the side of MAJOR for ambiguous changes. Developers can
-    always override upward via `--bump`; `bump-check` rejects
-    under-bumps.
-
-    A `None` or empty-dict `old` both mean "no usable prior schema" — the
-    transition from nothing to a fully-defined contract is a brand-new
-    contract, hence MAJOR. Without the empty-dict guard the additive
-    heuristic would walk an empty `dict.items()` loop and return MINOR,
-    silently under-classifying the publication.
-    """
-    if not old:
-        return "major"
-    if old == new:
-        return "none"
-    stripped_old = _strip_doc_and_stamp(old)
-    stripped_new = _strip_doc_and_stamp(new)
-    if stripped_old == stripped_new:
-        return "patch"
-    if _is_additive(stripped_old, stripped_new):
-        return "minor"
-    return "major"
 
 
 # ---------------------------------------------------------------------------
@@ -2186,44 +2046,159 @@ def _load_previous_arg(previous: str | None, *, cmd: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Bump records
+# ---------------------------------------------------------------------------
+
+
+_BUMP_RECORD_KEYS = frozenset({
+    "resource", "from", "to", "diff_sha256", "stage1", "stage2", "override", "final",
+})
+
+
+def bump_record_path(resource: Resource, version: str) -> Path:
+    return BUMP_RECORDS_ROOT / resource.name / f"{version}.json"
+
+
+def _shown(record_path: Path) -> str:
+    return record_path.relative_to(BUMP_RECORDS_ROOT.parent).as_posix()
+
+
+def build_bump_record(
+    resource: Resource,
+    base_version: str,
+    decision: cascade.Decision,
+    diff_digest: str,
+    override: dict | None,
+) -> dict[str, Any]:
+    final = override["bump"] if override else decision.final
+    return {
+        "resource": resource.name,
+        "from": base_version,
+        "to": bump_version(base_version, final),
+        "diff_sha256": diff_digest,
+        "stage1": decision.stage1,
+        "stage2": decision.stage2,
+        "override": override,
+        "final": final,
+    }
+
+
+def bump_record_problem(
+    record: Any, resource: Resource, base_version: str, head_version: str, diff_digest: str
+) -> str | None:
+    """Why `record` does not justify publishing `head_version` over `base_version`
+    with a change whose diff digests to `diff_digest`; None when it does."""
+    if not isinstance(record, dict) or record.keys() != _BUMP_RECORD_KEYS:
+        return f"is not a bump record (keys must be exactly {sorted(_BUMP_RECORD_KEYS)})"
+    if record["resource"] != resource.name:
+        return f"names resource {record['resource']!r}"
+    if (record["from"], record["to"]) != (base_version, head_version):
+        return f"records {record['from']} → {record['to']}, not {base_version} → {head_version}"
+    if record["diff_sha256"] != diff_digest:
+        return "was written for a different diff; the schema changed after the record was written"
+    decided = _recorded_decision(record)
+    if record["final"] != decided:
+        return f"has final {record['final']!r}, but its stages and override decide {decided!r}"
+    if record["final"] not in cascade.BUMPS or bump_version(base_version, record["final"]) != head_version:
+        return f"has final {record['final']!r}, which does not advance {base_version} to {head_version}"
+    return None
+
+
+def _recorded_decision(record: dict) -> Any:
+    """The bump a record's override, else its last model stage, decides."""
+    override, stage2, stage1 = record["override"], record["stage2"], record["stage1"]
+    if override is not None:
+        valid = (
+            isinstance(override, dict)
+            and override.keys() == {"bump", "reason"}
+            and isinstance(override["reason"], str)
+            and override["reason"].strip()
+        )
+        return override["bump"] if valid else None
+    if stage2 is not None:
+        return stage2.get("bump") if isinstance(stage2, dict) else None
+    return stage1.get("choice") if isinstance(stage1, dict) else None
+
+
+def _check_bump_records(resource: Resource) -> list[str]:
+    """Every record under the resource's directory, verified against the diff
+    between the pinned versions it names."""
+    problems: list[str] = []
+    for path in sorted((BUMP_RECORDS_ROOT / resource.name).glob("*")):
+        where = _shown(path)
+        match = VERSIONED_FILENAME_RE.match(path.name)
+        if not match:
+            problems.append(f"{where}: not named <version>.json")
+            continue
+        try:
+            record = json.loads(path.read_text())
+        except json.JSONDecodeError as exc:
+            problems.append(f"{where}: not valid JSON ({exc})")
+            continue
+        base_version = record.get("from") if isinstance(record, dict) else None
+        pinned = [(resource.dir() / f"{v}.json") for v in (base_version, match.group(1))]
+        if not isinstance(base_version, str) or not all(p.exists() for p in pinned):
+            problems.append(f"{where}: names a version with no pinned schema")
+            continue
+        old, new = (json.loads(p.read_text()) for p in pinned)
+        digest = diff_sha256([c.line for c in diff(old, new)])
+        problem = bump_record_problem(record, resource, base_version, match.group(1), digest)
+        if problem:
+            problems.append(f"{where}: {problem}")
+    return problems
+
+
+# ---------------------------------------------------------------------------
 # Subcommands
 # ---------------------------------------------------------------------------
 
 
 def cmd_write(args: argparse.Namespace) -> int:
-    """Render at an auto-computed version: classify the diff, advance, write.
+    """Render the next version: classify the diff, advance, write, record.
 
-    The next version is a pure function of the committed `latest.json` version
-    and the structural severity of the change — the developer never picks the
-    number. `--bump <sev>` raises the bump above the detected floor (the only
-    valid override is upward, e.g. an output-enum addition that is structurally
-    additive but semantically breaking). A new resource publishes at 1.0.0.
+    The model cascade decides the bump; `--bump` with `--reason` overrides it
+    in either direction, and the record keeps both. A new resource publishes
+    at 1.0.0 with no record, since there is no change to classify.
     """
     resource = get_resource(args.resource)
+    if (args.bump is None) != (args.reason is None):
+        print(f"{resource.name}: --bump and --reason go together.", file=sys.stderr)
+        return 2
     committed = load_latest(resource)
     base_version = (committed or {}).get("version") or "0.0.0"
 
-    # Probe the new structural shape (rendered at the base version so $id/version
-    # don't perturb the structural diff) and classify against the committed doc.
+    # Rendered at the base version so only the model's change enters the diff.
     probe = render_latest(resource, base_version)
-    floor = classify(committed, probe)
-
-    severity = floor
-    if args.bump:
-        if SEVERITY_RANK[args.bump] < SEVERITY_RANK[floor]:
+    record = None
+    if committed is None:
+        severity = "major"
+    else:
+        changes = diff(committed, probe)
+        if not changes:
+            print(f"{resource.name}: no change vs. committed {base_version} — nothing to write.")
+            return 0
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
             print(
-                f"{resource.name}: --bump {args.bump!r} is below the detected floor "
-                f"{floor!r}; overrides may only raise the bump.",
+                f"{resource.name}: OPENROUTER_API_KEY is not set; `write` needs it to classify the change.",
                 file=sys.stderr,
             )
             return 2
-        severity = args.bump
+        try:
+            decision = cascade.decide(
+                resource.name, committed, probe, changes, cascade.openrouter_post(api_key)
+            )
+        except cascade.BumpClassificationError as exc:
+            print(f"{resource.name}: the change could not be classified: {exc}", file=sys.stderr)
+            return 2
+        override = {"bump": args.bump, "reason": args.reason} if args.bump else None
+        record = build_bump_record(
+            resource, base_version, decision, diff_sha256([c.line for c in changes]), override
+        )
+        severity = record["final"]
+        print(f"{resource.name}: the models decided {decision.final!r} (cost ${decision.cost:.4f}).")
 
     version = bump_version(base_version, severity)
-    if severity == "none":
-        print(f"{resource.name}: no change vs. committed {base_version} — nothing to write.")
-        return 0
-
     pinned = render_pinned(resource, version)
     latest = render_latest(resource, version)
 
@@ -2240,6 +2215,8 @@ def cmd_write(args: argparse.Namespace) -> int:
     write_json(versioned_path, pinned)
     write_json(resource.dir() / "latest.json", latest)
     write_json(resource.dir() / "index.json", build_index(resource))
+    if record is not None:
+        write_json(bump_record_path(resource, version), record)
     print(
         f"wrote {resource.name}/{version}.json + latest.json + index.json "
         f"(bump {base_version} → {version}, '{severity}')"
@@ -2310,10 +2287,14 @@ def _check_resource(resource: Resource) -> tuple[bool, str]:
             f"{resource.name}: index.json is stale or hand-edited; re-run {write_hint}",
         )
 
+    record_problems = _check_bump_records(resource)
+    if record_problems:
+        return (False, "\n".join(record_problems))
+
     return (
         True,
         f"{resource.name}: OK — latest.json + {version}.json + index.json match "
-        "rendered output",
+        "rendered output; every bump record matches its pinned versions",
     )
 
 
@@ -2351,53 +2332,16 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
-def cmd_classify(args: argparse.Namespace) -> int:
-    """Classify severity of the on-disk current latest.json against `--previous`.
-
-    `--previous` is the path to the latest.json from before the current change
-    (typically extracted from the PR base branch via `git show`). Without it,
-    classification falls back to comparing against the next-highest checked-in
-    pinned version of the same resource.
-
-    A `--previous` path that is explicitly supplied but missing, empty,
-    malformed JSON, or non-dict JSON is treated as a plumbing failure: an
-    error is logged to stderr and the command exits with code 2. This
-    prevents a typo'd path or empty `git show` output from silently
-    masquerading as a brand-new resource (which would otherwise be classified
-    as `major` and pass CI).
-
-    The "no prior schema → major" path is reserved for the case where
-    `--previous` was *not* supplied and no prior pinned version exists.
-    """
-    resource = get_resource(args.resource)
-    versions = list_published_versions(resource)
-    if not versions:
-        print("major")
-        return 0
-    current = load_latest(resource)
-    if current is None:
-        print("major")
-        return 0
-
-    previous = _load_previous_arg(args.previous, cmd="classify")
-    if previous is None and not args.previous and len(versions) >= 2:
-        previous = json.loads(
-            (resource.dir() / f"{versions[-2]}.json").read_text()
-        )
-
-    print(classify(previous, current))
-    return 0
-
-
 def cmd_bump_check(args: argparse.Namespace) -> int:
-    """Enforce that the committed version bump meets the structural severity floor.
+    """Verify the base→head version change against its bump record, offline.
 
-    Replaces the infra repo's `schema-bump:<resource>:<sev>` PR-label mechanism. The
-    head version is read from the checked-in `latest.json` (which `write`
-    auto-computed); the base version from the PR base branch's `--previous`
-    copy. Requires the base→head delta to be >= the structurally-detected floor
-    and never a rollback. A brand-new resource (no `--previous`) passes — its
-    publication is its first version.
+    The head version is read from the checked-in `latest.json`, the base from
+    the PR base branch's `--previous` copy. An unchanged version needs an
+    unchanged schema; a new version needs a record whose diff digest matches
+    the base→head diff and whose final bump advances base to head. The models
+    never run here: that would make the gate nondeterministic and put an API
+    key within reach of pull-request code. A brand-new resource (no
+    `--previous`) passes — its publication is its first version.
     """
     resource = get_resource(args.resource)
     current = load_latest(resource)
@@ -2409,37 +2353,14 @@ def cmd_bump_check(args: argparse.Namespace) -> int:
         )
         return 2
 
-    head_version = current.get("version")
-    if not head_version:
-        print(
-            f"bump-check: {resource.name} latest.json has no `version` field.",
-            file=sys.stderr,
-        )
-        return 2
-
     previous = _load_previous_arg(args.previous, cmd="bump-check")
     if previous is None:
-        print(f"{resource.name}: new resource — publishing at {head_version}.")
+        print(f"{resource.name}: new resource — publishing at {current.get('version')}.")
         return 0
 
-    base_version = previous.get("version")
-    if not base_version:
-        # The base copy predates versioned publishing — a hand-authored schema
-        # being adopted into the generator. Treat it
-        # as the 0.0.0 baseline rather than skipping the gate: the floor +
-        # rollback checks below then still run against the head version, so a
-        # corrupt/blanked base `version` can't silently disable them.
-        print(
-            f"{resource.name}: base copy predates versioned publishing — "
-            "treating as 0.0.0 baseline for the floor check."
-        )
-        base_version = "0.0.0"
-
-    # Validate both versions are well-formed semver before arithmetic, so a
-    # corrupt/hand-edited `version` field fails with the function's exit-2
-    # plumbing code rather than an opaque parse_semver traceback.
+    head_version, base_version = current.get("version"), previous.get("version")
     for label, value in (("head", head_version), ("base", base_version)):
-        if not SEMVER_RE.match(value):
+        if not isinstance(value, str) or not SEMVER_RE.match(value):
             print(
                 f"bump-check: {resource.name} {label} version {value!r} is not valid "
                 "MAJOR.MINOR.PATCH semver.",
@@ -2447,25 +2368,44 @@ def cmd_bump_check(args: argparse.Namespace) -> int:
             )
             return 2
 
-    floor = classify(previous, current)
-    delta = semver_delta(base_version, head_version)
-    if delta == "rollback":
+    changes = diff(previous, current)
+    if head_version == base_version:
+        if changes:
+            print(
+                f"::error::{resource.name}: the schema changed but its version is still "
+                f"{head_version}. Run `render_schemas.py write --resource {resource.name}`.",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"{resource.name}: OK — unchanged at {head_version}.")
+        return 0
+
+    record_path = bump_record_path(resource, head_version)
+    if not record_path.exists():
         print(
-            f"::error::{resource.name}: version rollback — head {head_version} < base {base_version}.",
+            f"::error::{resource.name}: {base_version} → {head_version} has no bump record at "
+            f"{_shown(record_path)}. Publish with "
+            f"`render_schemas.py write --resource {resource.name}`.",
             file=sys.stderr,
         )
         return 1
-    if SEVERITY_RANK[delta] < SEVERITY_RANK[floor]:
+    try:
+        record = json.loads(record_path.read_text())
+    except json.JSONDecodeError as exc:
+        print(f"::error::{_shown(record_path)} is not valid JSON ({exc}).", file=sys.stderr)
+        return 1
+    problem = bump_record_problem(
+        record, resource, base_version, head_version, diff_sha256([c.line for c in changes])
+    )
+    if problem:
         print(
-            f"::error::{resource.name}: version bump {base_version} → {head_version} is "
-            f"'{delta}', below the detected floor '{floor}'. Re-run "
-            f"`render_schemas.py write --resource {resource.name}` "
-            f"(it auto-computes the correct bump).",
+            f"::error::{resource.name}: {_shown(record_path)} {problem}. Re-run "
+            f"`render_schemas.py write --resource {resource.name}` from the base version.",
             file=sys.stderr,
         )
         return 1
 
-    print(f"{resource.name}: OK — bump {base_version} → {head_version} ('{delta}') >= floor '{floor}'.")
+    print(f"{resource.name}: OK — {base_version} → {head_version} ('{record['final']}') matches its bump record.")
     return 0
 
 
@@ -2477,6 +2417,9 @@ def cmd_list(args: argparse.Namespace) -> int:
                 seen.add(p)
             seen.add(f"{resource.dir().relative_to(REPO_ROOT).as_posix()}/**")
         seen.add("scripts/render_schemas.py")
+        seen.add("scripts/schema_diff.py")
+        seen.add("scripts/schema_bump_cascade.py")
+        seen.add(f"{BUMP_RECORDS_ROOT.relative_to(REPO_ROOT).as_posix()}/**")
         seen.add(".github/workflows/tests.yml")
         # Generated arrow-types.json + the vendored grammar it renders from.
         seen.add("schemas/arrow-types.json")
@@ -2510,9 +2453,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_write.add_argument(
         "--bump",
-        choices=("patch", "minor", "major"),
-        help="raise the auto-detected bump (upward only); for changes that are "
-        "structurally additive but semantically breaking (e.g. a new output enum value)",
+        choices=cascade.BUMPS,
+        help="override the models' bump, in either direction; needs --reason. For "
+        "meaning changes written only in prose, and deliberate policy calls",
+    )
+    p_write.add_argument(
+        "--reason",
+        help="why --bump overrides the models; stored in the bump record",
     )
     p_write.add_argument(
         "--force",
@@ -2571,21 +2518,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_ds.set_defaults(func=cmd_document_schemas)
 
-    p_classify = sub.add_parser(
-        "classify",
-        help="print severity vs. previous publication: none|patch|minor|major",
-    )
-    p_classify.add_argument("--resource", required=True, help="resource name")
-    p_classify.add_argument(
-        "--previous",
-        help="Path to previous latest.json (e.g. extracted from PR base branch). "
-        "Without it, falls back to the prior pinned version of the same resource.",
-    )
-    p_classify.set_defaults(func=cmd_classify)
-
     p_bump = sub.add_parser(
         "bump-check",
-        help="enforce that the in-code version bump meets the detected severity floor",
+        help="verify the base→head version change against its bump record",
     )
     p_bump.add_argument("--resource", required=True, help="resource name")
     p_bump.add_argument(

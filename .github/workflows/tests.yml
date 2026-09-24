@@ -103,6 +103,39 @@ jobs:
           python3 packages/contract-models/scripts/build.py --check
           python3 packages/validator/scripts/build.py --check
 
+  schema-bump-check:
+    # Every resource's base→head version change must be justified by the bump
+    # record `render_schemas.py write` committed beside it. Offline and
+    # secret-free by design: the models ran at authoring time, and this job
+    # only re-derives the diff and compares it with the record.
+    if: github.event_name == 'pull_request'
+    name: schema version bumps match their records
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install dev/test dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Check every resource's bump against the base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          status=0
+          while IFS=$'\t' read -r resource latest; do
+            previous="$RUNNER_TEMP/$resource.base.json"
+            if git cat-file -e "origin/$BASE_REF:$latest" 2>/dev/null; then
+              git show "origin/$BASE_REF:$latest" > "$previous"
+              python3 scripts/render_schemas.py bump-check --resource "$resource" --previous "$previous" || status=1
+            else
+              python3 scripts/render_schemas.py bump-check --resource "$resource" || status=1
+            fi
+          done < <(python3 scripts/render_schemas.py list --latest)
+          exit $status
+
   sample-budget-portability:
     name: sample grading is bounded on ${{ matrix.os }}
     # The bound on grading a recorded sample is a worker process the parent

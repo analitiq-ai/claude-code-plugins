@@ -109,9 +109,9 @@ change absent here is decided by the question, not by its absence.
   record edited with no enforcer behind it refuses nothing.
 - **A model tightened.** A field made required, a `Literal` narrowed, a bound
   or pattern added. Ask the question of a document the last stable release
-  accepted. `render_schemas.py write` classifies the rendered schema's diff
-  and errs toward `major`; that is evidence, not the verdict — it grades the
-  schema alone, and a `@model_validator` renders into no keyword it can see.
+  accepted. `render_schemas.py write` has a model classify the rendered
+  schema's diff; that is evidence, not the verdict — it grades the schema
+  alone, and a `@model_validator` renders into no keyword it can see.
 - **A hole closed.** A fix after which the validator rejects what it wrongly
   accepted still answers yes. The question keys on the verdict, not the
   intent: a wrong pass is a pass a consumer relied on.

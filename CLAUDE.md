@@ -110,6 +110,7 @@ store that could only hold it by taking a second kind of unit is the wrong one.
 |---|---|---|
 | `packages/*/src` | a **model field** | a machine can reject one document with it |
 | `schemas/` | a **resource version** | never — rendered, never authored |
+| `schema-bumps/` | a **version decision** | never by hand — `render_schemas.py write` records it; `check` and `bump-check` verify it |
 | `rules/records/*.yaml` | an **obligation with an immutable id** | an artifact author can violate it, and something needs to cite it by name |
 | `census/areas/*.py` | a **prose site** — one field description or docstring | it exists under `analitiq.contracts`; membership is exhaustive, not chosen |
 | `census/consumption/dispositions.py` | an **unread contract field** | the pinned consumption manifest claims no read of it |
