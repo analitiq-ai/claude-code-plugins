@@ -175,26 +175,29 @@ def test_renderer_emits_nonempty_block(block_id):
         f"{block_id} must end with exactly one newline")
 
 
-def test_measured_reachable_connectors_ids_matches_expectation():
-    """`measured_reachable_connectors_ids` derives its answer by running probe
-    documents through the real adapter rather than naming functions by hand —
-    this pins the resulting *ids*, which is a legitimate test assertion target
-    (unlike a hand-typed allowlist of function names). A rename inside `connectors.py` cannot break this test: the
-    measurement calls through the live dispatch, not by name, so there is
-    nothing here for a rename to go stale against."""
-    assert G.measured_reachable_connectors_ids() == {
-        "RULE-DBEP-011", "RULE-PKG-031", "RULE-TMAP-014", "RULE-TMAP-017", "RULE-TMAP-022",
+def test_measured_single_document_ids_matches_expectation():
+    """`measured_single_document_ids` derives its answer by running probe
+    documents through `validate_single_document` rather than naming functions
+    by hand, so this pins the resulting ids, never a function name."""
+    assert G.measured_single_document_ids() == {
+        "RULE-DBEP-011", "RULE-TMAP-014", "RULE-TMAP-017", "RULE-TMAP-022",
     }
 
 
-def test_bundle_reach_follows_references_across_modules():
-    """A rule is reachable through the bundle when the function holding its
-    finding call is, however many calls and module imports lie between; a
-    function the bundle never references is not, even in the same module."""
+def test_validator_ids_include_what_only_a_workspace_request_reaches():
+    """A check no package locates every kind of runs only in a workspace
+    request, so its rule is reachable from `validate_workspace` alone."""
+    assert "`RULE-TMAP-018`" in G.render_validator_ids()
+
+
+def test_reach_follows_references_across_modules():
+    """A rule is reachable when the function holding its finding call is,
+    however many calls and module imports lie between; a function no root
+    references is not, even in the same module."""
     sources = {
-        "analitiq.validator.pipelines": (
+        "analitiq.validator.document_set": (
             "from .connectors import shared_check as shared\n"
-            "def validate_pipeline_bundle(bundle):\n"
+            "def validate_package(request):\n"
             "    checks = [local_check, shared]\n"
             "def local_check(d):\n    return helper(d)\n"
             "def helper(d):\n    return []\n"
@@ -205,19 +208,19 @@ def test_bundle_reach_follows_references_across_modules():
             "def inner(d):\n    return []\n"
         ),
     }
-    assert G._bundle_reach(sources) == {
-        "analitiq.validator.pipelines::local_check",
-        "analitiq.validator.pipelines::helper",
+    assert G._reach(sources, {"analitiq.validator.document_set::validate_package"}) == {
+        "analitiq.validator.document_set::local_check",
+        "analitiq.validator.document_set::helper",
         "analitiq.validator.connectors::shared_check",
         "analitiq.validator.connectors::inner",
     }
 
 
-def test_bundle_reach_follows_a_re_export_to_the_defining_module():
+def test_reach_follows_a_re_export_to_the_defining_module():
     sources = {
-        "analitiq.validator.pipelines": (
+        "analitiq.validator.document_set": (
             "from .connectors import check\n"
-            "def validate_pipeline_bundle(bundle):\n"
+            "def validate_package(request):\n"
             "    checks = [check]\n"
         ),
         "analitiq.validator.connectors": "from .streams import check\n",
@@ -226,8 +229,31 @@ def test_bundle_reach_follows_a_re_export_to_the_defining_module():
             "def inner(d):\n    return []\n"
         ),
     }
-    assert G._bundle_reach(sources) == {
+    assert G._reach(sources, {"analitiq.validator.document_set::validate_package"}) == {
         "analitiq.validator.streams::check", "analitiq.validator.streams::inner"}
+
+
+def test_reach_follows_a_module_level_table():
+    """Checks registered in a module-level table are reached through a root
+    that reads the table; a table no root reads reaches nothing."""
+    sources = {
+        "analitiq.validator.document_set": (
+            "_CHECKS: tuple = (Check(listed_check),)\n"
+            "_UNREAD = (unread_check,)\n"
+            "def validate_workspace(request):\n"
+            "    return [c for c in _CHECKS]\n"
+            "def listed_check(d):\n    return []\n"
+            "def unread_check(d):\n    return []\n"
+        ),
+    }
+    assert G._reach(sources, {"analitiq.validator.document_set::validate_workspace"}) == {
+        "analitiq.validator.document_set::listed_check"}
+
+
+def test_reach_refuses_a_root_that_no_longer_exists():
+    with pytest.raises(RuntimeError, match="validate_workspace"):
+        G._reach({"analitiq.validator.document_set": ""},
+                 {"analitiq.validator.document_set::validate_workspace"})
 
 
 def test_filter_operator_scopes_are_disjoint_and_complete():
