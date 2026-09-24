@@ -8,15 +8,16 @@ on disk.
 
 Prints `{"tool", "arguments"}`; `arguments` is the tool's input, passed verbatim.
 
-A package or workspace request carries every file under the directory, keyed by
-its relative path, except what sits inside a directory whose name starts with
+A package or workspace request carries every file under the directory whose
+name ends with an extension in `VALIDATOR_ALLOWED_EXTENSIONS`, keyed by its
+relative path, and leaves out every file or directory whose name starts with
 `.` — that is what keeps `.secrets/` out of every request. The server grades
 only the keys its location table matches.
 
-Anything the request cannot carry as text exits non-zero, naming it, rather
-than being dropped: a link (never followed), an entry that is not a regular
-file or directory, an unreadable entry, a file that is not UTF-8, and an
-argument list no mode takes.
+What the request would carry but cannot exits non-zero, naming it, rather than
+being dropped: a link (never followed) with an allowed extension or to a
+directory, an allowed entry that is not a regular file, an unreadable file or
+directory, a file that is not UTF-8, and an argument list no mode takes.
 
 Standard library only: the plugin installs nothing.
 """
@@ -26,6 +27,8 @@ import json
 import os
 import sys
 from pathlib import Path
+
+VALIDATOR_ALLOWED_EXTENSIONS = [".json"]
 
 
 class RequestError(ValueError):
@@ -54,10 +57,15 @@ def _documents(directory: Path, prefix: str = "") -> dict[str, str]:
     documents: dict[str, str] = {}
     for entry in entries:
         path, key = Path(entry.path), prefix + entry.name
-        if entry.is_dir(follow_symlinks=False):
-            if not entry.name.startswith("."):
-                documents |= _documents(path, f"{key}/")
-        else:
+        if entry.name.startswith("."):
+            continue
+        allowed = entry.name.endswith(tuple(VALIDATOR_ALLOWED_EXTENSIONS))
+        if entry.is_symlink():
+            if allowed or entry.is_dir():
+                raise RequestError(f"{path}: a link, never followed")
+        elif entry.is_dir(follow_symlinks=False):
+            documents |= _documents(path, f"{key}/")
+        elif allowed:
             documents[key] = _text(path)
     return documents
 

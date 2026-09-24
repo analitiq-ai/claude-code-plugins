@@ -55,9 +55,8 @@ the secrets workflow in
 ## Validation
 
 The `pipeline-schema-validator` agent builds each request with
-`scripts/validation_request.py` — which sends every file under the directory
-except what sits inside a directory whose name starts with `.`, so `.secrets/`
-never leaves the machine — and sends it to the MCP server. The plugin installs nothing. This plugin's suite lives at the
+`scripts/validation_request.py` — whose docstring states which files a request
+carries; `.secrets/` never leaves the machine — and sends it to the MCP server. The plugin installs nothing. This plugin's suite lives at the
 repo root under `tests/pipeline_builder/`. From the repo root:
 `pip install -r requirements-dev.txt`, then `pytest tests/pipeline_builder/`.
 

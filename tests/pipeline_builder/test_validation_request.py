@@ -1,6 +1,7 @@
 """The request builder the validator agents run: a package or workspace request
-carries every file under the directory except what sits inside a directory
-whose name starts with `.`, and an entry it cannot carry refuses the request."""
+carries every file under the directory with an allowed extension, leaving out
+every entry whose name starts with `.`, and a file it would send but cannot
+carry refuses the request."""
 from __future__ import annotations
 
 import importlib.util
@@ -58,17 +59,20 @@ def test_each_plugin_ships_the_same_copy(path):
 _TREE = {
     "connection.json": "{}",
     "definition/type-map.json": "{}",
+    "definition/endpoints/orders.json": "{}",
     "notes.md": "n",
-    ".gitignore": "x",
     "src/pkg/__init__.py": "",
+    "src/pkg/__pycache__/m.pyc": b"\xff",
+    "logo.png": b"\x89PNG\xff",
+    ".env.json": "{}",
     ".secrets/credentials.json": '{"token": "x"}',
     ".venv/lib/site.json": "{}",
-    "src/.cache/blob.bin": b"\xff",
+    "src/.cache/blob.json": "{}",
 }
-_SENT = [".gitignore", "connection.json", "definition/type-map.json", "notes.md", "src/pkg/__init__.py"]
+_SENT = ["connection.json", "definition/endpoints/orders.json", "definition/type-map.json"]
 
 
-def test_a_package_request_carries_every_file_outside_a_dot_directory(tmp_path):
+def test_a_package_request_carries_every_allowed_file_outside_a_dot_entry(tmp_path):
     _write(tmp_path, _TREE)
     assert _build("package", tmp_path, "connection") == {
         "tool": "validate_package",
@@ -76,11 +80,35 @@ def test_a_package_request_carries_every_file_outside_a_dot_directory(tmp_path):
                       "documents": {key: _TREE[key] for key in _SENT}}}
 
 
-def test_a_workspace_request_carries_every_file_outside_a_dot_directory(tmp_path):
+def test_a_workspace_request_carries_every_allowed_file_outside_a_dot_entry(tmp_path):
     _write(tmp_path, {f"connections/c/{key}": content for key, content in _TREE.items()})
     assert _build("workspace", tmp_path) == {
         "tool": "validate_workspace",
         "arguments": {"documents": {f"connections/c/{key}": _TREE[key] for key in _SENT}}}
+
+
+def test_an_added_extension_is_picked_up(tmp_path, monkeypatch):
+    _write(tmp_path, {"connection.json": "{}", "src/connector.py": "x = 1", "notes.md": "n"})
+    monkeypatch.setattr(grade.builder, "VALIDATOR_ALLOWED_EXTENSIONS", [".json", ".py"])
+    assert sorted(grade.builder.build(["package", str(tmp_path), "connection"])["arguments"]["documents"]) == [
+        "connection.json", "src/connector.py"]
+
+
+def test_every_secret_location_sits_under_a_dot_entry():
+    """The dot-entry exclusion is what keeps secrets out of every request."""
+    from analitiq.contracts.validation_requests import PACKAGE_KINDS
+
+    secrets = [pattern for model in PACKAGE_KINDS.values() for pattern in model.SECRET_LOCATIONS]
+    assert secrets
+    for pattern in secrets:
+        assert pattern.startswith("^\\."), pattern
+
+
+def test_an_entry_the_request_never_sends_is_never_read(tmp_path):
+    _write(tmp_path, {"connection.json": "{}"})
+    (tmp_path / "linked.md").symlink_to(tmp_path / "missing")
+    os.mkfifo(tmp_path / "pipe")
+    assert list(_build("package", tmp_path, "connection")["arguments"]["documents"]) == ["connection.json"]
 
 
 def test_nothing_inside_a_dot_directory_is_read(tmp_path):
@@ -109,18 +137,18 @@ def _linked_directory(root: Path) -> None:
 
 
 def _not_utf8(root: Path) -> None:
-    (root / "logo.png").write_bytes(b"\x89PNG\xff")
+    (root / "latin1.json").write_bytes(b'{"a": "\xe9"}')
 
 
 def _fifo(root: Path) -> None:
-    os.mkfifo(root / "pipe")
+    os.mkfifo(root / "pipe.json")
 
 
 @pytest.mark.parametrize("make,entry,reason", [
     (_link, "definition/type-map.json", "a link, never followed"),
     (_linked_directory, "definition", "a link, never followed"),
-    (_not_utf8, "logo.png", "not UTF-8 text"),
-    (_fifo, "pipe", "not a regular file"),
+    (_not_utf8, "latin1.json", "not UTF-8 text"),
+    (_fifo, "pipe.json", "not a regular file"),
 ])
 def test_an_entry_the_request_cannot_carry_refuses_it(tmp_path, make, entry, reason):
     (tmp_path / "connection.json").write_text("{}")

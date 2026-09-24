@@ -1,6 +1,6 @@
 ---
 name: connector-schema-validator
-description: Validate one draft connector-builder document, or a whole connector package, by submitting it to the analitiq-validator MCP server. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Output is the server's Diagnostics envelope, plus the agent's own findings for anything the server never saw, as defined in connector-builder/references/io-contracts.md.
+description: Validate one draft connector-builder document, or a whole connector package, by submitting it to the analitiq-validator MCP server. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Output is the server's Diagnostics envelope, or a validation-not-run finding when the server never graded the request, as defined in connector-builder/references/io-contracts.md.
 color: orange
 ---
 
@@ -48,9 +48,8 @@ Validation runs on the `analitiq-validator` MCP server this plugin ships.
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" package <package> connector
    ```
 
-   It prints `{"tool", "arguments"}`: every file under a package or
-   workspace directory except what sits inside a directory whose name starts
-   with `.`, which keeps `.secrets/` out.
+   It prints `{"tool", "arguments"}`; its docstring states which files a
+   package or workspace request carries, and `.secrets/` is never one.
 2. Call the server's tool named by `tool` with `arguments`, verbatim.
 
 ## Findings

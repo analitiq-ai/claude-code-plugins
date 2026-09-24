@@ -43,9 +43,8 @@ Exactly one of:
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" workspace <workspace>
    ```
 
-   It prints `{"tool", "arguments"}`: every file under a package or
-   workspace directory except what sits inside a directory whose name starts
-   with `.`, which keeps `.secrets/` out.
+   It prints `{"tool", "arguments"}`; its docstring states which files a
+   package or workspace request carries, and `.secrets/` is never one.
 2. Call the server's tool named by `tool` with `arguments`, verbatim.
 3. Return the envelope the tool answers.
 

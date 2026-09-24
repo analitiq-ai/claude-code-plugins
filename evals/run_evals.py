@@ -65,8 +65,8 @@ that breaks any of this, before a single agent runs.
                what the surrounding sentence means.
     validate — `{package, package_kind}` or `{workspace}`, a directory
                relative to the working directory. Graded as a package or a
-               workspace request built from the files there the contract
-               locates.
+               workspace request built by the plugin's request builder
+               from the files there.
     docs     — name → `{glob, where?}`, resolving one document per name for
                assertions. `where` selects by top-level field value where a glob
                matches more than one.
