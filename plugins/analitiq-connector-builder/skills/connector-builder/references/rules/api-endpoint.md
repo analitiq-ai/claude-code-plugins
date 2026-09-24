@@ -68,7 +68,7 @@ than edited.
 | RULE-ENDP-069 | Every `${...}` placeholder in a `filters` map template landing MUST begin with a declared resolution scope. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-073 | A response extraction's `records.ref` MUST be `response.body` or start with `response.body.`. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-075 | A query parameter that declares a serialization `style` together with an `explode` flag MUST declare a pairing that has a defined query-string serialization, and when the parameter's declared type is a container, a pairing that serializes that container type. | `api-endpoint` | error | validator | — |
-| RULE-ENDP-076 | A parameter's declared numeric bounds MUST be finite, and no declared lower bound — `minimum`, `minLength`, `minItems` — MUST exceed the upper bound it pairs with. | `api-endpoint` | error | validator | — |
+| RULE-ENDP-076 | A parameter's declared numeric bounds and numeric `enum` members MUST be finite, and no declared lower bound — `minimum`, `minLength`, `minItems` — MUST exceed the upper bound it pairs with. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-079 | A request's `query` map MUST NOT declare a key whose value is a bare `null`. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-080 | A write operation's `idempotency` placed in a header MUST name that header with an HTTP field-name token. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-082 | A write mode that declares batching MUST NOT declare a form-encoded (`application/x-www-form-urlencoded`) request `content_type`, matched on the media type with its parameters dropped and case folded. | `api-endpoint` | error | validator | — |
