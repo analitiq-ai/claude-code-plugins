@@ -40,6 +40,7 @@ from analitiq.contracts.shared.common import (
     validate_display_name,
     validate_tags,
 )
+from analitiq.contracts.shared.ecma_pattern import case_insensitive_ecma
 from analitiq.contracts.shared.types import UUID_PATTERN
 
 CONNECTION_SCHEMA_URL = schema_url_for("connection")
@@ -77,19 +78,6 @@ def _looks_secret(key: str) -> bool:
     )
 
 
-def _to_case_insensitive_ecma(pattern: str) -> str:
-    """Inline case-insensitivity for a JSON-Schema `pattern`.
-
-    ECMA `pattern` (JSON Schema) has no inline `(?i)` flag, so mirror the runtime
-    `re.IGNORECASE` by expanding each ASCII letter to a two-character class
-    (`s` -> `[Ss]`). The source patterns use letters only inside keyword literals,
-    never inside structural constructs, so the transform is lossless.
-    """
-    return re.sub(
-        r"[A-Za-z]", lambda m: f"[{m.group().upper()}{m.group().lower()}]", pattern
-    )
-
-
 # ECMA-262 mirror of `_looks_secret`, derived from the SAME Python sources: the
 # unanchored `.search()` regex (case-folded) OR any bare EXACT member (anchored,
 # case-folded — the unanchored regex does not match a bare `token`/`key`). The
@@ -104,13 +92,13 @@ def _to_case_insensitive_ecma(pattern: str) -> str:
 # map key ending in "\n" can be blocked by the runtime yet slip the published
 # pattern. The runtime `_looks_secret` gate stays authoritative — a leaked key
 # still fails on ingest — so external consumers get best-effort structural
-# coverage, not a security boundary. `_to_case_insensitive_ecma` is also lossless
+# coverage, not a security boundary. `case_insensitive_ecma` is also lossless
 # only because the source patterns use letters solely in keyword literals; a
 # future `\w`/`[a-z]` in structural position would need re-checking.
 _SECRET_KEY_ECMA_PATTERN: str = "|".join(
-    [_to_case_insensitive_ecma(_NON_SECRET_FIELD_KEY_RE.pattern)]
+    [case_insensitive_ecma(_NON_SECRET_FIELD_KEY_RE.pattern)]
     + [
-        rf"^{_to_case_insensitive_ecma(key)}$"
+        rf"^{case_insensitive_ecma(key)}$"
         for key in sorted(_NON_SECRET_FIELD_KEY_EXACT)
     ]
 )

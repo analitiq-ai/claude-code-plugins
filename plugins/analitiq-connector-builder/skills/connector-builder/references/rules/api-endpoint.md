@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Covers: every rule this plugin owns that binds an **`api-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 16 of the 94 below have no validator, so nothing rejects
+all hold: 16 of the 95 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **41** shape · **36** coherence · **8** reference · **4** process · **5** choice.
+In this file: **42** shape · **36** coherence · **8** reference · **4** process · **5** choice.
 
 ## Contents
 
@@ -71,6 +71,7 @@ than edited.
 | RULE-ENDP-076 | A parameter's declared numeric bounds and numeric `enum` members MUST be finite, and no declared lower bound — `minimum`, `minLength`, `minItems` — MUST exceed the upper bound it pairs with. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-079 | A request's `query` map MUST NOT declare a key whose value is a bare `null`. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-080 | A write operation's `idempotency` placed in a header MUST name that header with an HTTP field-name token. | `api-endpoint` | error | validator | — |
+| RULE-ENDP-082 | A write mode that declares batching MUST NOT declare a form-encoded (`application/x-www-form-urlencoded`) request `content_type`, matched on the media type with its parameters dropped and case folded. | `api-endpoint` | error | validator | — |
 | RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | `content-length` |
 | RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | `content-type` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |

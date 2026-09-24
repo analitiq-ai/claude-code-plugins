@@ -97,12 +97,14 @@ from analitiq.contracts.shared.types import (
     StrictPositiveInt,
 )
 from analitiq.contracts.value_expression import (
+    FORM_CONTENT_TYPE_PATTERN,
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
     header_name_key,
     _EXPRESSION_KEYS as _RESOLVER_EXPRESSION_KEYS,
     has_known_scope,
     has_unterminated_placeholder,
+    is_form_content_type,
     iter_expression_nodes,
     iter_expression_strings,
     template_placeholders,
@@ -2519,18 +2521,19 @@ class WriteOperation(_EndpointModel):
                 {"properties": {"idempotency": {"type": "null"}}},
                 {"properties": {"batching": {"type": "null"}}},
             ],
-            # Published-schema mirror of the `_wiring` body-placement guard:
-            # `idempotency.in: "body"` needs an object request body to inject
-            # into, so a literal non-object `request.body` template is
-            # unauthorable. Template-level only — an expression body
-            # (`{"from_input": ...}`) is an object template whose resolved
-            # shape JSON Schema cannot see; the model's static resolution and
-            # the engine's configure gate own those cases. A sibling `allOf`
-            # (not `if`/`then`, and not folded into the anyOf above, which
-            # would loosen it): the guard binds only documents using the new
-            # 9.1.0 field, so it is semantically additive, and this is the
-            # conjunction form the version classifier also reads as additive.
+            # Further `_wiring` mirrors, each a sibling conjunct: folding one
+            # into the anyOf above would loosen it.
             "allOf": [
+                # Body-placement guard: `idempotency.in: "body"` needs an
+                # object request body to inject into, so a literal non-object
+                # `request.body` template is unauthorable. Template-level only
+                # — an expression body (`{"from_input": ...}`) is an object
+                # template whose resolved shape JSON Schema cannot see; the
+                # model's static resolution and the engine's configure gate
+                # own those cases. Not `if`/`then`: this guard binds only
+                # documents using `idempotency`, introduced in 9.1.0, so it
+                # is semantically additive, and a conjunct is the form the
+                # version classifier also reads as additive.
                 {
                     "anyOf": [
                         {"properties": {"idempotency": {"anyOf": [
@@ -2541,6 +2544,22 @@ class WriteOperation(_EndpointModel):
                             "properties": {"body": {"type": "object"}},
                             "required": ["body"],
                         }}},
+                    ],
+                },
+                # Batched-write × form-content-type guard: a batched body
+                # binds the `records` list, which has no flat name/value form
+                # encoding. It tightens: `batching` and `request.content_type`
+                # both predate it, so it rejects documents earlier versions
+                # accepted. An absent `content_type` passes because
+                # `properties` never evaluates a key the instance lacks; an
+                # explicit null fails the inner `type: string`, so the `not`
+                # holds.
+                {
+                    "anyOf": [
+                        {"properties": {"batching": {"type": "null"}}},
+                        {"properties": {"request": {"properties": {"content_type": {
+                            "not": {"type": "string", "pattern": FORM_CONTENT_TYPE_PATTERN},
+                        }}}}},
                     ],
                 },
             ],
@@ -2652,6 +2671,15 @@ class WriteOperation(_EndpointModel):
                 "from_input in request.path_params cannot be combined with batching — "
                 "a path segment takes one record's value and a multi-record request "
                 "has no single record to take it from (spec: §Write Modes)"
+            )
+
+        if self.batching is not None and is_form_content_type(self.request.content_type):
+            raise violation(
+                "RULE-ENDP-082", "batched-write-form-content-type",
+                f"batching cannot be combined with content_type "
+                f"{self.request.content_type!r} — a batched body binds the "
+                "`records` list and a form body carries only flat name/value pairs "
+                "(spec: §Write Modes)"
             )
 
         if self.conflict_keys is not None:

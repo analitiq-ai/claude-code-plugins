@@ -39,6 +39,7 @@ from analitiq.contracts.endpoints import (
     SingleCursorMapping,
     TemplateExpression,
     WindowCursorMapping,
+    WriteOperation,
     WriteRequest,
     WriteResponse,
     parse_endpoint,
@@ -1890,9 +1891,10 @@ class TestWriteIdempotency:
 
 class TestPublishedSchemaIdempotencyRule:
     """The PUBLISHED api-endpoint JSON Schema must enforce the same
-    idempotency rules the Pydantic model does — the shape itself and the
-    idempotency×batching exclusion, including agreeing with the model on
-    the fields' nullable defaults (`idempotency: null` / `batching: null`)."""
+    write-mode rules the Pydantic model does — the idempotency shape, the
+    idempotency×batching and batching×form-content-type exclusions, including
+    agreeing with the model on the fields' nullable defaults
+    (`idempotency: null` / `batching: null`)."""
 
     @staticmethod
     def _validator():
@@ -1900,7 +1902,7 @@ class TestPublishedSchemaIdempotencyRule:
         return Draft202012Validator(schema)
 
     @staticmethod
-    def _doc(idempotency="omit", batching="omit", body="default"):
+    def _doc(idempotency="omit", batching="omit", body="default", content_type="omit"):
         batched = isinstance(batching, dict)
         block = {
             "request": {"method": "POST", "path": "/v1/x",
@@ -1913,6 +1915,8 @@ class TestPublishedSchemaIdempotencyRule:
                 body if body != "default"
                 else {"r": {"from_input": "records" if batched else "record"}}
             )
+        if content_type != "omit":
+            block["request"]["content_type"] = content_type
         if idempotency != "omit":
             block["idempotency"] = idempotency
         if batching != "omit":
@@ -1954,6 +1958,26 @@ class TestPublishedSchemaIdempotencyRule:
         self._assert_agreement(self._doc(idempotency, body=body), valid,
                                f"idempotency={idempotency!r} body={body!r}")
 
+    @pytest.mark.parametrize("content_type,batching,valid", [
+        ("application/x-www-form-urlencoded", {"max_records": 100}, False),
+        # Case-insensitive and parameter-tolerant, as the model reads it.
+        ("Application/X-WWW-Form-URLEncoded; charset=utf-8", {"max_records": 100}, False),
+        # The pattern's end: trailing space is still the form type (`MediaType`
+        # admits it, leading space it refuses outright), a longer subtype
+        # sharing the form type's prefix is not.
+        ("application/x-www-form-urlencoded  ", {"max_records": 100}, False),
+        ("application/x-www-form-urlencoded  ", "omit", True),
+        ("application/x-www-form-urlencodedx", {"max_records": 100}, True),
+        ("application/json", {"max_records": 100}, True),
+        ("omit", {"max_records": 100}, True),
+        ("application/x-www-form-urlencoded", "omit", True),
+    ])
+    def test_published_schema_batched_form_rule_matches_model(
+        self, content_type, batching, valid,
+    ):
+        self._assert_agreement(self._doc(batching=batching, content_type=content_type),
+                               valid, f"content_type={content_type!r} batching={batching!r}")
+
     def _assert_agreement(self, doc, valid, label):
         errors = list(self._validator().iter_errors(doc))
         assert (not errors) == valid, (
@@ -1966,6 +1990,49 @@ class TestPublishedSchemaIdempotencyRule:
         except ValidationError:
             model_ok = False
         assert model_ok == valid, f"model/schema disagree for {label}"
+
+
+# ---------------------------------------------------------------------------
+# §Write Modes: batching × form content_type
+# ---------------------------------------------------------------------------
+
+
+class TestBatchedWriteContentType:
+    """A batched write binds `records`, a list, and a form body carries only
+    flat name/value pairs, so batching excludes a form-encoded `content_type`."""
+
+    @staticmethod
+    def _write_op(content_type, body, batching=None):
+        op = {
+            "request": {
+                "method": "POST",
+                "path": "/items",
+                "content_type": content_type,
+                "body": body,
+            },
+            "input": {"schema": {"type": "object", "properties": {
+                "id": {"type": "integer", "native_type": "integer", "arrow_type": "Int64"},
+            }}},
+        }
+        if batching is not None:
+            op["batching"] = batching
+        return op
+
+    @pytest.mark.parametrize("content_type", [
+        "application/x-www-form-urlencoded",
+        "Application/X-WWW-Form-Urlencoded; charset=utf-8",
+    ])
+    def test_batched_form_write_rejected(self, content_type):
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-082\]"):
+            WriteOperation.model_validate(self._write_op(
+                content_type, {"items": {"from_input": "records"}},
+                batching={"max_records": 50},
+            ))
+
+    def test_unbatched_form_write_accepted(self):
+        WriteOperation.model_validate(self._write_op(
+            "application/x-www-form-urlencoded", {"item": {"from_input": "record"}},
+        ))
 
 
 # ---------------------------------------------------------------------------
