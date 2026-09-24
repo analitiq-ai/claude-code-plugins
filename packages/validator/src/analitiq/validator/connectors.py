@@ -90,7 +90,7 @@ try:
         from analitiq.contracts.type_map import TYPE_MAP_DIRECTIONS, TYPE_MAP_SCHEMA_URL, TypeMapDoc
         # The contract's resolution and container test, so the validator's
         # rendering and warnings can't drift from the model's rule-validation.
-        from analitiq.contracts.type_map import _guard_container_not_collapsed, resolve_type
+        from analitiq.contracts.type_map import TypeResolver, _guard_container_not_collapsed
         # The executable Arrow vocabulary — the write-coverage probe set is
         # derived from it rather than sampled by hand.
         from analitiq.contracts import arrow_grammar
@@ -526,10 +526,8 @@ _ALL_WRITE_FAMILY_PROBES: tuple[str, ...] = tuple(
 
 def _write_vocabulary_findings(rules: list) -> list[dict]:
     """Warn when a write map renders no rule for an Arrow family."""
-    missing = [
-        probe for probe in _WRITE_VOCABULARY_PROBES
-        if resolve_type(probe, rules, "write") is None
-    ]
+    resolver = TypeResolver(rules, "write")
+    missing = [probe for probe in _WRITE_VOCABULARY_PROBES if resolver.resolve(probe) is None]
     if not missing:
         return []
     return [finding(
@@ -1247,8 +1245,9 @@ def _native_coverage_findings(ep_doc: dict, read_rules: list) -> list[dict]:
     """RULE-PKG-033: every native type the endpoint declares renders, through
     the connector's read rules, to the Arrow type it declares beside it."""
     findings: list[dict] = []
+    resolver = TypeResolver(read_rules, "read")
     for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
-        rendered = resolve_type(native, read_rules, "read")
+        rendered = resolver.resolve(native)
         if rendered is None:
             findings.append(finding(
                 rule="RULE-PKG-033",

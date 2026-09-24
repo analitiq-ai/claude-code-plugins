@@ -468,8 +468,9 @@ class TypeMapDoc(StrictModel):
 _MATCH_AND_RENDER_KEYS = {"read": ("native_type", "arrow_type"), "write": ("arrow_type", "native_type")}
 
 
-def resolve_type(value: str, rules: list, direction: TypeMapDirection) -> str | None:
-    r"""`value` rendered by the first of `rules` matching it, or None when none does.
+class TypeResolver:
+    r"""One direction's rules, compiled once, rendering a type by the first rule
+    matching it.
 
     Read matching normalizes the probe with `normalize_native_type`, and an
     `exact` rule's `native_type` the same way; a `regex` matcher is never
@@ -481,34 +482,41 @@ def resolve_type(value: str, rules: list, direction: TypeMapDirection) -> str | 
     map it is still grading: only an object with a string on both sides and a
     `match` of `exact`, or of `regex` with a matcher the contract accepts, can
     match; any other rule is skipped."""
-    matcher_key, render_key = _MATCH_AND_RENDER_KEYS[direction]
-    normalize = normalize_native_type if direction == "read" else None
-    probe = normalize(value) if normalize else value
-    for rule in rules:
-        if not isinstance(rule, dict):
-            continue
-        matcher_value = rule.get(matcher_key)
-        render_value = rule.get(render_key)
-        if not isinstance(matcher_value, str) or not isinstance(render_value, str):
-            continue
-        if rule.get("match") == "exact":
-            matcher = normalize(matcher_value) if normalize else matcher_value
-            if matcher == probe:
-                return render_value
-        elif rule.get("match") == "regex":
-            try:
-                compiled = compile_matcher(matcher_value)
-            except ValueError:
+
+    def __init__(self, rules: list, direction: TypeMapDirection) -> None:
+        matcher_key, render_key = _MATCH_AND_RENDER_KEYS[direction]
+        self._normalize = normalize_native_type if direction == "read" else None
+        self._rules: list[tuple[str | CompiledMatcher, str]] = []
+        for rule in rules:
+            if not isinstance(rule, dict):
                 continue
-            m = compiled.fullmatch(probe)
-            if not m:
+            matcher, render = rule.get(matcher_key), rule.get(render_key)
+            if not isinstance(matcher, str) or not isinstance(render, str):
                 continue
-            groups = m.groupdict()
-            return _PLACEHOLDER_RE.sub(
-                lambda ph: groups.get(ph.group(1)) or "" if ph.group(1) in groups else ph.group(0),
-                render_value,
-            )
-    return None
+            if rule.get("match") == "exact":
+                self._rules.append((self._normalize(matcher) if self._normalize else matcher, render))
+            elif rule.get("match") == "regex":
+                try:
+                    self._rules.append((compile_matcher(matcher), render))
+                except ValueError:
+                    continue
+
+    def resolve(self, value: str) -> str | None:
+        """`value` rendered by the first rule matching it, or None when none does."""
+        probe = self._normalize(value) if self._normalize else value
+        for matcher, render in self._rules:
+            if isinstance(matcher, str):
+                if matcher == probe:
+                    return render
+                continue
+            m = matcher.fullmatch(probe)
+            if m:
+                groups = m.groupdict()
+                return _PLACEHOLDER_RE.sub(
+                    lambda ph: groups.get(ph.group(1)) or "" if ph.group(1) in groups else ph.group(0),
+                    render,
+                )
+        return None
 
 
 # Coarse guards against an unbounded request, set far above what one
@@ -547,7 +555,7 @@ class ResolveTypesRequest(StrictModel):
         ),
     )
 
-    _rules: list = PrivateAttr(default_factory=list)
+    _resolver: TypeResolver | None = PrivateAttr(default=None)
 
     @model_validator(mode="after")
     def _maps_are_type_maps_carrying_the_direction(self) -> "ResolveTypesRequest":
@@ -562,8 +570,14 @@ class ResolveTypesRequest(StrictModel):
         # cover rather than the missing section it is.
         if all(section is None for section in sections):
             raise ValueError(f"no map carries a {self.direction!r} section")
-        self._rules = [rule for section in sections if section for rule in section]
+        self._resolver = TypeResolver(
+            [rule for section in sections if section for rule in section], self.direction)
         return self
+
+    @property
+    def resolver(self) -> TypeResolver:
+        """The maps' rules for the request's direction, in precedence order."""
+        return self._resolver
 
 
 class ResolvedTypes(TypedDict):
@@ -577,5 +591,5 @@ class ResolvedTypes(TypedDict):
 def resolve_types(request: ResolveTypesRequest) -> ResolvedTypes:
     """Translate every type in `request` through its maps, earliest map first."""
     types = list(dict.fromkeys(request.types))
-    resolved = {t: resolve_type(t, request._rules, request.direction) for t in types}
+    resolved = {t: request.resolver.resolve(t) for t in types}
     return {"resolved": resolved, "gaps": [t for t in types if resolved[t] is None]}

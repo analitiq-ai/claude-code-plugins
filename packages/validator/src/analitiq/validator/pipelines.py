@@ -47,7 +47,7 @@ from .connectors import _ALL_WRITE_FAMILY_PROBES, _check_endpoint_ids_unique
 with contract_model_domain():
     from pydantic import TypeAdapter
     from analitiq.contracts.pipelines.config import PipelineInput
-    from analitiq.contracts.type_map import resolve_type
+    from analitiq.contracts.type_map import TypeResolver
     from analitiq.contracts.pipeline_manifest import PipelineManifest
 
 _PIPELINE_ADAPTER = TypeAdapter(PipelineInput)
@@ -513,8 +513,9 @@ def _connection_write_shadow_probes(connection_rules: list, connector_rules: lis
             candidates = [value] if isinstance(value, str) else []
         else:
             candidates = list(_ALL_WRITE_FAMILY_PROBES) + connector_literals
+        resolver = TypeResolver([rule], "write")
         for probe in candidates:
-            if resolve_type(probe, [rule], "write") is not None:
+            if resolver.resolve(probe) is not None:
                 yield probe
 
 
@@ -545,9 +546,10 @@ def _check_connection_type_map_shadow(documents: _Documents) -> list[tuple[str, 
         connection_rules = connection_maps[0].content.get("write")
         if not isinstance(connection_rules, list):
             continue
+        connector_resolver = TypeResolver(connector_rules, "write")
         shadowed = sorted({
             probe for probe in _connection_write_shadow_probes(connection_rules, connector_rules)
-            if resolve_type(probe, connector_rules, "write") is not None
+            if connector_resolver.resolve(probe) is not None
         })
         if shadowed:
             findings.append((connection_maps[0].key, finding(

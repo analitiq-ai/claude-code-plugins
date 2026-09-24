@@ -3,7 +3,7 @@
 
 This is the gap-detection half of connection-scoped type-map authoring
 (`endpoint-spec/spec-type-map-gaps.md`). It holds no matching logic of its
-own — resolution is the pinned contract models' `resolve_type` (the same
+own — resolution is the pinned contract models' `TypeResolver` (the same
 first-match-wins, `${name}`-substituting, read-side-normalizing semantics the
 validator uses), so a probe resolves here exactly as the validator resolves it.
 
@@ -103,7 +103,7 @@ def _load_rules(path: Path, direction: str) -> list | None:
 
 def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
     """Resolve every probe through the concatenated rule lists, primary first."""
-    from analitiq.contracts.type_map import resolve_type
+    from analitiq.contracts.type_map import TypeResolver
 
     sections = [_load_rules(path, direction) for path in rule_files]
     # One map lacking the section is expected (a connection map is gap-only);
@@ -118,7 +118,8 @@ def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
     rules = [rule for section in sections if section for rule in section]
 
     probes = list(dict.fromkeys(probes))  # dedupe, order-preserving — one verdict per probe
-    resolved = {p: resolve_type(p, rules, direction) for p in probes}
+    resolver = TypeResolver(rules, direction)
+    resolved = {p: resolver.resolve(p) for p in probes}
     return {
         "direction": direction,
         "resolved": resolved,

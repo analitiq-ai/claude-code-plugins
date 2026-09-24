@@ -1,4 +1,4 @@
-"""Translating types through type maps: `resolve_type` over one rule list, and
+"""Translating types through type maps: a `TypeResolver` over one rule list, and
 `resolve_types` over a `ResolveTypesRequest` carrying the maps as text.
 
 A malformed request — including a map that is not a type map — is refused when
@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from analitiq.contracts.type_map import (
     TYPE_MAP_SCHEMA_URL,
     ResolveTypesRequest,
-    resolve_type,
+    TypeResolver,
     resolve_types,
 )
 
@@ -54,45 +54,56 @@ def _request(direction, types, maps) -> ResolveTypesRequest:
 def test_read_exact_rule_normalizes_both_sides():
     # Every runtime reader normalizes an exact rule's `native_type` the way it
     # normalizes the probe: trim, collapse whitespace runs, uppercase.
-    assert resolve_type("STRING", [_exact_read("string", "Utf8")], "read") == "Utf8"
-    assert resolve_type("character varying", [_exact_read("CHARACTER  VARYING", "Utf8")], "read") == "Utf8"
-    assert resolve_type("STRING", [_exact_read("BIGINT", "Int64")], "read") is None
+    assert TypeResolver([_exact_read("string", "Utf8")], "read").resolve("STRING") == "Utf8"
+    assert TypeResolver([_exact_read("CHARACTER  VARYING", "Utf8")], "read").resolve("character varying") == "Utf8"
+    assert TypeResolver([_exact_read("BIGINT", "Int64")], "read").resolve("STRING") is None
 
 
 def test_read_regex_matches_the_normalized_probe_not_the_authored_spelling():
     # The probe is uppercased before a regex sees it, so a lowercase literal
     # in the pattern never matches.
-    assert resolve_type("varchar(255)", [_regex_read(r"^varchar\((?<n>\d+)\)$", "Utf8")], "read") is None
-    assert resolve_type("varchar(255)", [_regex_read(r"^VARCHAR\((?<n>\d+)\)$", "Utf8")], "read") == "Utf8"
+    assert TypeResolver([_regex_read(r"^varchar\((?<n>\d+)\)$", "Utf8")], "read").resolve("varchar(255)") is None
+    assert TypeResolver([_regex_read(r"^VARCHAR\((?<n>\d+)\)$", "Utf8")], "read").resolve("varchar(255)") == "Utf8"
 
 
 def test_regex_captures_substitute_into_the_render():
     rules = [_regex_read(r"^DECIMAL\((?<p>\d+),(?<s>\d+)\)$", "Decimal128(${p}, ${s})")]
-    assert resolve_type("decimal(38,9)", rules, "read") == "Decimal128(38, 9)"
+    assert TypeResolver(rules, "read").resolve("decimal(38,9)") == "Decimal128(38, 9)"
 
 
 def test_regex_uses_re2_semantics():
     # RE2's `\d` is ASCII, so a rule spelling digits with it does not cover a
     # non-ASCII digit.
     rules = [_regex_read(r"^N\d$", "Int8")]
-    assert resolve_type("N3", rules, "read") == "Int8"
-    assert resolve_type("N٣", rules, "read") is None
+    assert TypeResolver(rules, "read").resolve("N3") == "Int8"
+    assert TypeResolver(rules, "read").resolve("N٣") is None
 
 
 def test_regex_leaves_a_probe_re2_cannot_read_unresolved():
     # Raw JSON can spell a lone surrogate, which has no UTF-8 encoding for RE2.
-    assert resolve_type("A\ud800", [_regex_read(r"^A.*$", "Utf8")], "read") is None
+    assert TypeResolver([_regex_read(r"^A.*$", "Utf8")], "read").resolve("A\ud800") is None
 
 
 def test_write_compares_the_arrow_type_as_authored():
     rules = [_exact_write("Utf8", "TEXT")]
-    assert resolve_type("Utf8", rules, "write") == "TEXT"
-    assert resolve_type("UTF8", rules, "write") is None
+    assert TypeResolver(rules, "write").resolve("Utf8") == "TEXT"
+    assert TypeResolver(rules, "write").resolve("UTF8") is None
 
 
 def test_first_matching_rule_wins():
     rules = [_exact_read("int", "Int32"), _exact_read("INT", "Int64")]
-    assert resolve_type("int", rules, "read") == "Int32"
+    assert TypeResolver(rules, "read").resolve("int") == "Int32"
+
+
+@pytest.mark.parametrize("rule", [
+    "INT",
+    {"native_type": "INT", "arrow_type": "Int64"},
+    {"match": "prefix", "native_type": "INT", "arrow_type": "Int64"},
+    {"match": "exact", "native_type": "INT", "arrow_type": 64},
+    {"match": "regex", "native_type": "(?P<n>INT)", "arrow_type": "Int64"},
+])
+def test_a_rule_that_cannot_match_is_skipped(rule):
+    assert TypeResolver([rule, _exact_read("INT", "Int32")], "read").resolve("int") == "Int32"
 
 
 def _within(seconds, call):
@@ -111,7 +122,7 @@ def _within(seconds, call):
 
 def test_returns_promptly_on_a_nested_quantifier():
     rules = [{"match": "regex", "arrow_type": r"(A+)+$", "native_type": "TEXT"}]
-    assert _within(5, lambda: resolve_type("A" * 10_000 + "B", rules, "write")) is None
+    assert _within(5, lambda: TypeResolver(rules, "write").resolve("A" * 10_000 + "B")) is None
 
 
 # --- the request ------------------------------------------------------------
@@ -181,3 +192,10 @@ def test_published_schema_accepts_a_request():
 ])
 def test_refuses_a_malformed_request(raw):
     _refused_by_both(raw)
+
+
+def test_a_request_compiles_each_matcher_once_not_once_per_type():
+    rules = [_regex_read(rf"^T{i}_(?<n>\d+)$", "Int64") for i in range(1000)]
+    request = _request("read", [f"t{i}_1" for i in range(500)], [_map(read=rules)])
+    result = _within(5, lambda: resolve_types(request))
+    assert result["gaps"] == []
