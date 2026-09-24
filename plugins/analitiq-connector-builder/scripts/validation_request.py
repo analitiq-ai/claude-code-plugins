@@ -11,8 +11,8 @@ passed verbatim; `left_out` is the caller's to report.
 
 An argument that names nothing exits non-zero rather than narrowing the
 request: an unknown mode or arity, a target that is missing, linked or not
-UTF-8 text, or a pipeline the workspace table does not locate, has no
-unlinked directory, or whose directory holds no document its package requires.
+UTF-8 text, or a pipeline the workspace table does not locate or whose
+directory neither holds nor reports every document its package requires.
 
 Under a package or workspace directory, an entry is in scope when a location
 the table does not mark `x-secret` could hold it — for a directory, some key
@@ -23,7 +23,7 @@ scope. Out of scope is skipped silently and never walked into. In scope:
 |---|---|
 | located regular file, readable UTF-8 text | submitted |
 | located entry that is a link, not a regular file (a directory included), unreadable, or not UTF-8 | `left_out`, never walked into |
-| unlocated directory that is a link (never followed) or unreadable | `left_out` |
+| unlocated directory that is a link (never followed) or unreadable | `left_out`, standing for every key beneath it |
 
 A workspace request carries every in-scope package, so a named pipeline's
 references resolve against what the project holds.
@@ -151,11 +151,11 @@ class _LeftOut(Exception):
 
 
 def _read(path: Path) -> str:
-    if path.is_symlink():
-        raise _LeftOut("a link, never followed")
-    if not path.is_file():
-        raise _LeftOut("not a regular file")
     try:
+        if path.is_symlink():
+            raise _LeftOut("a link, never followed")
+        if not path.is_file():
+            raise _LeftOut("not a regular file")
         return path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         raise _LeftOut("not UTF-8 text") from None
@@ -164,36 +164,36 @@ def _read(path: Path) -> str:
 
 
 def _collect(root: Path, scope: _Scope) -> tuple[dict[str, str], list[dict]]:
+    """The only reader of the tree under `root`; every decision about what a
+    request carries is made from what it returns."""
     documents: dict[str, str] = {}
     left_out: list[dict] = []
 
-    def key_of(path: str) -> str:
-        return Path(path).relative_to(root).as_posix()
-
-    def unreadable(exc: OSError) -> None:
-        key = key_of(exc.filename)
-        if key == ".":
-            raise RequestError(f"{root}: unreadable: {exc.strerror}")
-        left_out.append({"key": f"{key}/", "reason": f"unreadable: {exc.strerror}"})
-
-    for directory, subdirectories, names in os.walk(root, onerror=unreadable):
-        walked = []
-        for name in sorted([*subdirectories, *names]):
-            path = Path(directory, name)
-            key = key_of(path)
+    def walk(directory: Path, prefix: str) -> None:
+        try:
+            with os.scandir(directory) as listing:
+                entries = sorted(listing, key=lambda entry: entry.name)
+        except OSError as exc:
+            if not prefix:
+                raise RequestError(f"{root}: unreadable: {exc.strerror}") from None
+            left_out.append({"key": prefix, "reason": f"unreadable: {exc.strerror}"})
+            return
+        for entry in entries:
+            key = prefix + entry.name
             # A document location outranks directory reach: whatever sits
             # there is the document, never a directory to walk into.
             if scope.file(key):
                 try:
-                    documents[key] = _read(path)
+                    documents[key] = _read(Path(entry.path))
                 except _LeftOut as exc:
                     left_out.append({"key": key, "reason": str(exc)})
-            elif name in subdirectories and scope.directory(key):
-                if path.is_symlink():
+            elif scope.directory(key):
+                if entry.is_symlink():
                     left_out.append({"key": f"{key}/", "reason": "a link, never followed"})
-                else:
-                    walked.append(name)
-        subdirectories[:] = walked
+                elif entry.is_dir(follow_symlinks=False):
+                    walk(Path(entry.path), f"{key}/")
+
+    walk(root, "")
     return documents, left_out
 
 
@@ -226,14 +226,13 @@ def workspace_documents(directory: str, pipeline: str | None,
     if pipeline is None:
         return _collect(root, scope)
     package = f"pipelines/{pipeline}"
-    held = root / package
-    if not table.locates(f"{package}/") or held.is_symlink() or not held.is_dir():
-        raise RequestError(f"{pipeline}: no pipeline directory under {root / 'pipelines'}")
+    if not table.locates(f"{package}/"):
+        raise RequestError(f"{pipeline}: not a pipeline directory name")
     documents, left_out = _collect(root, scope)
     missing = [key for key in scope.package_at(package).required
                if not _accounted_for(f"{package}/{key}", documents, left_out)]
     if missing:
-        raise RequestError(f"{held}: holds no {', '.join(missing)}")
+        raise RequestError(f"{root / package}: holds no {', '.join(missing)}")
     return documents, left_out
 
 

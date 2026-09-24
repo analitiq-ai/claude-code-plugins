@@ -295,6 +295,32 @@ def test_a_named_pipeline_under_a_linked_directory_is_reported(tmp_path):
         {"key": "pipelines/", "reason": "a link, never followed"}]
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads any directory")
+@pytest.mark.parametrize("mode,expected", [
+    (0, [{"key": "pipelines/", "reason": "unreadable: Permission denied"}]),
+    # Readable but not searchable: its names list, nothing beneath opens.
+    (0o644, [{"key": "pipelines/p/", "reason": "unreadable: Permission denied"}]),
+])
+def test_a_named_pipeline_under_an_unreadable_pipelines_directory_is_reported(tmp_path, mode, expected):
+    _write(tmp_path, {"pipelines/p/pipeline.json": "{}"})
+    pipelines = tmp_path / "pipelines"
+    pipelines.chmod(mode)
+    try:
+        left_out = _build("workspace", tmp_path, "p")["left_out"]
+    finally:
+        pipelines.chmod(0o755)
+    assert left_out == expected
+
+
+def test_a_named_pipeline_behind_a_link_is_reported_whatever_the_link_holds(tmp_path):
+    (tmp_path / "outside").mkdir()
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "pipelines").symlink_to(tmp_path / "outside", target_is_directory=True)
+    assert _build("workspace", workspace, "p")["left_out"] == [
+        {"key": "pipelines/", "reason": "a link, never followed"}]
+
+
 def test_a_directory_at_a_document_location_is_reported_not_walked(tmp_path):
     _write(tmp_path, {"connection.json": "{}", "definition/type-map.json/inner.json": "{}"})
     assert _build("package", tmp_path, "connection")["left_out"] == [
