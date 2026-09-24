@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Covers: every rule this plugin owns that binds a **`type-map`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 15 of the 37 below have no validator, so nothing rejects
+all hold: 15 of the 38 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **16** shape · **8** coherence · **5** reference · **6** process · **2** choice.
+In this file: **16** shape · **8** coherence · **6** reference · **6** process · **2** choice.
 
 ## Contents
 
@@ -84,9 +84,10 @@ both artifacts, which is more than you are authoring at the moment.
 |---|---|---|---|---|
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
-| RULE-TMAP-018 | A connection-scoped type map MUST declare a rule only for a native_type or arrow_type its connector's own map leaves unresolved. | `type-map` | error | — |
+| RULE-TMAP-018 | A connection-scoped type map's write section MUST declare a rule only for an arrow_type its connector's own write map does not already render. | `type-map` | error | validator |
 | RULE-TMAP-019 | An Arrow family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope. | `type-map` | warning | — |
 | RULE-TMAP-021 | A connection-scoped read rule MUST render the Arrow type the endpoint document already froze for the native_type it matches. | `type-map` | error | — |
+| RULE-TMAP-024 | A connection-scoped type map's read section MUST declare a rule only for a native_type its connector's own read map does not already render. | `type-map` | error | — |
 
 ## Process
 

@@ -18,6 +18,7 @@ rationale: >
   case or spacing count as one rule here for the same reason they do at
   runtime. It warns rather than rejects because a map assembled from
   concatenated scopes can legitimately arrive with a repeat, which
-  `RULE-TMAP-018` is what settles.
+  `RULE-TMAP-018` settles for the write section and `RULE-TMAP-024` for the
+  read section.
 status: active
 superseded_by: null
