@@ -116,18 +116,37 @@ def test_every_secret_location_sits_under_a_dot_entry():
         assert pattern.startswith("^\\."), pattern
 
 
+def _file_link(package: Path) -> None:
+    (package / "definition").mkdir()
+    (package / "definition" / "type-map.json").symlink_to(package / "connection.json")
+
+
+def _fifo(package: Path) -> None:
+    os.mkfifo(package / "pipe.json")
+
+
+def _directory_link(package: Path) -> None:
+    locked = package.parent / "elsewhere" / "locked"
+    _write(locked, {"type-map.json": "{}"})
+    (package / "definition").symlink_to(locked)
+    locked.parent.chmod(0)
+
+
+def _unsent_link(package: Path) -> None:
+    (package / "linked.md").symlink_to(package / "missing")
+
+
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads anything")
-def test_an_entry_the_request_never_sends_is_never_read(tmp_path):
+@pytest.mark.parametrize("make", [_file_link, _fifo, _directory_link, _unsent_link])
+def test_an_entry_that_is_not_a_regular_file_or_directory_is_left_out(tmp_path, make):
     package = tmp_path / "package"
-    _write(tmp_path, {"package/connection.json": "{}", "elsewhere/locked/type-map.json": "{}"})
-    (package / "linked.md").symlink_to(tmp_path / "missing")
-    (package / "definition").symlink_to(tmp_path / "elsewhere" / "locked")
-    (tmp_path / "elsewhere").chmod(0)
-    os.mkfifo(package / "pipe")
+    _write(package, {"connection.json": "{}"})
+    make(package)
     try:
         documents = _build("package", package, "connection")["arguments"]["documents"]
     finally:
-        (tmp_path / "elsewhere").chmod(0o755)
+        if (tmp_path / "elsewhere").exists():
+            (tmp_path / "elsewhere").chmod(0o755)
     assert list(documents) == ["connection.json"]
 
 
@@ -146,28 +165,10 @@ def test_a_document_is_carried_as_the_text_on_disk(tmp_path):
         "arguments": {"document": '{"a": "é"}', "document_kind": "pipeline"}}
 
 
-def _link(root: Path) -> None:
-    (root / "definition").mkdir()
-    (root / "definition" / "type-map.json").symlink_to(root / "connection.json")
-
-
-def _not_utf8(root: Path) -> None:
-    (root / "latin1.json").write_bytes(b'{"a": "\xe9"}')
-
-
-def _fifo(root: Path) -> None:
-    os.mkfifo(root / "pipe.json")
-
-
-@pytest.mark.parametrize("make,entry,reason", [
-    (_link, "definition/type-map.json", "a link, never followed"),
-    (_not_utf8, "latin1.json", "not UTF-8 text"),
-    (_fifo, "pipe.json", "not a regular file"),
-])
-def test_an_entry_the_request_cannot_carry_refuses_it(tmp_path, make, entry, reason):
+def test_a_file_that_is_not_utf8_refuses_the_request(tmp_path):
     (tmp_path / "connection.json").write_text("{}")
-    make(tmp_path)
-    assert _refused("package", tmp_path, "connection") == f"{tmp_path / entry}: {reason}"
+    (tmp_path / "latin1.json").write_bytes(b'{"a": "\xe9"}')
+    assert _refused("package", tmp_path, "connection") == f"{tmp_path / 'latin1.json'}: not UTF-8 text"
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root reads anything")
