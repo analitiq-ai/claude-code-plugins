@@ -212,6 +212,32 @@ def test_rewriting_from_the_base_replaces_unmerged_versions_with_one_record(tree
     assert _bump_check(base) == 0
 
 
+def test_rewriting_from_the_base_replaces_an_unmerged_version_at_the_same_number(tree, models, monkeypatch):
+    resource, base = tree
+    models.extend(confident("minor"))
+    assert _write() == 0
+    render = render_schemas.render_schema
+    monkeypatch.setattr(
+        render_schemas, "render_schema", lambda *a, **kw: {**render(*a, **kw), "maxProperties": 50},
+    )
+    models.extend(confident("minor"))
+    assert _write("--previous", str(base)) == 0
+    assert render_schemas.load_latest(resource)["maxProperties"] == 50
+    assert _record(resource, "1.1.0")["from"] == "1.0.0"
+    assert _check() == 0
+    assert _bump_check(base) == 0
+
+
+def test_rewriting_from_the_base_refuses_to_change_the_base_version_and_deletes_nothing(tree, models):
+    resource, base = tree
+    models.extend(confident("minor"))
+    assert _write() == 0
+    render_schemas.write_json(base, render_schemas.render_latest(resource, "1.0.0"))
+    assert _write("--previous", str(base)) == 2
+    assert render_schemas.list_published_versions(resource) == ["1.0.0", "1.1.0"]
+    assert render_schemas.bump_record_path(resource, "1.1.0").exists()
+
+
 def _publish(tree, models, answers) -> tuple:
     resource, base = tree
     models.extend(answers)

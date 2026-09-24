@@ -2111,11 +2111,16 @@ def _rewrite_hint(resource: Resource) -> str:
     )
 
 
+def _is_unmerged(version: str, base_version: str) -> bool:
+    """Whether a pinned version is this branch's own, replaceable by a rewrite
+    from the base: a branch publishes one version per resource, recorded
+    against the base, so every version above the base is unmerged."""
+    return parse_semver(version) > parse_semver(base_version)
+
+
 def _drop_unmerged_versions(resource: Resource, base_version: str) -> None:
-    """Remove every pinned version above the base, and its record: a branch
-    publishes one version per resource, recorded against the base."""
     for version in list_published_versions(resource):
-        if parse_semver(version) > parse_semver(base_version):
+        if _is_unmerged(version, base_version):
             (resource.dir() / f"{version}.json").unlink()
             bump_record_path(resource, version).unlink(missing_ok=True)
 
@@ -2220,7 +2225,8 @@ def cmd_write(args: argparse.Namespace) -> int:
     latest = render_latest(resource, version)
 
     versioned_path = resource.dir() / f"{version}.json"
-    if versioned_path.exists() and not args.force:
+    replaceable = previous is not None and _is_unmerged(version, base_version)
+    if versioned_path.exists() and not replaceable and not args.force:
         existing = json.loads(versioned_path.read_text())
         if existing != pinned:
             print(
