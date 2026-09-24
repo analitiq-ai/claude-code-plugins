@@ -40,7 +40,7 @@ from ._core import (
     register_document_validator,
     register_kind,
 )
-from .connectors import _check_endpoint_ids_unique
+from .connectors import _ALL_WRITE_FAMILY_PROBES, _check_endpoint_ids_unique, _first_match_render
 
 # Import the single-document contract model under the shared DOMAIN guard (the
 # model binds the `$schema` host at import; see `contract_model_domain`).
@@ -478,6 +478,85 @@ def _check_connection_connector_refs(documents: _Documents) -> list[tuple[str, d
                     f"connection {connection_id!r} references connector "
                     f"{connector_id!r} but it is not among the connectors present "
                     f"({sorted(present)})."),
+            )))
+    return findings
+
+
+def _connection_write_shadow_probes(connection_rules: list, connector_rules: list) -> Iterator[str]:
+    """One probe per rule in `connection_rules` that the rule itself actually
+    matches: an `exact` rule's own literal `arrow_type`, tested exactly rather
+    than approximated by a family's representative spelling — the shadow this
+    guards against is a specific restated rule, and a narrower or differently
+    parameterized exact rule than the family probe would otherwise miss it. A
+    `regex` rule names no single literal, so it is tested against every family
+    probe AND every literal `connector_rules` itself declares via an `exact`
+    rule — a concrete value the connector's own map states is a real shadow
+    candidate whether or not it happens to be a family's representative
+    spelling. What this still cannot reach: a connection regex narrower than
+    every family probe and every connector literal, shadowing only a
+    connector `regex` rule's own matched range with no value either side
+    states concretely — deciding that needs a solve over both patterns, not a
+    probe, and is not attempted here."""
+    connector_literals = [
+        connector_rule.get("arrow_type")
+        for connector_rule in connector_rules
+        if isinstance(connector_rule, dict)
+        and connector_rule.get("match") == "exact"
+        and isinstance(connector_rule.get("arrow_type"), str)
+    ]
+    for rule in connection_rules:
+        if not isinstance(rule, dict):
+            continue
+        if rule.get("match") == "exact":
+            value = rule.get("arrow_type")
+            candidates = [value] if isinstance(value, str) else []
+        else:
+            candidates = list(_ALL_WRITE_FAMILY_PROBES) + connector_literals
+        for probe in candidates:
+            if _first_match_render(probe, [rule], "arrow_type", "native_type") is not None:
+                yield probe
+
+
+def _check_connection_type_map_shadow(documents: _Documents) -> list[tuple[str, dict]]:
+    """RULE-TMAP-018: a connection's write map must declare a rule only for an
+    Arrow type its connector's own write map does not already render. Silent
+    when the connector is unresolved (RULE-CONN-011's finding instead) or
+    when either side carries no write section — nothing to compare there,
+    not a violation."""
+    connector_write_rules = {
+        connector.package_id: doc.content.get("write")
+        for connector in documents["connector"]
+        for doc in documents["type-map"]
+        if doc.package == connector.package and isinstance(doc.content, dict)
+        and isinstance(doc.content.get("write"), list)
+    }
+    findings: list[tuple[str, dict]] = []
+    for connection in documents["connection"]:
+        if not isinstance(connection.content, dict):
+            continue
+        connector_id = connection.content.get("connector_id")
+        connector_rules = connector_write_rules.get(connector_id) if isinstance(connector_id, str) else None
+        if connector_rules is None:
+            continue
+        connection_maps = [doc for doc in documents["type-map"] if doc.package == connection.package]
+        if not connection_maps or not isinstance(connection_maps[0].content, dict):
+            continue
+        connection_rules = connection_maps[0].content.get("write")
+        if not isinstance(connection_rules, list):
+            continue
+        shadowed = sorted({
+            probe for probe in _connection_write_shadow_probes(connection_rules, connector_rules)
+            if _first_match_render(probe, connector_rules, "arrow_type", "native_type") is not None
+        })
+        if shadowed:
+            findings.append((connection_maps[0].key, finding(
+                rule="RULE-TMAP-018",
+                message_id="connection-write-map-shadows-connector", kind="fail", path="/write",
+                message=(
+                    f"the write section restates rules for these Arrow types connector "
+                    f"{connector_id!r}'s map already renders: {shadowed}. This silently "
+                    "overrides the connector's rendering for every stream on the "
+                    "connection — see RULE-TMAP-018 for why."),
             )))
     return findings
 
