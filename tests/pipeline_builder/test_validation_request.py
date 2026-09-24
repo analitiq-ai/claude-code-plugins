@@ -257,10 +257,36 @@ def test_a_linked_target_directory_is_refused(tmp_path):
         builder.build(["package", str(tmp_path / "link"), "connection"], rendered)
 
 
-def test_a_pipeline_with_no_directory_is_refused(tmp_path):
-    _write(tmp_path, {"pipelines/p/pipeline.json": "{}"})
+@pytest.mark.parametrize("pipeline", ["typo", "", ".", "..", "p/streams", "notes"])
+def test_a_pipeline_the_workspace_does_not_hold_is_refused(tmp_path, pipeline):
+    _write(tmp_path, {
+        "pipelines/p/pipeline.json": "{}",
+        "pipelines/p/streams/s.json": "{}",
+        "pipelines/notes/notes.json": "{}",
+    })
     with pytest.raises(builder.RequestError):
-        builder.build(["workspace", str(tmp_path), "typo"], rendered)
+        builder.build(["workspace", str(tmp_path), pipeline], rendered)
+
+
+def test_a_pipeline_whose_document_is_left_out_is_carried_as_reported(tmp_path):
+    _write(tmp_path, {"pipelines/p/pipeline.json": b"\xff"})
+    assert _build("workspace", tmp_path, "p")["left_out"] == [
+        {"key": "pipelines/p/pipeline.json", "reason": "not UTF-8 text"}]
+
+
+def test_a_directory_at_a_document_location_is_reported_not_walked(tmp_path):
+    _write(tmp_path, {"connection.json": "{}", "definition/type-map.json/inner.json": "{}"})
+    assert _build("package", tmp_path, "connection")["left_out"] == [
+        {"key": "definition/type-map.json", "reason": "not a regular file"}]
+
+
+def test_a_directory_link_at_a_document_location_is_reported_not_followed(tmp_path):
+    (tmp_path / "outside").mkdir()
+    package = tmp_path / "pkg"
+    _write(package, {"connection.json": "{}", "definition/.keep": ""})
+    (package / "definition" / "type-map.json").symlink_to(tmp_path / "outside", target_is_directory=True)
+    assert _build("package", package, "connection")["left_out"] == [
+        {"key": "definition/type-map.json", "reason": "a link, never followed"}]
 
 
 @pytest.mark.parametrize("content,link", [(None, False), (b"\xff", False), ("{}", True)])

@@ -11,7 +11,8 @@ passed verbatim; `left_out` is the caller's to report.
 
 An argument that names nothing exits non-zero rather than narrowing the
 request: an unknown mode or arity, a target that is missing, linked or not
-UTF-8 text, or a pipeline with no directory under `pipelines/`.
+UTF-8 text, or a pipeline the workspace table does not locate, has no
+unlinked directory, or whose directory holds no document its package requires.
 
 Under a package or workspace directory, an entry is in scope when a location
 the table does not mark `x-secret` could hold it — for a directory, some key
@@ -21,8 +22,8 @@ scope. Out of scope is skipped silently and never walked into. In scope:
 | entry | outcome |
 |---|---|
 | located regular file, readable UTF-8 text | submitted |
-| located file that is a link, not a regular file, unreadable, or not UTF-8 | `left_out` |
-| directory that is a link (never followed) or unreadable | `left_out` |
+| located entry that is a link, not a regular file (a directory included), unreadable, or not UTF-8 | `left_out`, never walked into |
+| unlocated directory that is a link (never followed) or unreadable | `left_out` |
 
 A workspace request carries every in-scope package, so a named pipeline's
 references resolve against what the project holds.
@@ -88,6 +89,7 @@ class _Table:
         self.locations = [pattern for pattern, entry in schema["patternProperties"].items()
                           if not entry.get("x-secret")]
         self.refs = {pattern: entry.get("$ref") for pattern, entry in schema["patternProperties"].items()}
+        self.required = schema.get("required", [])
 
     def locates(self, key: str) -> bool:
         return any(re.match(pattern, key) for pattern in self.locations)
@@ -127,6 +129,11 @@ class _Scope:
             if held:
                 return package.locates(key[held.end():])
         return self.table.locates(key)
+
+    def package_at(self, directory: str) -> _Table:
+        """The table of the package whose own directory is `directory`/."""
+        return next(package for prefix, package in self.packages.items()
+                    if re.match(f"{prefix}{_END}", f"{directory}/"))
 
     def directory(self, key: str) -> bool:
         if self._other_pipeline(key.split("/"), True):
@@ -171,22 +178,22 @@ def _collect(root: Path, scope: _Scope) -> tuple[dict[str, str], list[dict]]:
 
     for directory, subdirectories, names in os.walk(root, onerror=unreadable):
         walked = []
-        for name in sorted(subdirectories):
-            key = key_of(os.path.join(directory, name))
-            if not scope.directory(key):
-                continue
-            if Path(directory, name).is_symlink():
-                left_out.append({"key": f"{key}/", "reason": "a link, never followed"})
-            else:
-                walked.append(name)
-        subdirectories[:] = walked
-        for name in sorted(names):
-            key = key_of(os.path.join(directory, name))
+        for name in sorted([*subdirectories, *names]):
+            path = Path(directory, name)
+            key = key_of(path)
+            # A document location outranks directory reach: whatever sits
+            # there is the document, never a directory to walk into.
             if scope.file(key):
                 try:
-                    documents[key] = _read(Path(directory, name))
+                    documents[key] = _read(path)
                 except _LeftOut as exc:
                     left_out.append({"key": key, "reason": str(exc)})
+            elif name in subdirectories and scope.directory(key):
+                if path.is_symlink():
+                    left_out.append({"key": f"{key}/", "reason": "a link, never followed"})
+                else:
+                    walked.append(name)
+        subdirectories[:] = walked
     return documents, left_out
 
 
@@ -206,12 +213,20 @@ def package_documents(directory: str, package_kind: str,
 def workspace_documents(directory: str, pipeline: str | None,
                         fetch: Fetch = fetch_schema) -> tuple[dict[str, str], list[dict]]:
     root = _directory(directory)
-    if pipeline is not None:
-        held = root / "pipelines" / pipeline
-        if "/" in pipeline or held.is_symlink() or not held.is_dir():
-            raise RequestError(f"{pipeline}: no pipeline directory under {root / 'pipelines'}")
     table = _Table(fetch(f"{SCHEMA_HOST}/workspace/latest.json"))
-    return _collect(root, _Scope(table, fetch, pipeline))
+    scope = _Scope(table, fetch, pipeline)
+    if pipeline is None:
+        return _collect(root, scope)
+    package = f"pipelines/{pipeline}"
+    held = root / package
+    if not table.locates(f"{package}/") or held.is_symlink() or not held.is_dir():
+        raise RequestError(f"{pipeline}: no pipeline directory under {root / 'pipelines'}")
+    documents, left_out = _collect(root, scope)
+    carried = {*documents, *(entry["key"] for entry in left_out)}
+    missing = [key for key in scope.package_at(package).required if f"{package}/{key}" not in carried]
+    if missing:
+        raise RequestError(f"{held}: holds no {', '.join(missing)}")
+    return documents, left_out
 
 
 def _document_text(target: str) -> str:
