@@ -107,7 +107,7 @@ from analitiq.contracts.connector_package import ConnectorPackage  # noqa: E402
 from analitiq.contracts.pipeline_manifest import PipelineManifest  # noqa: E402
 from analitiq.contracts.pipeline_package import PipelinePackage  # noqa: E402
 from analitiq.contracts.workspace import Workspace  # noqa: E402
-from analitiq.contracts.type_map import TypeMapDoc  # noqa: E402
+from analitiq.contracts.type_map import ResolveTypesRequest, TypeMapDoc  # noqa: E402
 from analitiq.contracts.pipelines.config import PipelineInput  # noqa: E402
 from analitiq.contracts.pipelines.data_sync import (  # noqa: E402
     PipelineRunAcceptedResponse,
@@ -1139,6 +1139,20 @@ RESOURCES: tuple[Resource, ...] = (
         ),
         adapter=TypeAdapter(Workspace),
         source_paths=(f"{_CONTRACTS_PREFIX}/workspace.py",),
+    ),
+    Resource(
+        name="resolve-types-request",
+        title="Analitiq Resolve Types Request",
+        description=(
+            "Public JSON Schema contract for a request to translate types through "
+            "type maps: a direction, the types to translate, and the type maps as "
+            "file text in precedence order. The schema gates the request's shape; "
+            "whether each map is a type map is judged when the request is built. "
+            "Source of truth: analitiq.contracts.type_map.ResolveTypesRequest "
+            "(Pydantic)."
+        ),
+        adapter=TypeAdapter(ResolveTypesRequest),
+        source_paths=(f"{_CONTRACTS_PREFIX}/type_map.py",),
     ),
     Resource(
         name="validate-package-request",
