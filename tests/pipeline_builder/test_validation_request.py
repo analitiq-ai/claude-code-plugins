@@ -274,6 +274,27 @@ def test_a_pipeline_whose_document_is_left_out_is_carried_as_reported(tmp_path):
         {"key": "pipelines/p/pipeline.json", "reason": "not UTF-8 text"}]
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads any directory")
+def test_a_named_pipeline_whose_directory_is_unreadable_is_reported(tmp_path):
+    _write(tmp_path, {"pipelines/p/pipeline.json": "{}"})
+    held = tmp_path / "pipelines" / "p"
+    held.chmod(0)
+    try:
+        left_out = _build("workspace", tmp_path, "p")["left_out"]
+    finally:
+        held.chmod(0o755)
+    assert left_out == [{"key": "pipelines/p/", "reason": "unreadable: Permission denied"}]
+
+
+def test_a_named_pipeline_under_a_linked_directory_is_reported(tmp_path):
+    _write(tmp_path / "outside", {"p/pipeline.json": "{}"})
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "pipelines").symlink_to(tmp_path / "outside", target_is_directory=True)
+    assert _build("workspace", workspace, "p")["left_out"] == [
+        {"key": "pipelines/", "reason": "a link, never followed"}]
+
+
 def test_a_directory_at_a_document_location_is_reported_not_walked(tmp_path):
     _write(tmp_path, {"connection.json": "{}", "definition/type-map.json/inner.json": "{}"})
     assert _build("package", tmp_path, "connection")["left_out"] == [

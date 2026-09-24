@@ -197,6 +197,14 @@ def _collect(root: Path, scope: _Scope) -> tuple[dict[str, str], list[dict]]:
     return documents, left_out
 
 
+def _accounted_for(key: str, documents: dict[str, str], left_out: list[dict]) -> bool:
+    """Whether `key` is carried or reported; a left-out key ending in `/`
+    reports every key beneath it."""
+    return key in documents or any(
+        entry["key"] == key or (entry["key"].endswith("/") and key.startswith(entry["key"]))
+        for entry in left_out)
+
+
 def _directory(target: str) -> Path:
     path = Path(target)
     if path.is_symlink() or not path.is_dir():
@@ -222,8 +230,8 @@ def workspace_documents(directory: str, pipeline: str | None,
     if not table.locates(f"{package}/") or held.is_symlink() or not held.is_dir():
         raise RequestError(f"{pipeline}: no pipeline directory under {root / 'pipelines'}")
     documents, left_out = _collect(root, scope)
-    carried = {*documents, *(entry["key"] for entry in left_out)}
-    missing = [key for key in scope.package_at(package).required if f"{package}/{key}" not in carried]
+    missing = [key for key in scope.package_at(package).required
+               if not _accounted_for(f"{package}/{key}", documents, left_out)]
     if missing:
         raise RequestError(f"{held}: holds no {', '.join(missing)}")
     return documents, left_out
