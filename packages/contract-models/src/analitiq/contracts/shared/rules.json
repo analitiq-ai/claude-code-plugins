@@ -1926,7 +1926,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "HttpTransport",
    "rationale": "The endpoint document refuses this shape in its request slots (RULE-ENDP-022), and the grammar is why the shape matters everywhere: resolution dispatches on the one expression key it recognises, so of two markers only one can win and a stray sibling is an edit with nothing to take effect on. This rule is what grades the expression dicts in transport header maps, auth-exchange bodies, DSN bindings and driver kwargs, so the finding lands at the author's validation run, naming the site, instead of wherever a resolver first reads the node. The covered fields are the fields a runtime resolves — the same traced set RULE-CTOR-057 covers — and RULE-CTOR-057's rationale carries the transport blast-radius argument, which binds here too. Unlike the endpoint document, no `x-*` sibling is admitted: the authored connector contract is closed, so there is no extension policy for one to ride on. The permitted `function` siblings are the union of the argument fields across the function models, mirroring the dispatch, which reads them whichever function is named; per-function argument shapes are the typed union's job, and only where a field carries that union. The shape is the whole of this rule — whether a well-formed function node names a function the engine registers is RULE-SHRD-007, deliberately out of reach here.\n",
    "status": "active",
    "superseded_by": null
@@ -3160,7 +3160,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "WriteOperation",
    "rationale": "Encoding a path segment is engine-owned and unconditional, so an author reaching for an encoder here is not adding safety, they are adding a second pass: an id containing a space or a slash goes on the wire double-escaped and the provider either 404s or matches a different resource. Nothing downstream can tell a double-escaped value from one that genuinely contained a percent sign, so the mistake cannot be detected after the fact and is refused at authoring time. The check reaches the whole binding subtree, extension keys included, because the resolver executes what it finds there too.\n",
    "status": "active",
    "superseded_by": null
@@ -3185,7 +3185,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "WriteOperation",
    "rationale": "The other things that fill a param are read-side: a `filters` map entry makes it a stream's landing site, and controlled_by hands it to pagination or replication. Neither is reachable from a write, so a write param with no default has provably no source, and the placeholder it fills can never be substituted — a document that validates and is dead at the first request. Nothing else in the param's own shape refuses it, which is why it is worth refusing explicitly rather than leaving to discovery at run time; the diagnostic names the two ways out, giving the param a default or binding the segment to the record instead. Reads keep the latitude, because there a stream filter can supply the value.\n",
    "status": "active",
    "superseded_by": null
@@ -4183,7 +4183,7 @@
    "fields": [],
    "mechanism": null,
    "symbol": null,
-   "fixture_model": null,
+   "fixture_model": "WriteOperation",
    "rationale": "`required` says the operation is wrong without the value, and the document is what has to be able to supply it. Every declared param is bound by exactly one request binding, and the value that binding carries reaches it from the param's own `default`, from a `filters` landing, or from a pagination or replication block. `filters` and those blocks are read-side, so a write param has only its `default` — the argument RULE-ENDP-028 also makes, about a write path_param whether or not it is required, so neither rule contains the other. A required param with none of them resolves to nothing on every run, while the document says in the same breath that the operation is wrong that way. That contradiction is settled by reading one document, which is why it is refused where it is written rather than left to a run to discover. Being driven by a block is not the same as being given a value by one: a `controlled_by` marker is self-declared, only the block-to-param direction is checked anywhere, and a block can name a param and leave it with nothing. What that looks like differs by block, which is why the two are stated apart. A pagination strategy declares the first request's value, so a page size with no `default`, a keyset or an offset or page cursor whose `initial` carries no value, and an opaque cursor, which has no field for one because there is no cursor before the first page, each name a param and fill it never. A replication block declares no such value anywhere: its cursor comes from the state a run stores, so what decides is `supported_methods`, and one that never says `incremental` says no run will leave a cursor behind. Counting a mention would be worse than not checking, because the refusal names the blocks as a way out and an author would take it. What the refusal proves is that a source is DECLARED, never that it resolves: a `default` reffing a connection parameter the connection leaves unset, a param `filters` names but no stream filters, and a cursor param on a run that is not incremental or on a mapping the stream did not select, all pass, because which run and which stream is not something one document settles. RULE-ENDP-067 is the obligation over that remainder, and it is what says a param whose absence a legitimate run tolerates is not required in the first place. Nothing in the check reads `required` back out of any consumer, so it stays correct however the flag comes to be honoured; what a `filters` landing rests on is the registry service's resolution of a stream's filter, by record field and operator, against the map, the same consumer RULE-STRM-026 names.\n",
    "status": "active",
    "superseded_by": null

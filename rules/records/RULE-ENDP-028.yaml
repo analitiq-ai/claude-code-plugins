@@ -8,6 +8,7 @@ artifact_kinds: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [WriteOperation]
+fixture_model: WriteOperation
 rationale: >
   The other things that fill a param are read-side: a `filters` map entry
   makes it a stream's landing site, and controlled_by hands it to pagination
