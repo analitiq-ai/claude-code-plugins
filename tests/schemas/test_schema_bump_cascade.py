@@ -240,3 +240,19 @@ def test_an_unreachable_host_fails_loud(monkeypatch):
     _urlopen_answering(monkeypatch, [urllib.error.URLError("no route")])
     with pytest.raises(cascade.BumpClassificationError):
         cascade.openrouter_post("key", sleep=lambda _: None)(cascade.JEV_URL, {})
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [pytest.param(TimeoutError("read timed out"), id="timeout"), pytest.param(ConnectionResetError(), id="reset")],
+)
+def test_a_dropped_connection_fails_loud(monkeypatch, outcome):
+    _urlopen_answering(monkeypatch, [outcome])
+    with pytest.raises(cascade.BumpClassificationError):
+        cascade.openrouter_post("key", sleep=lambda _: None)(cascade.JEV_URL, {})
+
+
+def test_a_success_status_with_a_body_that_is_not_json_fails_loud(monkeypatch):
+    monkeypatch.setattr(cascade.urllib.request, "urlopen", lambda request, timeout: _Response(b"<html>"))
+    with pytest.raises(cascade.BumpClassificationError):
+        cascade.openrouter_post("key", sleep=lambda _: None)(cascade.JEV_URL, {})

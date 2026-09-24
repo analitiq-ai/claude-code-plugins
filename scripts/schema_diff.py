@@ -126,12 +126,11 @@ def _diff_lists(old: list, new: list, path: tuple[str, ...], context: str, chang
         for index, (o, n) in enumerate(zip(old, new)):
             _diff(o, n, (*path, str(index)), context, changes)
     else:
-        for item in old:
-            if item not in new:
-                _emit(changes, path, "ITEM-REMOVED", f": {_json(item)}")
-        for item in new:
-            if item not in old:
-                _emit(changes, path, "ITEM-ADDED", f": {_json(item)}")
+        old_counts, new_counts = Counter(map(_json, old)), Counter(map(_json, new))
+        for item in _in_order(old, old_counts - new_counts):
+            _emit(changes, path, "ITEM-REMOVED", f": {item}")
+        for item in _in_order(new, new_counts - old_counts):
+            _emit(changes, path, "ITEM-ADDED", f": {item}")
 
 
 def _diff_scalar_lists(old: list, new: list, path: tuple[str, ...], changes: list[Change]) -> None:

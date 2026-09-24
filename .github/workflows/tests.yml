@@ -124,16 +124,25 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
+          set -euo pipefail
+          # A base that does not resolve would make every resource look new,
+          # and an empty listing would check nothing; both must fail the job.
+          base="$(git rev-parse --verify "origin/$BASE_REF^{commit}")"
+          listing="$(python3 scripts/render_schemas.py list --latest)"
+          if [ -z "$listing" ]; then
+            echo "::error::render_schemas.py list --latest printed no resources"
+            exit 1
+          fi
           status=0
           while IFS=$'\t' read -r resource latest; do
             previous="$RUNNER_TEMP/$resource.base.json"
-            if git cat-file -e "origin/$BASE_REF:$latest" 2>/dev/null; then
-              git show "origin/$BASE_REF:$latest" > "$previous"
+            if git cat-file -e "$base:$latest" 2>/dev/null; then
+              git show "$base:$latest" > "$previous"
               python3 scripts/render_schemas.py bump-check --resource "$resource" --previous "$previous" || status=1
             else
               python3 scripts/render_schemas.py bump-check --resource "$resource" || status=1
             fi
-          done < <(python3 scripts/render_schemas.py list --latest)
+          done <<< "$listing"
           exit $status
 
   sample-budget-portability:

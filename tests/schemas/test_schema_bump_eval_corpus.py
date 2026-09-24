@@ -35,3 +35,24 @@ def test_the_labels_file_names_only_consecutive_pinned_pairs():
     scored = {c.name for c in CASES if c.corpus == "historical"}
     assert "api-endpoint 16.0.0→16.1.0" in scored
     assert "stream 18.0.2→19.0.0" not in scored
+
+
+def _answering(jev_confidence: float):
+    luna = {
+        "model": "l", "usage": {"cost": 0},
+        "choices": [{"finish_reason": "stop", "message": {"content": '{"reasoning":"r","bump":"major"}'}}],
+    }
+
+    def post(url, payload):
+        if url == cascade.JEV_URL:
+            answer = {"choice": "minor", "confidence": jev_confidence, "probabilities": {}}
+            return 200, {"model": "j", "answers": {"bump": answer}, "usage": {"cost": 0}}
+        return 200, luna
+
+    return post
+
+
+@pytest.mark.parametrize(("confidence", "counted"), [(cascade.CONFIDENCE_FLOOR, True), (0.69, False)])
+def test_a_stage1_miss_counts_against_the_floor_only_when_stage1_was_final(confidence, counted):
+    case = eval_schema_bumps.Case("synthetic", "probe", {"type": "object"}, {"type": "string"}, "major")
+    assert eval_schema_bumps._score(case, _answering(confidence))["stage1_confident_miss"] is counted

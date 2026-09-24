@@ -2059,8 +2059,8 @@ def bump_record_path(resource: Resource, version: str) -> Path:
     return BUMP_RECORDS_ROOT / resource.name / f"{version}.json"
 
 
-def _shown(record_path: Path) -> str:
-    return record_path.relative_to(BUMP_RECORDS_ROOT.parent).as_posix()
+def _shown(path: Path) -> str:
+    return path.relative_to(BUMP_RECORDS_ROOT.parent).as_posix()
 
 
 def build_bump_record(
@@ -2070,7 +2070,7 @@ def build_bump_record(
     diff_digest: str,
     override: dict | None,
 ) -> dict[str, Any]:
-    final = override["bump"] if override else decision.final
+    final = cascade.routed_bump(decision.stage1, decision.stage2, override)
     return {
         "resource": resource.name,
         "from": base_version,
@@ -2096,28 +2096,28 @@ def bump_record_problem(
         return f"records {record['from']} → {record['to']}, not {base_version} → {head_version}"
     if record["diff_sha256"] != diff_digest:
         return "was written for a different diff; the schema changed after the record was written"
-    decided = _recorded_decision(record)
-    if record["final"] != decided:
-        return f"has final {record['final']!r}, but its stages and override decide {decided!r}"
-    if record["final"] not in cascade.BUMPS or bump_version(base_version, record["final"]) != head_version:
+    problem = cascade.decision_problem(record["stage1"], record["stage2"], record["override"], record["final"])
+    if problem:
+        return problem
+    if bump_version(base_version, record["final"]) != head_version:
         return f"has final {record['final']!r}, which does not advance {base_version} to {head_version}"
     return None
 
 
-def _recorded_decision(record: dict) -> Any:
-    """The bump a record's override, else its last model stage, decides."""
-    override, stage2, stage1 = record["override"], record["stage2"], record["stage1"]
-    if override is not None:
-        valid = (
-            isinstance(override, dict)
-            and override.keys() == {"bump", "reason"}
-            and isinstance(override["reason"], str)
-            and override["reason"].strip()
-        )
-        return override["bump"] if valid else None
-    if stage2 is not None:
-        return stage2.get("bump") if isinstance(stage2, dict) else None
-    return stage1.get("choice") if isinstance(stage1, dict) else None
+def _rewrite_hint(resource: Resource) -> str:
+    latest = _shown(resource.dir() / "latest.json")
+    return (
+        f"`render_schemas.py write --resource {resource.name} --previous <the base branch's {latest}>`"
+    )
+
+
+def _drop_unmerged_versions(resource: Resource, base_version: str) -> None:
+    """Remove every pinned version above the base, and its record: a branch
+    publishes one version per resource, recorded against the base."""
+    for version in list_published_versions(resource):
+        if parse_semver(version) > parse_semver(base_version):
+            (resource.dir() / f"{version}.json").unlink()
+            bump_record_path(resource, version).unlink(missing_ok=True)
 
 
 def _check_bump_records(resource: Resource) -> list[str]:
@@ -2158,25 +2158,44 @@ def cmd_write(args: argparse.Namespace) -> int:
 
     The model cascade decides the bump; `--bump` with `--reason` overrides it
     in either direction, and the record keeps both. A new resource publishes
-    at 1.0.0 with no record, since there is no change to classify.
+    at 1.0.0 with no record, since there is no change to classify, so an
+    override there is refused, as it is when nothing changed. `--previous`
+    names the base branch's `latest.json`: the change is classified against
+    it, and versions this branch already published above it are replaced.
     """
     resource = get_resource(args.resource)
-    if (args.bump is None) != (args.reason is None):
-        print(f"{resource.name}: --bump and --reason go together.", file=sys.stderr)
-        return 2
-    committed = load_latest(resource)
+    override = None
+    if args.bump is not None or args.reason is not None:
+        override = {"bump": args.bump, "reason": args.reason}
+        problem = cascade.override_problem(override)
+        if problem:
+            print(f"{resource.name}: {problem}; pass --bump with a --reason.", file=sys.stderr)
+            return 2
+    previous = _load_previous_arg(args.previous, cmd="write")
+    committed = previous if previous is not None else load_latest(resource)
     base_version = (committed or {}).get("version") or "0.0.0"
+    if previous is not None and base_version not in list_published_versions(resource):
+        print(f"{resource.name}: --previous names {base_version!r}, which is not pinned here.", file=sys.stderr)
+        return 2
 
     # Rendered at the base version so only the model's change enters the diff.
     probe = render_latest(resource, base_version)
+    changes = diff(committed, probe) if committed is not None else []
+    if override is not None and not changes:
+        print(
+            f"{resource.name}: there is no change to classify, so --bump has nothing to override.",
+            file=sys.stderr,
+        )
+        return 2
     record = None
     if committed is None:
-        severity = "major"
-    else:
-        changes = diff(committed, probe)
-        if not changes:
+        version = bump_version(base_version, "major")
+    elif not changes:
+        if previous is None:
             print(f"{resource.name}: no change vs. committed {base_version} — nothing to write.")
             return 0
+        version = base_version
+    else:
         api_key = os.environ.get("OPENROUTER_API_KEY")
         if not api_key:
             print(
@@ -2191,14 +2210,12 @@ def cmd_write(args: argparse.Namespace) -> int:
         except cascade.BumpClassificationError as exc:
             print(f"{resource.name}: the change could not be classified: {exc}", file=sys.stderr)
             return 2
-        override = {"bump": args.bump, "reason": args.reason} if args.bump else None
         record = build_bump_record(
             resource, base_version, decision, diff_sha256([c.line for c in changes]), override
         )
-        severity = record["final"]
+        version = record["to"]
         print(f"{resource.name}: the models decided {decision.final!r} (cost ${decision.cost:.4f}).")
 
-    version = bump_version(base_version, severity)
     pinned = render_pinned(resource, version)
     latest = render_latest(resource, version)
 
@@ -2212,15 +2229,14 @@ def cmd_write(args: argparse.Namespace) -> int:
             )
             return 2
 
+    if previous is not None:
+        _drop_unmerged_versions(resource, base_version)
     write_json(versioned_path, pinned)
     write_json(resource.dir() / "latest.json", latest)
     write_json(resource.dir() / "index.json", build_index(resource))
     if record is not None:
         write_json(bump_record_path(resource, version), record)
-    print(
-        f"wrote {resource.name}/{version}.json + latest.json + index.json "
-        f"(bump {base_version} → {version}, '{severity}')"
-    )
+    print(f"wrote {resource.name}/{version}.json + latest.json + index.json ({base_version} → {version})")
     _refresh_document_schemas()
     _refresh_contracts_version()
     return 0
@@ -2373,7 +2389,7 @@ def cmd_bump_check(args: argparse.Namespace) -> int:
         if changes:
             print(
                 f"::error::{resource.name}: the schema changed but its version is still "
-                f"{head_version}. Run `render_schemas.py write --resource {resource.name}`.",
+                f"{head_version}. Run {_rewrite_hint(resource)}.",
                 file=sys.stderr,
             )
             return 1
@@ -2384,8 +2400,7 @@ def cmd_bump_check(args: argparse.Namespace) -> int:
     if not record_path.exists():
         print(
             f"::error::{resource.name}: {base_version} → {head_version} has no bump record at "
-            f"{_shown(record_path)}. Publish with "
-            f"`render_schemas.py write --resource {resource.name}`.",
+            f"{_shown(record_path)}. Run {_rewrite_hint(resource)}.",
             file=sys.stderr,
         )
         return 1
@@ -2399,8 +2414,7 @@ def cmd_bump_check(args: argparse.Namespace) -> int:
     )
     if problem:
         print(
-            f"::error::{resource.name}: {_shown(record_path)} {problem}. Re-run "
-            f"`render_schemas.py write --resource {resource.name}` from the base version.",
+            f"::error::{resource.name}: {_shown(record_path)} {problem}. Run {_rewrite_hint(resource)}.",
             file=sys.stderr,
         )
         return 1
@@ -2460,6 +2474,11 @@ def main(argv: list[str] | None = None) -> int:
     p_write.add_argument(
         "--reason",
         help="why --bump overrides the models; stored in the bump record",
+    )
+    p_write.add_argument(
+        "--previous",
+        help="Path to the PR base-branch latest.json. The change is classified "
+        "against it, and versions above it that this branch already wrote are replaced",
     )
     p_write.add_argument(
         "--force",

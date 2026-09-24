@@ -1,9 +1,10 @@
 """Synthetic schema pairs with a known bump, one per structural class.
 
 The historical corpus is small, and the confidence floor was chosen on the same
-data it is scored on; these pairs are what validate the floor. Each pair
-changes one thing on `_base()`, a closed object, so adding an optional
-property only widens and removing one only narrows.
+data it is scored on; these pairs are what validate the floor. Every schema
+is built from `_base()`, a closed object, so adding an optional property only
+widens and removing one only narrows; each pair differs by the change its name
+states.
 """
 from __future__ import annotations
 
@@ -115,7 +116,7 @@ PAIRS: list[Pair] = [
         _edited(lambda s: _props(s).update(source={"oneOf": [{"$ref": "#/$defs/Table"}, {"$ref": "#/$defs/Query"}]})),
         "minor",
     ),
-    # The under-bump families of the structural classifier this cascade replaced.
+    # Tightenings that read as additions: each adds a key or a list item.
     Pair("allOf conjunct appended", _base(), _edited(lambda s: s.update(allOf=[{"minProperties": 3}])), "major"),
     Pair(
         "allOf with if/then introduced", _base(),

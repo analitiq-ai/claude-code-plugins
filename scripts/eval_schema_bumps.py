@@ -94,11 +94,7 @@ def _score(case: Case, post: cascade.Post) -> dict:
         "stage1": stage1,
         "escalated": decision.stage2 is not None,
         "cost": decision.cost,
-        "stage1_confident_miss": (
-            "choice" in stage1
-            and stage1["choice"] != case.label
-            and stage1["confidence"] >= cascade.CONFIDENCE_FLOOR
-        ),
+        "stage1_confident_miss": cascade.stage1_is_final(stage1) and stage1["choice"] != case.label,
     }
 
 

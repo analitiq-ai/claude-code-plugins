@@ -136,12 +136,19 @@ def openrouter_post(api_key: str, *, sleep: Callable[[float], None] = time.sleep
         while True:
             try:
                 with urllib.request.urlopen(request, timeout=300) as response:
-                    return response.status, json.loads(response.read())
+                    status, raw = response.status, response.read()
             except urllib.error.HTTPError as error:
                 if error.code not in _RETRY_STATUSES or attempt == len(_RETRY_DELAYS):
                     return error.code, _error_body(error)
-            except urllib.error.URLError as error:
-                raise BumpClassificationError(f"cannot reach {url}: {error.reason}") from error
+            except OSError as error:
+                raise BumpClassificationError(f"cannot reach {url}: {error!r}") from error
+            else:
+                try:
+                    return status, json.loads(raw)
+                except json.JSONDecodeError as error:
+                    raise BumpClassificationError(
+                        f"{url} returned HTTP {status} with a body that is not JSON: {raw[:500]!r}"
+                    ) from error
             sleep(_RETRY_DELAYS[attempt])
             attempt += 1
 
@@ -162,10 +169,75 @@ def decide(resource: str, old: dict, new: dict, changes: list[Change], post: Pos
         raise ValueError("an empty diff needs no classification")
     lines = [change.line for change in changes]
     stage1, cost = _ask_jev(resource, lines, post)
-    if "choice" in stage1 and stage1["confidence"] >= CONFIDENCE_FLOOR:
-        return Decision(stage1, None, stage1["choice"], cost)
+    if stage1_is_final(stage1):
+        return Decision(stage1, None, routed_bump(stage1, None, None), cost)
     stage2, luna_cost = _ask_luna(stage2_payload(resource, old, new, changes), post)
-    return Decision(stage1, stage2, stage2["bump"], cost + luna_cost)
+    return Decision(stage1, stage2, routed_bump(stage1, stage2, None), cost + luna_cost)
+
+
+def stage1_is_final(stage1: dict) -> bool:
+    """Whether Jev decides alone: it answered, at or above the floor."""
+    return "choice" in stage1 and stage1["confidence"] >= CONFIDENCE_FLOOR
+
+
+def routed_bump(stage1: dict, stage2: dict | None, override: dict | None) -> str:
+    """The bump that stands: the override, else the stage the routing made final."""
+    if override is not None:
+        return override["bump"]
+    return stage1["choice"] if stage1_is_final(stage1) else stage2["bump"]
+
+
+def override_problem(override: Any) -> str | None:
+    """Why `override` is not a bump with a reason; None when it is."""
+    if (
+        not isinstance(override, dict)
+        or override.keys() != {"bump", "reason"}
+        or override["bump"] not in BUMPS
+        or not isinstance(override["reason"], str)
+        or not override["reason"].strip()
+    ):
+        return f"override {_brief(override)} is not a bump in {BUMPS} with a non-blank reason"
+    return None
+
+
+def decision_problem(stage1: Any, stage2: Any, override: Any, final: Any) -> str | None:
+    """Why these stages, override and final are not what `decide` and an
+    override produce together; None when they are."""
+    if not _is_stage1(stage1):
+        return f"stage1 {_brief(stage1)} is neither a Jev answer nor a skipped Jev call"
+    if stage2 is not None and not _is_stage2(stage2):
+        return f"stage2 {_brief(stage2)} is not a Luna answer"
+    if (stage2 is None) != stage1_is_final(stage1):
+        return f"stage 2 runs exactly when stage 1 has no answer at or above {CONFIDENCE_FLOOR}"
+    if override is not None and (problem := override_problem(override)):
+        return problem
+    decided = routed_bump(stage1, stage2, override)
+    if final != decided:
+        return f"has final {final!r}, but its stages and override decide {decided!r}"
+    return None
+
+
+def _is_stage1(stage1: Any) -> bool:
+    if stage1 == {"skipped": _JEV_OVERSIZED}:
+        return True
+    return (
+        isinstance(stage1, dict)
+        and stage1.keys() == {"model", "choice", "confidence", "probabilities"}
+        and isinstance(stage1["model"], str)
+        and stage1["choice"] in BUMPS
+        and _is_probability(stage1["confidence"])
+        and isinstance(stage1["probabilities"], dict)
+    )
+
+
+def _is_stage2(stage2: Any) -> bool:
+    return (
+        isinstance(stage2, dict)
+        and stage2.keys() == {"model", "bump", "reasoning"}
+        and isinstance(stage2["model"], str)
+        and stage2["bump"] in BUMPS
+        and isinstance(stage2["reasoning"], str)
+    )
 
 
 def _ask_jev(resource: str, lines: list[str], post: Post) -> tuple[dict, float]:
@@ -193,7 +265,7 @@ def _ask_jev(resource: str, lines: list[str], post: Post) -> tuple[dict, float]:
         cost = body["usage"]["cost"]
     except (KeyError, TypeError) as error:
         raise BumpClassificationError(f"Jev answer is missing {error}: {_brief(body)}") from error
-    if stage1["choice"] not in BUMPS or not _is_probability(stage1["confidence"]):
+    if not _is_stage1(stage1):
         raise BumpClassificationError(f"Jev answer is malformed: {_brief(body)}")
     return stage1, cost
 
@@ -236,11 +308,12 @@ def _ask_luna(payload: dict, post: Post) -> tuple[dict, float]:
         answer = json.loads(content)
     except json.JSONDecodeError as error:
         raise BumpClassificationError(f"Luna content is not JSON: {content!r}") from error
-    if not isinstance(answer, dict) or answer.get("bump") not in BUMPS:
-        raise BumpClassificationError(f"Luna answered no bump in {BUMPS}: {content!r}")
-    if not isinstance(answer.get("reasoning"), str):
-        raise BumpClassificationError(f"Luna answered no reasoning: {content!r}")
-    return {"model": model, "bump": answer["bump"], "reasoning": answer["reasoning"]}, cost
+    if not isinstance(answer, dict):
+        raise BumpClassificationError(f"Luna content is not a JSON object: {content!r}")
+    stage2 = {"model": model, "bump": answer.get("bump"), "reasoning": answer.get("reasoning")}
+    if not _is_stage2(stage2):
+        raise BumpClassificationError(f"Luna answered no bump in {BUMPS} with reasoning: {content!r}")
+    return stage2, cost
 
 
 def stage2_payload(resource: str, old: dict, new: dict, changes: list[Change]) -> dict:

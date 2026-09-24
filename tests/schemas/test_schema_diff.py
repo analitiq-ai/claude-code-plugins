@@ -41,6 +41,11 @@ from schema_diff import diff, diff_lines, diff_sha256  # noqa: E402
             {"allOf": [{"minLength": 1}, {"maxLength": 5}]}, {"allOf": [{"minLength": 1}, {"maxLength": 3}]},
             ["CHANGED allOf/1/maxLength: 5 -> 3"], id="equal-length-lists-recurse-positionally",
         ),
+        pytest.param(
+            {"anyOf": [{"type": "string"}, {"type": "string"}, {"type": "null"}]},
+            {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            ['ITEM-REMOVED anyOf: {"type":"string"}'], id="item-duplicate-removed",
+        ),
         pytest.param({}, {"title": "T"}, ['DOC-ADDED title = "T"'], id="doc-added"),
         pytest.param({"$comment": "c"}, {}, ['DOC-REMOVED $comment = "c"'], id="doc-removed"),
         pytest.param(
