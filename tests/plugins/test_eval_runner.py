@@ -162,7 +162,7 @@ def test_every_operator_declares_an_argument_check():
 BUILD = {
     "id": "s", "plugin": "analitiq-pipeline-builder", "why": "w", "prompt": "p",
     "expect": "build",
-    "validate": [{"glob": "a.json", "entity": "pipeline"}],
+    "validate": [{"workspace": "."}],
     "docs": {"d": {"glob": "a.json"}},
     "assert": [{"doc": "d", "path": "status", "absent": True, "rule": "RULE-SHRD-004"}],
 }
@@ -228,31 +228,24 @@ def test_an_assertion_must_read_a_document_docs_resolves():
     assert any("absent-name" in p for p in problems)
 
 
-def test_a_validate_spec_rejects_unknown_keys():
-    unknown = {"glob": "a.json", "entity": "pipeline", "schema_url": "https://x/y.json"}
-    assert any("unknown keys" in p for p in _problems({"validate": [unknown]}))
+@pytest.mark.parametrize("spec", [
+    {"package": "xero", "package_kind": "connector"},
+    {"workspace": "."},
+])
+def test_a_validate_spec_names_a_package_or_a_workspace(spec):
+    assert _problems({"validate": [spec]}) == []
 
 
-def test_a_validate_spec_entity_is_optional():
-    # No `entity`: the plain validator detects the document's kind from its
-    # own shape instead of the pipeline plugin's `--entity`-selected adapter.
-    assert _problems({"validate": [{"glob": "a.json"}]}) == []
-
-
-def test_a_validate_spec_must_name_a_glob():
-    problems = _problems({"validate": [{"entity": "pipeline"}]})
-    assert any("missing required key 'glob'" in p for p in problems)
-
-
-def test_a_validate_spec_bundle_root_without_entity_is_refused():
-    # bundle_root is only read on the entity route; naming it alone is a
-    # silent no-op the shape check must catch instead of blessing.
-    problems = _problems({"validate": [{"glob": "a.json", "bundle_root": "b"}]})
-    assert any("bundle_root" in p and "entity" in p for p in problems)
-
-
-def test_a_validate_spec_bundle_root_with_entity_is_accepted():
-    assert _problems({"validate": [{"glob": "a.json", "entity": "pipeline", "bundle_root": "b"}]}) == []
+@pytest.mark.parametrize("spec", [
+    {"glob": "a.json", "entity": "pipeline"},
+    {"package": "xero"},
+    {"package_kind": "connector"},
+    {"package": "xero", "package_kind": "connector", "workspace": "."},
+    {"package": "xero", "package_kind": "connector-package"},
+    {},
+])
+def test_a_validate_spec_of_any_other_shape_is_refused(spec):
+    assert any("validate spec" in p for p in _problems({"validate": [spec]}))
 
 
 def test_a_seed_source_that_does_not_exist_is_refused():
@@ -328,9 +321,9 @@ def test_resolve_docs_requires_exactly_one_and_honours_where(tmp_path):
     assert problems and not docs
 
 
-def test_run_validator_reports_a_glob_that_matched_nothing(tmp_path):
-    failures = runner.run_validator(tmp_path, {"glob": "nope/*.json", "entity": "pipeline"}, 60)
-    assert failures and "no document was written" in failures[0]
+def test_run_validator_reports_a_directory_that_was_never_written(tmp_path):
+    failures = runner.run_validator(tmp_path, {"package": "nope", "package_kind": "connector"}, 60)
+    assert failures and "nope" in failures[0] and "no directory" in failures[0]
 
 
 def test_check_refusal_needs_the_reason_as_well_as_the_silence(tmp_path):
@@ -422,8 +415,7 @@ def test_the_agent_does_not_inherit_the_graders_environment(monkeypatch, tmp_pat
     assert "ANALITIQ_VALIDATOR_FROM_SOURCE" not in agent_env
     assert str(REPO_ROOT / "packages") not in (agent_env.get("PYTHONPATH") or "")
 
-    (tmp_path / "a.json").write_text("{}")
-    runner.run_validator(tmp_path, {"glob": "a.json", "entity": "pipeline"}, 5)
+    runner.run_validator(tmp_path, {"workspace": "."}, 5)
     grader_env = seen[sys.executable]
     assert grader_env["ANALITIQ_VALIDATOR_FROM_SOURCE"] == "1", (
         "the grader keeps the in-repo source it grades against")

@@ -100,7 +100,7 @@ Destination `endpoint_ref`s must be unique within a single stream
 
 ## Cross-document consistency
 
-<!-- PROBE: stream-cross-document-unchecked-alone, stream-connection-role-bundle-rejected, stream-connection-endpoint-bundle-rejected -->
+<!-- PROBE: stream-cross-document-unchecked-alone, stream-connection-role-package-rejected, stream-connection-endpoint-workspace-rejected -->
 The connection roles (`RULE-STRM-033`) and connection-scoped endpoint
 resolution (`RULE-STRM-034`) are checked only with `--bundle-root`, since
 neither can be settled from the stream document alone.

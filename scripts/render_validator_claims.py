@@ -10,14 +10,12 @@ while CI stayed green.
 
 This module is the fix, in three parts:
 
-1. **Probes** — tiny documents run through the in-repo validator
-   (`analitiq.validator.validate_document`, the same entry the plugins invoke),
-   each asserting an outcome: rejected with a message, accepted clean, or
-   accepted silent (zero findings). A probe is a *measurement*; if the contract
-   moves under it, `verify_probes()` fails and CI goes red. A claim about what
-   a plugin's own adapter does — the pipeline plugin stitches a bundle off disk
-   before grading it — is measured through that adapter instead, which is the
-   entry its agent runs; the findings list is the same shape either way.
+1. **Probes** — tiny documents run through the in-repo validator, each
+   asserting an outcome: rejected with a message, accepted clean, or accepted
+   silent (zero findings). A probe is a *measurement*; if the contract moves
+   under it, `verify_probes()` fails and CI goes red. A claim about a check
+   that needs a second document in hand is measured through the package or
+   workspace request the plugin submits, since only that request runs it.
 2. **Claims** — the prose sentences themselves, authored ONCE here, each naming
    the probes that prove it. Marked regions in the plugin docs
    (`<!-- BEGIN GENERATED: <block-id> -->` … `END GENERATED`, the same marker
@@ -99,8 +97,9 @@ STREAM_EXAMPLE = (
 )
 #: The two connection documents `STREAM_EXAMPLE` and `PIPELINE_EXAMPLE` already
 #: reference by `connection_id`, plus the endpoint document a database
-#: destination has to resolve to. Staged together they make an on-disk bundle
-#: out of documents `tests/pipeline_builder/test_examples.py` already validates.
+#: destination has to resolve to. Wired together they make a package and a
+#: workspace out of documents `tests/pipeline_builder/test_examples.py` already
+#: validates.
 CONNECTION_EXAMPLES = PIPELINE_PLUGIN / "skills" / "connection-spec" / "examples"
 SOURCE_CONNECTION_EXAMPLE = CONNECTION_EXAMPLES / "none.example.json"
 DESTINATION_CONNECTION_EXAMPLE = CONNECTION_EXAMPLES / "db.example.json"
@@ -771,28 +770,18 @@ def _p_pipeline_copied_default() -> list[dict]:
     return _validate(doc)
 
 
-def _staged_pipeline_bundle(
-    status: str,
-    mutate_stream: Callable[[dict], None] | None = None,
-) -> list[dict]:
-    """The shipped examples laid out on disk as a bundle, graded at `status`.
+def _wired_examples(status: str, mutate_stream: Callable[[dict], None] | None) -> dict:
+    """The shipped examples wired into one pipeline at `status`, by role.
 
-    A cross-document verdict is one the pipeline plugin reaches by stitching a
-    bundle off disk, which `scripts/validate.py` does, so measuring such a
-    claim means calling the adapter the agent runs, not `validate_document`.
-    Everything but the wiring comes from the bundled
-    examples — the pipeline's `streams` list and the destination ref are
-    repointed because no example pair ships pre-stitched.
-
-    `mutate_stream` runs after that repointing, so a probe can break exactly one
-    cross-document agreement in a bundle that is otherwise the shipped set.
+    Everything but the wiring comes from the bundled examples — the pipeline's
+    `streams` list and the destination ref are repointed because no example
+    pair ships pre-stitched. `mutate_stream` runs after that repointing, so a
+    probe can break exactly one cross-document agreement in a set that is
+    otherwise the shipped one.
     """
     pipeline = json.loads(PIPELINE_EXAMPLE.read_text())
     stream = json.loads(STREAM_EXAMPLE.read_text())
     endpoint = json.loads(ENDPOINT_EXAMPLE.read_text())
-    source = json.loads(SOURCE_CONNECTION_EXAMPLE.read_text())
-    destination = json.loads(DESTINATION_CONNECTION_EXAMPLE.read_text())
-
     pipeline["status"] = status
     pipeline["streams"] = [stream["stream_id"]]
     destination_ref = stream["destinations"][0]["endpoint_ref"]
@@ -800,34 +789,55 @@ def _staged_pipeline_bundle(
     destination_ref["database_object"] = endpoint["database_object"]
     if mutate_stream is not None:
         mutate_stream(stream)
+    return {
+        "pipeline": pipeline, "stream": stream, "endpoint": endpoint,
+        "source": json.loads(SOURCE_CONNECTION_EXAMPLE.read_text()),
+        "destination": json.loads(DESTINATION_CONNECTION_EXAMPLE.read_text()),
+    }
 
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        (root / "pipelines" / "p" / "streams").mkdir(parents=True)
-        document = root / "pipelines" / "p" / "pipeline.json"
-        document.write_text(json.dumps(pipeline))
-        (root / "pipelines" / "p" / "streams" / "s.json").write_text(json.dumps(stream))
-        for connection in (source, destination):
-            slug = connection["connector_id"]
-            (root / "connections" / slug).mkdir(parents=True)
-            (root / "connections" / slug / "connection.json").write_text(json.dumps(connection))
-            definition = root / "connectors" / slug / "definition"
-            definition.mkdir(parents=True)
-            (definition / "connector.json").write_text(json.dumps({"connector_id": slug}))
-        endpoints = (root / "connections" / destination["connector_id"]
-                     / "definition" / "endpoints")
-        endpoints.mkdir(parents=True)
-        (endpoints / f"{endpoint['endpoint_id']}.json").write_text(json.dumps(endpoint))
-        return _pipeline_adapter().diagnostics_for(
-            "pipeline", document, bundle_root=root)["findings"]
+
+def _pipeline_package(status: str, mutate_stream: Callable[[dict], None] | None = None) -> list[dict]:
+    """The wired pipeline and its stream graded as a pipeline package — what
+    the pipeline plugin submits once a pipeline is authored."""
+    from analitiq.contracts.validation_requests import ValidatePackageRequest
+    from analitiq.validator import validate_package
+
+    wired = _wired_examples(status, mutate_stream)
+    request = ValidatePackageRequest(package_kind="pipeline", documents={
+        "pipeline.json": json.dumps(wired["pipeline"]),
+        "streams/s.json": json.dumps(wired["stream"]),
+    })
+    return validate_package(request)["findings"]
+
+
+def _workspace(mutate_stream: Callable[[dict], None] | None = None) -> list[dict]:
+    """The wired draft pipeline graded in a workspace with its connections and
+    the destination's endpoint — what the pipeline plugin submits to check
+    references across packages."""
+    from analitiq.contracts.validation_requests import ValidateWorkspaceRequest
+    from analitiq.validator import validate_workspace
+
+    wired = _wired_examples("draft", mutate_stream)
+    destination, endpoint = wired["destination"], wired["endpoint"]
+    documents = {
+        "pipelines/p/pipeline.json": wired["pipeline"],
+        "pipelines/p/streams/s.json": wired["stream"],
+        f"connections/{destination['connection_id']}/definition/endpoints/"
+        f"{endpoint['endpoint_id']}.json": endpoint,
+    }
+    for connection in (wired["source"], destination):
+        documents[f"connections/{connection['connection_id']}/connection.json"] = connection
+    request = ValidateWorkspaceRequest(
+        documents={key: json.dumps(document) for key, document in documents.items()})
+    return validate_workspace(request)["findings"]
 
 
 def _p_pipeline_draft_runnability() -> list[dict]:
-    return _staged_pipeline_bundle("draft")
+    return _pipeline_package("draft")
 
 
 def _p_pipeline_active_runnability() -> list[dict]:
-    return _staged_pipeline_bundle("active")
+    return _pipeline_package("active")
 
 
 # --- stream mutations, each breaking one cross-document agreement -----------
@@ -857,26 +867,24 @@ def _unbacked_connection_endpoint(stream: dict) -> None:
 
 
 def _p_stream_cross_document_unchecked_alone() -> list[dict]:
-    """One stream document carrying both defects, graded as a stream document.
+    """One stream document carrying both defects, graded as a stream document:
+    the whole of what a single-document request can see."""
+    from analitiq.contracts.validation_requests import ValidateSingleDocumentRequest
+    from analitiq.validator import validate_single_document
 
-    The entity the agent passes for a stream never receives a bundle root, so
-    this is the whole of what a stream validation can see.
-    """
     stream = json.loads(STREAM_EXAMPLE.read_text())
     _wrong_connection_role(stream)
     _unbacked_connection_endpoint(stream)
-    with tempfile.TemporaryDirectory() as tmp:
-        document = Path(tmp) / "stream.json"
-        document.write_text(json.dumps(stream))
-        return _pipeline_adapter().diagnostics_for("stream", document)["findings"]
+    request = ValidateSingleDocumentRequest(document=json.dumps(stream), document_kind="stream")
+    return validate_single_document(request)["findings"]
 
 
-def _p_stream_connection_role_bundle() -> list[dict]:
-    return _staged_pipeline_bundle("draft", mutate_stream=_wrong_connection_role)
+def _p_stream_connection_role_package() -> list[dict]:
+    return _pipeline_package("draft", mutate_stream=_wrong_connection_role)
 
 
-def _p_stream_connection_endpoint_bundle() -> list[dict]:
-    return _staged_pipeline_bundle("draft", mutate_stream=_unbacked_connection_endpoint)
+def _p_stream_connection_endpoint_workspace() -> list[dict]:
+    return _workspace(mutate_stream=_unbacked_connection_endpoint)
 
 
 def _p_stream_filter_field_local() -> list[dict]:
@@ -1014,7 +1022,7 @@ PROBES: tuple[Probe, ...] = (
           message_re=r"at least one stream"),
     Probe("pipeline-schema-pinned-url-rejected", "error", _p_pipeline_schema_pinned_url,
           message_re=r"schemas\.analitiq\.ai/pipeline/latest\.json"),
-    # The pair: the SAME staged bundle, graded at each status. Without the
+    # The pair: the SAME pipeline package, graded at each status. Without the
     # active half, "runnability is enforced once the pipeline is active" would
     # rest on nothing — a build that stopped asking for runnability entirely
     # keeps the draft probe green.
@@ -1029,20 +1037,20 @@ PROBES: tuple[Probe, ...] = (
     Probe("pipeline-copied-default-unchecked", "clean", _p_pipeline_copied_default,
           forbid_re=r"(?i)default"),
     # The cross-document trio: one stream document breaking both agreements is
-    # graded alone and found clean, then each agreement is graded again inside
-    # the assembled bundle. Without the first, "only with --bundle-root" rests
-    # on nothing; without the other two, so does "checked" — and because all
-    # three drive the same mutations, a mutation that stopped biting fails the
-    # bundle halves rather than leaving the clean half passing over an
-    # untouched document.
+    # graded alone and found clean, then each agreement is graded again in the
+    # request that runs its check. Without the first, "only in a package or
+    # workspace" rests on nothing; without the other two, so does "checked" —
+    # and because all three drive the same mutations, a mutation that stopped
+    # biting fails those halves rather than leaving the clean half passing over
+    # an untouched document.
     Probe("stream-cross-document-unchecked-alone", "clean",
           _p_stream_cross_document_unchecked_alone,
           forbid_re=r"connections\.source|no matching endpoint document"),
-    Probe("stream-connection-role-bundle-rejected", "error",
-          _p_stream_connection_role_bundle,
+    Probe("stream-connection-role-package-rejected", "error",
+          _p_stream_connection_role_package,
           message_re=r"must match the pipeline's connections\.source"),
-    Probe("stream-connection-endpoint-bundle-rejected", "error",
-          _p_stream_connection_endpoint_bundle,
+    Probe("stream-connection-endpoint-workspace-rejected", "error",
+          _p_stream_connection_endpoint_workspace,
           message_re=r"no matching endpoint document"),
     Probe("stream-filter-field-unresolved-locally", "clean", _p_stream_filter_field_local,
           forbid_re=r"(?i)filter"),
@@ -1095,22 +1103,17 @@ def run_probe(probe: Probe) -> ProbeFailure | None:
     if probe.expect not in ("clean", "error", "silent"):
         raise ValueError(f"probe {probe.id!r}: unknown expectation {probe.expect!r}")
     findings = probe.build()
-    # A guard that contains a crash emits a finding whose message embeds the
-    # exception text. The validator's is `notApplicable`: it hides the findings
-    # the crashed check would have made, so an expect="clean" probe passes, and
-    # its text can satisfy a `require_re`. The pipeline adapter's is
-    # error-severity and can satisfy an expect="error" probe. Either way users
-    # get "validator bug — please report" instead of what the prose promises. A
-    # crash never proves a claim, in either direction.
+    # A guard that contains a crash emits a `notApplicable` finding whose
+    # message embeds the exception text: it hides the findings the crashed
+    # check would have made, so an expect="clean" probe passes, and its text
+    # can satisfy a `require_re`. Users get "validator bug — please report"
+    # instead of what the prose promises, so a crash never proves a claim.
     #
-    # Recognised by the id each guard publishes for it — the validator's, and
-    # the pipeline adapter's for its own containment — not by its wording: the
+    # Recognised by the id the guard publishes for it, not by its wording: the
     # sentence is the guard's to reword, and a probe grader reading the English
     # would stop detecting crashes the day it changes, with every probe still
     # reporting green.
-    crashed = [f for f in findings
-               if f.get("message_id") == "check-crashed"
-               or f.get("validator") == "adapter-crash"]
+    crashed = [f for f in findings if f.get("message_id") == "check-crashed"]
     if crashed:
         return ProbeFailure(probe.id, "the validator crashed on the probe document", crashed)
     return _expectation_failure(probe, findings) or _pattern_failure(probe, findings)
@@ -1470,32 +1473,6 @@ def _pipeline_gen():
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    return module
-
-
-@functools.lru_cache(maxsize=None)
-def _pipeline_adapter():
-    """The pipeline plugin's validator adapter, imported by path (cached).
-
-    Claims in that plugin's prose are about the adapter rather than about the
-    published validator: `scripts/validate.py` stitches the bundle it grades
-    out of the files on disk, so a probe that called
-    `validate_pipeline_bundle` directly would measure the wrong side of the
-    sentence. Import is side-effect-free — `_bootstrap`'s venv build and
-    re-exec only fire from the adapter's `main()`.
-    """
-    import importlib.util
-
-    scripts_dir = str(PIPELINE_PLUGIN / "scripts")
-    spec = importlib.util.spec_from_file_location(
-        "_pipeline_validate_adapter", PIPELINE_PLUGIN / "scripts" / "validate.py")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    sys.path.insert(0, scripts_dir)  # validate.py imports _bootstrap
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.path.remove(scripts_dir)
     return module
 
 

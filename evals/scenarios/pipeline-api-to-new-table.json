@@ -29,21 +29,7 @@
   "expect": "build",
   "validate": [
     {
-      "glob": "pipelines/*/pipeline.json",
-      "entity": "pipeline",
-      "bundle_root": "."
-    },
-    {
-      "glob": "pipelines/*/streams/*.json",
-      "entity": "stream"
-    },
-    {
-      "glob": "connections/*/connection.json",
-      "entity": "connection"
-    },
-    {
-      "glob": "connections/*/definition/endpoints/*.json",
-      "entity": "database-endpoint"
+      "workspace": "."
     }
   ],
   "docs": {

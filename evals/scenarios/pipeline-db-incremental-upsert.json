@@ -43,13 +43,7 @@
   "expect": "build",
   "validate": [
     {
-      "glob": "pipelines/*/pipeline.json",
-      "entity": "pipeline",
-      "bundle_root": "."
-    },
-    {
-      "glob": "pipelines/*/streams/*.json",
-      "entity": "stream"
+      "workspace": "."
     }
   ],
   "docs": {

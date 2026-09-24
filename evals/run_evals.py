@@ -63,10 +63,10 @@ that breaks any of this, before a single agent runs.
                check in the sense `.claude/rules/guards.md` requires: the id is
                resolved against the registry, and no verdict here depends on
                what the surrounding sentence means.
-    validate — `{glob, entity?, bundle_root?}` per document family. `entity`
-               selects the contract to grade against via the pipeline plugin's
-               adapter; omit it and the plain validator detects the document's
-               kind from its own shape instead.
+    validate — `{package, package_kind}` or `{workspace}`, a directory
+               relative to the working directory. Graded as a package or a
+               workspace request built from the files there the contract
+               locates.
     docs     — name → `{glob, where?}`, resolving one document per name for
                assertions. `where` selects by top-level field value where a glob
                matches more than one.
@@ -113,7 +113,7 @@ sys.stdout.reconfigure(line_buffering=True)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCENARIO_DIR = Path(__file__).resolve().parent / "scenarios"
-PIPELINE_VALIDATE = REPO_ROOT / "plugins" / "analitiq-pipeline-builder" / "scripts" / "validate.py"
+GRADE = Path(__file__).resolve().parent / "grade.py"
 RULE_RECORDS = REPO_ROOT / "rules" / "records"
 
 # The grader's environment, and only the grader's. It puts the in-repo contract
@@ -258,6 +258,12 @@ OP_ARGUMENT = {
 # The rule registry
 # ---------------------------------------------------------------------------
 
+def _import_from_the_checkout() -> None:
+    """Put the in-repo contract models and validator on this process's path."""
+    sys.path[:0] = [p for p in GRADER_ENV["PYTHONPATH"].split(os.pathsep) if p not in sys.path]
+    os.environ.setdefault("DOMAIN", GRADER_ENV["DOMAIN"])
+
+
 def unenforced_rules() -> set[str]:
     """Rule ids whose record names no validator — nothing rejects a violation.
 
@@ -268,8 +274,7 @@ def unenforced_rules() -> set[str]:
     registry already types the field, and a coverage denominator that quietly
     loses rules reports coverage nobody has.
     """
-    sys.path[:0] = [p for p in GRADER_ENV["PYTHONPATH"].split(os.pathsep) if p not in sys.path]
-    os.environ.setdefault("DOMAIN", GRADER_ENV["DOMAIN"])
+    _import_from_the_checkout()
     from analitiq.contracts.shared.rules import all_rules
 
     ids = {rule.id for rule in all_rules() if not rule.validator}
@@ -366,16 +371,17 @@ def _scenario_problems(scenario: dict, path: Path) -> list[str]:
         elif not _compiles(item[named[0]]):
             problems.append(f"text_assert on {item.get('file')!r}: {item[named[0]]!r} does not "
                             f"compile as a regex")
+    _import_from_the_checkout()
+    from analitiq.contracts.validation_requests import PACKAGE_KINDS
+
     for spec in scenario.get("validate", []):
-        unknown = sorted(set(spec) - {"glob", "entity", "bundle_root"})
-        if unknown:
-            problems.append(f"validate spec {spec.get('glob')!r} names unknown keys "
-                            f"{unknown}; expected a subset of glob/entity/bundle_root")
-        if "glob" not in spec:
-            problems.append(f"validate spec {spec!r} is missing required key 'glob'")
-        if "bundle_root" in spec and "entity" not in spec:
-            problems.append(f"validate spec {spec.get('glob')!r} names 'bundle_root' with no "
-                            f"'entity'; bundle_root is only read on the entity route")
+        if set(spec) == {"package", "package_kind"}:
+            if spec["package_kind"] not in PACKAGE_KINDS:
+                problems.append(f"validate spec {spec!r} names package_kind "
+                                f"{spec['package_kind']!r}; expected one of {sorted(PACKAGE_KINDS)}")
+        elif set(spec) != {"workspace"}:
+            problems.append(f"validate spec {spec!r} names neither {{package, package_kind}} "
+                            f"nor {{workspace}}")
     for item in scenario.get("seed", []):
         if not (REPO_ROOT / item["from"]).is_file():
             problems.append(f"seed source {item['from']} does not exist")
@@ -459,39 +465,28 @@ def invoke(scenario: dict, workdir: Path, timeout: int) -> tuple[bool, str]:
 
 
 def run_validator(workdir: Path, spec: dict, timeout: int) -> list[str]:
-    """Validate every document a spec's glob matches. Returns failure lines."""
-    failures = []
-    matches = sorted(workdir.glob(spec["glob"]))
-    if not matches:
-        return [f"{spec['glob']}: no document was written"]
-    for doc in matches:
-        rel = doc.relative_to(workdir).as_posix()
-        if "entity" in spec:
-            cmd = [sys.executable, str(PIPELINE_VALIDATE),
-                   "--entity", spec["entity"], "--document", str(doc)]
-            if spec.get("bundle_root"):
-                cmd += ["--bundle-root", str(workdir / spec["bundle_root"])]
-        else:
-            cmd = [sys.executable, "-c",
-                   "import sys;from analitiq.validator import main;"
-                   "sys.argv=['analitiq-validate','--document',sys.argv[1]];"
-                   "sys.exit(main())",
-                   str(doc)]
-        try:
-            proc = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True,
-                                  timeout=timeout, env={**os.environ, **GRADER_ENV})
-        except subprocess.TimeoutExpired:
-            failures.append(f"{rel}: the validator did not finish within {timeout}s")
-            continue
-        if proc.returncode != 0:
-            # Both stdout and stderr: the diagnostics land on stdout and a crash
-            # lands on stderr, and reading only the first hides the second.
-            # Generous truncation — this line is what `record` writes to the
-            # file the results are read from, so a dropped finding is dropped
-            # for good.
-            detail = "\n".join(part.strip() for part in (proc.stdout, proc.stderr) if part.strip())
-            failures.append(f"{rel}: {detail[:4000]}")
-    return failures
+    """Grade the package or workspace a spec names. Returns failure lines."""
+    directory = spec.get("package", spec.get("workspace"))
+    if not (workdir / directory).is_dir():
+        return [f"{directory}: no directory was written"]
+    if "package" in spec:
+        cmd = [sys.executable, str(GRADE), "package", str(workdir / directory), spec["package_kind"]]
+    else:
+        cmd = [sys.executable, str(GRADE), "workspace", str(workdir / directory)]
+    try:
+        proc = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True,
+                              timeout=timeout, env={**os.environ, **GRADER_ENV})
+    except subprocess.TimeoutExpired:
+        return [f"{directory}: the validator did not finish within {timeout}s"]
+    if proc.returncode != 0:
+        # Both stdout and stderr: the envelope lands on stdout and a crash
+        # lands on stderr, and reading only the first hides the second.
+        # Generous truncation — this line is what `record` writes to the
+        # file the results are read from, so a dropped finding is dropped
+        # for good.
+        detail = "\n".join(part.strip() for part in (proc.stdout, proc.stderr) if part.strip())
+        return [f"{directory}: {detail[:4000]}"]
+    return []
 
 
 def resolve_docs(scenario: dict, workdir: Path) -> tuple[dict, list[str]]:
