@@ -61,7 +61,6 @@ from .connectors import (  # skipcq: PY-W2000
     _database_endpoint_locator_findings,
     _endpoint_locator_findings,
     _flatten_api_locator,
-    _render_arrow_type,
 )
 from .pipelines import is_pipeline_bundle, is_pipeline_doc, validate_pipeline_bundle
 from .connections import is_connection_doc

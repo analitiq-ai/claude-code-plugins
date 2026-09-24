@@ -189,6 +189,10 @@ ALLOWED_RESTATEMENTS = {
          "modes — the upsert write variant declares a conflict key set and no "
          "other database write shape has the field — so each statement has to "
          "name them all"),
+    ("skills/endpoint-spec/spec-type-map-gaps.md", "ResolveTypesRequest.direction"):
+        (2, {"read", "write"},
+         "each statement maps a direction to what it translates — a section's "
+         "rules, then the helper's probes — which is how the author picks one"),
     # --- subset co-trips -----------------------------------------------------
     # A vocabulary whose members are a subset of another gated one is named by
     # every section that names the superset. These are not second copies: the

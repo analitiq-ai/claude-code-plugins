@@ -22,11 +22,14 @@ warnings.
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypedDict, get_args
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import (
+    ConfigDict, Field, PrivateAttr, StringConstraints, ValidationError, model_validator,
+)
 
 from analitiq.contracts.arrow_grammar import (
     CONTAINER_CANONICAL_HEADS as _CONTAINER_CANONICAL_HEADS,
@@ -35,7 +38,7 @@ from analitiq.contracts.arrow_grammar import (
     validate_template_bounds,
 )
 from analitiq.contracts.endpoints import ARROW_TYPE_PATTERN
-from analitiq.contracts.shared.common import StrictModel, schema_url_for
+from analitiq.contracts.shared.common import DocumentText, StrictModel, schema_url_for
 from analitiq.contracts.shared.re2_dialect import compile_re2
 from analitiq.contracts.shared.rules import violation
 
@@ -421,7 +424,8 @@ TypeMapWriteRule = Annotated[
 ]
 
 
-TYPE_MAP_DIRECTIONS = ("read", "write")
+TypeMapDirection = Literal["read", "write"]
+TYPE_MAP_DIRECTIONS = get_args(TypeMapDirection)
 
 
 class TypeMapDoc(StrictModel):
@@ -458,3 +462,134 @@ class TypeMapDoc(StrictModel):
                 "RULE-TMAP-023", "type-map-no-section",
                 "a type map declares a rule list under at least one of `read` or `write`")
         return self
+
+
+# The side a direction's rule matches on, and the side it renders.
+_MATCH_AND_RENDER_KEYS = {"read": ("native_type", "arrow_type"), "write": ("arrow_type", "native_type")}
+
+
+class TypeResolver:
+    r"""One direction's rules, compiled once, rendering a type by the first rule
+    matching it.
+
+    Read matching normalizes the probe with `normalize_native_type`, and an
+    `exact` rule's `native_type` the same way; a `regex` matcher is never
+    normalized, since uppercasing it would turn `\d` into `\D`. Write matching
+    compares the `arrow_type` as authored. A regex match substitutes each
+    `${name}` in the render with its capture.
+
+    `rules` need not have passed the model, so the validator can resolve over a
+    map it is still grading: only an object with a string on both sides and a
+    `match` of `exact`, or of `regex` with a matcher the contract accepts, can
+    match; any other rule is skipped."""
+
+    def __init__(self, rules: list, direction: TypeMapDirection) -> None:
+        matcher_key, render_key = _MATCH_AND_RENDER_KEYS[direction]
+        self._normalize = normalize_native_type if direction == "read" else None
+        self._rules: list[tuple[str | CompiledMatcher, str]] = []
+        for rule in rules:
+            if not isinstance(rule, dict):
+                continue
+            matcher, render = rule.get(matcher_key), rule.get(render_key)
+            if not isinstance(matcher, str) or not isinstance(render, str):
+                continue
+            if rule.get("match") == "exact":
+                self._rules.append((self._normalize(matcher) if self._normalize else matcher, render))
+            elif rule.get("match") == "regex":
+                try:
+                    self._rules.append((compile_matcher(matcher), render))
+                except ValueError:
+                    continue
+
+    def resolve(self, value: str) -> str | None:
+        """`value` rendered by the first rule matching it, or None when none does."""
+        probe = self._normalize(value) if self._normalize else value
+        for matcher, render in self._rules:
+            if isinstance(matcher, str):
+                if matcher == probe:
+                    return render
+                continue
+            m = matcher.fullmatch(probe)
+            if m:
+                groups = m.groupdict()
+                return _PLACEHOLDER_RE.sub(
+                    lambda ph: groups.get(ph.group(1)) or "" if ph.group(1) in groups else ph.group(0),
+                    render,
+                )
+        return None
+
+
+# Coarse guards against an unbounded request, set far above what one
+# resolution needs.
+MAX_RESOLVE_TYPES = 2000
+MAX_RESOLVE_MAPS = 16
+MAX_RESOLVE_TYPE_LENGTH = 1024
+
+ResolvableType = Annotated[str, StringConstraints(min_length=1, max_length=MAX_RESOLVE_TYPE_LENGTH)]
+
+
+class ResolveTypesRequest(StrictModel):
+    """A request to translate types through type maps: the direction, the types
+    in that direction's vocabulary, and the maps as file text in precedence
+    order.
+
+    Every map must be a type map, and at least one must carry the direction's
+    section. A map without it contributes no rules."""
+
+    direction: TypeMapDirection = Field(
+        ...,
+        description=(
+            "`read` translates provider native types to Arrow types; `write` "
+            "translates Arrow types to native types."
+        ),
+    )
+    types: Annotated[list[ResolvableType], Field(min_length=1, max_length=MAX_RESOLVE_TYPES)] = Field(
+        ...,
+        description="The types to translate, spelled as the direction's matching side spells them.",
+    )
+    maps: Annotated[list[DocumentText], Field(min_length=1, max_length=MAX_RESOLVE_MAPS)] = Field(
+        ...,
+        description=(
+            "`type-map.json` file texts, highest precedence first: a type resolves "
+            "through the first map with a rule matching it."
+        ),
+    )
+
+    _resolver: TypeResolver | None = PrivateAttr(default=None)
+
+    @model_validator(mode="after")
+    def _maps_are_type_maps_carrying_the_direction(self) -> "ResolveTypesRequest":
+        sections = []
+        for index, text in enumerate(self.maps):
+            try:
+                TypeMapDoc.model_validate_json(text)
+            except ValidationError as refusal:
+                raise ValueError(f"maps[{index}] is not a type map: {refusal}") from refusal
+            sections.append(json.loads(text).get(self.direction))
+        # Every type would come back unresolved, which reads as a vocabulary to
+        # cover rather than the missing section it is.
+        if all(section is None for section in sections):
+            raise ValueError(f"no map carries a {self.direction!r} section")
+        self._resolver = TypeResolver(
+            [rule for section in sections if section for rule in section], self.direction)
+        return self
+
+    @property
+    def resolver(self) -> TypeResolver:
+        """The maps' rules for the request's direction, in precedence order."""
+        return self._resolver
+
+
+class ResolvedTypes(TypedDict):
+    """Each requested type mapped to its translation, or None when no rule
+    renders it; `gaps` lists the None ones in request order."""
+
+    resolved: dict[str, str | None]
+    gaps: list[str]
+
+
+def resolve_types(request: ResolveTypesRequest) -> ResolvedTypes:
+    """Translate every type in `request` through its maps, earliest map first."""
+    types = list(dict.fromkeys(request.types))
+    resolved = {t: request.resolver.resolve(t) for t in types}
+    return {"resolved": resolved, "gaps": [t for t in types if resolved[t] is None]}

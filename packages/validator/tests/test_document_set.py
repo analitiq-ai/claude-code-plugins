@@ -761,7 +761,7 @@ def test_only_the_shadowing_connection_is_reported_among_several(validator):
 def test_connection_write_shadow_probes_over_match_kind_render_and_family_exclusion(
         name, connector_rules, connection_rules, expected):
     """`_connection_write_shadow_probes` resolves a probe only through
-    `_first_match_render`, on both its exact and regex branches, over the
+    `TypeResolver`, on both its exact and regex branches, over the
     full behaviour matrix: match kind (exact/regex) x whether the connection
     rule can actually render a candidate x whether the shadowed value's
     family is one RULE-TMAP-017's coverage pool excludes. A row whose

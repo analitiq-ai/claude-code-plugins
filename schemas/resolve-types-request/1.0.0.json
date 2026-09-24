@@ -1,0 +1,48 @@
+{
+  "$id": "https://schemas.analitiq.ai/resolve-types-request/1.0.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public JSON Schema contract for a request to translate types through type maps: a direction, the types to translate, and the type maps as file text in precedence order. The schema gates the request's shape; whether each map is a type map is judged when the request is built. Source of truth: analitiq.contracts.type_map.ResolveTypesRequest (Pydantic).",
+  "properties": {
+    "direction": {
+      "description": "`read` translates provider native types to Arrow types; `write` translates Arrow types to native types.",
+      "enum": [
+        "read",
+        "write"
+      ],
+      "title": "Direction",
+      "type": "string"
+    },
+    "maps": {
+      "description": "`type-map.json` file texts, highest precedence first: a type resolves through the first map with a rule matching it.",
+      "items": {
+        "maxLength": 500000,
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Maps",
+      "type": "array"
+    },
+    "types": {
+      "description": "The types to translate, spelled as the direction's matching side spells them.",
+      "items": {
+        "maxLength": 1024,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 2000,
+      "minItems": 1,
+      "title": "Types",
+      "type": "array"
+    }
+  },
+  "required": [
+    "direction",
+    "types",
+    "maps"
+  ],
+  "title": "Analitiq Resolve Types Request",
+  "type": "object",
+  "version": "1.0.0"
+}
