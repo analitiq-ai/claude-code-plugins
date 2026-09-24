@@ -1,61 +1,62 @@
-"""Grade what an eval run wrote, as a file holder submits it: select the files
-the contract locates, leave its secret locations behind, and hand the texts to
-the validator's request entry point.
+"""Grade what an eval run wrote the way the plugin submits it: the plugin's own
+request builder selects the files, reading the location tables this checkout
+renders, and the validator's request entry point grades them in-process.
 
     grade.py package <directory> <package_kind>
     grade.py workspace <directory>
 
-Prints the validation envelope and exits 1 when it did not pass.
+Prints the validation envelope and exits 1 when it did not pass or a file was
+left out of the request.
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
-from collections.abc import Callable
 from pathlib import Path
 
-from analitiq.contracts.validation_requests import (
-    PACKAGE_KINDS,
-    ValidatePackageRequest,
-    ValidateWorkspaceRequest,
-)
-from analitiq.contracts.workspace import Workspace
+from analitiq.contracts.validation_requests import ValidatePackageRequest, ValidateWorkspaceRequest
 from analitiq.validator import validate_package, validate_workspace
 
-
-def _located_texts(root: Path, kind_at: Callable[[str], str | None],
-                   secret_at: Callable[[str], bool]) -> dict[str, str]:
-    # A link could carry a file from outside the directory into the request,
-    # so only regular files are read.
-    texts = {}
-    for path in sorted(root.rglob("*")):
-        if path.is_symlink() or not path.is_file():
-            continue
-        key = path.relative_to(root).as_posix()
-        if kind_at(key) and not secret_at(key):
-            texts[key] = path.read_text(encoding="utf-8")
-    return texts
+REPO_ROOT = Path(__file__).resolve().parents[1]
+_BUILDER = REPO_ROOT / "plugins" / "analitiq-pipeline-builder" / "scripts" / "validation_request.py"
 
 
-def package_request(directory: Path, package_kind: str) -> ValidatePackageRequest:
-    model = PACKAGE_KINDS[package_kind]
-    return ValidatePackageRequest(
-        package_kind=package_kind,
-        documents=_located_texts(directory, model.kind_at, model.secret_at))
+def _load_builder():
+    spec = importlib.util.spec_from_file_location("validation_request", _BUILDER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def workspace_request(directory: Path) -> ValidateWorkspaceRequest:
-    return ValidateWorkspaceRequest(
-        documents=_located_texts(directory, Workspace.kind_at, Workspace.secret_at))
+builder = _load_builder()
+
+
+def rendered_schema(url: str) -> dict:
+    """The schema this checkout renders at a published URL."""
+    path = url.removeprefix(builder.SCHEMA_HOST + "/")
+    return json.loads((REPO_ROOT / "schemas" / path).read_text())
+
+
+def package_request(directory: Path, package_kind: str) -> tuple[ValidatePackageRequest, list[dict]]:
+    documents, left_out = builder.package_documents(directory, package_kind, rendered_schema)
+    return ValidatePackageRequest(package_kind=package_kind, documents=documents), left_out
+
+
+def workspace_request(directory: Path) -> tuple[ValidateWorkspaceRequest, list[dict]]:
+    documents, left_out = builder.workspace_documents(directory, None, rendered_schema)
+    return ValidateWorkspaceRequest(documents=documents), left_out
 
 
 def main(argv: list[str]) -> int:
     if argv[0] == "package":
-        envelope = validate_package(package_request(Path(argv[1]), argv[2]))
+        request, left_out = package_request(Path(argv[1]), argv[2])
+        envelope = validate_package(request)
     else:
-        envelope = validate_workspace(workspace_request(Path(argv[1])))
-    print(json.dumps(envelope, indent=2))
-    return 0 if envelope["passed"] else 1
+        request, left_out = workspace_request(Path(argv[1]))
+        envelope = validate_workspace(request)
+    print(json.dumps({**envelope, "left_out": left_out}, indent=2))
+    return 0 if envelope["passed"] and not left_out else 1
 
 
 if __name__ == "__main__":

@@ -168,6 +168,10 @@ REQUIRED_BLOCKS = {
 # invented member or lose a real one; the count so a second copy cannot hide
 # behind the first. An entry is a decision, not a backlog.
 ALLOWED_RESTATEMENTS = {
+    ("agents/private-endpoint-creator.md", "ResolveTypesRequest.direction"):
+        (1, {"read", "write"},
+         "§`create-endpoints` resolves natives with one direction and frozen "
+         "Arrow types with the other; each call names the direction it takes"),
     ("skills/pipeline-builder/references/enum-mappers.md", "schedule.type"):
         (1, {"manual", "interval", "cron"},
          "the phrasing->member mapping table's right-hand column IS the member"),

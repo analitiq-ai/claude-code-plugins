@@ -13,8 +13,8 @@ name: Publish analitiq-validator
 # ever updated to a version already on PyPI. Root CLAUDE.md "Releases" owns the
 # full sequence; the short form:
 #   1. One PR bumps every coupled value (this pyproject's `version`, the
-#      contract-models `==` dep, VALIDATOR_PIN, the connector agent's
-#      self-install line). `pinned-validator-guard` is red until step 3.
+#      contract-models `==` dep, VALIDATOR_PIN). `pinned-validator-guard` is
+#      red until step 3.
 #   2. Push a tag matching that version at the PR head: `validator-v1.0.0rc2`.
 #      Checkout below resolves the tag, so the commit need not be on main yet.
 #   3. This workflow asserts tag == pyproject version, runs the validator's own

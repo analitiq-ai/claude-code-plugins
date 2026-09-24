@@ -19,13 +19,11 @@ a version-pinned `…/<X.Y.Z>.json` variant is rejected outright.
 
 ## How validation works
 
-The plugin does **not** fetch or cache schemas. `analitiq-validator` validates
-each document against the bundled Pydantic contract models — the same source of
-truth the published JSON Schemas are rendered from. The
-`pipeline-schema-validator` agent runs the plugin's adapter (`scripts/validate.py`),
-which self-installs the pinned validator into a managed virtualenv on first use
-and is offline thereafter. That agent's definition carries the invocation.
+The plugin submits its documents to the `analitiq-validator` MCP server it
+ships, which validates each against the Pydantic contract models — the same
+source of truth the published JSON Schemas are rendered from. The
+`pipeline-schema-validator` agent's definition carries the submission.
 
-Because validation is offline, a document's declared `$schema` URL is a label,
-not a fetch target — keep it in sync with the entity so the file stays
+The validator never fetches a document's declared `$schema` URL: it is a label,
+not a fetch target — keep it in sync with the document kind so the file stays
 self-describing.

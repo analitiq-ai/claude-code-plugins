@@ -1,4 +1,4 @@
-"""The eval grader's file selection: what a file holder puts in a request."""
+"""The eval grader: the plugin's request, graded in-process."""
 from __future__ import annotations
 
 import importlib.util
@@ -20,62 +20,28 @@ def _grade():
 grade = _grade()
 
 
-def _write(root: Path, files: dict[str, str]) -> None:
-    for key, text in files.items():
-        path = root / key
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
-
-
-def test_a_package_request_carries_only_located_documents(tmp_path):
-    _write(tmp_path, {
-        "connection.json": "{}",
-        "definition/type-map.json": "{}",
-        ".secrets/credentials.json": '{"token": "x"}',
-        ".venv/lib/site.json": "{}",
-        "notes.md": "n",
-    })
-    request = grade.package_request(tmp_path, "connection")
-    assert sorted(request.documents.root) == ["connection.json", "definition/type-map.json"]
-
-
-def test_a_workspace_request_carries_only_located_documents(tmp_path):
-    _write(tmp_path, {
-        "pipelines/p/pipeline.json": "{}",
-        "pipelines/manifest.json": "{}",
-        "connections/c/connection.json": "{}",
-        "connections/c/.secrets/credentials.json": '{"token": "x"}',
-        "connectors/k/definition/connector.json": "{}",
-        "connectors/k/connector.py": "",
-        "README.md": "r",
-    })
-    request = grade.workspace_request(tmp_path)
-    assert sorted(request.documents.root) == [
-        "connections/c/connection.json",
-        "connectors/k/definition/connector.json",
-        "pipelines/manifest.json",
-        "pipelines/p/pipeline.json",
-    ]
-
-
-def test_a_document_is_carried_as_the_text_on_disk(tmp_path):
-    text = '{\n  "connection_id": "c"\n}\n'
-    _write(tmp_path, {"connection.json": text})
-    assert grade.package_request(tmp_path, "connection").documents.root == {"connection.json": text}
-
-
-def test_a_linked_file_is_not_followed(tmp_path):
-    outside = tmp_path / "outside.json"
-    outside.write_text("{}")
-    package = tmp_path / "pkg"
-    _write(package, {"connection.json": "{}"})
-    (package / "definition").mkdir()
-    (package / "definition" / "type-map.json").symlink_to(outside)
-    assert sorted(grade.package_request(package, "connection").documents.root) == ["connection.json"]
-
-
 def test_main_prints_the_envelope_and_exits_by_the_verdict(tmp_path, capsys):
-    _write(tmp_path, {"connection.json": "not json"})
+    (tmp_path / "connection.json").write_text("not json")
     assert grade.main(["package", str(tmp_path), "connection"]) == 1
-    envelope = json.loads(capsys.readouterr().out)
-    assert envelope["passed"] is False and envelope["findings"]
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["passed"] is False and printed["findings"]
+
+
+def test_a_file_left_out_fails_the_grade(tmp_path, capsys):
+    package = REPO_ROOT / "plugins" / "analitiq-connector-builder" / "skills" / "connector-spec-db" / "examples" / "postgresql"
+    definition = tmp_path / "definition"
+    definition.mkdir()
+    (definition / "connector.json").write_text((package / "postgresql.example.json").read_text())
+    (definition / "type-map.json").symlink_to(package / "type-map.json")
+    assert grade.main(["package", str(tmp_path), "connector"]) == 1
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["left_out"] == [{"key": "definition/type-map.json", "reason": "a link, never followed"}]
+
+
+def test_a_clean_package_passes(tmp_path, capsys):
+    package = REPO_ROOT / "plugins" / "analitiq-connector-builder" / "skills" / "connector-spec-db" / "examples" / "postgresql"
+    definition = tmp_path / "definition"
+    definition.mkdir()
+    (definition / "connector.json").write_text((package / "postgresql.example.json").read_text())
+    (definition / "type-map.json").write_text((package / "type-map.json").read_text())
+    assert grade.main(["package", str(tmp_path), "connector"]) == 0

@@ -3,8 +3,7 @@
 The plugin prose and the runtime validator pin release on independent trains
 (release-please for the plugins, hand-pushed tags for the packages). Nothing
 else mechanically ties them together: every in-repo drift test grades the
-in-repo contract SOURCE, while `connector-schema-validator` self-installs the
-PUBLISHED `VALIDATOR_PIN` wheel. The failure this permits, and has already
+in-repo contract SOURCE, while `VALIDATOR_PIN` names a PUBLISHED wheel. The failure this permits, and has already
 produced: prose instructing authors to write `redshift+redshift_connector`
 while the pinned wheel still carried the old async-only pattern that rejects it.
 

@@ -408,14 +408,18 @@ def render_validator_ids() -> str:
 
     single_document_ids = measured_single_document_ids()
     reached = _reach(_validator_sources(), _REQUEST_ENTRY_POINTS)
+    # A workspace also carries the connector packages this plugin downloads and
+    # never authors; their rules are rendered in the connector plugin, not here.
     ids = sorted(
         rule.id for rule in all_rules()
-        if rule.validator in reached or rule.id in single_document_ids
+        if "pipeline-plugin" in rule.owners
+        and (rule.validator in reached or rule.id in single_document_ids)
     )
     if not ids:
         raise RuntimeError("no rule is bound to a validator function a request reaches")
     out = [
-        "Rule ids a validation request can surface beyond what a contract model "
+        "Rule ids on the documents this plugin authors that a validation request "
+        "can surface beyond what a contract model "
         "rejects on its own, whether the check needs a second document in hand "
         "(references across a package or workspace, filename↔id) or grades one "
         "document as a plain function rather than a `@model_validator` "
@@ -457,7 +461,8 @@ def render_endpoint_id_derivation() -> str:
         "",
         "Derivation must stay deterministic: a handle that changes for an unchanged "
         "resource mints a new endpoint and breaks every stream pinned to the old one. "
-        "Never hand-write one — call the helper (`scripts/endpoint_id.py` wraps it).",
+        "Never hand-write one — take it from the `derive_endpoint_identity` tool of the "
+        "`analitiq-validator` MCP server, which runs that function.",
     ]
     return "\n".join(out) + "\n"
 

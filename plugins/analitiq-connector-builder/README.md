@@ -53,7 +53,7 @@ connector-builder (skill, orchestrator)
 ├── db-connector-creator            # authors kind=database connectors (loads connector-spec-db)
 ├── endpoint-creator                # authors API endpoint documents
 ├── storage-connector-creator       # stub for kind ∈ {file, s3, stdout}
-├── connector-schema-validator      # JSON Schema + semantic validation
+├── connector-schema-validator      # submits documents to the validator MCP server
 └── connector-drift-classifier      # patch/minor/major bump from diff
 ```
 
@@ -72,12 +72,13 @@ agent owns the authoring vocabulary for its kind via a dedicated spec skill
 
 ## Validation
 
-The plugin validates authored documents with the published
+The `connector-schema-validator` agent submits authored documents, or the whole
+connector package, to the `analitiq-validator` MCP server the plugin ships
+(`.mcp.json`); the plugin installs nothing. The server runs the published
 [`analitiq-validator`](https://pypi.org/project/analitiq-validator/) package,
-which the `connector-schema-validator` agent **self-installs at runtime**. It is
-**offline and model-driven** — each document is validated against the Analitiq
-contract models (`analitiq-contract-models`), the same models the published JSON
-Schemas are generated from — so there is no schema fetch. It runs:
+which validates each document against the Analitiq contract models
+(`analitiq-contract-models`), the same models the published JSON Schemas are
+generated from. It runs:
 
 1. **Contract-model validation** — structure, plus the cross-field rules the
    models themselves apply.
@@ -109,16 +110,9 @@ Schemas are generated from — so there is no schema fetch. It runs:
    The validator checks JSON documents only; the database package files
    (`connector.py`, `pyproject.toml`, …) are enforced by registry CI.
 
-Run directly (console entry point `analitiq-validate`):
-
-```bash
-pip install -r requirements-dev.txt      # from the repo root
-analitiq-validate --document path/to/connector.json
-```
-
-Output is a single `Diagnostics` JSON object. Exit 0 iff `passed: true`. The
-connector registry's CI installs the same package to run the semantic checks as
-a required merge gate outside the plugin runtime.
+The result is a single `Diagnostics` JSON object. The connector registry's CI
+installs the same package to run the semantic checks as a required merge gate
+outside the plugin runtime.
 
 The plugin's own schema enum-drift guard lives under `tests/connector_builder/`.
 It reads the enum vocabularies straight from the pinned

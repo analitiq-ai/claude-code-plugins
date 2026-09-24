@@ -129,8 +129,8 @@ either kind.
 
 ### 4. Validate the domain (barrier)
 
-Invoke `connector-schema-validator` over the connector body and type
-map; it detects each document's kind from its own shape.
+Stage the connector body and type map at their release paths and invoke
+`connector-schema-validator` with that `package` directory.
 <!-- PROBE: type-map-section-missing -->
 The map is one `type-map.json` carrying a section for each direction the
 connector's `kind` calls for (`RULE-PKG-030`); a section the kind needs and the
@@ -147,8 +147,8 @@ field types through the read map. For `kind = database` this completes
 validation — a connector release ships no database endpoint documents
 (`RULE-DBEP-006`), so phase 5 is skipped.
 
-In `validate` mode, run the validator once over **every** on-disk document
-— the connector, `type-map.json`, and all
+In `validate` mode, run the validator once with the on-disk connector
+package as `package` — it carries the connector, `type-map.json` and every
 `definition/endpoints/*.json` — report the resulting `Diagnostics`, and
 stop. There is no fix loop and no creator re-dispatch (phases 1–3 and 5
 were skipped, so there is no `CreatorOutput` to revise). The fix loop
@@ -189,7 +189,8 @@ Database connectors skip this phase entirely.
      echoes the connector-wide pagination (`ProviderFacts.pagination` →
      style + params) into the branch's `EndpointFacts.pagination`
      (`io-contracts.md` §EndpointFacts).
-   - `connector-schema-validator` validates the endpoint, with the same
+   - `connector-schema-validator` validates the endpoint as a `document`
+     (`document_kind` `api-endpoint`), with the same
      per-artifact 5-pass fix loop as phase 4 (re-dispatch
      `endpoint-creator` with `Diagnostics.findings` and the
      `EndpointCreatorOutput` it produced).
@@ -199,7 +200,7 @@ Database connectors skip this phase entirely.
    dropping the endpoint.
 4. **Join, then validate the package.** When the worklist is drained (no
    `pending` / `running`), stage `connector.json`, the type map and every
-   authored endpoint at their release paths and validate the **connector**,
+   authored endpoint at their release paths and validate that **package**,
    not the endpoint documents on their own. Coverage is connector-anchored:
    the per-branch pass in step 2 grades one endpoint against the endpoint
    contract and can say nothing about the sibling read map, so a native a

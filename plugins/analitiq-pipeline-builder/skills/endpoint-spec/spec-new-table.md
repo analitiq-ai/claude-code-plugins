@@ -14,7 +14,7 @@ document without introspection; the mode contract lives in
 
 - `schema` / `name` are the user's spelling (`RULE-DBEP-009`) — for a new table
   the user's spelling *is* the canonical identifier; it determines what the
-  engine creates. Pass it to `endpoint_id.py` unchanged, `--object-type table`.
+  engine creates. Pass it to `derive_endpoint_identity` unchanged, `object_type` `table`.
 - The target namespace is `schema`, or the database-as-`catalog` for schemaless
   dialects (`RULE-DBEP-010`). Whether the engine creates a missing schema is
   dialect-owned (a connector pre-DDL hook; not every dialect declares one), so a

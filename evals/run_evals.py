@@ -120,13 +120,8 @@ RULE_RECORDS = REPO_ROOT / "rules" / "records"
 # models and validator on the path, the same choice `conftest.py` makes for the
 # suite: a repo-side check answers "does the code in this checkout accept it".
 #
-# It must never reach the agent. `_bootstrap.py` short-circuits on
-# `ANALITIQ_VALIDATOR_FROM_SOURCE`, and the connector plugin's self-install is
-# guarded by an import probe that `PYTHONPATH` would satisfy — so an agent
-# handed this environment validates its own work against in-repo source instead
-# of the release its users run. That is the one thing a plugin eval must not do:
-# the gap between what this repo ships and what `VALIDATOR_PIN` names is a real
-# failure mode, and leaking these variables hides it.
+# It must never reach the agent: the agent validates through the plugin's MCP
+# server, as its users do, and nothing it runs reads these variables.
 GRADER_ENV = {
     "ANALITIQ_VALIDATOR_FROM_SOURCE": "1",
     "DOMAIN": os.environ.get("DOMAIN", "analitiq.ai"),

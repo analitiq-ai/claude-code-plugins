@@ -101,7 +101,7 @@ Every authored document must:
    `connections.destinations[]`, and **stream UUIDs** in `streams[]` — set to
    the `connection_id` / `stream_id` of the corresponding documents in the
    `$schema` table above. That pairing is plugin convention; `RULE-PIPE-011`
-   and `RULE-PIPE-012` are what the wiring must satisfy, and `--bundle-root`
-   is how the validator sees it.
-4. Pass validation (the `pipeline-schema-validator`, entity `pipeline`) with
-   zero error findings.
+   and `RULE-PIPE-012` are what the wiring must satisfy, and validating the
+   workspace is how the validator sees it.
+4. Pass validation (the `pipeline-schema-validator`, document kind `pipeline`)
+   with zero error findings.

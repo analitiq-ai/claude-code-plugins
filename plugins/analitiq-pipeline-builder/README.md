@@ -37,9 +37,8 @@ The plugin then:
 3. **Authors** a connection per side (with a `.secrets/credentials.json`
    template you fill in), the endpoint documents, the pipeline shell, and one
    stream per endpoint.
-4. **Validates** every artifact against the published contract (the offline
-   `analitiq-validator` package), and the assembled pipeline through the bundle
-   pass (`--bundle-root`).
+4. **Validates** every artifact on the `analitiq-validator` MCP server the
+   plugin ships (`.mcp.json`), and the assembled pipeline as a workspace.
 5. **Writes files** to disk — only once everything passes.
 
 You can also **edit** an existing pipeline in place — e.g. "change the schedule
@@ -53,26 +52,14 @@ the registry. The full file layout and identity model are documented in
 the secrets workflow in
 [spec-envelope.md](skills/connection-spec/spec-envelope.md).
 
-## Validate manually
+## Validation
 
-Validation runs the published, offline `analitiq-validator` package through a
-thin adapter (the plugin self-installs it on first use):
-
-```bash
-python3 plugins/analitiq-pipeline-builder/scripts/validate.py \
-  --entity pipeline \
-  --document path/to/pipeline.json \
-  --bundle-root path/to/project
-```
-
-Output is a single `Diagnostics` JSON object; exit `0` iff `passed: true`. This
-plugin's suite lives at the repo root under `tests/pipeline_builder/`. From the
-repo root: `pip install -r requirements-dev.txt`, then
-`pytest tests/pipeline_builder/`.
-
-The `--entity` values are listed in
-[pipeline-schema-validator.md](agents/pipeline-schema-validator.md); how each one
-routes is in `scripts/validate.py`'s module docstring.
+The `pipeline-schema-validator` agent builds each request with
+`scripts/validation_request.py` — which selects a package's files by its
+published location table and never submits a credentials file — and sends it to
+the MCP server. The plugin installs nothing. This plugin's suite lives at the
+repo root under `tests/pipeline_builder/`. From the repo root:
+`pip install -r requirements-dev.txt`, then `pytest tests/pipeline_builder/`.
 
 ## How it fits together
 

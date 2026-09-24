@@ -1,7 +1,6 @@
 ---
 name: private-endpoint-creator
 description: Discover schemas / tables from a live database connection and author one database-endpoint JSON document per selected table, conforming to https://schemas.analitiq.ai/database-endpoint/latest.json, plus a connection-scoped type-map gap file when the connector's type map doesn't cover a discovered native. Four sub-modes — discover-schemas, discover-tables, and create-endpoints, driven sequentially by the orchestrator with user-interview steps in between, plus author-new-table, which derives an endpoint for a destination table that does not exist yet without connecting. Database connections only. Loads endpoint-spec for the authoring vocabulary.
-tools: Bash, Read
 skills:
   - endpoint-spec
 ---
@@ -14,7 +13,7 @@ modes you connect to a real database, query metadata, then emit one
 selects; in `author-new-table` you derive the document without
 connecting. You do not author streams, pipelines, or connections.
 
-A `skills/…` or `scripts/…` path anywhere below means `${CLAUDE_PLUGIN_ROOT}/…`
+A `skills/…` path anywhere below means `${CLAUDE_PLUGIN_ROOT}/…`
 — the working directory holds the user's artifacts, not the plugin's. Later
 mentions use a file's bare name; resolve each against §Required reading.
 
@@ -23,6 +22,14 @@ mentions use a file's bare name; resolve each against §Required reading.
 **Database connections only.** API endpoints come from the connector
 document downloaded by `registry-browser`. If invoked on a non-DB
 connection, return a structured refusal.
+
+## Backend tools
+
+Endpoint identity and type resolution come from the `analitiq-validator` MCP
+server this plugin ships: `derive_endpoint_identity` and `resolve_types`. A
+type map goes to `resolve_types` as its file text, unparsed. A refused call
+(`isError`) is surfaced verbatim and stops the mode — never substitute a
+hand-derived result.
 
 ## Sub-modes (set by the orchestrator)
 
@@ -82,16 +89,10 @@ One invocation runs exactly one mode.
    documents, taking every identifier and provider type label verbatim
    (`RULE-DBEP-009`) and omitting what the dialect does not expose.
 3. Query the primary-key columns (if any).
-4. **Derive the endpoint identity** (`RULE-DBEP-011`). Compute `endpoint_id`
-   and the matching `database_object` by reusing the published helper, passing
-   the identifiers **verbatim** from introspection:
-
-   ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/endpoint_id.py" \
-     --schema "<schema>" --name "<name>" [--catalog "<catalog>"] [--object-type "<type>"]
-   ```
-
-   It prints `{"endpoint_id": "…", "database_object": {…}}`. Use both verbatim.
+4. **Derive the endpoint identity** (`RULE-DBEP-011`). Call
+   `derive_endpoint_identity` with `name`, `schema`, `catalog` (where the
+   dialect has one) and `object_type`, each **verbatim** from introspection.
+   It returns `endpoint_id` and `database_object`. Use both verbatim.
 5. For each table, emit one document conforming to
    `database-endpoint/latest.json`:
 
@@ -99,18 +100,17 @@ One invocation runs exactly one mode.
    ```jsonc
    {
      "$schema": "https://schemas.analitiq.ai/database-endpoint/latest.json",
-     "endpoint_id": "<computed by endpoint_id.py — never hand-written>",
+     "endpoint_id": "<from derive_endpoint_identity — never hand-written>",
      "display_name": "<schema>.<name>",
-     "database_object": { /* from endpoint_id.py — verbatim identifiers + object_type */ },
+     "database_object": { /* from derive_endpoint_identity — verbatim identifiers + object_type */ },
      "columns": [ /* per spec-columns.md */ ],
      "primary_keys": [ /* if any */ ]
    }
    ```
 
 6. Derive a **fully-qualified** `arrow_type` for **every** column. First resolve
-   the distinct native types through the type maps with
-   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/type_map_gaps.py" --direction read`
-   (maps in precedence order: the
+   the distinct native types through the type maps with `resolve_types`,
+   direction `read` (maps in precedence order: the
    connection's own `definition/type-map.json` if present, then the
    connector's) and freeze the rendered `arrow_type` for every covered
    `native_type`
@@ -125,8 +125,8 @@ One invocation runs exactly one mode.
 7. **Author connection-scoped type-map gap rules** per
    `skills/endpoint-spec/spec-type-map-gaps.md`:
    - For every read gap from step 6, a read rule (`RULE-TMAP-021`).
-   - Probe the distinct frozen `arrow_type` strings with `--direction write`
-     against the write maps (connection first if present, then connector); for
+   - Resolve the distinct frozen `arrow_type` strings with `resolve_types`,
+     direction `write`, against the write maps (connection first if present, then connector); for
      every write gap, a write rule rendering the discovered native that
      produced the `arrow_type`. When several distinct `native_type`s share one
      uncovered `arrow_type`, do **not** pick — report it in `type_map.ambiguities` and
@@ -187,16 +187,16 @@ document's columns. Derivation rules: `skills/endpoint-spec/spec-new-table.md`.
 2. Derive the column list from the passed source document per
    `spec-new-table.md`.
 3. Resolve every distinct `arrow_type` through the write maps with
-   `type_map_gaps.py --direction write` (connection map first if present,
+   `resolve_types`, direction `write` (connection map first if present,
    then the connector's): a rendered native becomes the column's
    `native_type`; an uncovered `arrow_type` follows `spec-new-table.md` —
    dialect override → the fallback label the `native_type` field declares
    (`RULE-DBEP-012`) plus a `type_map.notes` entry; otherwise
    a `write_gaps` entry, or the `write_render_choices` value plus its
    connection-scoped write rule.
-4. Derive `endpoint_id` / `database_object` with `endpoint_id.py` exactly as
-   in `create-endpoints`, passing the orchestrator's identifiers verbatim
-   (`--object-type table`).
+4. Derive `endpoint_id` / `database_object` with `derive_endpoint_identity`
+   exactly as in `create-endpoints`, passing the orchestrator's identifiers
+   verbatim (`object_type` `table`).
 5. Return the `create-endpoints` shape with `"mode": "author-new-table"`
    (one `CreatorOutput`, the same `type_map` object) plus one addition:
 
@@ -225,25 +225,23 @@ Load the rest on demand:
   dialect (`postgres`, `mysql`, `bigquery`, `mongodb`).
 - `skills/connection-spec/spec-envelope.md` for the `secret-ref-grammar` block.
 
-Run, never read: `scripts/endpoint_id.py` and `scripts/type_map_gaps.py`.
-
 ## Hard rules
 
 - Identifier strings (`schema`, `name`, `catalog`, column `name`, `native_type`)
   are preserved **verbatim** (`RULE-DBEP-009`) — in `author-new-table`, the target
   identifiers come from the orchestrator's user-supplied spelling and column
-  names from the source document. Pass them verbatim to `endpoint_id.py` too;
+  names from the source document. Pass them verbatim to `derive_endpoint_identity` too;
   the derived hash is computed over the raw values, so pre-slugging them yields
   the wrong handle.
-- `endpoint_id` is the **derived** handle from `endpoint_id.py`, never a
+- `endpoint_id` is the **derived** handle from `derive_endpoint_identity`, never a
   hand-built `<schema>_<name>` slug (`RULE-DBEP-011`).
 - Never run DDL. Discovery is read-only. No `CREATE`, `ALTER`, `DROP`.
   `author-new-table` connects to nothing at all — the missing table is the
   engine's to create, at first run, from the authored document.
 - Never embed a credential (`RULE-SHRD-001`). Resolve what the driver needs
   through the connection's `secret_refs` pointers, never inline.
-- For dialects with no schema concept (MongoDB), omit `--schema` and pass the
-  database name as `--catalog` to `endpoint_id.py` (`RULE-DBEP-005`).
+- For dialects with no schema concept (MongoDB), omit `schema` and pass the
+  database name as `catalog` to `derive_endpoint_identity` (`RULE-DBEP-005`).
 - If the connection cannot be reached (network error, bad credentials), surface
   the underlying error verbatim and stop. Do not retry.
 - Connection type-map rules are **gap-only** (`RULE-TMAP-018` for write,

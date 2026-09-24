@@ -236,7 +236,7 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
      overwrite.
    - **If no** → invoke `connection-creator`. It writes:
      - `connections/<connection-slug>/connection.json` — validates as
-       entity `connection`. Authors `connection_id` as the
+       document kind `connection`. Authors `connection_id` as the
        orchestrator-minted UUID, `connector_id` as the connector slug,
        and routes each connector-contract input into the
        `parameters` / `selections` / `secret_refs` maps by its
@@ -260,9 +260,10 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
    For each table the user selects, check whether an endpoint file for
    it already exists under `connections/<connection-slug>/definition/endpoints/`.
    The filename is the endpoint's **derived** `endpoint_id`; compute it
-   for the table with `scripts/endpoint_id.py` to know the filename —
+   for the table with `derive_endpoint_identity` (the `analitiq-validator` MCP
+   server) to know the filename —
    never hand-write one (see `endpoint-spec/spec-database-object.md`):
-   - **If yes** → reuse it. Validate it (entity `database-endpoint`) so
+   - **If yes** → reuse it. Validate it (document kind `database-endpoint`) so
      a stale shape is caught early. If validation passes, record reuse
      in the final summary and do **not** re-introspect or rewrite the
      file. If validation **fails**, halt and surface the validator's
@@ -298,9 +299,9 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
    - Collect the new table's `primary_keys`, suggesting the source
      endpoint's own primary keys as the default — an `upsert`
      destination draws its `conflict_keys` from them (`RULE-STRM-016`).
-   - Compute the endpoint filename with `scripts/endpoint_id.py` (as
-     above, passing the same `--catalog` / `--schema` / `--name`
-     arguments discovery would); an existing file for it is an
+   - Compute the endpoint filename with `derive_endpoint_identity` (as
+     above, passing the same `catalog` / `schema` / `name` discovery
+     would); an existing file for it is an
      existing endpoint — reuse per the rules above instead of
      re-authoring.
    - Invoke `author-new-table` with the target, the primary keys, and
@@ -331,7 +332,7 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
      ambiguities.
    - Write a non-null `type_map.document` to
      `connections/<connection-slug>/definition/type-map.json` and validate it
-     (entity `type-map`) through the same fix-and-revalidate loop as other
+     (document kind `type-map`) through the same fix-and-revalidate loop as other
      artifacts.
      `null` means write nothing — never create an empty map file, and never
      delete an existing one. Record authored or extended maps in the final
@@ -341,7 +342,7 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
    `pipeline_id` UUID, the `connections.source` / `connections.destinations[]`
    UUIDs, schedule classification, and engine/runtime defaults. Writes
    `pipelines/<pipeline-slug>/pipeline.json` with `streams: []` (filled
-   in phase 8). Validates as entity `pipeline`.
+   in phase 8). Validates as document kind `pipeline`.
 
 7. **Streams** — invoke `stream-creator` once per selected endpoint, in
    parallel. Each receives the
@@ -350,17 +351,17 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
    UUIDs, the minted `stream_id` UUID, replication method, write mode,
    and the parent `pipeline_id` UUID (written into stream `pipeline_id`).
    Writes `pipelines/<pipeline-slug>/streams/<stream-slug>.json` and
-   validates as entity `stream`.
+   validates as document kind `stream`.
 
 8. **Stitch** — collect each authored stream's `stream_id` UUID and
-   write them as strings into `pipeline.json#/streams`. Re-validate the
-   pipeline file with `bundle_root: .` so the bundle referential checks
-   run.
+   write them as strings into `pipeline.json#/streams`. Validate the
+   workspace (the project root, naming this pipeline) so the cross-document
+   checks run.
 
 9. **Validate** — invoke `pipeline-schema-validator` once per authored
-    artifact, passing the entity that artifact was authored as (the
-    vocabulary is the agent's `entity` input); for the stitched pipeline
-    pass `bundle_root: .` so the cross-document referential checks run —
+    artifact, passing the document kind that artifact was authored as; for
+    the stitched pipeline validate the workspace so the cross-document
+    referential checks run —
     `references/io-contracts.md` documents the finding shape and the ids its
     own cross-document checks emit; a finding may also name a rule its
     contract model raised, or none at all where that section says none
@@ -415,11 +416,11 @@ and leaves everything else — including `.secrets/` — untouched.
    through the same fix-and-revalidate loop. When a pipeline or stream changed, also
    validate its **referenced closure** — every connection the pipeline references
    (public and private), every connection-scoped private endpoint those
-   connections own (entities `connection` / `database-endpoint`), and any
+   connections own (document kinds `connection` / `database-endpoint`), and any
    connection-scoped `type-map.json` beside them
-   (entity `type-map`) — which catches a stale or broken
-   referenced artifact; plus the whole bundle with `bundle_root: .`, the pass
-   that resolves cross-document references and the on-disk endpoint file names
+   (document kind `type-map`) — which catches a stale or broken
+   referenced artifact; plus the workspace, the request that resolves
+   cross-document references and the on-disk endpoint file names
    (`references/io-contracts.md` documents its finding ids and shape). Both
    surface at edit time instead of at engine runtime. Write only once
    validation is clean.
@@ -440,8 +441,8 @@ Report to the user:
 
 ## Hard rules
 
-- Never call any Analitiq registration / submission API. This is a local
-  authoring tool only.
+- Never call any Analitiq registration API. The only backend this plugin
+  talks to is the `analitiq-validator` MCP server it ships.
 - Never author connector documents. Those belong to the
   `analitiq-connector-builder` plugin. `registry-browser` only
   *downloads* connector files from the DIP registry.
@@ -451,8 +452,8 @@ Report to the user:
   where UUIDs belong; do not put UUIDs where slugs belong.
 - Every cross-document reference must resolve in the assembled run
   (`RULE-PIPE-011`, `RULE-PIPE-012`, `RULE-STRM-032`, `RULE-STRM-033`,
-  `RULE-STRM-034`, `RULE-CONN-011`). Pass `bundle_root: .` when validating
-  the stitched pipeline, which is what runs them.
+  `RULE-STRM-034`, `RULE-CONN-011`). Validate the workspace once the
+  pipeline is stitched, which is what runs them.
 - Authored documents declare `$schema` with the published host
   (`RULE-SHRD-003`); the per-entity URLs and how validation runs are in
   `references/schema-hosts.md`.

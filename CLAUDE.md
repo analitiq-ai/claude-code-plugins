@@ -89,23 +89,19 @@ puts both source trees on the path and sets `ANALITIQ_VALIDATOR_FROM_SOURCE=1` s
 helper run from a checkout does not bootstrap a venv and `os.execv` out of pytest.
 `requirements-dev.txt` carries only the packages' runtime deps.
 
-The plugins **self-install a published release at runtime** — end users have no
-checkout, so the pin must name a version already on PyPI. **`VALIDATOR_PIN` in
-`plugins/analitiq-pipeline-builder/scripts/_bootstrap.py` is the only place that
-version is stated.** Never restate it. The one unavoidable second copy is the
-self-install line in
-`plugins/analitiq-connector-builder/agents/connector-schema-validator.md` (prose an
-agent runs, so it cannot import the constant), pinned by
-`test_connector_validator_agent_states_the_same_pin`.
+The plugins **install nothing**: they submit documents to the `analitiq-validator`
+MCP server each plugin ships in its `.mcp.json`, which runs a published release.
+**`VALIDATOR_PIN` in `plugins/analitiq-pipeline-builder/scripts/_bootstrap.py` is
+the only place a published validator version is stated**, read by the pin guards
+alone; nothing imports that module. Never restate it.
 
 The pin must be **at or behind** `packages/validator/pyproject.toml`. Equal is the
 steady state; behind is tolerated for merging because the publish is a hand-pushed
 tag firing before the version bump merges — the `contracts-version-guard` job reds
 its strict runs while the pin lags, as the reminder to finish the release. A pin
-**ahead** of what this repo ships is the dangerous direction: marketplace installs
-track main HEAD, so every user's `pip install` fails and the plugin cannot run.
+**ahead** of what this repo ships names a release that does not exist.
 `PINNED_VERSION` in `tests/connector_builder/_pins.py` is a *different* value — what
-this repo ships, not what the plugins install — so it runs ahead during a release
+this repo ships, not what `VALIDATOR_PIN` names — so it runs ahead during a release
 window. `scripts/check_validator_pin_contract.py` (CI job `pinned-validator-guard`)
 guards the pin from the other side; its docstring owns the full semantics.
 

@@ -27,11 +27,11 @@ For each artifact:
 
 1. Run the validator.
 2. If `passed: true`, accept and move on.
-3. If any finding's `validator` is `adapter-crash`, halt immediately and
-   surface it instead of entering the fix loop below: it names a validator or
-   runtime failure, not an authored-document defect, so the creator has no
-   correction to make — feeding it in would re-invoke the creator against an
-   artifact that may already be valid.
+3. If any finding's `message_id` is `validation-not-run` or `file-left-out`,
+   halt immediately and surface it instead of entering the fix loop below: it
+   names a failure to submit, not an authored-document defect, so the creator
+   has no correction to make — feeding it in would re-invoke the creator
+   against an artifact that may already be valid.
 4. Otherwise, collect the findings and re-invoke the matching creator with the
    findings attached, asking it to fix exactly the reported errors — and only
    those, no opportunistic edits.
@@ -40,5 +40,5 @@ For each artifact:
    surface the diagnostics.
 
 The validator is stateless — the pass cap and the discipline live here, not in
-`scripts/validate.py`, and every artifact the orchestrator writes goes through
-this same loop.
+`pipeline-schema-validator`, and every artifact the orchestrator writes goes
+through this same loop.

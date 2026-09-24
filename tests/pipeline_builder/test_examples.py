@@ -2,8 +2,8 @@
 
 The `examples/*.example.json` files are what a creator agent copies its shape
 from, so a drifted example teaches the agent to author an invalid document. This
-suite is the guard: it validates each example against the entity its directory
-implies, using the same adapter the `pipeline-schema-validator` agent runs.
+suite is the guard: it validates each example as the document kind its
+directory implies, through the validator's single-document request.
 
 Skips cleanly when the published packages are absent, like the other suites.
 """
@@ -16,8 +16,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2] / "plugins" / "analitiq-pipeline-builder"
-sys.path.insert(0, str(ROOT / "scripts"))
-import validate as V  # noqa: E402
+from _validate import validate_as  # noqa: E402  (pytest puts this dir on sys.path)
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
@@ -72,7 +71,7 @@ def test_every_spec_skill_with_examples_is_mapped():
 
 @pytest.mark.parametrize("entity,path", EXAMPLES)
 def test_example_validates(entity, path):
-    diagnostics = V.diagnostics_for(entity, path)
+    diagnostics = validate_as(entity, path.read_text())
     assert diagnostics["passed"], (
         f"{path.relative_to(ROOT)} does not validate as {entity}: "
         + "; ".join(f"{f['path']}: {f['message']}" for f in diagnostics["findings"])

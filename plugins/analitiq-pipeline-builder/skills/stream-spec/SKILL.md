@@ -127,5 +127,5 @@ Every authored document must:
 4. Shape each `endpoint_ref` by its `scope` — see `spec-endpoint-refs.md` for
    the per-scope field tables and `RULE-STRM-018` for the derived
    `endpoint_id`.
-5. Pass validation (the `pipeline-schema-validator`, entity `stream`) with zero
+5. Pass validation (the `pipeline-schema-validator`, document kind `stream`) with zero
    error findings.
