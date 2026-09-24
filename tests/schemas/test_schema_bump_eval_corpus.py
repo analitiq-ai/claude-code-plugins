@@ -56,3 +56,12 @@ def _answering(jev_confidence: float):
 def test_a_stage1_miss_counts_against_the_floor_only_when_stage1_was_final(confidence, counted):
     case = eval_schema_bumps.Case("synthetic", "probe", {"type": "object"}, {"type": "string"}, "major")
     assert eval_schema_bumps._score(case, _answering(confidence))["stage1_confident_miss"] is counted
+
+
+@pytest.mark.parametrize("runs", ["0", "-1"])
+def test_a_run_count_below_one_is_refused_before_any_call(monkeypatch, runs):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(cascade, "openrouter_post", lambda api_key: pytest.fail("no call expected"))
+    with pytest.raises(SystemExit) as refused:
+        eval_schema_bumps.main(["--runs", runs])
+    assert refused.value.code == 2

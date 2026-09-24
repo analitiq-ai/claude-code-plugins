@@ -122,9 +122,16 @@ def _report(run: int, results: list[dict]) -> bool:
     return ok
 
 
+def _positive_int(text: str) -> int:
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1, got {value}")
+    return value
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
-    parser.add_argument("--runs", type=int, default=3)
+    parser.add_argument("--runs", type=_positive_int, default=3)
     parser.add_argument("--corpus", choices=("all", "historical", "synthetic"), default="all")
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--out", type=Path, help="write every scored result as JSON here")
