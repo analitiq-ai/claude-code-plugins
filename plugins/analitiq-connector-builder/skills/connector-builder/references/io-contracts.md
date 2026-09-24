@@ -358,6 +358,15 @@ access and may not guess field types).
 }
 ```
 
+The validator agent adds findings of its own, for what never reached the server:
+
+- `file-left-out` — `fail`, **error**: an entry a location could hold that the
+  request could not carry — a link (never followed), a directory it could not
+  read, or a file that is not a regular file, unreadable, or not UTF-8 text.
+  `path` is its key; a directory's ends in `/`.
+- `validation-not-run` — `notApplicable`: the request could not be built, or
+  the server refused it. `message` carries the reason verbatim.
+
 ## DriftVerdict
 
 <!-- BEGIN GENERATED: drift-verdict-envelope -->

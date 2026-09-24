@@ -190,6 +190,17 @@ def test_validator_ids_include_what_only_a_workspace_request_reaches():
     assert "`RULE-TMAP-018`" in G.render_validator_ids()
 
 
+def test_validator_ids_leave_out_rules_the_plugin_does_not_render():
+    """A workspace also carries connector packages, whose rules the connector
+    plugin renders; a reached rule the pipeline plugin does not own is left out."""
+    from analitiq.contracts.shared.rules import all_rules
+
+    connector_only = next(r for r in all_rules() if r.id == "RULE-PKG-030")
+    assert "pipeline-plugin" not in connector_only.owners
+    assert connector_only.validator in G._reach(G._validator_sources(), G._REQUEST_ENTRY_POINTS)
+    assert "`RULE-PKG-030`" not in G.render_validator_ids()
+
+
 def test_reach_follows_references_across_modules():
     """A rule is reachable when the function holding its finding call is,
     however many calls and module imports lie between; a function no root

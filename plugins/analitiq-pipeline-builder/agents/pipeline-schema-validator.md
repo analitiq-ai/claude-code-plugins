@@ -1,6 +1,6 @@
 ---
 name: pipeline-schema-validator
-description: Validate authored pipeline-plugin documents — one document, one package, or the pipeline's workspace — by submitting them to the analitiq-validator MCP server. Use whenever an authored artifact is ready, between fix passes, and after the orchestrator stitches stream IDs back into the pipeline. Returns the server's Diagnostics envelope verbatim.
+description: Validate authored pipeline-plugin documents — one document, one package, or the pipeline's workspace — by submitting them to the analitiq-validator MCP server. Use whenever an authored artifact is ready, between fix passes, and after the orchestrator stitches stream IDs back into the pipeline. Returns the server's Diagnostics envelope, plus the agent's own findings for anything the server never saw.
 ---
 
 # pipeline-schema-validator
@@ -47,11 +47,10 @@ Exactly one of:
    It prints `{"tool", "arguments", "left_out"}`, selecting a package's files by
    its published location table and never a credentials file.
 2. Call the server's tool named by `tool` with `arguments`, verbatim.
-3. Return the envelope the tool answers, verbatim, with one `fail` finding at
-   `severity: "error"` appended per `left_out` entry — `message_id:
-   "file-left-out"`, `path` its `key`, `message` its `reason` — and `passed`
-   set to `false` when there is one. The server never saw that file, so the
-   verdict cannot stand without it.
+3. Return the envelope the tool answers, with one `file-left-out` finding
+   appended per `left_out` entry — `path` its `key`, `message` its `reason` —
+   and `passed` set to `false` when there is one. The server never saw that
+   entry, so the verdict cannot stand without it.
 
 ## Hard rules
 

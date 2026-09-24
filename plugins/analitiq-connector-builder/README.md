@@ -18,9 +18,9 @@ documentation URL, the plugin:
    (dialect + connector class, requirements, pyproject).
 4. Authors endpoint files alongside (API connectors only — DB endpoints are
    discovered at runtime).
-5. Validates everything against the published contract — offline, via the
-   contract models — plus a layer of semantic validators (DSN bindings, auth
-   shape, type-map coverage, etc.).
+5. Validates everything on the `analitiq-validator` MCP server, against the
+   published contract models plus a layer of semantic validators (DSN
+   bindings, auth shape, type-map coverage, etc.).
 6. Classifies version drift against the previous release and bumps `version`
    accordingly.
 7. Writes the connector and endpoint files to disk at predictable paths.
@@ -124,8 +124,9 @@ Without the package installed the guards skip.
 ## Schema host
 
 - The published schemas are hosted at `https://schemas.analitiq.ai`. The
-  validator enforces the contract **offline** (via the contract models) and does
-  not fetch them.
+  validator enforces the contract through the contract models and does not
+  fetch them; the plugin's request builder reads only the package location
+  tables there.
 - <!-- PROBE: connector-schema-optional, endpoint-schema-host-locked -->
   Authored documents declare `$schema` with the same host. How hard that is
   enforced varies by document family — endpoint documents lock the URL with a

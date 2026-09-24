@@ -5,7 +5,15 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
+
+import pytest
+from analitiq.contracts.validation_requests import (
+    ValidatePackageRequest,
+    ValidateSingleDocumentRequest,
+    ValidateWorkspaceRequest,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,8 +45,18 @@ def _write(root: Path, files: dict[str, str | bytes]) -> None:
             path.write_text(content)
 
 
+_REQUEST_MODELS = {
+    "validate_single_document": ValidateSingleDocumentRequest,
+    "validate_package": ValidatePackageRequest,
+    "validate_workspace": ValidateWorkspaceRequest,
+}
+
+
 def _build(*argv) -> dict:
-    return builder.build([str(a) for a in argv], rendered)
+    """Build, holding `arguments` to the request model its tool takes."""
+    built = builder.build([str(a) for a in argv], rendered)
+    _REQUEST_MODELS[built["tool"]].model_validate(built["arguments"])
+    return built
 
 
 def test_the_connector_plugin_ships_the_same_builder():
@@ -89,7 +107,7 @@ def test_a_workspace_request_naming_a_pipeline_carries_no_other_pipeline(tmp_pat
         "connections/c/connection.json": "{}",
     })
     assert sorted(_build("workspace", tmp_path, "p")["arguments"]["documents"]) == [
-        "connections/c/connection.json", "pipelines/p/pipeline.json"]
+        "connections/c/connection.json", "pipelines/manifest.json", "pipelines/p/pipeline.json"]
 
 
 def test_a_document_is_carried_as_the_text_on_disk(tmp_path):
@@ -126,7 +144,7 @@ def test_a_linked_directory_is_reported_not_followed(tmp_path):
     (package / "definition").symlink_to(outside, target_is_directory=True)
     built = _build("package", package, "connection")
     assert sorted(built["arguments"]["documents"]) == ["connection.json"]
-    assert built["left_out"] == [{"key": "definition", "reason": "a linked directory, never followed"}]
+    assert built["left_out"] == [{"key": "definition/", "reason": "a link, never followed"}]
 
 
 def test_a_document_that_is_not_utf8_is_reported(tmp_path):
@@ -140,3 +158,118 @@ def test_every_package_kind_has_a_location_table_where_the_builder_reads_it():
     from analitiq.contracts.validation_requests import PACKAGE_KINDS
     for kind in PACKAGE_KINDS:
         assert rendered(f"{builder.SCHEMA_HOST}/{kind}-package/latest.json")["patternProperties"]
+
+
+def test_a_connector_package_is_rooted_where_its_table_locates_it(tmp_path):
+    _write(tmp_path, {"definition/connector.json": "{}", "definition/endpoints/e.json": "{}",
+                      "connector.py": "", "README.md": "r"})
+    assert sorted(_build("package", tmp_path, "connector")["arguments"]["documents"]) == [
+        "definition/connector.json", "definition/endpoints/e.json"]
+
+
+def test_a_linked_directory_no_location_reaches_is_not_reported(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    package = tmp_path / "pkg"
+    _write(package, {"connection.json": "{}", ".venv/lib/x.py": ""})
+    (package / ".venv" / "lib64").symlink_to(outside, target_is_directory=True)
+    (package / "definition").mkdir()
+    (package / "definition" / "cache").symlink_to(outside, target_is_directory=True)
+    assert _build("package", package, "connection")["left_out"] == []
+
+
+def test_a_linked_directory_under_another_pipeline_is_not_reported(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    workspace = tmp_path / "ws"
+    _write(workspace, {"pipelines/p/pipeline.json": "{}", "pipelines/q/pipeline.json": "{}"})
+    (workspace / "pipelines" / "q" / "streams").symlink_to(outside, target_is_directory=True)
+    assert _build("workspace", workspace, "p")["left_out"] == []
+
+
+def test_a_linked_package_directory_in_a_workspace_is_reported(tmp_path):
+    outside = tmp_path / "outside"
+    _write(outside, {"connection.json": "{}"})
+    workspace = tmp_path / "ws"
+    _write(workspace, {"pipelines/p/pipeline.json": "{}"})
+    (workspace / "connections").mkdir()
+    (workspace / "connections" / "c").symlink_to(outside, target_is_directory=True)
+    assert _build("workspace", workspace)["left_out"] == [
+        {"key": "connections/c/", "reason": "a link, never followed"}]
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads any directory")
+def test_an_unreadable_directory_a_location_reaches_is_reported(tmp_path):
+    _write(tmp_path, {"connection.json": "{}", "definition/endpoints/e.json": "{}"})
+    endpoints = tmp_path / "definition" / "endpoints"
+    endpoints.chmod(0)
+    try:
+        built = _build("package", tmp_path, "connection")
+    finally:
+        endpoints.chmod(0o755)
+    assert built["left_out"] == [{"key": "definition/endpoints/", "reason": "unreadable: Permission denied"}]
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads any file")
+def test_an_unreadable_document_is_reported(tmp_path):
+    _write(tmp_path, {"connection.json": "{}"})
+    (tmp_path / "connection.json").chmod(0)
+    try:
+        built = _build("package", tmp_path, "connection")
+    finally:
+        (tmp_path / "connection.json").chmod(0o644)
+    assert built["left_out"] == [{"key": "connection.json", "reason": "unreadable: Permission denied"}]
+
+
+def test_a_located_entry_that_is_not_a_regular_file_is_reported(tmp_path):
+    _write(tmp_path, {"connection.json": "{}"})
+    os.mkfifo(tmp_path / "definition-type-map.fifo")
+    (tmp_path / "definition").mkdir()
+    os.mkfifo(tmp_path / "definition" / "type-map.json")
+    assert _build("package", tmp_path, "connection")["left_out"] == [
+        {"key": "definition/type-map.json", "reason": "not a regular file"}]
+
+
+@pytest.mark.parametrize("argv", [
+    [],
+    ["validate"],
+    ["package"],
+    ["package", "."],
+    ["document", "x.json"],
+    ["workspace", ".", "p", "extra"],
+    ["package", ".", "connection", "extra"],
+])
+def test_an_argument_list_no_mode_takes_is_refused(tmp_path, argv):
+    with pytest.raises(builder.RequestError, match="usage"):
+        builder.build(argv, rendered)
+
+
+@pytest.mark.parametrize("mode,extra", [("package", ["connection"]), ("workspace", [])])
+def test_a_missing_directory_is_refused(tmp_path, mode, extra):
+    with pytest.raises(builder.RequestError):
+        builder.build([mode, str(tmp_path / "absent"), *extra], rendered)
+
+
+def test_a_linked_target_directory_is_refused(tmp_path):
+    (tmp_path / "real").mkdir()
+    (tmp_path / "link").symlink_to(tmp_path / "real", target_is_directory=True)
+    with pytest.raises(builder.RequestError):
+        builder.build(["package", str(tmp_path / "link"), "connection"], rendered)
+
+
+def test_a_pipeline_with_no_directory_is_refused(tmp_path):
+    _write(tmp_path, {"pipelines/p/pipeline.json": "{}"})
+    with pytest.raises(builder.RequestError):
+        builder.build(["workspace", str(tmp_path), "typo"], rendered)
+
+
+@pytest.mark.parametrize("content,link", [(None, False), (b"\xff", False), ("{}", True)])
+def test_a_single_document_that_cannot_be_submitted_is_refused(tmp_path, content, link):
+    target = tmp_path / "s.json"
+    if link:
+        (tmp_path / "real.json").write_text(content)
+        target.symlink_to(tmp_path / "real.json")
+    elif content is not None:
+        target.write_bytes(content)
+    with pytest.raises(builder.RequestError):
+        builder.build(["document", str(target), "stream"], rendered)

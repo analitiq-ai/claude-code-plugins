@@ -1,6 +1,6 @@
 ---
 name: connector-schema-validator
-description: Validate one draft connector-builder document, or a whole connector package, by submitting it to the analitiq-validator MCP server. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Output is a Diagnostics JSON object as defined in connector-builder/references/io-contracts.md.
+description: Validate one draft connector-builder document, or a whole connector package, by submitting it to the analitiq-validator MCP server. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Output is the server's Diagnostics envelope, plus the agent's own findings for anything the server never saw, as defined in connector-builder/references/io-contracts.md.
 color: orange
 ---
 
@@ -26,7 +26,7 @@ Exactly one of:
   name of the published schema it is written against (the resource segment of
   its `$schema` URL). Graded alone: no check that needs a second document runs.
 - `package` — absolute path to a connector package's own directory, the one
-  holding `connector.json`. The only request that runs the package-level checks.
+  holding `definition/connector.json`. The only request that runs the package-level checks.
   <!-- PROBE: type-map-standalone-no-package-check, type-map-section-missing -->
   Validating a type map on its own runs no package-level check — those run when
   the **connector package** is validated, off the `type-map.json` beside it, and
@@ -51,10 +51,10 @@ Validation runs on the `analitiq-validator` MCP server this plugin ships.
    It prints `{"tool", "arguments", "left_out"}`, selecting a package's files by
    its published location table.
 2. Call the server's tool named by `tool` with `arguments`, verbatim.
-3. Append one `fail` finding at `severity: "error"` per `left_out` entry —
-   `message_id: "file-left-out"`, `path` its `key`, `message` its `reason` —
-   and set `passed` to `false` when there is one. The server never saw that
-   file, so the verdict cannot stand without it.
+3. Append one `file-left-out` finding per `left_out` entry — `path` its
+   `key`, `message` its `reason` — and set `passed` to `false` when there is
+   one. The server never saw that entry, so the verdict cannot stand without
+   it.
 
 ## Findings
 
@@ -104,8 +104,6 @@ prose, do not reformat.
 - Never assemble `arguments` by hand, and never add a file the builder left
   out: the location table decides what a request carries.
 - If the builder fails, or the tool call is refused (the result is an error),
-  report a single finding carrying the builder's stderr or the refusal text
-  verbatim as `message`: `message_id: "validation-not-run"`,
-  `kind: "notApplicable"` (nothing here decided whether the document holds,
-  so no `rule` and no `severity`), `path: ""`. Never forward partial output as
-  the verdict.
+  report a single `validation-not-run` finding, `path: ""`, carrying the
+  builder's stderr or the refusal text verbatim as `message`. Never forward
+  partial output as the verdict.

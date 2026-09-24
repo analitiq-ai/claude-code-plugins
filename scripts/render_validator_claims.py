@@ -797,8 +797,8 @@ def _wired_examples(status: str, mutate_stream: Callable[[dict], None] | None) -
 
 
 def _pipeline_package(status: str, mutate_stream: Callable[[dict], None] | None = None) -> list[dict]:
-    """The wired pipeline and its stream graded as a pipeline package — what
-    the pipeline plugin submits once a pipeline is authored."""
+    """The wired pipeline and its stream graded as a pipeline package, the
+    smallest request whose checks read both."""
     from analitiq.contracts.validation_requests import ValidatePackageRequest
     from analitiq.validator import validate_package
 
