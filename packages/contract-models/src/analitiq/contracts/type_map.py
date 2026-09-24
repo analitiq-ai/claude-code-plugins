@@ -478,7 +478,9 @@ def resolve_type(value: str, rules: list, direction: TypeMapDirection) -> str | 
     `${name}` in the render with its capture.
 
     `rules` need not have passed the model, so the validator can resolve over a
-    map it is still grading: a rule the model would refuse renders nothing."""
+    map it is still grading. A rule that is not an object, lacks a string on
+    either side, or carries a regex matcher the contract refuses renders
+    nothing; any other rule renders as authored."""
     matcher_key, render_key = _MATCH_AND_RENDER_KEYS[direction]
     normalize = normalize_native_type if direction == "read" else None
     probe = normalize(value) if normalize else value
