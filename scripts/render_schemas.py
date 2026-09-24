@@ -150,6 +150,17 @@ _TIGHTENING_NEW_KEYWORDS = frozenset({
     "unevaluatedProperties", "unevaluatedItems",
 })
 
+# List-valued keywords a document satisfies by matching ANY member, and those it
+# satisfies only by matching EVERY member. `dependentRequired` holds its lists
+# one level down, under each property name.
+_DISJUNCTIVE_LIST_KEYWORDS = frozenset({"enum", "type", "anyOf"})
+_CONJUNCTIVE_LIST_KEYWORDS = frozenset({"required", "allOf", "dependentRequired"})
+# Keywords whose keys are author-chosen names, so a key under them is a name
+# that may happen to spell a keyword.
+_NAME_KEYED_KEYWORDS = frozenset(
+    {"properties", "patternProperties", "$defs", "dependentSchemas", "dependentRequired"}
+)
+
 
 # ---------------------------------------------------------------------------
 # Resource registry
@@ -2020,7 +2031,7 @@ def _strip_doc_and_stamp(obj: Any) -> Any:
     return obj
 
 
-def _is_additive(old: Any, new: Any, path: tuple = ()) -> bool:
+def _is_additive(old: Any, new: Any, new_root: dict, path: tuple = ()) -> bool:
     """True when `new` only adds keys / list elements compared to `old`.
 
     Heuristic — returns False (≈ MAJOR) for the changes we explicitly know
@@ -2028,9 +2039,12 @@ def _is_additive(old: Any, new: Any, path: tuple = ()) -> bool:
 
     - Removing a key from a dict node (e.g. dropping a property).
     - Mutating a scalar value (e.g. tightening minLength from 5 to 10).
-    - Removing an element from a list other than `required` (e.g. dropping an
-      `enum` value, narrowing a `type` union, removing a `oneOf` branch).
-    - Adding to a JSON Schema `required` array.
+    - Removing a member of a disjunctive list (`enum`, `type`, `anyOf`).
+    - Adding a member to a conjunctive list (`required`, `allOf`, a
+      `dependentRequired` entry).
+    - Any change to `oneOf` other than adding branches that are provably
+      disjoint, to the length or order of `prefixItems`, or to another
+      list-valued keyword.
     - Introducing any of `_TIGHTENING_NEW_KEYWORDS` (`pattern`,
       `minProperties`, `dependentRequired`, …) on a node where it didn't
       previously exist.
@@ -2041,11 +2055,15 @@ def _is_additive(old: Any, new: Any, path: tuple = ()) -> bool:
 
     - Adding a key to a dict node (new optional property, new $defs entry,
       new oneOf branch as a discrete dict key).
-    - Removing entries from `required` (loosening).
-    - Adding entries to multiset-style lists (extra `enum` values, extra
+    - Removing a member of a conjunctive list (loosening).
+    - Adding a member to a disjunctive list (extra `enum` values, extra
       union members) — note this is the permissive direction for *input*
       enums and may be wrong for *output* enums; developers must escalate
       via `--bump` when that distinction matters.
+    - Widening a `prefixItems` member in place.
+    - Adding a `oneOf` branch when every branch requires one property with a
+      distinct `const` (a discriminated union), so no document can match more
+      than one.
 
     Anything not matched above falls through to False, so the caller errs
     on the side of MAJOR.
@@ -2053,13 +2071,13 @@ def _is_additive(old: Any, new: Any, path: tuple = ()) -> bool:
     if old == new:
         return True
     if isinstance(old, dict) and isinstance(new, dict):
-        return _dict_is_additive(old, new, path)
+        return _dict_is_additive(old, new, new_root, path)
     if isinstance(old, list) and isinstance(new, list):
-        return _list_is_additive(old, new, path)
+        return _list_is_additive(old, new, new_root, path)
     return False
 
 
-def _dict_is_additive(old: dict, new: dict, path: tuple) -> bool:
+def _dict_is_additive(old: dict, new: dict, new_root: dict, path: tuple) -> bool:
     """The dict half of `_is_additive` — pure extraction, same rules."""
     for k in set(new) - set(old):
         if k in _TIGHTENING_NEW_KEYWORDS:
@@ -2070,19 +2088,66 @@ def _dict_is_additive(old: dict, new: dict, path: tuple) -> bool:
     for k, v in old.items():
         if k not in new:
             return False
-        if not _is_additive(v, new[k], path + (k,)):
+        if not _is_additive(v, new[k], new_root, path + (k,)):
             return False
     return True
 
 
-def _list_is_additive(old: list, new: list, path: tuple) -> bool:
-    """The list half of `_is_additive` — pure extraction, same rules."""
-    if path and path[-1] == "required":
-        return set(new).issubset(set(old))
-    for item in old:
-        if item not in new:
-            return False
-    return True
+def _list_is_additive(old: list, new: list, new_root: dict, path: tuple) -> bool:
+    """The list half of `_is_additive`: the keyword holding the list decides.
+
+    A disjunction accepts more as it grows and a conjunction accepts less, so
+    each is additive in the opposite direction. Members are compared whole: a
+    member edited in place reads as one removed and one added. `oneOf` grows
+    additively only while its branches stay disjoint, since a document matching
+    a new branch as well as an old one matches neither. Any other list (`const`,
+    an unknown keyword) is additive only when unchanged.
+    """
+    keyword = path[-1] if path else None
+    if (len(path) >= 2 and path[-2] == "dependentRequired"
+            and (len(path) < 3 or path[-3] not in _NAME_KEYED_KEYWORDS)):
+        keyword = "dependentRequired"
+    if keyword in _DISJUNCTIVE_LIST_KEYWORDS:
+        return all(item in new for item in old)
+    if keyword in _CONJUNCTIVE_LIST_KEYWORDS:
+        return all(item in old for item in new)
+    if keyword == "oneOf":
+        return all(item in new for item in old) and _branches_are_disjoint(new, new_root)
+    if keyword == "prefixItems":
+        return len(old) == len(new) and all(
+            _is_additive(o, n, new_root, path + (i,)) for i, (o, n) in enumerate(zip(old, new))
+        )
+    return False
+
+
+def _branches_are_disjoint(branches: list, root: dict) -> bool:
+    """True when some property is required by every branch with a distinct `const`."""
+    resolved = [_resolve_local_ref(b, root) for b in branches]
+    if not resolved or any(b is None for b in resolved):
+        return False
+    shared = set.intersection(*(
+        {p for p in b.get("required", []) if "const" in b.get("properties", {}).get(p, {})}
+        for b in resolved
+    ))
+    return any(
+        len({json.dumps(b["properties"][p]["const"], sort_keys=True) for b in resolved})
+        == len(resolved)
+        for p in shared
+    )
+
+
+def _resolve_local_ref(node: Any, root: dict) -> dict | None:
+    """`node`, or the `$defs` entry a bare `$ref` names; None when not resolvable here."""
+    if not isinstance(node, dict):
+        return None
+    if "$ref" not in node:
+        return node
+    prefix = "#/$defs/"
+    ref = node["$ref"]
+    if len(node) != 1 or not ref.startswith(prefix):
+        return None
+    target = root.get("$defs", {}).get(ref[len(prefix):])
+    return None if target is None or "$ref" in target else target
 
 
 def classify(old: dict | None, new: dict) -> str:
@@ -2106,7 +2171,7 @@ def classify(old: dict | None, new: dict) -> str:
     stripped_new = _strip_doc_and_stamp(new)
     if stripped_old == stripped_new:
         return "patch"
-    if _is_additive(stripped_old, stripped_new):
+    if _is_additive(stripped_old, stripped_new, stripped_new):
         return "minor"
     return "major"
 
