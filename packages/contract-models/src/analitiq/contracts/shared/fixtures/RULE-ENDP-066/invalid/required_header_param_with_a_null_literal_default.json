@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/items",
+    "body": {
+      "item": {
+        "from_input": "record"
+      }
+    },
+    "headers": {
+      "X-Tenant": {
+        "from_param": "tenant"
+      }
+    }
+  },
+  "input": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "native_type": "integer",
+          "arrow_type": "Int64"
+        }
+      }
+    }
+  },
+  "params": {
+    "tenant": {
+      "in": "header",
+      "type": "string",
+      "required": true,
+      "default": {
+        "literal": null
+      }
+    }
+  }
+}

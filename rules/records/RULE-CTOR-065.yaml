@@ -16,6 +16,7 @@ targets:
   - AdbcTransport
   - DatabaseTls
   - DsnBinding
+fixture_model: HttpTransport
 rationale: >
   The endpoint document refuses this shape in its request slots
   (RULE-ENDP-022), and the grammar is why the shape matters everywhere:
