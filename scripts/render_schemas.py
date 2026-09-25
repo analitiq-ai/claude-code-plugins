@@ -2053,12 +2053,19 @@ def cmd_release(_args: argparse.Namespace) -> int:
 
     Planned, then applied: everything that can fail runs before the first
     model call, and every bump is decided before the first write, so a failure
-    leaves the tree untouched. document_schemas.json is verified, never
+    leaves the tree untouched. It plans only from a tree that bare `check`
+    accepts. document_schemas.json is verified, never
     written: the request model reads it, so it is an input to the render.
     """
     pending: list[PendingRelease] = []
     problems = misplaced_overrides()
     for resource in RESOURCES:
+        # The version is derived from latest.json, so a tree `check` rejects
+        # would have the release overwrite an immutable pin.
+        consistent, problem = _check_resource(resource, released=False)
+        if not consistent:
+            problems.append(problem)
+            continue
         try:
             release = pending_release(resource)
         except ValueError as exc:

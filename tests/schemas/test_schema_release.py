@@ -233,6 +233,20 @@ def test_a_document_schemas_fault_fails_the_release_before_any_write(tree, model
     assert _files(tmp_path) == before
 
 
+@pytest.mark.parametrize("fault", ["latest missing", "latest below the highest pin"])
+def test_an_inconsistent_committed_tree_fails_the_release_before_any_write(tree, models, tmp_path, fault):
+    """The release plans from latest.json, so it must refuse a tree `check` rejects, or it overwrites a pin."""
+    models.extend([_jev("minor"), _jev("minor")])
+    resource = tree[0]
+    if fault == "latest missing":
+        (resource.dir() / "latest.json").unlink()
+    else:
+        render_schemas.write_json(resource.dir() / "1.1.0.json", render_schemas.render_pinned(resource, "1.1.0"))
+    before = _files(tmp_path)
+    assert _release() == 2
+    assert _files(tmp_path) == before
+
+
 def test_an_unreleased_model_change_passes_the_check_and_fails_the_released_check(tree):
     assert _check() == 0
     assert _check("--released") == 1
