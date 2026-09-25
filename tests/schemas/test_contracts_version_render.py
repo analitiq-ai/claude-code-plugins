@@ -52,8 +52,8 @@ def test_stamp_states_the_pyproject_version_and_the_tree_digest():
 def test_tree_digest_moves_with_the_tree_and_ignores_the_stamp(
     monkeypatch, tmp_path
 ):
-    """The digest is what makes the stamp change on every render — without
-    that, a publish that failed to land a re-render is undetectable from the
+    """The digest is what makes the stamp change on every release — without
+    that, a publish that failed to land a release is undetectable from the
     stamp whenever the package version did not move."""
     tree = tmp_path / "schemas"
     (tree / "connector").mkdir(parents=True)

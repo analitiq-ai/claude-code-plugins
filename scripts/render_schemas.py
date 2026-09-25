@@ -1688,12 +1688,8 @@ def contract_models_version() -> str:
 
 
 def schemas_tree_digest() -> str:
-    """sha256 over every `schemas/**/*.json` except the stamp itself.
-
-    This is the half of the stamp that moves with EVERY render: paths and
-    bytes, sorted, so any document changing, appearing, or disappearing —
-    including the hand-authored ones — re-stamps the tree.
-    """
+    """sha256 over the sorted paths and bytes of every `schemas/**/*.json`
+    except the stamp itself, hand-authored documents included."""
     hasher = hashlib.sha256()
     for path in sorted(SCHEMAS_ROOT.rglob("*.json")):
         if path == CONTRACTS_VERSION_PATH:

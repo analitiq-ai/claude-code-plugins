@@ -15,27 +15,24 @@ This guard is this repo answering the same question about itself, the half no
 offline test can see:
 
   1. The PUBLISHED `contracts-version.json` at schemas.analitiq.ai is
-     byte-identical to the committed stamp. The stamp carries the tree
-     digest and the publish uploads it dead last, so byte equality
-     establishes: the last publish to COMPLETE was of a tree identical to
-     the current committed one. A publish that silently failed, died
-     mid-tree, or never ran (its `schemas` environment holds deployments
-     for reviewer approval, so the stamp-changing push itself reaches this
-     guard before the upload; a failed run retriggers only on the next
-     schemas/ push) all leave a stale or absent stamp and land here. A
-     completed publish that simply has not propagated through the CDN yet
-     does NOT land here on a strict run: `fetch_published_with_retry`
-     already retries across the publish's own pointer TTL
-     (`.github/workflows/schemas-publish.yml` owns the cache-control) before
-     this step ever sees the divergence. What this deliberately does NOT
-     reach: the stamp witnesses the tree as of the last schema release, the
-     only writer of the stamp. A push that changes only a hand-authored
-     document outside the registry publishes under the unchanged stamp, so a
-     failed upload of it is not witnessed until the next release PR merges;
-     likewise an out-of-band write to some OTHER published object leaves the
-     stamp intact — the stamp witnesses the last released tree, not the
-     bucket's current contents. The remediation
-     once the retry budget is spent is the same flow the validator release
+     byte-identical to the committed stamp. Only the schema release writes
+     the stamp, it carries the tree digest, and the publish uploads it dead
+     last, so byte equality establishes: the last publish to COMPLETE
+     uploaded the tree as of the last schema release. A publish that
+     silently failed, died mid-tree, or never ran (its `schemas` environment
+     holds deployments for reviewer approval, so the stamp-changing push
+     itself reaches this guard before the upload; a failed run retriggers
+     only on the next schemas/ push) all leave a stale or absent stamp and
+     land here. A completed publish that simply has not propagated through
+     the CDN yet does NOT land here on a strict run:
+     `fetch_published_with_retry` already retries across the publish's own
+     pointer TTL (`.github/workflows/schemas-publish.yml` owns the
+     cache-control) before this step ever sees the divergence. Equality does
+     not witness a later push that changes only a hand-authored document
+     outside the registry (it publishes under the unchanged stamp, so its
+     failed upload is invisible until the next release PR merges), nor an
+     out-of-band write to any other published object. The remediation once
+     the retry budget is spent is the same flow the validator release
      already uses: land or re-run the publish, then re-run this job.
   2. The committed stamp states the pyproject version. Only the schema
      release re-stamps, so a package version bump leaves the stamp behind
