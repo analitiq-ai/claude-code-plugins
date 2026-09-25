@@ -195,7 +195,7 @@ def test_validator_ids_leave_out_rules_the_plugin_does_not_render():
     plugin renders; a reached rule the pipeline plugin does not own is left out."""
     from analitiq.contracts.shared.rules import all_rules
 
-    connector_only = next(r for r in all_rules() if r.id == "RULE-PKG-030")
+    connector_only = {r.id: r for r in all_rules()}["RULE-PKG-030"]
     assert "pipeline-plugin" not in connector_only.owners
     assert connector_only.validator in G._reach(G._validator_sources(), G._REQUEST_ENTRY_POINTS)
     assert "`RULE-PKG-030`" not in G.render_validator_ids()

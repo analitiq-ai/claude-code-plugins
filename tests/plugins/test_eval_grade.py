@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import sys
 
 from _eval_grade import REPO_ROOT, grade  # noqa: E402  (pytest puts this dir on sys.path)
 

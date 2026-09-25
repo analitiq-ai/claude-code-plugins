@@ -10,7 +10,6 @@ Skips cleanly when the published packages are absent, like the other suites.
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
