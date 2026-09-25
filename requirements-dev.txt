@@ -38,3 +38,8 @@ PyYAML>=6,<7
 # `pip install -r requirements-dev.txt && pytest`, so it belongs here rather
 # than being assumed present on the machine.
 pytest
+
+# Decides and verifies schema version bumps for `scripts/render_schemas.py`
+# (`release`, `check`). The org's shared tool, pinned to one commit; the
+# reusable `schema-release.yml` workflow runs whatever version this pins.
+analitiq-schema-bump @ git+https://github.com/analitiq-ai/.github@ca19df3d6ec28300c1559f8e7898d78aa6b3f5cd#subdirectory=tools/schema-bump

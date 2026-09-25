@@ -16,10 +16,18 @@ into `plugins/`.
 
 ## Trees nothing here may author
 
-**`schemas/` is generated.** `scripts/render_schemas.py` renders it from
-`packages/contract-models`; `render_schemas.py check` re-renders and fails on any
-diff, and CI runs it. Never hand-edit a file under `schemas/`. Two versionless
-documents are generated the same way and covered by `check`:
+**`schemas/` is generated, and only a release writes a resource.**
+`render_schemas.py release`, run by `.github/workflows/schema-release.yml` on
+every push to main, renders each resource from `packages/contract-models`, has
+the bump models decide each changed one's version, and keeps one release PR open
+with the new pinned versions and their `schema-bumps/` records. Every other PR
+is kept off those paths by `render_schemas.py release-guard`. So main's tree
+trails the models until that PR merges: a test asking what the contract
+publishes reads `render_schemas.rendered_latest`, never the committed file.
+`render_schemas.py check` verifies the committed tree offline, and
+`check --released` also requires it to match the render. Never hand-edit a file
+under `schemas/`. Two versionless documents are generated from the source
+directly and covered by `check`:
 `arrow-types.json` (from the vendored engine grammar) and
 `contracts-version.json`, the provenance stamp recording which
 `analitiq-contract-models` version the tree renders from plus a digest of it —
@@ -110,7 +118,7 @@ store that could only hold it by taking a second kind of unit is the wrong one.
 |---|---|---|
 | `packages/*/src` | a **model field** | a machine can reject one document with it |
 | `schemas/` | a **resource version** | never — rendered, never authored |
-| `schema-bumps/` | a **version decision** | never by hand — `render_schemas.py write` records it; `check` and `bump-check` verify it |
+| `schema-bumps/` | a **version decision** | never by hand — a release records it and `check` verifies it; the one authored file is a resource's `override.json`, a `{bump, reason}` its next release applies over the models |
 | `rules/records/*.yaml` | an **obligation with an immutable id** | an artifact author can violate it, and something needs to cite it by name |
 | `census/areas/*.py` | a **prose site** — one field description or docstring | it exists under `analitiq.contracts`; membership is exhaustive, not chosen |
 | `census/consumption/dispositions.py` | an **unread contract field** | the pinned consumption manifest claims no read of it |

@@ -15,7 +15,6 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "tests" / "connector_builder"))
 
 from _pins import require_contract_models  # noqa: E402

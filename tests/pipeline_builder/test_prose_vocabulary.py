@@ -96,14 +96,12 @@ states its own coverage and limits.
 from __future__ import annotations
 
 import re
-import sys
 from collections import Counter
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2] / "plugins" / "analitiq-pipeline-builder"
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")

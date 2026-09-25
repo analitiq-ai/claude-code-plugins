@@ -7,16 +7,12 @@ connection document references each value by name via `secret_refs.<name>`.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from analitiq.contracts.credentials_file import CredentialsFile
-
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
-CREDENTIALS_SCHEMA_PATH = REPO_ROOT / "schemas" / "credentials" / "latest.json"
+from render_schemas import rendered_latest
 
 
 def test_credentials_round_trip_flat_map():
@@ -50,7 +46,7 @@ def test_credentials_rejects_non_object_root():
 
 
 def test_published_schema_is_flat_open_map():
-    schema = json.loads(CREDENTIALS_SCHEMA_PATH.read_text())
+    schema = rendered_latest("credentials")
     assert schema["type"] == "object"
     # Open map: any key, any JSON value (the engine string-coerces on read).
     assert schema["additionalProperties"] is True

@@ -1,12 +1,11 @@
 """A workspace key resolves to its package and to the published schema of the
-document at it, read from the committed workspace and package schemas alone.
+document at it, read from the rendered workspace and package schemas alone.
 
 The resolver holds no path of its own: every location it knows comes from a
-committed table, so a key the tables cannot place resolves to nothing.
+published table, so a key the tables cannot place resolves to nothing.
 """
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -14,7 +13,6 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "tests" / "connector_builder"))
 
 from _pins import require_contract_models  # noqa: E402
@@ -31,12 +29,8 @@ ENTRY_PATH = "orders/pipeline.json"
 _RESOURCE_OF = {schema_url_for(name): name for name in render_schemas.RESOURCES_BY_NAME}
 
 
-def _rendered(resource: str) -> dict:
-    return json.loads((REPO_ROOT / "schemas" / resource / "latest.json").read_text())
-
-
 def _locate(resource: str, key: str) -> list[tuple[str, str]]:
-    table = {p: node["$ref"] for p, node in _rendered(resource)["patternProperties"].items()}
+    table = {p: node["$ref"] for p, node in render_schemas.rendered_latest(resource)["patternProperties"].items()}
     return [(key, _RESOURCE_OF[ref]) for p, ref in table.items() if re.search(p, key)]
 
 
@@ -92,7 +86,7 @@ def test_the_published_manifest_path_refuses_a_trailing_newline():
     published pattern must end where the value does."""
     from jsonschema import Draft202012Validator
 
-    schema = _rendered("pipeline-manifest")["$defs"]["PipelineManifestEntry"]["properties"]["path"]
+    schema = render_schemas.rendered_latest("pipeline-manifest")["$defs"]["PipelineManifestEntry"]["properties"]["path"]
     validator = Draft202012Validator(schema)
     assert validator.is_valid(ENTRY_PATH)
     assert not validator.is_valid(ENTRY_PATH + "\n")

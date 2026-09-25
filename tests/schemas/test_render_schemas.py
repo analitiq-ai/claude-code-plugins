@@ -19,7 +19,6 @@ import pytest
 from pydantic import BaseModel, RootModel, TypeAdapter, computed_field
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "tests" / "connector_builder"))
 
 # Skipping here would defeat the point: this module exists because

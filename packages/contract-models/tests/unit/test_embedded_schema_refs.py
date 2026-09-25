@@ -1332,12 +1332,9 @@ class TestKeywordVocabularyHasOneOwner:
     """
 
     def _rendered_node(self):
-        import json
-        from pathlib import Path
+        from render_schemas import rendered_latest
 
-        repo = Path(__file__).resolve().parents[4]
-        doc = json.loads((repo / "schemas/api-endpoint/latest.json").read_text())
-        return doc["$defs"]["JsonSchemaPropertyNode"]
+        return rendered_latest("api-endpoint")["$defs"]["JsonSchemaPropertyNode"]
 
     def test_rendered_node_constrains_exactly_the_contract_vocabulary(self):
         from analitiq.contracts.shared import json_schema as js

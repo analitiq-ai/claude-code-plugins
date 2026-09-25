@@ -54,6 +54,7 @@ from analitiq.contracts.connector import (
     WriteUnit,
     parse_connector,
 )
+from render_schemas import rendered_latest
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 POSTGRES_EXAMPLE = (
@@ -626,14 +627,11 @@ def test_write_unit_is_connector_level(db_example):
 def test_published_connector_schema_exposes_new_defs():
     """The rendered public schema must carry the new $defs and their mirrors.
 
-    `render_schemas.py check` already pins committed-vs-rendered, but this makes
-    the *presence* of the cross-field mirrors an explicit, named assertion so a
-    silent regression (e.g. dropping the `json_schema_extra`) fails loudly here
-    too, at the exact contract external consumers fetch.
+    This makes the *presence* of the cross-field mirrors an explicit, named
+    assertion so a silent regression (e.g. dropping the `json_schema_extra`)
+    fails loudly on the document a release publishes.
     """
-    latest = json.loads(
-        (REPO_ROOT / "schemas" / "connector" / "latest.json").read_text()
-    )
+    latest = rendered_latest("connector")
     defs = latest["$defs"]
     assert {
         "SqlBulkLoad",
@@ -665,10 +663,7 @@ def test_full_connector_validates_against_published_schema(db_example):
     — a valid doc passes, and each cross-field / field rule is rejected by the
     published schema exactly as the Pydantic model rejects it.
     """
-    schema = json.loads(
-        (REPO_ROOT / "schemas" / "connector" / "latest.json").read_text()
-    )
-    validator = Draft202012Validator(schema)
+    validator = Draft202012Validator(rendered_latest("connector"))
 
     valid = with_adbc_transport(db_example)
     valid["sql_capabilities"] = copy.deepcopy(VALID_SQL_CAPS)

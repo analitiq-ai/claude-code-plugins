@@ -43,7 +43,10 @@ for _src in (*PACKAGE_SRC_ROOTS,
              # `census/` holds this repo's catalogues of the contract's own surface —
              # maintenance machinery, deliberately outside `src/` so it stays
              # out of the wheel, and on the path because the suite reads it.
-             REPO_ROOT):
+             REPO_ROOT,
+             # The renderers: a test asking what the contract publishes renders
+             # it, because the committed tree changes only in a release.
+             REPO_ROOT / "scripts"):
     # Fail loudly. Skipping a missing root would leave the suite importing
     # whatever happens to be installed while every downstream `importorskip`
     # turned green — a merge gate passing having validated nothing.

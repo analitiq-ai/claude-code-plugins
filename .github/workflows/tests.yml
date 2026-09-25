@@ -103,14 +103,17 @@ jobs:
           python3 packages/contract-models/scripts/build.py --check
           python3 packages/validator/scripts/build.py --check
 
-  schema-bump-check:
-    # Every resource's base→head version change must be justified by the bump
-    # record `render_schemas.py write` committed beside it. Offline and
-    # secret-free by design: the models ran at authoring time, and this job
-    # only re-derives the diff and compares it with the record.
+  schema-release-guard:
+    # Schema versions and bump records change only in the release PR that
+    # `schema-release.yml` keeps open (`render_schemas.py` owns the rule).
+    # That PR must publish exactly what the models render, every record
+    # verified offline; every other PR must leave those paths alone.
     if: github.event_name == 'pull_request'
-    name: schema version bumps match their records
+    name: schema versions change only in a release
     runs-on: ubuntu-latest
+    env:
+      # The branch `schema-release.yml` passes as `release-branch`.
+      IS_RELEASE: ${{ github.head_ref == 'schema-release' && github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -120,30 +123,17 @@ jobs:
           python-version: '3.13'
       - name: Install dev/test dependencies
         run: pip install -r requirements-dev.txt
-      - name: Check every resource's bump against the base branch
+      - name: The release publishes exactly what the models render
+        if: env.IS_RELEASE == 'true'
+        run: python3 scripts/render_schemas.py check --released
+      - name: No other PR changes a release-only path
+        if: env.IS_RELEASE != 'true'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          # A base that does not resolve would make every resource look new,
-          # and an empty listing would check nothing; both must fail the job.
           base="$(git rev-parse --verify "origin/$BASE_REF^{commit}")"
-          listing="$(python3 scripts/render_schemas.py list --latest)"
-          if [ -z "$listing" ]; then
-            echo "::error::render_schemas.py list --latest printed no resources"
-            exit 1
-          fi
-          status=0
-          while IFS=$'\t' read -r resource latest; do
-            previous="$RUNNER_TEMP/$resource.base.json"
-            if git cat-file -e "$base:$latest" 2>/dev/null; then
-              git show "$base:$latest" > "$previous"
-              python3 scripts/render_schemas.py bump-check --resource "$resource" --previous "$previous" || status=1
-            else
-              python3 scripts/render_schemas.py bump-check --resource "$resource" || status=1
-            fi
-          done <<< "$listing"
-          exit $status
+          git diff --no-renames --name-only "$base...HEAD" | python3 scripts/render_schemas.py release-guard
 
   sample-budget-portability:
     name: sample grading is bounded on ${{ matrix.os }}

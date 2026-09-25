@@ -9,10 +9,8 @@ Schema cannot express it.
 """
 from __future__ import annotations
 
-import json
 import re
 import time
-from pathlib import Path
 
 import jsonschema
 import pytest
@@ -26,10 +24,9 @@ from analitiq.contracts.validation_requests import (
     ValidateSingleDocumentRequest,
     WorkspaceDocumentSet,
 )
+from render_schemas import rendered_latest
 
-PUBLISHED_SCHEMA = json.loads(
-    (Path(__file__).resolve().parents[4] / "schemas" / "validate-package-request"
-     / "latest.json").read_text())
+PUBLISHED_SCHEMA = rendered_latest("validate-package-request")
 
 WELL_FORMED_DOCUMENTS = {
     "connector.json": "{}",
