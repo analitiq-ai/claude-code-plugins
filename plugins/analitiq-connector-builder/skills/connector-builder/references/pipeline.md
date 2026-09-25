@@ -155,8 +155,7 @@ were skipped, so there is no `CreatorOutput` to revise). The fix loop
 below applies to `build` and `update` only.
 
 If any finding's `message_id` is `validation-not-run`, halt
-and surface it, in every mode: it names a failure to submit, not a defect a
-creator can correct.
+and surface it, in every mode (`references/io-contracts.md` defines it).
 
 In `build` / `update` mode the orchestrator should attempt at most 5 fix
 passes per artifact — re-dispatch the matching creator with the

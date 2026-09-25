@@ -98,7 +98,6 @@ prose, do not reformat.
 - Never modify the document under validation.
 - Never silence warnings. If `passed` is false, return the full finding list.
 - Never assemble or edit `arguments` by hand.
-- If the builder fails, or the tool call is refused (the result is an error),
-  report a single `validation-not-run` finding, `path: ""`, carrying the
-  builder's stderr or the refusal text verbatim as `message`. Never forward
-  partial output as the verdict.
+- If the server does not grade the request, return the `validation-not-run`
+  envelope `skills/connector-builder/references/io-contracts.md` defines.
+  Never forward partial output as the verdict.

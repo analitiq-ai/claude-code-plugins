@@ -30,7 +30,8 @@ Exactly one of:
 - `package` + `package_kind` — absolute path to a package's own directory, and
   the kind of its root document (a `connection` directory holds
   `connection.json`).
-- `workspace` — absolute path to the project root. The only request that grades
+- `workspace` — absolute path to the workspace root
+  (`skills/pipeline-builder/SKILL.md` § "Workspace root"). The only request that grades
   references between packages (`skills/pipeline-builder/references/io-contracts.md`
   § `Diagnostics` lists their rule ids).
 
@@ -60,11 +61,6 @@ Exactly one of:
 - Never filter by severity. A warning-only result still returns every warning,
   alignment suggestion intact; the orchestrator decides what to act on.
 - Never assemble or edit `arguments` by hand.
-- If the builder fails, or the tool call is refused (the result is an error),
-  return no envelope of your own making: report a single finding carrying the
-  builder's stderr or the refusal text verbatim, as `message`:
-
-  <!-- illustrative -->
-  ```jsonc
-  {"passed": false, "findings": [{"message_id": "validation-not-run", "kind": "notApplicable", "path": "", "message": "<stderr or refusal text>"}]}
-  ```
+- If the server does not grade the request, return the `validation-not-run`
+  envelope `skills/pipeline-builder/references/io-contracts.md` defines, never
+  one of your own making.

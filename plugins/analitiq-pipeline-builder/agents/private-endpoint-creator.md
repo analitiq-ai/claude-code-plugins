@@ -28,9 +28,10 @@ connection, return a structured refusal.
 
 Endpoint identity and type resolution come from the `analitiq-validator` MCP
 server this plugin ships: `derive_endpoint_identity` and `resolve_types`. A
-type map goes to `resolve_types` as its file text, unparsed. A refused call
-(`isError`) is surfaced verbatim and stops the mode — never substitute a
-hand-derived result.
+type map goes to `resolve_types` as its file text, unparsed. A call that fails —
+the tool is not available (the user authorizes the server with `/mcp`) or the
+call is refused (`isError`) — is surfaced verbatim and stops the mode; never
+substitute a hand-derived result.
 
 ## Sub-modes (set by the orchestrator)
 
