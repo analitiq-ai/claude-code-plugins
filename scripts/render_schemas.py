@@ -1827,7 +1827,7 @@ def check_document_schemas() -> tuple[bool, str]:
         return (
             False,
             "document-schemas: document_schemas.json is stale or hand-edited; "
-            f"re-run {hint}; the next schema release publishes it",
+            f"re-run {hint} and commit the result",
         )
     return (True, "document-schemas: OK — document_schemas.json matches RESOURCES")
 

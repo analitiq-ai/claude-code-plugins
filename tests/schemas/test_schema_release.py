@@ -64,11 +64,16 @@ def tree(tmp_path, monkeypatch):
     monkeypatch.setattr(render_schemas, "DOCUMENT_SCHEMAS_PATH", tmp_path / "document_schemas.json")
     monkeypatch.setattr(render_schemas, "ARROW_TYPES_PATH", tmp_path / "schemas" / "arrow-types.json")
     monkeypatch.setattr(render_schemas, "CONTRACTS_VERSION_PATH", tmp_path / "schemas" / "contracts-version.json")
-    resources = [render_schemas.get_resource(name) for name in NAMES]
-    monkeypatch.setattr(render_schemas, "RESOURCES", resources)
-    render_schemas.DOCUMENT_SCHEMAS_PATH.write_text(render_schemas._document_schemas_text())  # skipcq: PYL-W0212
+    resources = _register(monkeypatch, [render_schemas.get_resource(name) for name in NAMES])
     for resource in resources:
         _publish_stale(resource)
+    return resources
+
+
+def _register(monkeypatch, resources):
+    """Install `resources` and commit the document_schemas.json they render, as a registering PR does."""
+    monkeypatch.setattr(render_schemas, "RESOURCES", resources)
+    assert render_schemas.main(["document-schemas"]) == 0
     return resources
 
 
@@ -163,9 +168,7 @@ def test_a_release_with_nothing_to_publish_still_renders_the_versionless_documen
 
 def test_a_new_resource_is_first_released_at_1_0_0_without_a_record_or_a_key(tree, monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    fresh = render_schemas.get_resource("stream")
-    monkeypatch.setattr(render_schemas, "RESOURCES", [fresh])
-    assert render_schemas.main(["document-schemas"]) == 0
+    [fresh] = _register(monkeypatch, [render_schemas.get_resource("stream")])
     assert _check_of(fresh) == 0
     assert _check_of(fresh, "--released") == 1
     assert _release() == 0
@@ -175,8 +178,7 @@ def test_a_new_resource_is_first_released_at_1_0_0_without_a_record_or_a_key(tre
 
 
 def test_an_override_on_a_new_resource_fails_the_release(tree, monkeypatch):
-    fresh = render_schemas.get_resource("stream")
-    monkeypatch.setattr(render_schemas, "RESOURCES", [fresh])
+    [fresh] = _register(monkeypatch, [render_schemas.get_resource("stream")])
     _override(fresh, bump="major", reason="r")
     assert _check_of(fresh) == 1
     assert _release() == 2
