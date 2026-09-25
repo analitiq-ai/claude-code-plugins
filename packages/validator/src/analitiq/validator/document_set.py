@@ -271,9 +271,10 @@ def validate_package(request: ValidatePackageRequest) -> ValidationEnvelope:
 
 
 def validate_workspace(request: ValidateWorkspaceRequest) -> ValidationEnvelope:
-    """Validate a workspace: every package's root presence, each located
-    document, then — where every root is present and every located document
-    parsed — each package's checks and the workspace checks."""
+    """Validate a workspace: that it locates a package, every package's root
+    presence, each located document, then — where every root is present and
+    every located document parsed — each package's checks and the workspace
+    checks."""
     texts = request.documents.root
     packages: dict[str, type[DocumentPackage]] = {}
     located: dict[str, tuple[str, str]] = {}
@@ -288,6 +289,10 @@ def validate_workspace(request: ValidateWorkspaceRequest) -> ValidationEnvelope:
         if kind is not None:
             located[key] = (kind, directory)
 
+    if not packages:
+        return _envelope([finding(
+            message_id="workspace-empty", kind="fail", path="",
+            message="a workspace carries at least one package; none is located.")])
     graded = _graded_request(texts, packages, located)
     findings = list(graded.findings)
     if graded.complete:

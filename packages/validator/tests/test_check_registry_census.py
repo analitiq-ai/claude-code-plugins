@@ -120,6 +120,9 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator.document_set::_graded_request", "package-root-missing"): (
         "a structural precondition — the package carries no document at its "
         "root location — rejected before any package check could run"),
+    ("analitiq.validator.document_set::validate_workspace", "workspace-empty"): (
+        "a structural precondition — the workspace locates no package — "
+        "rejected before any document or check could run"),
     ("analitiq.validator._core::validate_document_as", "check-crashed"): (
         "grading one document as the kind a request named crashed, leaving "
         "its model errors and every rule of that kind unevaluated together, "
