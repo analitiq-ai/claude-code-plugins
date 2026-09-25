@@ -244,9 +244,9 @@ jobs:
 
   contracts-version-guard:
     # `schemas/contracts-version.json` stamps the committed tree's
-    # provenance: the analitiq-contract-models version it renders from plus
-    # a digest of the tree, so the stamp moves with every render (the render
-    # check keeps it current). This job is the network half: the PUBLISHED
+    # provenance: the analitiq-contract-models version it was released from
+    # plus a digest of the tree, so the stamp moves with every schema release
+    # (the only writer). This job is the network half: the PUBLISHED
     # copy at schemas.analitiq.ai must be byte-identical to the committed
     # stamp, and VALIDATOR_PIN must agree with it — a silently failed
     # schemas publish or a lagging pin surfaces here instead of at a

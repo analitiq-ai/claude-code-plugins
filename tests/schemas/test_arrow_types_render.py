@@ -73,7 +73,7 @@ def test_check_reports_builder_failure_instead_of_truncating(monkeypatch):
         "_ARROW_EXAMPLES",
         render_schemas._ARROW_EXAMPLES + ("Interval(YEAR_MONTH)",),
     )
-    ok, msg = render_schemas.check_arrow_types()
+    ok, msg = render_schemas.check_arrow_types(released=True)
     assert not ok and "cannot render" in msg
 
 

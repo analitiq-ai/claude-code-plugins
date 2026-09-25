@@ -132,12 +132,6 @@ def _pin_matching_stamp(guard, monkeypatch, tmp_path) -> None:
 # --- the readers, against the real working tree ---------------------------
 
 
-def test_committed_stamp_and_pyproject_agree_on_the_real_tree(guard):
-    # The render check owns this equality; the guard re-derives it as its
-    # baseline. Green here means the guard can run at all on this tree.
-    assert guard.read_committed_stamp() == guard.read_shipped_version()
-
-
 def test_reads_the_pin_from_its_single_source(guard):
     # `_bootstrap.py` owns the pin; the guard references it by regex. If that
     # file is refactored so the regex misses, this fails here instead of the
@@ -409,19 +403,26 @@ def test_fetch_failure_is_a_guard_error(guard, monkeypatch, capsys):
     assert "GUARD ERROR" in capsys.readouterr().err
 
 
-def test_committed_vs_pyproject_disagreement_is_a_guard_error(
-    guard, monkeypatch, tmp_path, capsys
-):
-    # The render check owns that equality; the guard must refuse to mint any
-    # verdict about the published copy from a baseline the repo itself
-    # cannot agree on — and must not touch the network doing so.
-    diverged = tmp_path / "pyproject.toml"
-    diverged.write_text('[project]\nversion = "999.0.0"\n')
-    monkeypatch.setattr(guard, "PYPROJECT_PATH", diverged)
-    calls = _stub_fetch(guard, monkeypatch, _fact(guard, "999.0.0"))
-    assert guard.main() == 2
-    assert "render_schemas.py contracts-version" in capsys.readouterr().err
-    assert not calls, "no verdict input may be fetched for an unusable baseline"
+def _pyproject_ahead_of_the_stamp(guard, monkeypatch, tmp_path) -> None:
+    """A package release merged and the schema release has not re-stamped yet."""
+    ahead = tmp_path / "pyproject.toml"
+    ahead.write_text('[project]\nversion = "999.0.0"\n')
+    monkeypatch.setattr(guard, "PYPROJECT_PATH", ahead)
+    _pin_matching_stamp(guard, monkeypatch, tmp_path)
+    _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
+
+
+def test_a_stamp_behind_the_package_fails_strict(guard, monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
+    _pyproject_ahead_of_the_stamp(guard, monkeypatch, tmp_path)
+    assert guard.main() == 1
+    assert "schema release" in capsys.readouterr().err
+
+
+def test_a_stamp_behind_the_package_warns_on_ordinary_prs(guard, monkeypatch, tmp_path, capsys):
+    _pyproject_ahead_of_the_stamp(guard, monkeypatch, tmp_path)
+    assert guard.main() == 0
+    assert "WINDOW" in capsys.readouterr().out
 
 
 def test_unrecognized_strict_value_is_a_guard_error(guard, monkeypatch, capsys):

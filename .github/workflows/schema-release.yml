@@ -2,8 +2,8 @@ name: Schema release
 
 # Keeps one release PR open publishing every schema the models changed since
 # its last release, each bump decided by the org's shared `schema-bump` tool.
-# The OpenRouter key reaches this workflow only: pull-request CI verifies
-# the release offline (`tests.yml`, schema-release-guard).
+# Pull-request CI never receives the OpenRouter key: it verifies the release
+# offline (`tests.yml`, schema-release-guard).
 
 on:
   push:

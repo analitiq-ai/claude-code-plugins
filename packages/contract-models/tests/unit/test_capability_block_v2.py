@@ -609,7 +609,8 @@ def test_published_connector_schema_exposes_new_defs():
 
 
 def test_full_connector_validates_against_published_schema(db_example):
-    """End-to-end parity against the artifact a real consumer actually fetches."""
+    """End-to-end parity against the connector schema the models render, which
+    the next schema release publishes."""
     validator = Draft202012Validator(rendered_latest("connector"))
 
     valid = with_adbc_transport(db_example)

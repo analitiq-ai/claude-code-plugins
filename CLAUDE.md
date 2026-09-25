@@ -26,12 +26,11 @@ trails the models until that PR merges: a test asking what the contract
 publishes reads `render_schemas.rendered_latest`, never the committed file.
 `render_schemas.py check` verifies the committed tree offline, and
 `check --released` also requires it to match the render. Never hand-edit a file
-under `schemas/`. Two versionless documents are generated from the source
-directly and covered by `check`:
-`arrow-types.json` (from the vendored engine grammar) and
-`contracts-version.json`, the provenance stamp recording which
-`analitiq-contract-models` version the tree renders from plus a digest of it —
-the `contracts-version-guard` CI job holds the published copy, and
+under `schemas/`. The release also re-renders the versionless documents, and
+only the release writes them: `arrow-types.json` (from the vendored engine
+grammar) and `contracts-version.json`, the provenance stamp recording which
+`analitiq-contract-models` version the tree was released from plus a digest of
+it — the `contracts-version-guard` CI job holds the published copy, and
 `VALIDATOR_PIN`, to that stamp.
 
 The hand-authored exceptions, outside the registry and never inspected by
@@ -59,9 +58,10 @@ payload under a key of its own — the grammar's families under `families`, the
 matrix's grid under `conversions`. Always read those keys, never the document
 itself. `test_arrow_grammar.py` and the `engine-grammar-pin-guard` CI job hold the
 vendored bytes and the self-declared versions to the pin. A family is added by
-shipping it in the engine first, then bumping the pin here (re-vendor,
-`render_schemas.py arrow-types`, re-render, re-run the plugin doc generator) —
-never by hand-editing the vocabulary.
+shipping it in the engine first, then bumping the pin here (re-vendor and
+re-run the plugin doc generator; the next schema release re-renders
+`arrow-types.json` and every affected resource) — never by hand-editing the
+vocabulary.
 
 **`plugins/<name>/` is a distribution artifact.** Its contents are copied verbatim
 into every user's plugin cache. Tests, scratch output, CI config and contributor

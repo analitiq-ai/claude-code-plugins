@@ -62,7 +62,8 @@ def tree(tmp_path, monkeypatch):
     monkeypatch.setattr(render_schemas, "BUMP_RECORDS_ROOT", tmp_path / "schema-bumps")
     monkeypatch.setattr(render_schemas, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(render_schemas, "_refresh_document_schemas", lambda: None)
-    monkeypatch.setattr(render_schemas, "_refresh_contracts_version", lambda: None)
+    monkeypatch.setattr(render_schemas, "ARROW_TYPES_PATH", tmp_path / "schemas" / "arrow-types.json")
+    monkeypatch.setattr(render_schemas, "CONTRACTS_VERSION_PATH", tmp_path / "schemas" / "contracts-version.json")
     resources = [render_schemas.get_resource(name) for name in NAMES]
     monkeypatch.setattr(render_schemas, "RESOURCES", resources)
     for resource in resources:
@@ -149,6 +150,16 @@ def test_an_override_on_an_unchanged_resource_fails_the_release(tree, models, tm
     assert _files(tmp_path) == before
 
 
+def test_a_release_with_nothing_to_publish_still_renders_the_versionless_documents(tree, models):
+    models.extend([_jev("minor"), _jev("minor")])
+    assert _release() == 0
+    render_schemas.ARROW_TYPES_PATH.unlink()
+    render_schemas.CONTRACTS_VERSION_PATH.unlink()
+    assert _release() == 0
+    assert render_schemas.check_arrow_types(released=True)[0]
+    assert render_schemas.check_contracts_version(released=True)[0]
+
+
 def test_a_new_resource_is_first_released_at_1_0_0_without_a_record_or_a_key(tree, monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     fresh = render_schemas.get_resource("stream")
@@ -165,8 +176,22 @@ def test_an_override_on_a_new_resource_fails_the_release(tree, monkeypatch):
     fresh = render_schemas.get_resource("stream")
     monkeypatch.setattr(render_schemas, "RESOURCES", [fresh])
     _override(fresh, bump="major", reason="r")
+    assert _check_of(fresh) == 1
     assert _release() == 2
     assert render_schemas.list_published_versions(fresh) == []
+
+
+@pytest.mark.parametrize("where", ["workspce/override.json", "override.json"])
+def test_an_override_outside_a_registered_resource_fails_the_check_the_release_and_the_guard(tree, models, tmp_path, where):
+    path = render_schemas.BUMP_RECORDS_ROOT / where
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"bump": "major", "reason": "r"}))
+    before = _files(tmp_path)
+    assert _check() == 1
+    assert _release() == 2
+    assert _files(tmp_path) == before
+    shown = path.relative_to(tmp_path).as_posix()
+    assert render_schemas.release_only_paths([shown]) == [shown]
 
 
 def _check_of(resource, *argv: str) -> int:
@@ -230,11 +255,11 @@ def test_the_check_fails_on_a_record_that_does_not_justify_its_versions(tree, mo
     assert _check() == 1
 
 
-def test_the_released_check_fails_on_an_override_left_after_the_release(tree, models):
+def test_the_check_fails_on_an_override_of_an_unchanged_resource(tree, models):
     models.extend([_jev("minor"), _jev("minor")])
     assert _release() == 0
     _override(tree[0], bump="major", reason="r")
-    assert _check() == 0
+    assert _check() == 1
     assert _check("--released") == 1
 
 
@@ -245,8 +270,8 @@ def test_the_released_check_fails_on_an_override_left_after_the_release(tree, mo
         ("schemas/workspace/latest.json", True),
         ("schema-bumps/workspace/1.1.0.json", True),
         ("schema-bumps/workspace/override.json", False),
-        ("schemas/arrow-types.json", False),
-        ("schemas/contracts-version.json", False),
+        ("schemas/arrow-types.json", True),
+        ("schemas/contracts-version.json", True),
         ("schemas/workspace-extra/latest.json", False),
         ("packages/contract-models/src/analitiq/contracts/workspace.py", False),
     ],

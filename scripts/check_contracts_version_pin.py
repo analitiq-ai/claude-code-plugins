@@ -2,11 +2,11 @@
 """Guard: the published contracts-version fact must match the repo's pins.
 
 `schemas/contracts-version.json` stamps the committed schema tree's
-provenance (rendered by `scripts/render_schemas.py contracts-version`, whose
-full `check` keeps it current): the `analitiq-contract-models` version the
-contract source tree declared when the tree was rendered, plus a digest over
-every other document in the tree — the half that changes with EVERY render,
-where the version half changes only on a package bump. The publish workflow
+provenance (written only by the schema release, `scripts/render_schemas.py
+release`): the `analitiq-contract-models` version the contract source tree
+declared when the tree was released, plus a digest over every other document
+in the tree — the half that changes with EVERY release, where the version
+half changes only on a package bump. The publish workflow
 uploads it like every other mutable pointer, so consumers can fetch a
 machine-readable statement of which contract-models version rendered the
 published tree, and check their own contract pin against it.
@@ -14,10 +14,7 @@ published tree, and check their own contract pin against it.
 This guard is this repo answering the same question about itself, the half no
 offline test can see:
 
-  1. The committed stamp states the pyproject version (re-derived here so the
-     guard never certifies a baseline the render check already rejects — a
-     mismatch is a GuardError naming the render, not a verdict).
-  2. The PUBLISHED `contracts-version.json` at schemas.analitiq.ai is
+  1. The PUBLISHED `contracts-version.json` at schemas.analitiq.ai is
      byte-identical to the committed stamp. The stamp carries the tree
      digest and the publish uploads it dead last, so byte equality
      establishes: the last publish to COMPLETE was of a tree identical to
@@ -36,6 +33,11 @@ offline test can see:
      completed publish, not the bucket's current contents. The remediation
      once the retry budget is spent is the same flow the validator release
      already uses: land or re-run the publish, then re-run this job.
+  2. The committed stamp states the pyproject version. Only the schema
+     release re-stamps, so a package version bump leaves the stamp behind
+     until the release PR it triggers merges — a window, graded like the
+     others below, and graded after step 1 so a lagging publish is named
+     before a lagging release.
   3. `VALIDATOR_PIN` (`plugins/analitiq-pipeline-builder/scripts/_bootstrap.py`
      — the validator end users actually install) agrees with the published
      fact. The guard asserts EQUALITY only and never orders versions: the
@@ -47,12 +49,12 @@ offline test can see:
      `packages/validator/tests/test_contract_models_pin.py` — the bridge that
      makes an `analitiq-validator` version comparable to the stamp's
      `analitiq-contract-models` version at all), and the stamp equals the
-     contract-models version (step 1). With step 2 green, a mismatch here can
+     contract-models version (step 2). With step 2 green, a mismatch here can
      only be the pin lagging: the release-window state whose remediation is
      the pin catch-up PR. Ordering PEP 440 pre-releases (`1.0.0rc21`) in
      stdlib would re-implement `packaging` badly to distinguish states those
      invariants already distinguish. And the pin comparison runs only after
-     step 2 holds, so it always grades the version the published tree was
+     steps 1 and 2 hold, so it always grades the version the published tree was
      actually rendered with.
 
 Strict-vs-warn windows (the STRICT env contract — typo-refusal and all — is
@@ -62,7 +64,7 @@ verdicts behind it are this guard's own):
 
   - CONTRACTS_VERSION_GUARD_STRICT=1 (CI sets it on pushes and on
     release-please branches): a published-fact or missing-stamp divergence
-    (step 2) is retried — `fetch_published_with_retry` re-samples every
+    (step 1) is retried — `fetch_published_with_retry` re-samples every
     RETRY_INTERVAL_SECONDS across a window one interval wider than
     RETRY_BUDGET_SECONDS (margin against landing exactly on the CDN's own
     expiry boundary), until the published bytes match the committed stamp
@@ -74,10 +76,11 @@ verdicts behind it are this guard's own):
     still diverges once the window is spent FAILS: the standing signal that
     the committed render has not been published, needing the `schemas`
     deployment approved or schemas-publish.yml re-run before this job is
-    re-run. The pin catch-up divergence (step 3) is not a network race — it
-    is graded only after step 2 already holds, and the loop returns as soon
-    as step 2's bytes match — so it fails on the first sample; that one is
-    deliberately TIGHTER than the offline "at or behind" tolerance (root
+    re-run. The stamp-lag and pin catch-up divergences (steps 2 and 3) are
+    not network races — they are graded only after step 1 already holds, and
+    the loop returns as soon as step 1's bytes match — so they fail on the
+    first sample: merge the schema release PR, or land the pin catch-up. The
+    pin catch-up is deliberately TIGHTER than the offline "at or behind" tolerance (root
     CLAUDE.md, "The contract, and the runtime pin", which governs the merge
     gate): the red is the reminder that finishes the release.
   - unset (ordinary PRs): divergences WARN (checks-UI annotation) and the
@@ -257,8 +260,8 @@ def fetch_published_with_retry(committed_bytes: bytes, *, strict: bool) -> bytes
 def read_committed_stamp() -> str:
     if not COMMITTED_PATH.exists():
         raise GuardError(
-            f"{COMMITTED_PATH.relative_to(REPO_ROOT)} is missing — run "
-            "`scripts/render_schemas.py contracts-version`"
+            f"{COMMITTED_PATH.relative_to(REPO_ROOT)} is missing — the "
+            "schema release (`scripts/render_schemas.py release`) writes it"
         )
     return _read_fact(
         COMMITTED_PATH.read_bytes(), context=str(COMMITTED_PATH.relative_to(REPO_ROOT))
@@ -296,15 +299,6 @@ _REPUBLISH = (
 def run() -> int:
     committed = read_committed_stamp()
     shipped = read_shipped_version()
-    if committed != shipped:
-        # The render check owns this half; a guard must not certify (or
-        # blame the publish for) a baseline the repo itself cannot agree on.
-        raise GuardError(
-            f"committed stamp {committed!r} != pyproject version {shipped!r} — "
-            "run `scripts/render_schemas.py contracts-version` (the render "
-            "check gates this; this guard needs the stamp and the pyproject "
-            "to agree before it can say anything about the published copy)"
-        )
     pin_version = read_pin_version()
     strict = read_strict_env(STRICT_ENV)
     print(f"committed: {committed}  validator pin: {pin_version}  strict: {strict}")
@@ -344,9 +338,18 @@ def run() -> int:
                 f"but not the same tree digest — the publish has not landed "
                 f"the latest render; {_REPUBLISH}.",
                 f"the published stamp names the same release ({published}) "
-                "but not the same tree digest — expected on a PR that "
-                "re-renders schemas, until it merges and publishes.",
+                "but not the same tree digest — expected on the schema "
+                "release PR, until it merges and publishes.",
             )
+    elif committed != shipped:
+        divergence = (
+            f"committed stamp {committed!r} != pyproject version {shipped!r} "
+            "— the schema release has not re-stamped the tree since the "
+            "package version moved; merge the schema release PR, then re-run "
+            "this job.",
+            f"committed stamp {committed!r} != pyproject version {shipped!r} "
+            "— a package-release window until the schema release PR merges.",
+        )
     elif pin_version != committed:
         divergence = (
             f"VALIDATOR_PIN ({pin_version}) disagrees with the published "

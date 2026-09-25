@@ -46,8 +46,8 @@ Updating the pin:
   here can be an envelope/shape change rather than a vocabulary change (v2.0.0
   moved the grid under `conversions`), which means the guard's reader may need
   teaching before the pin can move.
-- Then re-render the schemas (`render_schemas.py arrow-types`, plus any
-  affected resource) and re-run the plugin doc generator.
+- Then re-run the plugin doc generator; the next schema release re-renders
+  `arrow-types.json` and every affected resource.
 
 Per the re-add policy a family appears here only after the engine executes it:
 the engine work ships first, and the contract picks it up by consuming the new

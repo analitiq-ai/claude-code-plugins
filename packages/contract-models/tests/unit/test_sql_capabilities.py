@@ -655,7 +655,8 @@ def test_published_connector_schema_exposes_new_defs():
 
 
 def test_full_connector_validates_against_published_schema(db_example):
-    """End-to-end parity against the artifact a real consumer actually fetches.
+    """End-to-end parity against the connector schema the models render, which
+    the next schema release publishes.
 
     The other `_external_validator` tests exercise isolated sub-model schemas;
     a consumer validates a whole connector.json against `connector/latest.json`.
