@@ -93,7 +93,7 @@ The plugins **install nothing**: they submit documents to the `analitiq-validato
 MCP server each plugin ships in its `.mcp.json`, which runs a published release.
 **`VALIDATOR_PIN` in `plugins/analitiq-pipeline-builder/scripts/_bootstrap.py` is
 the only place a published validator version is stated**, read by the pin guards
-alone; nothing imports that module. Never restate it.
+alone; no plugin helper imports that module. Never restate it.
 
 The pin must be **at or behind** `packages/validator/pyproject.toml`. Equal is the
 steady state; behind is tolerated for merging because the publish is a hand-pushed

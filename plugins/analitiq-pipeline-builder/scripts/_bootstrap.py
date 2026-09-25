@@ -1,7 +1,7 @@
 """Shared dependency bootstrap for the plugin's Python helpers.
 
-Nothing imports this module; the pin guards read `VALIDATOR_PIN` from it. It
-guarantees the published `analitiq-validator` (which pulls
+No plugin helper imports this module; the pin guards read `VALIDATOR_PIN` from
+it. It guarantees the published `analitiq-validator` (which pulls
 `analitiq-contract-models`) is importable: if the current interpreter lacks the
 pinned version it installs it into a managed virtualenv and re-execs the calling
 script under it. A venv sidesteps PEP-668 externally-managed interpreters; pip
