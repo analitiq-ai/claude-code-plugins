@@ -19,7 +19,7 @@ reports all failures at once, since each check only compares committed state.
 
 A generator is only ever CHECKED here, never written, when its write mode
 would press a judgment a pipeline must not press, or when it has no write
-mode at all: `render_schemas.py write` cuts a new immutable schema version,
+mode at all: `render_schemas.py release` cuts new immutable schema versions,
 `render_prose_census.py write` restamps a changed prose site's hash — the
 re-affirmation the census exists to demand from a person — and
 `render_contract_consumption.py` has no write mode, because a disposition is
@@ -37,12 +37,10 @@ SCRIPTS = REPO_ROOT / "scripts"
 
 # (script, write argvs, check argv). Order is the dependency order for write.
 PIPELINE = [
-    # schemas/ is rendered output of packages/contract-models; arrow-types
-    # is rendered from the vendored engine grammar, and contracts-version is
-    # the tree's provenance stamp. One check covers every one of them.
-    # Checked in BOTH modes, never written here: `render_schemas.py write`
-    # cuts a new schema version (--resource, --bump), a judgment about what
-    # kind of contract change this is — its own failure output says how.
+    # schemas/ is the published tree; the render_schemas.py module docstring
+    # says what `check` holds it to. Checked in BOTH modes, never written here: `render_schemas.py release`
+    # cuts new schema versions and calls the bump models, and only the
+    # schema-release workflow runs it.
     ("render_schemas.py", [["check"]], ["check"]),
     # Validates every rules/records/*.yaml, resolves every `validator` binding
     # against the live models, and compiles the rules.json the wheel ships.

@@ -16,15 +16,23 @@ into `plugins/`.
 
 ## Trees nothing here may author
 
-**`schemas/` is generated.** `scripts/render_schemas.py` renders it from
-`packages/contract-models`; `render_schemas.py check` re-renders and fails on any
-diff, and CI runs it. Never hand-edit a file under `schemas/`. Two versionless
-documents are generated the same way and covered by `check`:
-`arrow-types.json` (from the vendored engine grammar) and
-`contracts-version.json`, the provenance stamp recording which
-`analitiq-contract-models` version the tree renders from plus a digest of it —
-the `contracts-version-guard` CI job holds the published copy, and
-`VALIDATOR_PIN`, to that stamp.
+**`schemas/` is generated, and only a release writes a resource.**
+`render_schemas.py release`, run by `.github/workflows/schema-release.yml` on
+every push to main, renders each resource from `packages/contract-models`, has
+the bump models decide each changed one's version, and keeps one release PR open
+with the new pinned versions and their `schema-bumps/` records. Every other PR
+is kept off those paths by `render_schemas.py release-guard`. So main's tree
+trails the models until that PR merges: a test asking what the contract
+publishes reads `render_schemas.rendered_latest`, never the committed file.
+`render_schemas.py check` verifies the committed tree offline; its module
+docstring says what bare `check` and `check --released` each hold. Never
+hand-edit a file under `schemas/`. The release also re-renders the
+versionless documents, and only the release writes them: `arrow-types.json`
+(from the vendored engine grammar) and `contracts-version.json`, the provenance stamp recording which
+`analitiq-contract-models` version the tree was released from plus a digest of
+it — the `contracts-version-guard` CI job holds the published copy, and
+`VALIDATOR_PIN`, to that stamp (`scripts/check_contracts_version_pin.py` owns
+what the stamp witnesses).
 
 The hand-authored exceptions, outside the registry and never inspected by
 `check`: `data-sync-api/openapi.json` (no version triple) and
@@ -51,9 +59,10 @@ payload under a key of its own — the grammar's families under `families`, the
 matrix's grid under `conversions`. Always read those keys, never the document
 itself. `test_arrow_grammar.py` and the `engine-grammar-pin-guard` CI job hold the
 vendored bytes and the self-declared versions to the pin. A family is added by
-shipping it in the engine first, then bumping the pin here (re-vendor,
-`render_schemas.py arrow-types`, re-render, re-run the plugin doc generator) —
-never by hand-editing the vocabulary.
+shipping it in the engine first, then bumping the pin here (re-vendor and
+re-run the plugin doc generator; the next schema release re-renders
+`arrow-types.json` and every affected resource) — never by hand-editing the
+vocabulary.
 
 **`plugins/<name>/` is a distribution artifact.** Its contents are copied verbatim
 into every user's plugin cache. Tests, scratch output, CI config and contributor
@@ -110,6 +119,7 @@ store that could only hold it by taking a second kind of unit is the wrong one.
 |---|---|---|
 | `packages/*/src` | a **model field** | a machine can reject one document with it |
 | `schemas/` | a **resource version** | never — rendered, never authored |
+| `schema-bumps/` | a **version decision** | never by hand — a release records it and `check` verifies it; the one authored file is a resource's `override.json`, a `{bump, reason}` its next release applies over the models |
 | `rules/records/*.yaml` | an **obligation with an immutable id** | an artifact author can violate it, and something needs to cite it by name |
 | `census/areas/*.py` | a **prose site** — one field description or docstring | it exists under `analitiq.contracts`; membership is exhaustive, not chosen |
 | `census/consumption/dispositions.py` | an **unread contract field** | the pinned consumption manifest claims no read of it |

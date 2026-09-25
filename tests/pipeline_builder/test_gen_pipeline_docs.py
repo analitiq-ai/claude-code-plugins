@@ -14,7 +14,6 @@ never fails confusingly; CI hard-requires it via the repo conftest.
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 import pytest
@@ -22,7 +21,6 @@ import pytest
 from _rule_files import rule_reference_root
 
 ROOT = Path(__file__).resolve().parents[2] / "plugins" / "analitiq-pipeline-builder"
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import gen_pipeline_docs as G  # noqa: E402
 
 pytest.importorskip("analitiq.validator",

@@ -74,6 +74,7 @@ from analitiq.contracts.connector import (
     SqlLimits,
     parse_connector,
 )
+from render_schemas import rendered_latest
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 POSTGRES_EXAMPLE = (
@@ -572,14 +573,11 @@ def test_database_connector_rejects_bad_concurrency(db_example):
 def test_published_connector_schema_exposes_new_defs():
     """The rendered public schema must carry the new $defs and their mirrors.
 
-    `render_schemas.py check` already pins committed-vs-rendered; this makes
-    the presence of the v2 blocks — and the per-family
+    This makes the presence of the v2 blocks — and the per-family
     `additionalProperties: false` parity mirror — an explicit, named assertion
-    at the exact contract external consumers fetch.
+    on the document a release publishes.
     """
-    latest = json.loads(
-        (REPO_ROOT / "schemas" / "connector" / "latest.json").read_text()
-    )
+    latest = rendered_latest("connector")
     defs = latest["$defs"]
     assert {"ErrorMap", "Concurrency", "SqlLimits"} <= set(defs)
     # Connector-level: present on EVERY kind. The kind set is pinned exactly
@@ -611,11 +609,9 @@ def test_published_connector_schema_exposes_new_defs():
 
 
 def test_full_connector_validates_against_published_schema(db_example):
-    """End-to-end parity against the artifact a real consumer actually fetches."""
-    schema = json.loads(
-        (REPO_ROOT / "schemas" / "connector" / "latest.json").read_text()
-    )
-    validator = Draft202012Validator(schema)
+    """End-to-end parity against the connector schema the models render, which
+    the next schema release publishes."""
+    validator = Draft202012Validator(rendered_latest("connector"))
 
     valid = with_adbc_transport(db_example)
     valid["error_map"] = copy.deepcopy(VALID_ERROR_MAP)

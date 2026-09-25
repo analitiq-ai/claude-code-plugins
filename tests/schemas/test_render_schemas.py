@@ -19,7 +19,6 @@ import pytest
 from pydantic import BaseModel, RootModel, TypeAdapter, computed_field
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "tests" / "connector_builder"))
 
 # Skipping here would defeat the point: this module exists because
@@ -86,6 +85,13 @@ def test_every_registered_resource_is_public():
         for model in _model_tree(resource.adapter._type):
             assert _module_allowed(model.__module__), (
                 f"{resource.name} renders {model.__module__}.{model.__qualname__}")
+
+
+@pytest.mark.parametrize("name", [resource.name for resource in render_schemas.RESOURCES])
+def test_every_registered_resource_renders(name):
+    """A pull request never writes `schemas/`, so this is what makes a model
+    whose schema cannot be generated fail before it reaches the release job."""
+    assert render_schemas.rendered_latest(name)["$id"]
 
 
 # --- the walker reaches what the guard depends on --------------------------

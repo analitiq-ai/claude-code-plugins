@@ -3,8 +3,6 @@ validity the validator delegates to. The validator's premise ("the model
 rejects it, so the validator catches it") rests on these, so they are pinned
 directly.
 """
-import json
-from pathlib import Path
 
 import jsonschema
 import pytest
@@ -17,6 +15,7 @@ from analitiq.contracts.type_map import (
     compile_matcher,
     normalize_native_type,
 )
+from render_schemas import rendered_latest
 
 MAP = TypeAdapter(TypeMapDoc)
 # The section a rule list is wrapped under — the key is the direction.
@@ -112,8 +111,7 @@ def test_a_document_without_a_section_rejected(doc):
         MAP.validate_python(doc)
 
 
-_PUBLISHED = json.loads(
-    (Path(__file__).resolve().parents[3] / "schemas" / "type-map" / "latest.json").read_text())
+_PUBLISHED = rendered_latest("type-map")
 
 
 @pytest.mark.parametrize("doc", [

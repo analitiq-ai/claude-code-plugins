@@ -6,19 +6,16 @@ refuses the same inputs.
 """
 from __future__ import annotations
 
-import json
 import re
-from pathlib import Path
 
 import jsonschema
 import pytest
 from pydantic import ValidationError
 
 from analitiq.contracts.validation_requests import MAX_WORKSPACE_DOCUMENTS, ValidateWorkspaceRequest
+from render_schemas import rendered_latest
 
-PUBLISHED = json.loads(
-    (Path(__file__).resolve().parents[4] / "schemas" / "validate-workspace-request"
-     / "latest.json").read_text())
+PUBLISHED = rendered_latest("validate-workspace-request")
 
 DOCUMENTS = {
     "pipelines/manifest.json": "{}",

@@ -13,8 +13,6 @@ The `content_type` field is pinned from both ends here too: it exists on the
 request models that declare a body, and the branch that declares none refuses
 it structurally.
 """
-import json
-from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -37,6 +35,7 @@ from analitiq.contracts.shared.rules import (
     DeclaredHeaderNames,
     NoNullOrEmptyHeaderValues,
 )
+from render_schemas import rendered_latest
 
 #: A minimal instance of each block that names headers through a `headers`
 #: map, as (label, model, kwargs-without-headers).
@@ -331,11 +330,6 @@ def test_a_value_that_is_not_a_media_type_is_refused(label, value):
         WriteRequest(method="POST", path="/v1/x", content_type=value)
 
 
-# tests/unit/<this file> -> parents[4] is the repo root.
-LATEST_CONNECTOR_SCHEMA = (
-    Path(__file__).resolve().parents[4] / "schemas" / "connector" / "latest.json"
-)
-
 _CONNECTOR_WITHOUT_TRANSPORTS = {
     "$schema": "https://schemas.analitiq.ai/connector/latest.json",
     "connector_id": "acme",
@@ -374,16 +368,11 @@ class TestThePublishedSchemaAgreesAboutHeaderNames:
     as the connector-kind union failing to match its `http` branch, not as an
     error whose path mentions headers, so asserting on the path reports a pass
     for every input.
-
-    This reads the COMMITTED document, so it grades what a consumer fetches
-    and is blind to a model that has drifted from it — dropping the fragment
-    leaves this green. `render_schemas.py check` re-renders and compares,
-    which is the gate that sees that half.
     """
 
     @staticmethod
     def _validator() -> Draft202012Validator:
-        return Draft202012Validator(json.loads(LATEST_CONNECTOR_SCHEMA.read_text()))
+        return Draft202012Validator(rendered_latest("connector"))
 
     @pytest.mark.parametrize("name", ["Accept", "X-Api-Key", "Content-Length-ish"])
     def test_a_header_name_validates(self, name):

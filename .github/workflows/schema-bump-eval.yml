@@ -1,0 +1,26 @@
+name: Schema bump evaluation
+
+# Grades the pinned `schema-bump` tool against this repo's published history
+# and the tool's synthetic corpus. Paid, so dispatch only; run it on the
+# branch that changes the tool pin before that change merges.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        type: number
+        default: 3
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    uses: analitiq-ai/.github/.github/workflows/schema-bump-eval.yml@9bd2b2997c038dd60dea1f1464189c029ac33cfa
+    with:
+      setup-command: pip install -r requirements-dev.txt
+      history: schemas
+      labels: evals/schema_bumps/labels.json
+      runs: ${{ inputs.runs }}
+    secrets:
+      OPEN_ROUTER_KEY: ${{ secrets.OPEN_ROUTER_KEY }}

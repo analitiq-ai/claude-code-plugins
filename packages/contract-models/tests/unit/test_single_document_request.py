@@ -7,7 +7,6 @@ A malformed request is refused when it is built, so every rejection below is a
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import jsonschema
 import pytest
@@ -18,10 +17,9 @@ from analitiq.contracts.validation_requests import (
     DOCUMENT_SCHEMA_NAMES,
     ValidateSingleDocumentRequest,
 )
+from render_schemas import rendered_latest
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-PUBLISHED = json.loads(
-    (REPO_ROOT / "schemas" / "validate-single-document-request" / "latest.json").read_text())
+PUBLISHED = rendered_latest("validate-single-document-request")
 
 
 def _json(document, kind) -> str:

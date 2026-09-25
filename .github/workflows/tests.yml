@@ -103,6 +103,38 @@ jobs:
           python3 packages/contract-models/scripts/build.py --check
           python3 packages/validator/scripts/build.py --check
 
+  schema-release-guard:
+    # Schema versions and bump records change only in the release PR that
+    # `schema-release.yml` keeps open (`render_schemas.py` owns the rule).
+    # That PR must publish exactly what the models render, every record
+    # verified offline; every other PR must leave those paths alone.
+    if: github.event_name == 'pull_request'
+    name: schema versions change only in a release
+    runs-on: ubuntu-latest
+    env:
+      # The branch `schema-release.yml` passes as `release-branch`.
+      IS_RELEASE: ${{ github.head_ref == 'schema-release' && github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install dev/test dependencies
+        run: pip install -r requirements-dev.txt
+      - name: The release publishes exactly what the models render
+        if: env.IS_RELEASE == 'true'
+        run: python3 scripts/render_schemas.py check --released
+      - name: No other PR changes a release-only path
+        if: env.IS_RELEASE != 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          base="$(git rev-parse --verify "origin/$BASE_REF^{commit}")"
+          git diff --no-renames --name-only "$base...HEAD" | python3 scripts/render_schemas.py release-guard
+
   sample-budget-portability:
     name: sample grading is bounded on ${{ matrix.os }}
     # The bound on grading a recorded sample is a worker process the parent
@@ -212,9 +244,9 @@ jobs:
 
   contracts-version-guard:
     # `schemas/contracts-version.json` stamps the committed tree's
-    # provenance: the analitiq-contract-models version it renders from plus
-    # a digest of the tree, so the stamp moves with every render (the render
-    # check keeps it current). This job is the network half: the PUBLISHED
+    # provenance: the analitiq-contract-models version it was released from
+    # plus a digest of the tree, so the stamp moves with every schema release
+    # (the only writer). This job is the network half: the PUBLISHED
     # copy at schemas.analitiq.ai must be byte-identical to the committed
     # stamp, and VALIDATOR_PIN must agree with it — a silently failed
     # schemas publish or a lagging pin surfaces here instead of at a

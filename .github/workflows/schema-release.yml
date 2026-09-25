@@ -1,0 +1,26 @@
+name: Schema release
+
+# Keeps one release PR open publishing every schema the models changed since
+# its last release, each bump decided by the org's shared `schema-bump` tool.
+# Pull-request CI never receives the OpenRouter key: it verifies the release
+# offline (`tests.yml`, schema-release-guard).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    uses: analitiq-ai/.github/.github/workflows/schema-release.yml@9bd2b2997c038dd60dea1f1464189c029ac33cfa
+    with:
+      setup-command: pip install -r requirements-dev.txt
+      release-command: python3 scripts/render_schemas.py release
+      # tests.yml's schema-release-guard recognises the release PR by this name.
+      release-branch: schema-release
+    secrets:
+      OPEN_ROUTER_KEY: ${{ secrets.OPEN_ROUTER_KEY }}
+      RELEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}

@@ -1,0 +1,159 @@
+{
+  "$comment": "Labels for historical pinned pairs whose committed bump is wrong or cannot be read from a diff. A pair absent here is labelled with its committed bump; a null label leaves the pair out of scoring.",
+  "pairs": [
+    {
+      "resource": "connector",
+      "from": "7.0.0",
+      "to": "8.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "connector",
+      "from": "9.0.0",
+      "to": "10.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "connector",
+      "from": "11.0.0",
+      "to": "12.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "connector",
+      "from": "12.0.0",
+      "to": "13.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "connector",
+      "from": "18.1.1",
+      "to": "19.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "pipeline",
+      "from": "3.0.0",
+      "to": "4.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "database-endpoint",
+      "from": "4.0.0",
+      "to": "5.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "stream",
+      "from": "2.0.0",
+      "to": "3.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "stream",
+      "from": "5.0.0",
+      "to": "6.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "stream",
+      "from": "10.0.0",
+      "to": "11.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "connection",
+      "from": "5.0.0",
+      "to": "6.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "api-endpoint",
+      "from": "4.0.0",
+      "to": "5.0.0",
+      "label": "minor",
+      "rationale": "Published major, but every change loosens: no document the old schema accepted is rejected."
+    },
+    {
+      "resource": "api-endpoint",
+      "from": "16.0.0",
+      "to": "16.1.0",
+      "label": "major",
+      "rationale": "JsonSchemaPropertyNode gained contentSchema under an open object, so {\"type\":\"string\",\"contentSchema\":false} validates against 16.0.0 and not against 16.1.0."
+    },
+    {
+      "resource": "api-endpoint",
+      "from": "3.0.0",
+      "to": "3.1.0",
+      "label": "major",
+      "rationale": "Drops the ^x- patternProperties under additionalProperties false, so a document with an x- key is rejected."
+    },
+    {
+      "resource": "api-endpoint",
+      "from": "2.0.0",
+      "to": "3.0.0",
+      "label": null,
+      "rationale": "The breaking change is written only in prose; no diff can show it."
+    },
+    {
+      "resource": "stream",
+      "from": "18.0.2",
+      "to": "19.0.0",
+      "label": null,
+      "rationale": "Filter.field was retargeted only through its description; no diff can show it."
+    },
+    {
+      "resource": "validate-single-document-request",
+      "from": "1.0.0",
+      "to": "2.0.0",
+      "label": null,
+      "rationale": "Identical apart from $id and version, so the diff is empty."
+    },
+    {
+      "resource": "connector",
+      "from": "14.1.0",
+      "to": "14.1.1",
+      "label": null,
+      "rationale": "Identical apart from $id and version, so the diff is empty."
+    },
+    {
+      "resource": "api-endpoint",
+      "from": "9.1.0",
+      "to": "9.1.1",
+      "label": null,
+      "rationale": "Identical apart from $id and version, so the diff is empty."
+    },
+    {
+      "resource": "database-endpoint",
+      "from": "8.0.0",
+      "to": "8.0.1",
+      "label": null,
+      "rationale": "Identical apart from $id and version, so the diff is empty."
+    },
+    {
+      "resource": "pipeline",
+      "from": "6.0.1",
+      "to": "6.0.2",
+      "label": null,
+      "rationale": "Identical apart from $id and version, so the diff is empty."
+    },
+    {
+      "resource": "stream",
+      "from": "11.0.0",
+      "to": "11.0.1",
+      "label": null,
+      "rationale": "Identical apart from $id and version, so the diff is empty."
+    }
+  ]
+}

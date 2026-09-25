@@ -6,7 +6,7 @@ Three surfaces, each with a regression nothing downstream would catch loudly:
   sub-floor fold are exercised here on synthetic rules, because the committed
   registry cannot be relied on to exhibit every placement shape and the
   byte-sync test can only pin behavior a committed file shows.
-* `render_all.py` write mode must never invoke `render_schemas.py write` or
+* `render_all.py` write mode must never invoke `render_schemas.py release` or
   `render_prose_census.py write`, and only ever checks
   `render_contract_consumption.py`, which has no write mode — the one
   regression every other stage stays green through: a hook fire would
@@ -90,7 +90,7 @@ def test_every_pipeline_entry_names_a_real_script():
 
 
 def test_write_mode_never_writes_the_judgment_generators(monkeypatch):
-    """`render_schemas.py write` cuts an immutable version; census `write`
+    """`render_schemas.py release` cuts immutable versions; census `write`
     presses a re-affirmation. Neither may ever run from the pipeline."""
     render_all = _load("render_all")
     calls: list[tuple[str, tuple[str, ...]]] = []

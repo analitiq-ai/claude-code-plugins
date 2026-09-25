@@ -23,8 +23,6 @@ The fence has a second half: `path_params` accepts `{from_param}` (mixable with
 `from_input`, and the batching *arity* rules are a statement about `request.body`
 alone.
 """
-import json
-from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -35,10 +33,8 @@ from analitiq.contracts.endpoints import (
     ApiEndpointDoc,
     parse_endpoint,
 )
+from render_schemas import rendered_latest
 
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
-LATEST_API_ENDPOINT_SCHEMA_PATH = REPO_ROOT / "schemas" / "api-endpoint" / "latest.json"
 
 API_SCHEMA_URL = "https://schemas.analitiq.ai/api-endpoint/latest.json"
 JSON_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
@@ -164,7 +160,7 @@ class TestSevdeskPutContactById:
     def test_published_json_schema_also_admits_it(self):
         # The models are one half of the contract; the rendered JSON Schema is
         # the half every non-Python consumer reads. Both must accept the shape.
-        schema = json.loads(LATEST_API_ENDPOINT_SCHEMA_PATH.read_text())
+        schema = rendered_latest("api-endpoint")
         errors = list(Draft202012Validator(schema).iter_errors(self.SEVDESK_UPDATE_CONTACT))
         assert errors == [], [e.message for e in errors]
 

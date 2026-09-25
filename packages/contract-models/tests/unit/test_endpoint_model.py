@@ -8,10 +8,8 @@ cursor_field schema-presence, pagination expression shape), and the
 discriminated-union refactors of `Predicate` and `CursorMapping`.
 """
 import itertools
-import json
 import re
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -44,15 +42,8 @@ from analitiq.contracts.endpoints import (
     WriteResponse,
     parse_endpoint,
 )
+from render_schemas import rendered_latest
 
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
-API_ENDPOINT_SCHEMA_PATH = REPO_ROOT / "schemas" / "api-endpoint" / "4.0.0.json"
-DATABASE_ENDPOINT_SCHEMA_PATH = REPO_ROOT / "schemas" / "database-endpoint" / "4.0.0.json"
-LATEST_API_ENDPOINT_SCHEMA_PATH = REPO_ROOT / "schemas" / "api-endpoint" / "latest.json"
-LATEST_DATABASE_ENDPOINT_SCHEMA_PATH = (
-    REPO_ROOT / "schemas" / "database-endpoint" / "latest.json"
-)
 
 API_SCHEMA_URL = "https://schemas.analitiq.ai/api-endpoint/latest.json"
 DB_SCHEMA_URL = "https://schemas.analitiq.ai/database-endpoint/latest.json"
@@ -1669,7 +1660,7 @@ class TestPublishedSchemaConflictKeysRule:
 
     @staticmethod
     def _validator():
-        schema = json.loads(LATEST_API_ENDPOINT_SCHEMA_PATH.read_text())
+        schema = rendered_latest("api-endpoint")
         return Draft202012Validator(schema)
 
     @staticmethod
@@ -1898,7 +1889,7 @@ class TestPublishedSchemaIdempotencyRule:
 
     @staticmethod
     def _validator():
-        schema = json.loads(LATEST_API_ENDPOINT_SCHEMA_PATH.read_text())
+        schema = rendered_latest("api-endpoint")
         return Draft202012Validator(schema)
 
     @staticmethod
@@ -4097,7 +4088,7 @@ class TestAliasAllowsHyphen:
 
 class TestPublishedSchemasExcludeReservedFields:
     def test_api_endpoint_excludes_reserved(self):
-        schema = json.loads(API_ENDPOINT_SCHEMA_PATH.read_text())
+        schema = rendered_latest("api-endpoint")
         properties = set(schema.get("properties", {}).keys())
         leaked = _RESERVED_ENDPOINT_FIELDS & properties
         assert not leaked, (
@@ -4105,7 +4096,7 @@ class TestPublishedSchemasExcludeReservedFields:
         )
 
     def test_database_endpoint_excludes_reserved(self):
-        schema = json.loads(DATABASE_ENDPOINT_SCHEMA_PATH.read_text())
+        schema = rendered_latest("database-endpoint")
         properties = set(schema.get("properties", {}).keys())
         leaked = _RESERVED_ENDPOINT_FIELDS & properties
         assert not leaked, (
@@ -4413,22 +4404,15 @@ class TestPublishedMetadataConstraints:
 
     These schemas used to enforce the tag rules in Python while declaring
     `tags: {"type": "string"}` with no bounds at all — a consumer reading the
-    contract saw "any list of strings" and got a rejection. Schema parity only
-    proves the artifact matches the model, and its documented remedy is
-    "re-run render_schemas.py write" — which would happily regenerate a
-    weakened contract. This pins the values, so dropping a bound costs an
-    explicit test edit and a version-bump conversation.
+    contract saw "any list of strings" and got a rejection. A release renders
+    whatever the model says, so it would happily publish a weakened contract.
+    This pins the values, so dropping a bound costs an explicit test edit and a
+    version-bump conversation.
     """
 
     @pytest.fixture(params=["api-endpoint", "database-endpoint"])
     def schema(self, request):
-        path = (
-            LATEST_API_ENDPOINT_SCHEMA_PATH
-            if request.param == "api-endpoint"
-            else LATEST_DATABASE_ENDPOINT_SCHEMA_PATH
-        )
-        assert path.exists(), f"published schema missing: {path}"
-        return json.loads(path.read_text())
+        return rendered_latest(request.param)
 
     @staticmethod
     def _branch(node, key):
@@ -4568,7 +4552,7 @@ class TestRefResolutionScope:
 
     def test_scope_pattern_rendered_into_published_schema(self):
         # Rule 2a is structural, so it must appear in the published JSON Schema.
-        schema = json.loads(LATEST_API_ENDPOINT_SCHEMA_PATH.read_text())
+        schema = rendered_latest("api-endpoint")
         ref_def = schema["$defs"]["RefExpression"]["properties"]["ref"]
         assert "pattern" in ref_def
         for scope in RESOLUTION_SCOPES:

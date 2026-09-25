@@ -17,7 +17,6 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "tests" / "connector_builder"))
 
 from _pins import require_contract_models  # noqa: E402
@@ -74,7 +73,7 @@ def test_check_reports_builder_failure_instead_of_truncating(monkeypatch):
         "_ARROW_EXAMPLES",
         render_schemas._ARROW_EXAMPLES + ("Interval(YEAR_MONTH)",),
     )
-    ok, msg = render_schemas.check_arrow_types()
+    ok, msg = render_schemas.check_arrow_types(released=True)
     assert not ok and "cannot render" in msg
 
 

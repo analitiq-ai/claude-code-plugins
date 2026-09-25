@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import signal
-from pathlib import Path
 
 import jsonschema
 import pytest
@@ -21,9 +20,9 @@ from analitiq.contracts.type_map import (
     TypeResolver,
     resolve_types,
 )
+from render_schemas import rendered_latest
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-PUBLISHED = json.loads((REPO_ROOT / "schemas" / "resolve-types-request" / "latest.json").read_text())
+PUBLISHED = rendered_latest("resolve-types-request")
 
 
 def _map(**sections) -> str:

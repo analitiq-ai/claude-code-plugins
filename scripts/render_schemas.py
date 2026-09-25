@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Render and publish versioned JSON Schema documents for Analitiq contracts.
 
-Source of truth: Pydantic models in `analitiq.contracts.*`. The version is NEVER picked
-by hand. `write` classifies the
-structural diff against the committed `latest.json` and advances the version
-itself (`--bump` raises it, upward only); CI's `bump-check` re-derives the same
-floor and rejects any committed bump below it.
+Source of truth: Pydantic models in `analitiq.contracts.*`. A contract change
+edits the models only; the committed tree changes in a schema release alone.
+`release` renders every resource, has `schema-bump` (the org's shared tool)
+decide the bump of each one that changed, and writes the new versions with a
+bump record per bump under `schema-bumps/<resource>/<version>.json`. The
+org's reusable `schema-release.yml` workflow runs it on every push to main
+and keeps one release PR open with the result. A committed
+`schema-bumps/<resource>/override.json` (`{"bump", "reason"}`) overrides the
+models' bump of that resource in either direction; the release records it and
+deletes the file.
 
 Output trees:
     Rendered into the committed tree, uploaded to the serving bucket behind
@@ -17,26 +22,33 @@ Output trees:
         schemas/arrow-types.json        (mutable; generated from the vendored
                                              engine grammar)
         schemas/contracts-version.json      (mutable; the analitiq-contract-models
-                                             release the whole tree renders from)
+                                             version the tree was released from)
+    Every file above is written by `release` alone, which re-renders both
+    versionless documents on every run.
 
-Resources are declared in the `RESOURCES` registry below. Adding a schema is one
-entry there.
+Resources are declared in the `RESOURCES` registry below. Adding a schema is an
+entry there; when its root model declares `$schema`, commit the
+`render_schemas.py document-schemas` re-render with it. The next release
+publishes it at 1.0.0.
 
 Subcommands:
-    write       Auto-compute the next version (classify → advance) and write
-                {version}.json + latest.json + index.json for one resource.
-    check       Render every registered resource and exit 1 if any checked-in
-                {version}.json/latest.json differs from rendered (CI gate).
-    classify    Print detected severity vs. checked-in/base latest.json.
-    bump-check  Exit 1 if the committed version bump (base→head) is below the
-                detected floor or is a rollback (CI gate; replaces labels).
+    release     Publish every resource whose render differs from its
+                latest.json: decide the bump, write {version}.json +
+                latest.json + index.json + the bump record; then re-render
+                arrow-types.json and the contracts-version.json stamp. Needs
+                OPENROUTER_API_KEY when a released resource changed.
+    check       Exit 1 unless the committed tree is self-consistent: latest.json
+                mirrors the highest pinned version, index.json lists the pinned
+                versions, every bump record justifies the versions it names,
+                every override is one the release would apply, and the
+                versionless documents have their render's shape (offline).
+                `--released` also requires the models, the grammar and the
+                contract-models version to render exactly that tree, as they do
+                on a release PR.
+    release-guard
+                Read changed paths from stdin; exit 1 on any that only the
+                release may change (CI runs it on every other PR).
     list        Print registered resource names (one per line) — used by CI.
-    arrow-types
-                Render schemas/arrow-types.json from the vendored engine
-                grammar (versionless + mutable; covered by the full `check`).
-    contracts-version
-                Render schemas/contracts-version.json — the tree's provenance
-                stamp (versionless + mutable; covered by the full `check`).
     document-schemas
                 Render analitiq/contracts/document_schemas.json — the resources
                 whose root model declares `$schema`, loaded by the
@@ -66,6 +78,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # tree never leaves `analitiq.contracts`.
 CONTRACTS_SRC = REPO_ROOT / "packages" / "contract-models" / "src"
 sys.path.insert(0, str(CONTRACTS_SRC))
+
+from schema_bump import cascade  # noqa: E402
+from schema_bump.diff import diff  # noqa: E402
+from schema_bump.record import decide_record, record_problem  # noqa: E402
+from schema_bump.semver import parse_semver  # noqa: E402
 
 SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
 # `DOMAIN` selects the host stamped into every `$id`. Set it BEFORE the contract
@@ -124,31 +141,13 @@ from analitiq.contracts.validation_requests import (  # noqa: E402
     ValidateWorkspaceRequest,
 )
 SCHEMAS_ROOT = REPO_ROOT / "schemas"
+# Outside `schemas/`, so the publish never ships a record.
+BUMP_RECORDS_ROOT = REPO_ROOT / "schema-bumps"
+OVERRIDE_NAME = "override.json"
+FIRST_VERSION = "1.0.0"
 
-SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 VERSIONED_FILENAME_RE = re.compile(r"^(\d+\.\d+\.\d+)\.json$")
 
-# Keys whose changes are documentation-only and warrant a PATCH bump.
-DOC_KEYS = {"description", "title", "examples", "$comment"}
-# Keys stamped by this script that must be ignored when comparing schemas.
-STAMP_KEYS = {"$id", "version"}
-
-# JSON Schema 2020-12 keywords that, *when newly introduced* on a node, tighten
-# validation. Adding any of these to a property/object that previously didn't
-# have them rejects payloads that previously validated, so the change is MAJOR.
-# (Mutating an *existing* such keyword's value is already caught by the scalar
-# fall-through in `_is_additive`.)
-_TIGHTENING_NEW_KEYWORDS = frozenset({
-    "dependentRequired", "dependencies",
-    "minProperties", "maxProperties",
-    "minItems", "maxItems", "minContains", "uniqueItems",
-    "minLength", "maxLength",
-    "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
-    "multipleOf", "pattern",
-    "propertyNames",
-    "not", "if", "then", "else",
-    "unevaluatedProperties", "unevaluatedItems",
-})
 
 
 # ---------------------------------------------------------------------------
@@ -1227,9 +1226,8 @@ def get_resource(name: str) -> Resource:
 # glob). Its ACCEPTED SET is generated from the engine-published, vendored
 # grammar manifest (`analitiq.contracts.arrow_grammar`); only the
 # prose below — titles, descriptions, display grouping — is authored here.
-# `check` (and the dedicated `arrow-types --check`) fails when the
-# committed file differs from the rendered output, exactly like a registered
-# resource.
+# Only the release writes it; the `check` entry of the module docstring says
+# what each check mode holds it to.
 #
 # This document was published as `canonical-types.json` before it was renamed.
 # The publish is additive and deletes nothing, so that path keeps serving the
@@ -1586,8 +1584,8 @@ def build_arrow_types_doc() -> dict[str, Any]:
         "$comment": (
             "GENERATED by scripts/render_schemas.py from the vendored engine "
             "grammar manifest (analitiq.contracts.arrow_grammar) — do not "
-            "hand-edit; run `render_schemas.py arrow-types` after a pin "
-            "bump. Validating a value directly against this document's URL "
+            "hand-edit; the schema release (`render_schemas.py release`) "
+            "re-renders it. Validating a value directly against this document's URL "
             "checks it against the strict arrow_type vocabulary. Type-map "
             "regex rules that permit ${name} templates reference the "
             "#/$defs/arrow_type_or_template fragment explicitly."
@@ -1601,42 +1599,42 @@ def _arrow_types_text() -> str:
     return json.dumps(build_arrow_types_doc(), indent=2) + "\n"
 
 
-def check_arrow_types() -> tuple[bool, str]:
-    """(ok, message) — committed arrow-types.json vs rendered output.
+_RELEASE_WRITES_IT = "the schema release (`render_schemas.py release`) writes it"
 
-    A builder failure (grouping / example drift) is reported as a normal check
-    failure so it participates in `cmd_check`'s aggregate run instead of
-    truncating it mid-way."""
-    hint = "`scripts/render_schemas.py arrow-types`"
-    if not ARROW_TYPES_PATH.exists():
-        return (False, f"arrow-types: {ARROW_TYPES_PATH} is missing; run {hint}")
+
+def _versionless_problem(path: Path, render: Callable[[], str], *, released: bool) -> str | None:
+    """Why the committed versionless document at `path` fails the check, or None.
+
+    Only the release writes it, so between releases it may trail its sources:
+    bare `check` asks only for the render's top-level keys, and `released`
+    for the render's exact bytes.
+    """
+    if not path.exists():
+        return f"{path.name} is missing; {_RELEASE_WRITES_IT}"
     try:
-        rendered = _arrow_types_text()
+        rendered = render()
     except RuntimeError as exc:
-        return (False, f"arrow-types: cannot render — {exc}")
-    if ARROW_TYPES_PATH.read_text() != rendered:
-        return (
-            False,
-            "arrow-types: arrow-types.json is stale or hand-edited; "
-            f"re-run {hint}",
-        )
-    return (True, "arrow-types: OK — arrow-types.json matches rendered output")
-
-
-def cmd_arrow_types(args: argparse.Namespace) -> int:
-    if args.check:
-        ok, msg = check_arrow_types()
-        print(msg, file=None if ok else sys.stderr)
-        return 0 if ok else 1
+        return f"cannot render {path.name} — {exc}"
+    committed = path.read_text()
+    if released:
+        if committed != rendered:
+            return f"{path.name} is not what its sources render; {_RELEASE_WRITES_IT}"
+        return None
     try:
-        rendered = _arrow_types_text()
-    except RuntimeError as exc:
-        print(f"arrow-types: cannot render — {exc}", file=sys.stderr)
-        return 2
-    ARROW_TYPES_PATH.write_text(rendered)
-    print(f"wrote {ARROW_TYPES_PATH.relative_to(REPO_ROOT)}")
-    _refresh_contracts_version()
-    return 0
+        keys = json.loads(committed).keys()
+    except (ValueError, AttributeError):
+        return f"{path.name} is not a JSON object; {_RELEASE_WRITES_IT}"
+    if keys != json.loads(rendered).keys():
+        return f"{path.name} does not have its render's keys; {_RELEASE_WRITES_IT}"
+    return None
+
+
+def check_arrow_types(*, released: bool) -> tuple[bool, str]:
+    """(ok, message) — see `_versionless_problem`. A builder failure is a
+    normal check failure, so it participates in `cmd_check`'s aggregate run
+    instead of truncating it mid-way."""
+    problem = _versionless_problem(ARROW_TYPES_PATH, _arrow_types_text, released=released)
+    return (problem is None, f"arrow-types: {problem or 'OK'}")
 
 
 # ---------------------------------------------------------------------------
@@ -1646,16 +1644,15 @@ def cmd_arrow_types(args: argparse.Namespace) -> int:
 # (it rides the publish workflow's `**/*.json` glob as a mutable pointer).
 # The document carries the facts a consumer needs to check that the schema it
 # fetched and the validator it pinned came from the same contract: the
-# `analitiq-contract-models` version the contract source tree DECLARED at
-# render time (READ from the package's `pyproject.toml`, never
-# hand-maintained), plus a digest of every other document in the tree. The
-# digest is what makes the stamp move with EVERY render — the version alone
-# changes only on a package bump, so without it a publish that failed to
-# land a re-render would be undetectable from the stamp. The full `check`
-# fails when the committed stamp lags either fact, and the
-# `contracts-version-guard` CI job holds the PUBLISHED copy byte-identical
-# to the committed one (`scripts/check_contracts_version_pin.py` owns those
-# semantics).
+# `analitiq-contract-models` version the contract source tree DECLARED when
+# the release rendered the tree (READ from the package's `pyproject.toml`,
+# never hand-maintained), plus a digest of every other document in the tree.
+# The digest is what makes the stamp move with EVERY release — the version
+# alone changes only on a package bump, so without it a publish that failed
+# to land a release would be undetectable from the stamp. Only the release
+# writes it; the `check` entry of the module docstring says what each check
+# mode holds it to, and `scripts/check_contracts_version_pin.py` owns what the
+# published copy witnesses.
 
 CONTRACTS_VERSION_PATH = SCHEMAS_ROOT / "contracts-version.json"
 CONTRACT_MODELS_PYPROJECT = (
@@ -1693,12 +1690,8 @@ def contract_models_version() -> str:
 
 
 def schemas_tree_digest() -> str:
-    """sha256 over every `schemas/**/*.json` except the stamp itself.
-
-    This is the half of the stamp that moves with EVERY render: paths and
-    bytes, sorted, so any document changing, appearing, or disappearing —
-    including the hand-authored ones — re-stamps the tree.
-    """
+    """sha256 over the sorted paths and bytes of every `schemas/**/*.json`
+    except the stamp itself, hand-authored documents included."""
     hasher = hashlib.sha256()
     for path in sorted(SCHEMAS_ROOT.rglob("*.json")):
         if path == CONTRACTS_VERSION_PATH:
@@ -1715,10 +1708,10 @@ def build_contracts_version_doc() -> dict[str, Any]:
         "$comment": (
             "GENERATED by scripts/render_schemas.py — the "
             "analitiq-contract-models version the contract source tree "
-            "declared when this schema tree was rendered, plus a sha256 over "
+            "declared when this schema tree was released, plus a sha256 over "
             "every other document in the tree (so the stamp changes with "
-            "every render, not only on a version bump). Do not hand-edit; "
-            "`render_schemas.py contracts-version` re-renders it."
+            "every release, not only on a version bump). Do not hand-edit; "
+            "`render_schemas.py release` re-renders it."
         ),
         CONTRACTS_VERSION_KEY: contract_models_version(),
         "tree_sha256": schemas_tree_digest(),
@@ -1729,55 +1722,10 @@ def _contracts_version_text() -> str:
     return json.dumps(build_contracts_version_doc(), indent=2, sort_keys=True) + "\n"
 
 
-def check_contracts_version() -> tuple[bool, str]:
-    """(ok, message) — committed contracts-version.json vs rendered output."""
-    hint = "`scripts/render_schemas.py contracts-version`"
-    if not CONTRACTS_VERSION_PATH.exists():
-        return (False, f"contracts-version: {CONTRACTS_VERSION_PATH} is missing; run {hint}")
-    try:
-        rendered = _contracts_version_text()
-    except RuntimeError as exc:
-        return (False, f"contracts-version: cannot render — {exc}")
-    if CONTRACTS_VERSION_PATH.read_text() != rendered:
-        return (
-            False,
-            "contracts-version: contracts-version.json is stale or hand-edited "
-            "(the stamp derives from the contract-models [project] version "
-            "and the bytes of every other schemas/ document); "
-            f"re-run {hint}",
-        )
-    return (
-        True,
-        "contracts-version: OK — contracts-version.json matches the "
-        "contract-models version",
-    )
-
-
-def _refresh_contracts_version() -> None:
-    """Re-render the stamp after a write that changed the tree.
-
-    Every path that writes under schemas/ ends here, so an author never has
-    to remember the digest half by hand; hand edits to the hand-authored
-    documents are the one path this cannot cover, and the full `check`'s
-    stale-stamp failure names the fix for those.
-    """
-    CONTRACTS_VERSION_PATH.write_text(_contracts_version_text())
-    print(f"wrote {CONTRACTS_VERSION_PATH.relative_to(REPO_ROOT)} (tree re-stamped)")
-
-
-def cmd_contracts_version(args: argparse.Namespace) -> int:
-    if args.check:
-        ok, msg = check_contracts_version()
-        print(msg, file=None if ok else sys.stderr)
-        return 0 if ok else 1
-    try:
-        rendered = _contracts_version_text()
-    except RuntimeError as exc:
-        print(f"contracts-version: cannot render — {exc}", file=sys.stderr)
-        return 2
-    CONTRACTS_VERSION_PATH.write_text(rendered)
-    print(f"wrote {CONTRACTS_VERSION_PATH.relative_to(REPO_ROOT)}")
-    return 0
+def check_contracts_version(*, released: bool) -> tuple[bool, str]:
+    """(ok, message) — see `_versionless_problem`."""
+    problem = _versionless_problem(CONTRACTS_VERSION_PATH, _contracts_version_text, released=released)
+    return (problem is None, f"contracts-version: {problem or 'OK'}")
 
 
 # ---------------------------------------------------------------------------
@@ -1881,18 +1829,15 @@ def check_document_schemas() -> tuple[bool, str]:
         return (
             False,
             "document-schemas: document_schemas.json is stale or hand-edited; "
-            f"re-run {hint}, then `write --resource validate-single-document-request`",
+            f"re-run {hint} and commit the result",
         )
     return (True, "document-schemas: OK — document_schemas.json matches RESOURCES")
 
 
-def _refresh_document_schemas() -> None:
-    rendered = _document_schemas_text()
-    if DOCUMENT_SCHEMAS_PATH.read_text() != rendered:
-        DOCUMENT_SCHEMAS_PATH.write_text(rendered)
-        print(
-            f"wrote {DOCUMENT_SCHEMAS_PATH.relative_to(REPO_ROOT)}; re-run "
-            "`write --resource validate-single-document-request` to publish it")
+def _refresh(path: Path, rendered: str) -> None:
+    if not path.exists() or path.read_text() != rendered:
+        path.write_text(rendered)
+        print(f"wrote {_shown(path)}")
 
 
 def cmd_document_schemas(args: argparse.Namespace) -> int:
@@ -1913,55 +1858,6 @@ def cmd_document_schemas(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
-
-
-def parse_semver(version: str) -> tuple[int, int, int]:
-    match = SEMVER_RE.match(version)
-    if not match:
-        raise ValueError(f"Invalid semver: {version!r} (expected MAJOR.MINOR.PATCH)")
-    return int(match.group(1)), int(match.group(2)), int(match.group(3))
-
-
-# Severity ordering shared by the structural classifier and the bump checker.
-SEVERITY_RANK: dict[str, int] = {"none": 0, "patch": 1, "minor": 2, "major": 3}
-
-
-def semver_delta(old: str, new: str) -> str:
-    """Classify the version bump from `old` to `new`.
-
-    Returns 'rollback' when new < old, else 'none'/'patch'/'minor'/'major'
-    for the highest component that changed. Used to validate that an in-code
-    `Resource.version` bump meets the structurally-detected severity floor.
-    """
-    o, n = parse_semver(old), parse_semver(new)
-    if n < o:
-        return "rollback"
-    if n == o:
-        return "none"
-    if n[0] != o[0]:
-        return "major"
-    if n[1] != o[1]:
-        return "minor"
-    return "patch"
-
-
-def bump_version(base: str, severity: str) -> str:
-    """Advance `base` by `severity` ('none'/'patch'/'minor'/'major').
-
-    'none' returns `base` unchanged. A higher severity zeroes the lower
-    components per semver (a minor bump resets patch; a major bump resets
-    minor and patch).
-    """
-    major, minor, patch = parse_semver(base)
-    if severity == "none":
-        return base
-    if severity == "patch":
-        return f"{major}.{minor}.{patch + 1}"
-    if severity == "minor":
-        return f"{major}.{minor + 1}.0"
-    if severity == "major":
-        return f"{major + 1}.0.0"
-    raise ValueError(f"unknown severity {severity!r}")
 
 
 def render_schema(resource: Resource, version: str, *, identity: str | None = None) -> dict[str, Any]:
@@ -2006,112 +1902,6 @@ def render_latest(resource: Resource, version: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Diff / classification
-# ---------------------------------------------------------------------------
-
-
-def _strip_doc_and_stamp(obj: Any) -> Any:
-    """Strip documentation/identity keys for structural comparison."""
-    drop = DOC_KEYS | STAMP_KEYS
-    if isinstance(obj, dict):
-        return {k: _strip_doc_and_stamp(v) for k, v in obj.items() if k not in drop}
-    if isinstance(obj, list):
-        return [_strip_doc_and_stamp(v) for v in obj]
-    return obj
-
-
-def _is_additive(old: Any, new: Any, path: tuple = ()) -> bool:
-    """True when `new` only adds keys / list elements compared to `old`.
-
-    Heuristic — returns False (≈ MAJOR) for the changes we explicitly know
-    are tightening:
-
-    - Removing a key from a dict node (e.g. dropping a property).
-    - Mutating a scalar value (e.g. tightening minLength from 5 to 10).
-    - Removing an element from a list other than `required` (e.g. dropping an
-      `enum` value, narrowing a `type` union, removing a `oneOf` branch).
-    - Adding to a JSON Schema `required` array.
-    - Introducing any of `_TIGHTENING_NEW_KEYWORDS` (`pattern`,
-      `minProperties`, `dependentRequired`, …) on a node where it didn't
-      previously exist.
-    - Introducing `additionalProperties: false` where it was previously
-      absent or truthy.
-
-    Returns True (≈ MINOR) for the changes we know are additive:
-
-    - Adding a key to a dict node (new optional property, new $defs entry,
-      new oneOf branch as a discrete dict key).
-    - Removing entries from `required` (loosening).
-    - Adding entries to multiset-style lists (extra `enum` values, extra
-      union members) — note this is the permissive direction for *input*
-      enums and may be wrong for *output* enums; developers must escalate
-      via `--bump` when that distinction matters.
-
-    Anything not matched above falls through to False, so the caller errs
-    on the side of MAJOR.
-    """
-    if old == new:
-        return True
-    if isinstance(old, dict) and isinstance(new, dict):
-        return _dict_is_additive(old, new, path)
-    if isinstance(old, list) and isinstance(new, list):
-        return _list_is_additive(old, new, path)
-    return False
-
-
-def _dict_is_additive(old: dict, new: dict, path: tuple) -> bool:
-    """The dict half of `_is_additive` — pure extraction, same rules."""
-    for k in set(new) - set(old):
-        if k in _TIGHTENING_NEW_KEYWORDS:
-            return False
-    if (new.get("additionalProperties", True) is False
-            and old.get("additionalProperties", True) is not False):
-        return False
-    for k, v in old.items():
-        if k not in new:
-            return False
-        if not _is_additive(v, new[k], path + (k,)):
-            return False
-    return True
-
-
-def _list_is_additive(old: list, new: list, path: tuple) -> bool:
-    """The list half of `_is_additive` — pure extraction, same rules."""
-    if path and path[-1] == "required":
-        return set(new).issubset(set(old))
-    for item in old:
-        if item not in new:
-            return False
-    return True
-
-
-def classify(old: dict | None, new: dict) -> str:
-    """Return 'none', 'patch', 'minor', or 'major' for severity vs. previous schema.
-
-    Heuristic — errs on the side of MAJOR for ambiguous changes. Developers can
-    always override upward via `--bump`; `bump-check` rejects
-    under-bumps.
-
-    A `None` or empty-dict `old` both mean "no usable prior schema" — the
-    transition from nothing to a fully-defined contract is a brand-new
-    contract, hence MAJOR. Without the empty-dict guard the additive
-    heuristic would walk an empty `dict.items()` loop and return MINOR,
-    silently under-classifying the publication.
-    """
-    if not old:
-        return "major"
-    if old == new:
-        return "none"
-    stripped_old = _strip_doc_and_stamp(old)
-    stripped_new = _strip_doc_and_stamp(new)
-    if stripped_old == stripped_new:
-        return "patch"
-    if _is_additive(stripped_old, stripped_new):
-        return "minor"
-    return "major"
-
-
-# ---------------------------------------------------------------------------
 # Filesystem helpers
 # ---------------------------------------------------------------------------
 
@@ -2128,11 +1918,22 @@ def list_published_versions(resource: Resource) -> list[str]:
     return sorted(found, key=parse_semver)
 
 
+def read_committed_json(path: Path) -> dict:
+    """Raises ValueError naming the file when it is not a JSON object."""
+    try:
+        document = json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{_shown(path)}: not valid JSON ({exc})") from exc
+    if not isinstance(document, dict):
+        raise ValueError(f"{_shown(path)}: not a JSON object")
+    return document
+
+
 def load_latest(resource: Resource) -> dict | None:
     path = resource.dir() / "latest.json"
     if not path.exists():
         return None
-    return json.loads(path.read_text())
+    return read_committed_json(path)
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -2149,172 +1950,281 @@ def build_index(resource: Resource) -> dict[str, Any]:
 
 
 def _load_pinned(resource: Resource, version: str) -> dict:
-    return json.loads((resource.dir() / f"{version}.json").read_text())
+    return read_committed_json(resource.dir() / f"{version}.json")
 
 
-def _load_previous_arg(previous: str | None, *, cmd: str) -> dict | None:
-    """Load and validate a `--previous` base-branch latest.json path.
+def rendered_latest(name: str) -> dict[str, Any]:
+    """The `latest.json` the models render now, stamped at the committed
+    version. The committed tree changes only in a release, so a test asking
+    what the contract publishes reads this, not the committed file."""
+    resource = get_resource(name)
+    return render_latest(resource, committed_version(resource) or FIRST_VERSION)
 
-    Returns the parsed dict, or None when `--previous` was not supplied.
-    A supplied-but-broken path (missing, empty, malformed, non-object) is a
-    plumbing failure: a typo'd path or empty `git show` output must not
-    silently masquerade as a brand-new resource. Exits 2 in that case.
+
+# ---------------------------------------------------------------------------
+# Releases
+# ---------------------------------------------------------------------------
+
+
+def bump_record_path(resource: Resource, version: str) -> Path:
+    return BUMP_RECORDS_ROOT / resource.name / f"{version}.json"
+
+
+def override_path(resource: Resource) -> Path:
+    return BUMP_RECORDS_ROOT / resource.name / OVERRIDE_NAME
+
+
+def _shown(path: Path) -> str:
+    return path.relative_to(REPO_ROOT).as_posix()
+
+
+def load_override(resource: Resource) -> dict | None:
+    """The committed override of the next bump of `resource`, or None.
+
+    Raises ValueError naming the file when it is not a bump with a reason.
     """
-    if not previous:
+    path = override_path(resource)
+    if not path.exists():
         return None
-
-    def _fail(msg: str) -> None:
-        # Exit 2 (plumbing failure) — distinct from the 0/1 classification codes.
-        print(f"{cmd}: {msg}", file=sys.stderr)
-        raise SystemExit(2)
-
-    prev_path = Path(previous)
-    if not prev_path.exists():
-        _fail(f"--previous={previous!r} does not exist.")
-    if prev_path.stat().st_size == 0:
-        _fail(f"--previous={previous!r} is empty.")
-    try:
-        parsed = json.loads(prev_path.read_text())
-    except json.JSONDecodeError as exc:
-        _fail(f"--previous={previous!r} is not valid JSON ({exc}).")
-    if not isinstance(parsed, dict):
-        _fail(
-            f"--previous={previous!r} parsed to "
-            f"{type(parsed).__name__}; expected a JSON object."
-        )
-    return parsed
+    override = read_committed_json(path)
+    problem = cascade.override_problem(override)
+    if problem:
+        raise ValueError(f"{_shown(path)}: {problem}")
+    return override
 
 
-# ---------------------------------------------------------------------------
-# Subcommands
-# ---------------------------------------------------------------------------
+def misplaced_overrides() -> list[str]:
+    """Every override file no registered resource would read, as a problem.
 
-
-def cmd_write(args: argparse.Namespace) -> int:
-    """Render at an auto-computed version: classify the diff, advance, write.
-
-    The next version is a pure function of the committed `latest.json` version
-    and the structural severity of the change — the developer never picks the
-    number. `--bump <sev>` raises the bump above the detected floor (the only
-    valid override is upward, e.g. an output-enum addition that is structurally
-    additive but semantically breaking). A new resource publishes at 1.0.0.
+    Only `override_path` of a registered resource is applied, so any other
+    file of that name — a misspelled resource, the records root — would
+    otherwise be ignored by every release while looking committed.
     """
-    resource = get_resource(args.resource)
+    registered = {override_path(resource) for resource in RESOURCES}
+    return [
+        f"{_shown(path)}: no registered resource reads this override; "
+        f"it belongs at {_shown(BUMP_RECORDS_ROOT)}/<resource>/{OVERRIDE_NAME}"
+        for path in sorted(BUMP_RECORDS_ROOT.rglob(OVERRIDE_NAME))
+        if path not in registered
+    ]
+
+
+# Every inconsistent state is a partial or hand-edited release; no command
+# repairs one, since a release reads its starting version from it.
+_RESTORE_HINT = "only the schema release writes these; restore them from the last release commit"
+
+
+def committed_version(resource: Resource) -> str | None:
+    """The version `resource` was last released at, or None when nothing of a
+    release is committed: no pinned version, latest.json, index.json or bump
+    record.
+
+    Raises ValueError, naming the resource, for every other state.
+    """
+    versions = list_published_versions(resource)
+    records = [p for p in (BUMP_RECORDS_ROOT / resource.name).glob("*") if p.name != OVERRIDE_NAME]
+    if not (versions or (resource.dir() / "latest.json").exists()
+            or (resource.dir() / "index.json").exists() or records):
+        return None
+    try:
+        problem = _release_problem(resource, versions)
+    except ValueError as exc:
+        problem = str(exc)
+    if problem:
+        raise ValueError(f"{resource.name}: {problem}; {_RESTORE_HINT}")
+    return versions[-1]
+
+
+def _release_problem(resource: Resource, versions: list[str]) -> str | None:
+    """Why the committed release files of `resource` are not one release, or
+    None: `latest.json` mirrors the highest pinned version, `index.json` lists
+    what is pinned, and every bump record justifies the versions it names."""
+    if not versions:
+        return "release files are committed but no version is pinned"
+    committed_latest = load_latest(resource)
+    if committed_latest is None:
+        return "latest.json is missing"
+    version = committed_latest.get("version")
+    if version != versions[-1]:
+        return f"latest.json names {version!r}, not the highest pinned version {versions[-1]}"
+    if committed_latest != {**_load_pinned(resource, version), "$id": f"{resource.base_url()}/latest.json"}:
+        return f"latest.json does not mirror {version}.json"
+    # index.json is published to the CDN exactly like the other two, so it
+    # needs the same gate.
+    index_path = resource.dir() / "index.json"
+    if not index_path.exists() or read_committed_json(index_path) != build_index(resource):
+        return "index.json is missing or stale"
+    return "\n".join(_check_bump_records(resource)) or None
+
+
+@dataclass(frozen=True)
+class PendingRelease:
+    """A resource whose render differs from its committed `latest.json`."""
+
+    resource: Resource
+    #: None for a resource never released.
+    committed: dict | None
+    #: The render, stamped at the committed version so only the models' change diffs.
+    rendered: dict
+    override: dict | None
+
+
+def pending_release(resource: Resource) -> PendingRelease | None:
+    """What the next release publishes for `resource`; None when nothing changed.
+
+    Raises ValueError when the committed release is inconsistent
+    (`committed_version`), or when a committed override cannot apply: it is
+    malformed, nothing changed, or the resource is new and has no bump to
+    override.
+    """
+    version = committed_version(resource)
+    override = load_override(resource)
+    if version is None:
+        if override is not None:
+            raise ValueError(
+                f"{_shown(override_path(resource))}: {resource.name} is first released at "
+                f"{FIRST_VERSION}; there is no bump to override")
+        return PendingRelease(resource, None, render_latest(resource, FIRST_VERSION), None)
     committed = load_latest(resource)
-    base_version = (committed or {}).get("version") or "0.0.0"
+    rendered = render_latest(resource, version)
+    if not diff(committed, rendered):
+        if override is not None:
+            raise ValueError(
+                f"{_shown(override_path(resource))}: {resource.name} has not changed since "
+                f"{version}; there is nothing to override")
+        return None
+    return PendingRelease(resource, committed, rendered, override)
 
-    # Probe the new structural shape (rendered at the base version so $id/version
-    # don't perturb the structural diff) and classify against the committed doc.
-    probe = render_latest(resource, base_version)
-    floor = classify(committed, probe)
 
-    severity = floor
-    if args.bump:
-        if SEVERITY_RANK[args.bump] < SEVERITY_RANK[floor]:
-            print(
-                f"{resource.name}: --bump {args.bump!r} is below the detected floor "
-                f"{floor!r}; overrides may only raise the bump.",
-                file=sys.stderr,
-            )
-            return 2
-        severity = args.bump
-
-    version = bump_version(base_version, severity)
-    if severity == "none":
-        print(f"{resource.name}: no change vs. committed {base_version} — nothing to write.")
-        return 0
-
-    pinned = render_pinned(resource, version)
-    latest = render_latest(resource, version)
-
-    versioned_path = resource.dir() / f"{version}.json"
-    if versioned_path.exists() and not args.force:
-        existing = json.loads(versioned_path.read_text())
-        if existing != pinned:
-            print(
-                f"refusing to overwrite immutable {versioned_path} (use --force to confirm)",
-                file=sys.stderr,
-            )
-            return 2
-
-    write_json(versioned_path, pinned)
-    write_json(resource.dir() / "latest.json", latest)
+def _publish(resource: Resource, version: str, record: dict | None) -> None:
+    write_json(resource.dir() / f"{version}.json", render_pinned(resource, version))
+    write_json(resource.dir() / "latest.json", render_latest(resource, version))
     write_json(resource.dir() / "index.json", build_index(resource))
-    print(
-        f"wrote {resource.name}/{version}.json + latest.json + index.json "
-        f"(bump {base_version} → {version}, '{severity}')"
-    )
-    _refresh_document_schemas()
-    _refresh_contracts_version()
+    if record is not None:
+        write_json(bump_record_path(resource, version), record)
+    override_path(resource).unlink(missing_ok=True)
+
+
+def cmd_release(_args: argparse.Namespace) -> int:
+    """Publish every resource the models have changed since its last release,
+    then re-render the versionless documents, the stamp last.
+
+    Planned, then applied: everything that can fail runs before the first
+    model call, and every bump is decided before the first write, so a failure
+    leaves the tree untouched. It plans from the same `committed_version`
+    bare `check` holds the tree to. document_schemas.json is verified, never
+    written: the request model reads it, so it is an input to the render.
+    """
+    pending: list[PendingRelease] = []
+    problems = misplaced_overrides()
+    for resource in RESOURCES:
+        try:
+            release = pending_release(resource)
+        except ValueError as exc:
+            problems.append(str(exc))
+            continue
+        if release is not None:
+            pending.append(release)
+    try:
+        arrow_types = _arrow_types_text()
+        contract_models_version()
+    except RuntimeError as exc:
+        problems.append(f"cannot render the versionless documents — {exc}")
+    document_schemas_ok, document_schemas_problem = check_document_schemas()
+    if not document_schemas_ok:
+        problems.append(document_schemas_problem)
+    if problems:
+        print("\n".join(problems), file=sys.stderr)
+        return 2
+
+    post = None
+    if any(release.committed is not None for release in pending):
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            print("OPENROUTER_API_KEY is not set; deciding a bump needs it.", file=sys.stderr)
+            return 2
+        post = cascade.openrouter_post(api_key)
+    decided: list[tuple[Resource, str, dict | None]] = []
+    for release in pending:
+        if release.committed is None:
+            decided.append((release.resource, FIRST_VERSION, None))
+            print(f"{release.resource.name}: first release at {FIRST_VERSION}")
+            continue
+        try:
+            record, cost = decide_record(
+                release.resource.name, release.committed["version"],
+                release.committed, release.rendered, post, release.override)
+        except cascade.BumpClassificationError as exc:
+            print(f"{release.resource.name}: the change could not be classified: {exc}", file=sys.stderr)
+            return 2
+        decided.append((release.resource, record["to"], record))
+        decided_by = "override" if release.override else "models"
+        print(f"{release.resource.name}: {record['from']} → {record['to']} "
+              f"({record['final']}, decided by the {decided_by}, cost ${cost:.4f})")
+    if not pending:
+        print("No resource changed: every resource renders as its latest.json.")
+
+    for resource, version, record in decided:
+        _publish(resource, version, record)
+    _refresh(ARROW_TYPES_PATH, arrow_types)
+    # Last: the stamp's digest covers every other document in the tree.
+    _refresh(CONTRACTS_VERSION_PATH, _contracts_version_text())
     return 0
 
 
-def _check_resource(resource: Resource) -> tuple[bool, str]:
-    """Return (ok, message). ok=False on drift / missing publication.
+def _check_bump_records(resource: Resource) -> list[str]:
+    """Every file under the resource's record directory but its override: a
+    record justifying the pinned versions it names."""
+    problems: list[str] = []
+    for path in sorted((BUMP_RECORDS_ROOT / resource.name).glob("*")):
+        where = _shown(path)
+        if path.name == OVERRIDE_NAME:
+            continue
+        match = VERSIONED_FILENAME_RE.match(path.name)
+        if not match:
+            problems.append(f"{where}: neither {OVERRIDE_NAME} nor named <version>.json")
+            continue
+        try:
+            record = read_committed_json(path)
+        except ValueError as exc:
+            problems.append(str(exc))
+            continue
+        from_version = record.get("from")
+        pinned = [resource.dir() / f"{v}.json" for v in (from_version, match.group(1))]
+        if not isinstance(from_version, str) or not all(p.exists() for p in pinned):
+            problems.append(f"{where}: names a version with no pinned schema")
+            continue
+        old, new = (read_committed_json(p) for p in pinned)
+        problem = record_problem(record, resource.name, from_version, match.group(1), old, new)
+        if problem:
+            problems.append(f"{where}: the bump record {problem}")
+    return problems
 
-    The committed `latest.json` is authoritative for the current version: its
-    `version` field must have a matching pinned `{version}.json`, must be the
-    highest pinned version, and both files must equal the rendered output at
-    that version. Changing a model without re-running `write` fails here,
-    naming the fix.
+
+def _check_resource(resource: Resource, *, released: bool) -> tuple[bool, str]:
+    """Return (ok, message).
+
+    The committed tree must be a release `committed_version` accepts, and a
+    committed override one the next release would apply. With `released`, the
+    models must also render exactly that release, which holds only once a
+    release has published every change (and so consumed every override).
     """
-    write_hint = f"`scripts/render_schemas.py write --resource {resource.name}`"
-    versions = list_published_versions(resource)
-    if not versions:
-        return (
-            False,
-            f"{resource.name}: no checked-in versions under "
-            f"{resource.dir().relative_to(REPO_ROOT)}/; run {write_hint}",
-        )
-
-    committed_latest = load_latest(resource)
-    if committed_latest is None:
-        return (False, f"{resource.name}: latest.json is missing; run {write_hint}")
-
-    version = committed_latest.get("version")
-    if not version or version not in versions:
-        return (
-            False,
-            f"{resource.name}: latest.json version {version!r} has no matching pinned "
-            f"{version}.json; re-run {write_hint}",
-        )
-    if parse_semver(versions[-1]) > parse_semver(version):
-        return (
-            False,
-            f"{resource.name}: a higher pinned version {versions[-1]}.json exists than "
-            f"latest.json points to ({version}); re-run {write_hint}",
-        )
-
-    if _load_pinned(resource, version) != render_pinned(resource, version):
-        return (
-            False,
-            f"{resource.name}: {version}.json is stale or hand-edited; re-run {write_hint}",
-        )
-    if committed_latest != render_latest(resource, version):
-        return (
-            False,
-            f"{resource.name}: latest.json is stale or out of sync with "
-            f"{version}.json; re-run {write_hint}",
-        )
-
-    # index.json is published to the CDN exactly like the other two, so it needs
-    # the same gate. Without this, hand-editing it (or `write` changing the
-    # manifest shape) drifts silently while `check` still reports OK.
-    index_path = resource.dir() / "index.json"
-    committed_index = json.loads(index_path.read_text()) if index_path.exists() else None
-    if committed_index is None:
-        return (False, f"{resource.name}: index.json is missing; run {write_hint}")
-    if committed_index != build_index(resource):
-        return (
-            False,
-            f"{resource.name}: index.json is stale or hand-edited; re-run {write_hint}",
-        )
-
-    return (
-        True,
-        f"{resource.name}: OK — latest.json + {version}.json + index.json match "
-        "rendered output",
-    )
+    try:
+        version = committed_version(resource)
+        if override_path(resource).exists():
+            pending_release(resource)
+    except ValueError as exc:
+        return (False, str(exc))
+    if version is None:
+        if released:
+            return (False, f"{resource.name}: registered but never released")
+        return (True, f"{resource.name}: OK — not released yet")
+    if released:
+        if _load_pinned(resource, version) != render_pinned(resource, version):
+            return (False, f"{resource.name}: {version}.json is not what the models render; "
+                           "the release is stale")
+        return (True, f"{resource.name}: OK — {version} released, matching the models")
+    return (True, f"{resource.name}: OK — {version} is consistent with its pinned versions and records")
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -2324,148 +2234,58 @@ def cmd_check(args: argparse.Namespace) -> int:
     if not targets:
         print("no resources registered", file=sys.stderr)
         return 1
-    failed = False
-    for resource in targets:
-        ok, msg = _check_resource(resource)
-        if not ok:
-            failed = True
-            print(msg, file=sys.stderr)
-        else:
-            print(msg)
+    results = [_check_resource(resource, released=args.released) for resource in targets]
+    results += [(False, problem) for problem in misplaced_overrides()]
     # arrow-types.json, contracts-version.json and document_schemas.json are
     # generated but not registry Resources (versionless + mutable); a full
     # check covers them so CI needs no extra invocation.
     if not args.resource:
-        for extra_check in (check_arrow_types, check_contracts_version, check_document_schemas):
-            ok, msg = extra_check()
-            if not ok:
-                failed = True
-                print(msg, file=sys.stderr)
-            else:
-                print(msg)
+        results += [
+            check_arrow_types(released=args.released),
+            check_contracts_version(released=args.released),
+            check_document_schemas(),
+        ]
     else:
         print(
             "note: arrow-types.json, contracts-version.json and "
             "document_schemas.json not checked with --resource; run a full `check` (CI does) to cover them"
         )
-    return 1 if failed else 0
+    for ok, msg in results:
+        print(msg, file=None if ok else sys.stderr)
+    return 0 if all(ok for ok, _ in results) else 1
 
 
-def cmd_classify(args: argparse.Namespace) -> int:
-    """Classify severity of the on-disk current latest.json against `--previous`.
-
-    `--previous` is the path to the latest.json from before the current change
-    (typically extracted from the PR base branch via `git show`). Without it,
-    classification falls back to comparing against the next-highest checked-in
-    pinned version of the same resource.
-
-    A `--previous` path that is explicitly supplied but missing, empty,
-    malformed JSON, or non-dict JSON is treated as a plumbing failure: an
-    error is logged to stderr and the command exits with code 2. This
-    prevents a typo'd path or empty `git show` output from silently
-    masquerading as a brand-new resource (which would otherwise be classified
-    as `major` and pass CI).
-
-    The "no prior schema → major" path is reserved for the case where
-    `--previous` was *not* supplied and no prior pinned version exists.
-    """
-    resource = get_resource(args.resource)
-    versions = list_published_versions(resource)
-    if not versions:
-        print("major")
-        return 0
-    current = load_latest(resource)
-    if current is None:
-        print("major")
-        return 0
-
-    previous = _load_previous_arg(args.previous, cmd="classify")
-    if previous is None and not args.previous and len(versions) >= 2:
-        previous = json.loads(
-            (resource.dir() / f"{versions[-2]}.json").read_text()
-        )
-
-    print(classify(previous, current))
-    return 0
+def release_only_paths(paths: Iterable[str]) -> list[str]:
+    """The paths in `paths` that only the schema release may change: a
+    registered resource's published tree, the versionless documents, and
+    everything under the bump records but a registered resource's override."""
+    owned = tuple(f"{_shown(resource.dir())}/" for resource in RESOURCES)
+    versionless = {_shown(ARROW_TYPES_PATH), _shown(CONTRACTS_VERSION_PATH)}
+    records = f"{_shown(BUMP_RECORDS_ROOT)}/"
+    overrides = {_shown(override_path(resource)) for resource in RESOURCES}
+    return [
+        path for path in paths
+        if path.startswith(owned)
+        or path in versionless
+        or (path.startswith(records) and path not in overrides)
+    ]
 
 
-def cmd_bump_check(args: argparse.Namespace) -> int:
-    """Enforce that the committed version bump meets the structural severity floor.
-
-    Replaces the infra repo's `schema-bump:<resource>:<sev>` PR-label mechanism. The
-    head version is read from the checked-in `latest.json` (which `write`
-    auto-computed); the base version from the PR base branch's `--previous`
-    copy. Requires the base→head delta to be >= the structurally-detected floor
-    and never a rollback. A brand-new resource (no `--previous`) passes — its
-    publication is its first version.
-    """
-    resource = get_resource(args.resource)
-    current = load_latest(resource)
-    if current is None:
+def cmd_release_guard(_args: argparse.Namespace) -> int:
+    """Read changed repo-relative paths from stdin; exit 1 on any only a release may change."""
+    blocked = release_only_paths(line.strip() for line in sys.stdin if line.strip())
+    if blocked:
         print(
-            f"bump-check: {resource.name} has no checked-in latest.json; run "
-            f"`render_schemas.py write --resource {resource.name}` first.",
+            "Only the schema release writes schema versions, the versionless "
+            "documents and bump records. "
+            f"Revert these, and commit a {OVERRIDE_NAME} under "
+            f"{_shown(BUMP_RECORDS_ROOT)}/<resource>/ to override a bump:",
             file=sys.stderr,
         )
-        return 2
-
-    head_version = current.get("version")
-    if not head_version:
-        print(
-            f"bump-check: {resource.name} latest.json has no `version` field.",
-            file=sys.stderr,
-        )
-        return 2
-
-    previous = _load_previous_arg(args.previous, cmd="bump-check")
-    if previous is None:
-        print(f"{resource.name}: new resource — publishing at {head_version}.")
-        return 0
-
-    base_version = previous.get("version")
-    if not base_version:
-        # The base copy predates versioned publishing — a hand-authored schema
-        # being adopted into the generator. Treat it
-        # as the 0.0.0 baseline rather than skipping the gate: the floor +
-        # rollback checks below then still run against the head version, so a
-        # corrupt/blanked base `version` can't silently disable them.
-        print(
-            f"{resource.name}: base copy predates versioned publishing — "
-            "treating as 0.0.0 baseline for the floor check."
-        )
-        base_version = "0.0.0"
-
-    # Validate both versions are well-formed semver before arithmetic, so a
-    # corrupt/hand-edited `version` field fails with the function's exit-2
-    # plumbing code rather than an opaque parse_semver traceback.
-    for label, value in (("head", head_version), ("base", base_version)):
-        if not SEMVER_RE.match(value):
-            print(
-                f"bump-check: {resource.name} {label} version {value!r} is not valid "
-                "MAJOR.MINOR.PATCH semver.",
-                file=sys.stderr,
-            )
-            return 2
-
-    floor = classify(previous, current)
-    delta = semver_delta(base_version, head_version)
-    if delta == "rollback":
-        print(
-            f"::error::{resource.name}: version rollback — head {head_version} < base {base_version}.",
-            file=sys.stderr,
-        )
+        for path in blocked:
+            print(f"  {path}", file=sys.stderr)
         return 1
-    if SEVERITY_RANK[delta] < SEVERITY_RANK[floor]:
-        print(
-            f"::error::{resource.name}: version bump {base_version} → {head_version} is "
-            f"'{delta}', below the detected floor '{floor}'. Re-run "
-            f"`render_schemas.py write --resource {resource.name}` "
-            f"(it auto-computes the correct bump).",
-            file=sys.stderr,
-        )
-        return 1
-
-    print(f"{resource.name}: OK — bump {base_version} → {head_version} ('{delta}') >= floor '{floor}'.")
+    print("No release-only path changed.")
     return 0
 
 
@@ -2477,6 +2297,7 @@ def cmd_list(args: argparse.Namespace) -> int:
                 seen.add(p)
             seen.add(f"{resource.dir().relative_to(REPO_ROOT).as_posix()}/**")
         seen.add("scripts/render_schemas.py")
+        seen.add(f"{BUMP_RECORDS_ROOT.relative_to(REPO_ROOT).as_posix()}/**")
         seen.add(".github/workflows/tests.yml")
         # Generated arrow-types.json + the vendored grammar it renders from.
         seen.add("schemas/arrow-types.json")
@@ -2484,14 +2305,6 @@ def cmd_list(args: argparse.Namespace) -> int:
         seen.add(f"{_CONTRACTS_PREFIX}/arrow_type_grammar.json")
         for p in sorted(seen):
             print(p)
-        return 0
-    if args.latest:
-        # `<resource>\t<repo-relative latest.json path>` per resource — lets a
-        # caller resolve each resource's output path from the registry instead
-        # of hard-coding it.
-        for resource in RESOURCES:
-            rel = (resource.dir() / "latest.json").relative_to(REPO_ROOT).as_posix()
-            print(f"{resource.name}\t{rel}")
         return 0
     for resource in RESOURCES:
         print(resource.name)
@@ -2502,61 +2315,32 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_write = sub.add_parser(
-        "write", help="render and write {version}.json + latest.json + index.json"
+    p_release = sub.add_parser(
+        "release",
+        help="publish every resource the models changed since its last release",
     )
-    p_write.add_argument(
-        "--resource", required=True, help=f"resource name; one of: {', '.join(r.name for r in RESOURCES)}"
-    )
-    p_write.add_argument(
-        "--bump",
-        choices=("patch", "minor", "major"),
-        help="raise the auto-detected bump (upward only); for changes that are "
-        "structurally additive but semantically breaking (e.g. a new output enum value)",
-    )
-    p_write.add_argument(
-        "--force",
-        action="store_true",
-        help="allow overwriting an existing immutable {version}.json",
-    )
-    p_write.set_defaults(func=cmd_write)
+    p_release.set_defaults(func=cmd_release)
 
     p_check = sub.add_parser(
         "check",
-        help="exit 1 if rendered output differs from checked-in latest.json (all resources by default)",
+        help="exit 1 unless the committed tree is self-consistent (all resources by default)",
     )
     p_check.add_argument(
         "--resource",
         help="check just one resource; default checks every registered resource",
     )
+    p_check.add_argument(
+        "--released",
+        action="store_true",
+        help="also require the models to render exactly the committed tree",
+    )
     p_check.set_defaults(func=cmd_check)
 
-    p_ct = sub.add_parser(
-        "arrow-types",
-        help="render schemas/arrow-types.json from the vendored engine "
-        "grammar (versionless + mutable, so no write/{X.Y.Z} machinery)",
+    p_guard = sub.add_parser(
+        "release-guard",
+        help="read changed paths from stdin; exit 1 on any only the release may change",
     )
-    p_ct.add_argument(
-        "--check",
-        action="store_true",
-        help="exit 1 if the committed file differs from rendered output "
-        "(also part of the full `check` run)",
-    )
-    p_ct.set_defaults(func=cmd_arrow_types)
-
-    p_cv = sub.add_parser(
-        "contracts-version",
-        help="render schemas/contracts-version.json — the analitiq-contract-models "
-        "release the tree renders from (versionless + mutable, so no "
-        "write/{X.Y.Z} machinery)",
-    )
-    p_cv.add_argument(
-        "--check",
-        action="store_true",
-        help="exit 1 if the committed file differs from rendered output "
-        "(also part of the full `check` run)",
-    )
-    p_cv.set_defaults(func=cmd_contracts_version)
+    p_guard.set_defaults(func=cmd_release_guard)
 
     p_ds = sub.add_parser(
         "document-schemas",
@@ -2571,30 +2355,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_ds.set_defaults(func=cmd_document_schemas)
 
-    p_classify = sub.add_parser(
-        "classify",
-        help="print severity vs. previous publication: none|patch|minor|major",
-    )
-    p_classify.add_argument("--resource", required=True, help="resource name")
-    p_classify.add_argument(
-        "--previous",
-        help="Path to previous latest.json (e.g. extracted from PR base branch). "
-        "Without it, falls back to the prior pinned version of the same resource.",
-    )
-    p_classify.set_defaults(func=cmd_classify)
-
-    p_bump = sub.add_parser(
-        "bump-check",
-        help="enforce that the in-code version bump meets the detected severity floor",
-    )
-    p_bump.add_argument("--resource", required=True, help="resource name")
-    p_bump.add_argument(
-        "--previous",
-        help="Path to the PR base-branch latest.json (e.g. extracted via `git show`). "
-        "Omit for a brand-new resource (first publication).",
-    )
-    p_bump.set_defaults(func=cmd_bump_check)
-
     p_list = sub.add_parser(
         "list",
         help="print registered resource names (one per line); "
@@ -2606,11 +2366,6 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print the union of source/output paths this render depends "
         "on, one per line",
-    )
-    p_list.add_argument(
-        "--latest",
-        action="store_true",
-        help="print `<resource>\\t<repo-relative latest.json path>` per resource",
     )
     p_list.set_defaults(func=cmd_list)
 
