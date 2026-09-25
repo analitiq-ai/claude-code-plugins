@@ -84,12 +84,10 @@ jobs:
         run: pip install --quiet -r requirements-dev.txt
 
       - name: Verify schemas/ is self-consistent
-        # tests.yml already gates merges with these; running them again here
-        # means a hand-edited tree can't publish even if that gate is
-        # bypassed. The render_schemas.py module docstring says what bare
-        # `check` holds the tree to. `check --released` is the release PR's
-        # gate, not this one: main may carry changes the next release has not
-        # published yet.
+        # Bare `check`, whose coverage the render_schemas.py module docstring
+        # owns. Hand-edits to release-only paths are refused at PR time by
+        # tests.yml's `release-guard`, which this workflow does not run. Not
+        # `check --released`: main trails the models between releases.
         # The remaining hand-authored files have no content gate in this
         # workflow — data-sync-run-response/1.0.0.json is protected by the
         # first-write-wins byte-compare at upload, data-sync-api/openapi.json
