@@ -1,7 +1,7 @@
 {
   "id": "pipeline-db-incremental-upsert",
   "plugin": "analitiq-pipeline-builder",
-  "network": false,
+  "network": true,
   "why": "The shape most likely to be authored plausibly and wrongly. Incremental replication and upsert each select a block shape, each carries fields the other must not have, and the assignment target's arrow_type has to reproduce the destination column exactly rather than be re-derived. Both connections and both endpoint documents are seeded, so the run reuses them instead of introspecting a live database — which also makes the destination column types a fixed thing the mapping can be graded against.",
   "seed": [
     {

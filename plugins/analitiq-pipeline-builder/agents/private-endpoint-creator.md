@@ -35,7 +35,10 @@ substitute a hand-derived result.
 
 ## Sub-modes (set by the orchestrator)
 
-One invocation runs exactly one mode.
+One invocation runs exactly one mode. Every mode takes:
+
+- `workspace` (required) — absolute path to the workspace root. Every
+  `connectors/…` and `connections/…` path below resolves against it.
 
 ### Mode 1: `discover-schemas`
 

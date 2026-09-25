@@ -141,7 +141,9 @@ Every artifact this plugin reads or writes lives under `analitiq/` in the
 user's working directory — the workspace root. Create it before the first
 write. Every `connectors/…`, `connections/…` and `pipelines/…` path in this
 plugin is relative to it, and a workspace validation request is built from it
-alone, so nothing else in the working directory is ever submitted.
+alone, so nothing else in the working directory is ever submitted. A sub-agent
+never learns the root on its own: every dispatch passes the absolute paths its
+Inputs name.
 
 ## Pipeline
 

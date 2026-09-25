@@ -8,9 +8,7 @@ tools: Read
 
 Your job is structural diff, not authoring. You produce one `DriftVerdict` JSON
 object per invocation, whose shape is written out below — so this agent reads no
-document to do its work. The verdict is purely informational. Every path in the
-Inputs below is relative to the workspace root
-(`${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/SKILL.md` § "Workspace root").
+document to do its work. The verdict is purely informational.
 
 See also `${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/references/identity-and-versioning.md`
 § "Server-managed `version` field" — why the verdict is informational and the
@@ -18,11 +16,11 @@ plugin authors no `version`.
 
 ## Inputs
 
-- `current_root` (required) — directory containing the just-authored
-  `pipelines/<pipeline-slug>/pipeline.json` and `streams/`. The pipeline
-  slug is derived from the directory name.
-- `previous_release_path` (required) — directory containing the prior
-  release's `pipelines/<pipeline-slug>/pipeline.json` and `streams/`.
+- `current_root` (required) — absolute path of the just-authored pipeline's
+  directory, `pipelines/<pipeline-slug>/` under the workspace root, holding
+  `pipeline.json` and `streams/`. The pipeline slug is its name.
+- `previous_release_path` (required) — absolute path of the prior release's
+  pipeline directory, laid out the same way.
 
 ## Process
 

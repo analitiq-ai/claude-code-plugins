@@ -1,7 +1,7 @@
 {
   "id": "pipeline-api-to-new-table",
   "plugin": "analitiq-pipeline-builder",
-  "network": false,
+  "network": true,
   "why": "The plainest whole-pipeline run, and the one that reaches the most obligations nothing rejects: routing each connection-contract input by its declared storage, keeping a secret as a pointer, supplying CA material for a verifying TLS mode, and authoring no default the contract already declares. Both connectors are seeded, so the run needs no registry and no live system — an API source reads its endpoints out of the connector document, and a destination table that does not exist yet is derived without connecting.",
   "seed": [
     {
