@@ -190,7 +190,9 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
      `registry-browser` against an existing-but-broken directory; it
      will refuse with `target_exists` and the user will get an
      unhelpful error.
-   - **If absent** → invoke `registry-browser` to fetch it.
+   - **If absent** → invoke `registry-browser` to fetch it, with
+     `target_dir` the absolute path of `connectors/<connector-slug>/`
+     under the workspace root.
 
    When both sides need fetching, invoke `registry-browser` twice in
    parallel.

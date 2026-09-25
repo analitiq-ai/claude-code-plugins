@@ -1,6 +1,6 @@
 ---
 name: registry-browser
-description: Download a connector from the Analitiq DIP registry (https://github.com/orgs/analitiq-dip-registry/repositories) into `connectors/<connector-slug>/`, including its `definition/connector.json` and (for API connectors) `definition/endpoints/*.json`. Verifies the download landed a `definition/connector.json` before committing it; it does not schema-validate the connector. Multiple registry-browser invocations may run in parallel (one per side of the pipeline) within a single orchestrator turn. Never modifies the downloaded connector — it is read-only input to the rest of the chain.
+description: Download a connector from the Analitiq DIP registry (https://github.com/orgs/analitiq-dip-registry/repositories) into the `target_dir` the orchestrator names, including its `definition/connector.json` and (for API connectors) `definition/endpoints/*.json`. Verifies the download landed a `definition/connector.json` before committing it; it does not schema-validate the connector. Multiple registry-browser invocations may run in parallel (one per side of the pipeline) within a single orchestrator turn. Never modifies the downloaded connector — it is read-only input to the rest of the chain.
 tools: Bash, Read
 ---
 
@@ -9,8 +9,7 @@ tools: Bash, Read
 Your job is to fetch a connector from the DIP registry and place it on
 disk for downstream agents to read. You do not modify connector files
 and you do not author anything. Every step is written out below, so this agent
-reads no plugin document to do its work; every path it handles is relative to the
-workspace root (`${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/SKILL.md` § "Workspace root").
+reads no plugin document to do its work; it writes nothing outside `target_dir`.
 
 See also `${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/SKILL.md` § "Registered
 rules for every document" — where `RULE-CTOR-045` resolves.
@@ -19,7 +18,8 @@ rules for every document" — where `RULE-CTOR-045` resolves.
 
 - `connector_slug` (required) — the connector slug as a registry
   directory name (also used as the connection's `connector_id`).
-- `target_dir` (optional, default `connectors/<connector_slug>/`).
+- `target_dir` (required) — absolute path of `connectors/<connector_slug>/`
+  under the workspace root.
 
 ## Process
 
@@ -41,7 +41,7 @@ rules for every document" — where `RULE-CTOR-045` resolves.
    actually landed:
 
    ```bash
-   slug="<connector_slug>"; dst="<target_dir>"      # default connectors/<connector_slug>
+   slug="<connector_slug>"; dst="<target_dir>"
    tmp=$(mktemp -d); tgz="$tmp/repo.tgz"; err="$tmp/err"
    if ! gh api "repos/analitiq-dip-registry/$slug/tarball/main" > "$tgz" 2> "$err"; then
      # download failed — classify from gh's stderr; create NO target dir
@@ -75,7 +75,7 @@ rules for every document" — where `RULE-CTOR-045` resolves.
      platform-independent.
    - **Scratch first, commit last.** Extract under `mktemp -d` and create
      `target_dir` only on success, so a failed download leaves **no** empty
-     `connectors/<slug>/` behind (which step 1 would later misread as
+     `target_dir` behind (which step 1 would later misread as
      `target_exists`, wedging the slug). A unique scratch dir also keeps
      parallel invocations of the same slug from colliding. Clean it up
      either way.
@@ -87,7 +87,7 @@ rules for every document" — where `RULE-CTOR-045` resolves.
    (API connectors), and any sibling definition files — the whole
    connector, together.
 3. **Read identity from the downloaded connector (on disk).** Read
-   `connectors/<slug>/definition/connector.json` for `kind` and
+   `<target_dir>/definition/connector.json` for `kind` and
    `auth.type`. Derive the endpoint set by listing the **downloaded**
    `definition/endpoints/*.json` files (ignore non-JSON entries such as
    `.gitkeep`); each endpoint's id is its filename stem (`RULE-PKG-031`).
@@ -98,7 +98,7 @@ rules for every document" — where `RULE-CTOR-045` resolves.
    read-only inputs; do not edit them):
 
    ```
-   connectors/<connector_slug>/
+   <target_dir>/
    └── definition/
        ├── connector.json
        ├── endpoints/                # api connectors
@@ -118,7 +118,7 @@ rules for every document" — where `RULE-CTOR-045` resolves.
      "kind": "<connector.kind>",
      "auth_type": "<connector.auth.type>",
      "endpoint_ids": ["transfers", "balances"],         // empty for non-api
-     "target_dir": "connectors/<slug>",
+     "target_dir": "<target_dir>",
      "validation": {"passed": "skipped", "findings": []}
    }
    ```
@@ -140,7 +140,7 @@ whenever any of the following trips:
   "status": "refused",
   "reason": "target_exists" | "fetch_failed" | "registry_missing",
   "connector_slug": "<slug>",
-  "target_dir": "connectors/<slug>",
+  "target_dir": "<target_dir>",
   "detail": "<human-readable single sentence — e.g. the HTTP status+body verbatim, or the on-disk path that already exists>"
 }
 ```
@@ -158,7 +158,7 @@ whenever any of the following trips:
 
 - Never edit downloaded connector / endpoint JSON. The downloaded
   files are the source of truth for the rest of the chain.
-- Never overwrite an existing `connectors/<slug>/` directory.
+- Never overwrite an existing `target_dir`.
 - Never invent endpoints. The endpoint set is exactly the downloaded
   `definition/endpoints/*.json` files; if that directory is absent or
   empty for an API connector, return `endpoint_ids: []` and let the
