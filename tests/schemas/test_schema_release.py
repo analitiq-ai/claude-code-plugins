@@ -61,11 +61,12 @@ def tree(tmp_path, monkeypatch):
     monkeypatch.setattr(render_schemas, "SCHEMAS_ROOT", tmp_path / "schemas")
     monkeypatch.setattr(render_schemas, "BUMP_RECORDS_ROOT", tmp_path / "schema-bumps")
     monkeypatch.setattr(render_schemas, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(render_schemas, "_refresh_document_schemas", lambda: None)
+    monkeypatch.setattr(render_schemas, "DOCUMENT_SCHEMAS_PATH", tmp_path / "document_schemas.json")
     monkeypatch.setattr(render_schemas, "ARROW_TYPES_PATH", tmp_path / "schemas" / "arrow-types.json")
     monkeypatch.setattr(render_schemas, "CONTRACTS_VERSION_PATH", tmp_path / "schemas" / "contracts-version.json")
     resources = [render_schemas.get_resource(name) for name in NAMES]
     monkeypatch.setattr(render_schemas, "RESOURCES", resources)
+    render_schemas.DOCUMENT_SCHEMAS_PATH.write_text(render_schemas._document_schemas_text())  # skipcq: PYL-W0212
     for resource in resources:
         _publish_stale(resource)
     return resources
@@ -164,6 +165,7 @@ def test_a_new_resource_is_first_released_at_1_0_0_without_a_record_or_a_key(tre
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     fresh = render_schemas.get_resource("stream")
     monkeypatch.setattr(render_schemas, "RESOURCES", [fresh])
+    assert render_schemas.main(["document-schemas"]) == 0
     assert _check_of(fresh) == 0
     assert _check_of(fresh, "--released") == 1
     assert _release() == 0
@@ -207,6 +209,23 @@ def test_a_release_without_a_key_writes_nothing(tree, monkeypatch, tmp_path):
 
 def test_a_failed_classification_writes_nothing_even_for_resources_already_decided(tree, models, tmp_path):
     models.extend([_jev("minor"), (cascade.JEV_URL, 503, {"error": {"code": 503}})])
+    before = _files(tmp_path)
+    assert _release() == 2
+    assert _files(tmp_path) == before
+
+
+def _raise_value_error(_resources):
+    raise ValueError("a root model's `$schema` also accepts another resource's URL")
+
+
+@pytest.mark.parametrize("fault", ["stale", "unrenderable"])
+def test_a_document_schemas_fault_fails_the_release_before_any_write(tree, models, tmp_path, monkeypatch, fault):
+    """The request model reads document_schemas.json, so the release verifies it and never writes it."""
+    models.extend([_jev("minor"), _jev("minor")])
+    if fault == "stale":
+        render_schemas.DOCUMENT_SCHEMAS_PATH.write_text('{"document_schemas": []}\n')
+    else:
+        monkeypatch.setattr(render_schemas, "document_schema_names", _raise_value_error)
     before = _files(tmp_path)
     assert _release() == 2
     assert _files(tmp_path) == before

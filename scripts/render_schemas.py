@@ -1838,10 +1838,6 @@ def _refresh(path: Path, rendered: str) -> None:
         print(f"wrote {_shown(path)}")
 
 
-def _refresh_document_schemas() -> None:
-    _refresh(DOCUMENT_SCHEMAS_PATH, _document_schemas_text())
-
-
 def cmd_document_schemas(args: argparse.Namespace) -> int:
     if args.check:
         ok, msg = check_document_schemas()
@@ -2053,9 +2049,10 @@ def cmd_release(_args: argparse.Namespace) -> int:
     """Publish every resource the models have changed since its last release,
     then re-render the versionless documents, the stamp last.
 
-    Every override is validated and every source rendered before the first
+    Planned, then applied: everything that can fail runs before the first
     model call, and every bump is decided before the first write, so a failure
-    leaves the tree untouched.
+    leaves the tree untouched. document_schemas.json is verified, never
+    written: the request model reads it, so it is an input to the render.
     """
     pending: list[PendingRelease] = []
     problems = misplaced_overrides()
@@ -2072,6 +2069,9 @@ def cmd_release(_args: argparse.Namespace) -> int:
         contract_models_version()
     except RuntimeError as exc:
         problems.append(f"cannot render the versionless documents — {exc}")
+    document_schemas_ok, document_schemas_problem = check_document_schemas()
+    if not document_schemas_ok:
+        problems.append(document_schemas_problem)
     if problems:
         print("\n".join(problems), file=sys.stderr)
         return 2
@@ -2106,7 +2106,6 @@ def cmd_release(_args: argparse.Namespace) -> int:
     for resource, version, record in decided:
         _publish(resource, version, record)
     _refresh(ARROW_TYPES_PATH, arrow_types)
-    _refresh_document_schemas()
     # Last: the stamp's digest covers every other document in the tree.
     _refresh(CONTRACTS_VERSION_PATH, _contracts_version_text())
     return 0
