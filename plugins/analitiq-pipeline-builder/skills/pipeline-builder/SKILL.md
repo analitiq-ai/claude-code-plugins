@@ -231,7 +231,8 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
 4. **Connections** — for each side, check whether
    `connections/<connection-slug>/connection.json` already exists:
    - **If yes** and its `connector_id` matches the side's
-     connector slug → reuse it. Validate the existing file (entity
+     connector slug → reuse it. Validate the existing file (a `document`
+     request: its absolute path under the workspace root, document kind
      `connection`) so a stale shape is caught early. If validation
      passes, record its `connection_id` UUID for downstream use, leave
      the user's `.secrets/credentials.json` untouched, and record

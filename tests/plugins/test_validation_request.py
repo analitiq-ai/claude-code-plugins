@@ -47,7 +47,8 @@ def test_each_plugin_ships_the_same_copy(path):
 
 
 def _validation_not_run(plugin: str) -> str:
-    text = next((PLUGINS / plugin / "skills").glob("*/references/io-contracts.md")).read_text(encoding="utf-8")
+    (contracts,) = (PLUGINS / plugin / "skills").glob("*/references/io-contracts.md")
+    text = contracts.read_text(encoding="utf-8")
     start = text.index("- `validation-not-run`")
     return text[start:text.index("\n\n", start)]
 

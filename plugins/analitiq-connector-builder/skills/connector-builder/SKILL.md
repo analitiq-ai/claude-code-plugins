@@ -112,7 +112,8 @@ worklist protocol, and the on-disk layout — is `references/pipeline.md`
 3. **Dispatch creator** — `api-` / `db-` / `storage-connector-creator`
    by kind; always pass `provider_facts` (the creator's hard gate).
 4. **Validate the domain (barrier)** — `connector-schema-validator` over
-   the connector body and type map; the domain must be clean before
+   the connector body and type map (`references/pipeline.md` §4 says which
+   request each kind takes); the domain must be clean before
    any fan-out. Findings are passed verbatim to the owning creator,
    which triages them — never you.
 5. **Endpoint fan-out (api only)** — a bounded worklist; one researcher

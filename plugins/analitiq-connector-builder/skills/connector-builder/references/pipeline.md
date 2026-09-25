@@ -129,12 +129,20 @@ either kind.
 
 ### 4. Validate the domain (barrier)
 
-Stage the connector body and type map at their release paths and invoke
-`connector-schema-validator` with that `package` directory.
+Stage the connector body and type map at their release paths, then invoke
+`connector-schema-validator`:
+
+- `kind = database` — with that `package` directory. The package is complete:
+  no endpoint ships with it.
+- `kind = api` — once per document, as a `document` (`document_kind`
+  `connector`, then `type-map`). A package without endpoints fails
+  (`RULE-PKG-035`), so the package request waits for the phase-5 join.
+
 <!-- PROBE: type-map-section-missing -->
 The map is one `type-map.json` carrying a section for each direction the
 connector's `kind` calls for (`RULE-PKG-030`); a section the kind needs and the
-map lacks fails the connector.
+map lacks fails the connector package — at this phase for `database`, at the
+phase-5 join for `api`.
 
 Validation covers the JSON documents above; the package files are
 governed by rules of their own (`RULE-PKG-007`, `RULE-PKG-009`,
