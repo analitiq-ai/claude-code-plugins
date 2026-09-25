@@ -233,15 +233,31 @@ def test_a_document_schemas_fault_fails_the_release_before_any_write(tree, model
     assert _files(tmp_path) == before
 
 
-@pytest.mark.parametrize("fault", ["latest missing", "latest below the highest pin"])
-def test_an_inconsistent_committed_tree_fails_the_release_before_any_write(tree, models, tmp_path, fault):
-    """The release plans from latest.json, so it must refuse a tree `check` rejects, or it overwrites a pin."""
+def _unlink(resource, *names: str) -> None:
+    for name in names:
+        (resource.dir() / name).unlink()
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        pytest.param(lambda r: _unlink(r, "latest.json"), id="pins-without-latest"),
+        pytest.param(lambda r: _unlink(r, "1.0.0.json", "index.json"), id="latest-without-pins"),
+        pytest.param(lambda r: _unlink(r, "1.0.0.json", "latest.json"), id="index-without-pins"),
+        pytest.param(
+            lambda r: render_schemas.write_json(r.dir() / "1.1.0.json", render_schemas.render_pinned(r, "1.1.0")),
+            id="latest-below-the-highest-pin",
+        ),
+    ],
+)
+def test_a_partial_or_inconsistent_release_fails_the_check_and_the_release_before_any_write(
+    tree, models, tmp_path, fault
+):
+    """Only a tree with no release footprint at all is new; anything between that and a
+    consistent release is refused, or the release would pin from a version it never published."""
     models.extend([_jev("minor"), _jev("minor")])
-    resource = tree[0]
-    if fault == "latest missing":
-        (resource.dir() / "latest.json").unlink()
-    else:
-        render_schemas.write_json(resource.dir() / "1.1.0.json", render_schemas.render_pinned(resource, "1.1.0"))
+    fault(tree[0])
+    assert _check() == 1
     before = _files(tmp_path)
     assert _release() == 2
     assert _files(tmp_path) == before

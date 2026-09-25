@@ -1947,8 +1947,7 @@ def rendered_latest(name: str) -> dict[str, Any]:
     version. The committed tree changes only in a release, so a test asking
     what the contract publishes reads this, not the committed file."""
     resource = get_resource(name)
-    committed = load_latest(resource)
-    return render_latest(resource, committed["version"] if committed else FIRST_VERSION)
+    return render_latest(resource, committed_version(resource) or FIRST_VERSION)
 
 
 # ---------------------------------------------------------------------------
@@ -2002,6 +2001,49 @@ def misplaced_overrides() -> list[str]:
     ]
 
 
+# Every inconsistent state is a partial or hand-edited release; no command
+# repairs one, since a release reads its starting version from it.
+_RESTORE_HINT = "only the schema release writes these; restore them from the last release commit"
+
+
+def committed_version(resource: Resource) -> str | None:
+    """The version `resource` was last released at, or None when nothing of a
+    release is committed: no pinned version, latest.json, index.json or bump
+    record.
+
+    Raises ValueError for every other state: `latest.json` must mirror the
+    highest pinned version, `index.json` list what is pinned, and every bump
+    record justify the versions it names.
+    """
+    versions = list_published_versions(resource)
+    index_path = resource.dir() / "index.json"
+    records = [p for p in (BUMP_RECORDS_ROOT / resource.name).glob("*") if p.name != OVERRIDE_NAME]
+    if not (versions or (resource.dir() / "latest.json").exists() or index_path.exists() or records):
+        return None
+
+    def inconsistent(problem: str) -> ValueError:
+        return ValueError(f"{resource.name}: {problem}; {_RESTORE_HINT}")
+
+    if not versions:
+        raise inconsistent("release files are committed but no version is pinned")
+    committed_latest = load_latest(resource)
+    if committed_latest is None:
+        raise inconsistent("latest.json is missing")
+    version = committed_latest.get("version")
+    if version != versions[-1]:
+        raise inconsistent(f"latest.json names {version!r}, not the highest pinned version {versions[-1]}")
+    if committed_latest != {**_load_pinned(resource, version), "$id": f"{resource.base_url()}/latest.json"}:
+        raise inconsistent(f"latest.json does not mirror {version}.json")
+    # index.json is published to the CDN exactly like the other two, so it
+    # needs the same gate.
+    if not index_path.exists() or json.loads(index_path.read_text()) != build_index(resource):
+        raise inconsistent("index.json is missing or stale")
+    record_problems = _check_bump_records(resource)
+    if record_problems:
+        raise ValueError("\n".join([*record_problems, f"{resource.name}: {_RESTORE_HINT}"]))
+    return version
+
+
 @dataclass(frozen=True)
 class PendingRelease:
     """A resource whose render differs from its committed `latest.json`."""
@@ -2017,23 +2059,26 @@ class PendingRelease:
 def pending_release(resource: Resource) -> PendingRelease | None:
     """What the next release publishes for `resource`; None when nothing changed.
 
-    Raises ValueError when a committed override cannot apply: it is malformed,
-    nothing changed, or the resource is new and has no bump to override.
+    Raises ValueError when the committed release is inconsistent
+    (`committed_version`), or when a committed override cannot apply: it is
+    malformed, nothing changed, or the resource is new and has no bump to
+    override.
     """
+    version = committed_version(resource)
     override = load_override(resource)
-    committed = load_latest(resource)
-    if committed is None:
+    if version is None:
         if override is not None:
             raise ValueError(
                 f"{_shown(override_path(resource))}: {resource.name} is first released at "
                 f"{FIRST_VERSION}; there is no bump to override")
         return PendingRelease(resource, None, render_latest(resource, FIRST_VERSION), None)
-    rendered = render_latest(resource, committed["version"])
+    committed = load_latest(resource)
+    rendered = render_latest(resource, version)
     if not diff(committed, rendered):
         if override is not None:
             raise ValueError(
                 f"{_shown(override_path(resource))}: {resource.name} has not changed since "
-                f"{committed['version']}; there is nothing to override")
+                f"{version}; there is nothing to override")
         return None
     return PendingRelease(resource, committed, rendered, override)
 
@@ -2053,19 +2098,13 @@ def cmd_release(_args: argparse.Namespace) -> int:
 
     Planned, then applied: everything that can fail runs before the first
     model call, and every bump is decided before the first write, so a failure
-    leaves the tree untouched. It plans only from a tree that bare `check`
-    accepts. document_schemas.json is verified, never
+    leaves the tree untouched. It plans from the same `committed_version`
+    bare `check` holds the tree to. document_schemas.json is verified, never
     written: the request model reads it, so it is an input to the render.
     """
     pending: list[PendingRelease] = []
     problems = misplaced_overrides()
     for resource in RESOURCES:
-        # The version is derived from latest.json, so a tree `check` rejects
-        # would have the release overwrite an immutable pin.
-        consistent, problem = _check_resource(resource, released=False)
-        if not consistent:
-            problems.append(problem)
-            continue
         try:
             release = pending_release(resource)
         except ValueError as exc:
@@ -2152,51 +2191,23 @@ def _check_bump_records(resource: Resource) -> list[str]:
 def _check_resource(resource: Resource, *, released: bool) -> tuple[bool, str]:
     """Return (ok, message).
 
-    The committed tree must be self-consistent: `latest.json` mirrors the
-    highest pinned version, `index.json` lists what is pinned, and every bump
-    record justifies the versions it names, and a committed override is one
-    the next release would apply. With `released`, the models must also
-    render exactly that tree, which holds only once a release has published
-    every change (and so consumed every override).
+    The committed tree must be a release `committed_version` accepts, and a
+    committed override one the next release would apply. With `released`, the
+    models must also render exactly that release, which holds only once a
+    release has published every change (and so consumed every override).
     """
-    release_hint = "the schema release writes it; never edit it by hand"
-    if override_path(resource).exists():
-        try:
+    try:
+        version = committed_version(resource)
+        if override_path(resource).exists():
             pending_release(resource)
-        except ValueError as exc:
-            return (False, str(exc))
-    versions = list_published_versions(resource)
-    if not versions:
+    except ValueError as exc:
+        return (False, str(exc))
+    if version is None:
         if released:
             return (False, f"{resource.name}: registered but never released")
         return (True, f"{resource.name}: OK — not released yet")
-
-    committed_latest = load_latest(resource)
-    if committed_latest is None:
-        return (False, f"{resource.name}: latest.json is missing; {release_hint}")
-    version = committed_latest.get("version")
-    if version != versions[-1]:
-        return (
-            False,
-            f"{resource.name}: latest.json names {version!r}, not the highest pinned "
-            f"version {versions[-1]}; {release_hint}",
-        )
-    pinned = _load_pinned(resource, version)
-    if committed_latest != {**pinned, "$id": f"{resource.base_url()}/latest.json"}:
-        return (False, f"{resource.name}: latest.json does not mirror {version}.json; {release_hint}")
-
-    # index.json is published to the CDN exactly like the other two, so it
-    # needs the same gate.
-    index_path = resource.dir() / "index.json"
-    if not index_path.exists() or json.loads(index_path.read_text()) != build_index(resource):
-        return (False, f"{resource.name}: index.json is missing or stale; {release_hint}")
-
-    record_problems = _check_bump_records(resource)
-    if record_problems:
-        return (False, "\n".join(record_problems))
-
     if released:
-        if pinned != render_pinned(resource, version):
+        if _load_pinned(resource, version) != render_pinned(resource, version):
             return (False, f"{resource.name}: {version}.json is not what the models render; "
                            "the release is stale")
         return (True, f"{resource.name}: OK — {version} released, matching the models")
