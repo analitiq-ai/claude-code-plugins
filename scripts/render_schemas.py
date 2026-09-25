@@ -2049,7 +2049,7 @@ def _publish(resource: Resource, version: str, record: dict | None) -> None:
     override_path(resource).unlink(missing_ok=True)
 
 
-def cmd_release(args: argparse.Namespace) -> int:
+def cmd_release(_args: argparse.Namespace) -> int:
     """Publish every resource the models have changed since its last release,
     then re-render the versionless documents, the stamp last.
 
@@ -2239,7 +2239,7 @@ def release_only_paths(paths: Iterable[str]) -> list[str]:
     ]
 
 
-def cmd_release_guard(args: argparse.Namespace) -> int:
+def cmd_release_guard(_args: argparse.Namespace) -> int:
     """Read changed repo-relative paths from stdin; exit 1 on any only a release may change."""
     blocked = release_only_paths(line.strip() for line in sys.stdin if line.strip())
     if blocked:
