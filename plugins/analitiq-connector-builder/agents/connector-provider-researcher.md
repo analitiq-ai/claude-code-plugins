@@ -38,7 +38,7 @@ You run at one of two scopes per invocation:
   those a write accepts — and return an `EndpointFacts`
   object whose shape `io-contracts.md` §EndpointFacts states: per field, which
   directions carry it, its type pair where the provider documents one, a
-  **real sample value** wherever a payload shows one, and — for temporal
+  **real sample value** wherever a payload shows one, and — for date-time
   fields — that sample's zone-awareness. This is the field-level category
   `ProviderFacts` deliberately omits.
 
@@ -87,9 +87,10 @@ Later mentions use a file's bare name; resolve each against these paths.
 The `EndpointFacts` fragment states every field to fill and what each must
 carry. Where it leaves the call to you: a native the domain pass never reported
 goes into `notes` as a domain type-map addition, never an endpoint-local one;
-and a temporal field whose docs show no sample value is a gap you report, never
-a zone you assume (`RULE-SHRD-002`) — a date-only wire value (`2024-01-02`) is
-`Date32`, never a `Timestamp`. A sample grounds the entry for the direction whose
+and a date-time field whose payloads show no date-time string sample is a gap
+you report, never a zone you assume (`RULE-SHRD-002`) — a date-only field
+(`2024-01-02`) is `Date32` on its documented `format`, never a `Timestamp` and
+never a missing-sample gap. A sample grounds the entry for the direction whose
 payload carried it, so a field shown in a response and accepted on a write is a
 `read` entry with the value and a `write` entry without one (`RULE-SHRD-002`).
 A sample is copied out of a payload the provider publishes, in the kind that
