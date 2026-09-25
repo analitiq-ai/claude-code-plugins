@@ -287,6 +287,11 @@ _RECORD = "schema-bumps/workspace/1.1.0.json"
         pytest.param(lambda r: (r.dir() / "index.json").write_text("{"), _INDEX, id="malformed-index"),
         pytest.param(lambda r: _stray_record(r, "{"), _RECORD, id="malformed-record"),
         pytest.param(_corrupt_the_pin_a_record_names, _PIN, id="malformed-pin-a-record-names"),
+        # Every release file the classifier reads, parsing to something other than an object.
+        pytest.param(lambda r: (r.dir() / "latest.json").write_text("[]"), _LATEST, id="nonobject-latest"),
+        pytest.param(lambda r: (r.dir() / "1.0.0.json").write_text('"x"'), _PIN, id="nonobject-highest-pin"),
+        pytest.param(lambda r: (r.dir() / "index.json").write_text("[]"), _INDEX, id="nonobject-index"),
+        pytest.param(lambda r: _stray_record(r, "[]"), _RECORD, id="nonobject-record"),
     ],
 )
 def test_a_partial_or_inconsistent_release_fails_the_check_and_the_release_before_any_write(

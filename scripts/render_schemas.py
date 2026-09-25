@@ -1918,12 +1918,15 @@ def list_published_versions(resource: Resource) -> list[str]:
     return sorted(found, key=parse_semver)
 
 
-def read_committed_json(path: Path) -> Any:
-    """Raises ValueError naming the file when it does not parse."""
+def read_committed_json(path: Path) -> dict:
+    """Raises ValueError naming the file when it is not a JSON object."""
     try:
-        return json.loads(path.read_text())
+        document = json.loads(path.read_text())
     except json.JSONDecodeError as exc:
         raise ValueError(f"{_shown(path)}: not valid JSON ({exc})") from exc
+    if not isinstance(document, dict):
+        raise ValueError(f"{_shown(path)}: not a JSON object")
+    return document
 
 
 def load_latest(resource: Resource) -> dict | None:
@@ -2186,7 +2189,7 @@ def _check_bump_records(resource: Resource) -> list[str]:
         except ValueError as exc:
             problems.append(str(exc))
             continue
-        from_version = record.get("from") if isinstance(record, dict) else None
+        from_version = record.get("from")
         pinned = [resource.dir() / f"{v}.json" for v in (from_version, match.group(1))]
         if not isinstance(from_version, str) or not all(p.exists() for p in pinned):
             problems.append(f"{where}: names a version with no pinned schema")
