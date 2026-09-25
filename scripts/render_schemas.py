@@ -26,8 +26,10 @@ Output trees:
     Every file above is written by `release` alone, which re-renders both
     versionless documents on every run.
 
-Resources are declared in the `RESOURCES` registry below. Adding a schema is one
-entry there; the next release publishes it at 1.0.0.
+Resources are declared in the `RESOURCES` registry below. Adding a schema is an
+entry there; when its root model declares `$schema`, commit the
+`render_schemas.py document-schemas` re-render with it. The next release
+publishes it at 1.0.0.
 
 Subcommands:
     release     Publish every resource whose render differs from its
