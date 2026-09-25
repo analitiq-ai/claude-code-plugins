@@ -469,7 +469,7 @@ def run_validator(workdir: Path, spec: dict, timeout: int) -> list[str]:
     else:
         cmd = [sys.executable, str(GRADE), "workspace", str(workdir / directory)]
     try:
-        proc = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True,
+        proc = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True, check=False,
                               timeout=timeout, env={**os.environ, **GRADER_ENV})
     except subprocess.TimeoutExpired:
         return [f"{directory}: the validator did not finish within {timeout}s"]
