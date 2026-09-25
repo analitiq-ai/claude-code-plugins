@@ -33,9 +33,34 @@ def test_every_mcp_tool_names_a_server_its_plugin_declares(agent):
     assert stray == []
 
 
-@pytest.mark.parametrize(
-    "agent", [a for a in _AGENTS if "/scripts/validation_request.py" in a.read_text(encoding="utf-8")],
-    ids=lambda a: f"{a.parents[1].name}/{a.stem}")
-def test_an_agent_running_the_builder_allowlists_every_tool_it_names(agent):
-    (prefix,) = _tool_prefixes(agent.parents[1])
-    assert {prefix + tool for tool in grade._TOOLS} <= set(_allowed_tools(agent))
+_BUILDER_MODE = re.compile(r'/scripts/validation_request\.py"\s+(\w+)')
+
+
+def _builder_tool(mode, tmp_path) -> str:
+    (tmp_path / "doc.json").write_text("{}", encoding="utf-8")
+    argv = {"document": [tmp_path / "doc.json", "kind"], "package": [tmp_path, "kind"],
+            "workspace": [tmp_path]}[mode]
+    return grade.builder.build([mode, *map(str, argv)])["tool"]
+
+
+_BACKEND_TOOLS = re.compile(r"^## Backend tools\n(.*?)(?=^## |\Z)", re.MULTILINE | re.DOTALL)
+
+
+def _backend_tools(body: str) -> set[str]:
+    section = _BACKEND_TOOLS.search(body)
+    return set(re.findall(r"`([a-z_]+)`", section.group(1))) if section else set()
+
+
+@pytest.mark.parametrize("agent", _AGENTS, ids=lambda a: f"{a.parents[1].name}/{a.stem}")
+def test_an_agent_allowlists_exactly_the_server_tools_it_calls(agent, tmp_path):
+    body = agent.read_text(encoding="utf-8").split("---", 2)[2]
+    called = {_builder_tool(mode, tmp_path) for mode in _BUILDER_MODE.findall(body)}
+    called |= _backend_tools(body)
+    allowed = {t.split("__")[-1] for t in _allowed_tools(agent) if t.startswith("mcp__")}
+    assert allowed == called
+
+
+def test_both_kinds_of_call_site_are_located():
+    bodies = [a.read_text(encoding="utf-8").split("---", 2)[2] for a in _AGENTS]
+    assert any(_BUILDER_MODE.search(b) for b in bodies)
+    assert any(_backend_tools(b) for b in bodies)

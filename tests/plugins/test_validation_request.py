@@ -45,6 +45,18 @@ def test_each_plugin_ships_the_same_copy(path):
             == (PLUGINS / "analitiq-pipeline-builder" / path).read_bytes())
 
 
+
+def _validation_not_run(plugin: str) -> str:
+    text = next((PLUGINS / plugin / "skills").glob("*/references/io-contracts.md")).read_text(encoding="utf-8")
+    start = text.index("- `validation-not-run`")
+    return text[start:text.index("\n\n", start)]
+
+
+def test_each_plugin_defines_validation_not_run_the_same_way():
+    # The orchestrators halt on the same outcomes whichever plugin ran the call.
+    assert (_validation_not_run("analitiq-connector-builder")
+            == _validation_not_run("analitiq-pipeline-builder"))
+
 _TREE = {
     "connection.json": "{}",
     "definition/type-map.json": "{}",
