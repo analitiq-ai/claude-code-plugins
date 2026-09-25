@@ -22,7 +22,7 @@ def _write(root: Path, files: dict[str, str | bytes]) -> None:
         if isinstance(content, bytes):
             path.write_bytes(content)
         else:
-            path.write_text(content)
+            path.write_text(content, encoding="utf-8")
 
 
 def _build(*argv) -> dict:
@@ -147,14 +147,14 @@ def test_nothing_inside_a_dot_directory_is_read(tmp_path):
 
 def test_a_document_is_carried_as_the_text_on_disk(tmp_path):
     document = tmp_path / "pipeline.json"
-    document.write_text('{"a": "é"}')
+    document.write_text('{"a": "é"}', encoding="utf-8")
     assert _build("document", document, "pipeline") == {
         "tool": "validate_single_document",
         "arguments": {"document": '{"a": "é"}', "document_kind": "pipeline"}}
 
 
 def test_a_file_that_is_not_utf8_refuses_the_request(tmp_path):
-    (tmp_path / "connection.json").write_text("{}")
+    (tmp_path / "connection.json").write_text("{}", encoding="utf-8")
     (tmp_path / "latin1.json").write_bytes(b'{"a": "\xe9"}')
     assert _refused("package", tmp_path, "connection") == f"{tmp_path / 'latin1.json'}: not UTF-8 text"
 
@@ -175,7 +175,7 @@ def test_an_unreadable_entry_refuses_the_request(tmp_path, entry):
 def test_a_single_document_that_cannot_be_carried_is_refused(tmp_path, content, link):
     document = tmp_path / "pipeline.json"
     if link:
-        (tmp_path / "target.json").write_text(content)
+        (tmp_path / "target.json").write_text(content, encoding="utf-8")
         document.symlink_to(tmp_path / "target.json")
     elif content is not None:
         document.write_bytes(content)
