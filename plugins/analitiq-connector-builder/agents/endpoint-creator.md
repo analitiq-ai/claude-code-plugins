@@ -238,9 +238,9 @@ was raised.
      entry carries to satisfy the map: the read map is first-match-wins and
      shared with the read direction, so a rule added for a native the
      provider never emits can shadow a real one. This bans a fabricated
-     token — never distinct tokens the provider genuinely documents
-     differently, whether for different fields or for one field's separate
-     directional entries.
+     token — never tokens that are distinct under step 3's comparison,
+     whether for different fields or for one field's separate directional
+     entries.
    - `conflict_keys` (`RULE-ENDP-019`, `RULE-ENDP-014`) — the
      provider-defined natural key the upsert matches on. Use
      `endpoint_facts.conflict_keys`; never invent one.
