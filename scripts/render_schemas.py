@@ -1224,9 +1224,8 @@ def get_resource(name: str) -> Resource:
 # glob). Its ACCEPTED SET is generated from the engine-published, vendored
 # grammar manifest (`analitiq.contracts.arrow_grammar`); only the
 # prose below — titles, descriptions, display grouping — is authored here.
-# `check` (and the dedicated `arrow-types --check`) fails when the
-# committed file differs from the rendered output, exactly like a registered
-# resource.
+# Only the release writes it; the `check` entry of the module docstring says
+# what each check mode holds it to.
 #
 # This document was published as `canonical-types.json` before it was renamed.
 # The publish is additive and deletes nothing, so that path keeps serving the
@@ -1649,10 +1648,9 @@ def check_arrow_types(*, released: bool) -> tuple[bool, str]:
 # The digest is what makes the stamp move with EVERY release — the version
 # alone changes only on a package bump, so without it a publish that failed
 # to land a release would be undetectable from the stamp. Only the release
-# writes it; `check --released` fails when it lags either fact, and the
-# `contracts-version-guard` CI job holds the PUBLISHED copy byte-identical
-# to the committed one (`scripts/check_contracts_version_pin.py` owns those
-# semantics).
+# writes it; the `check` entry of the module docstring says what each check
+# mode holds it to, and `scripts/check_contracts_version_pin.py` owns what the
+# published copy witnesses.
 
 CONTRACTS_VERSION_PATH = SCHEMAS_ROOT / "contracts-version.json"
 CONTRACT_MODELS_PYPROJECT = (

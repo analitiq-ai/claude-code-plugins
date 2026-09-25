@@ -86,15 +86,10 @@ jobs:
       - name: Verify schemas/ is self-consistent
         # tests.yml already gates merges with these; running them again here
         # means a hand-edited tree can't publish even if that gate is
-        # bypassed. Coverage, stated precisely: for every registered resource,
-        # latest.json and index.json agree with the pinned versions and every
-        # bump record justifies the versions it names, every override is one
-        # a release would apply, and the generated versionless documents
-        # (arrow-types.json and the contracts-version.json provenance stamp)
-        # have their render's shape. Whether the models, the grammar and the
-        # package version render exactly this tree is the release PR's gate
-        # (`check --released`), not this one: main may carry changes the next
-        # release has not published yet.
+        # bypassed. The render_schemas.py module docstring says what bare
+        # `check` holds the tree to. `check --released` is the release PR's
+        # gate, not this one: main may carry changes the next release has not
+        # published yet.
         # The remaining hand-authored files have no content gate in this
         # workflow — data-sync-run-response/1.0.0.json is protected by the
         # first-write-wins byte-compare at upload, data-sync-api/openapi.json
@@ -161,9 +156,9 @@ jobs:
           # mid-run failure never leaves a pointer at content that isn't up.
           # contracts-version.json is exempt from the sort for the same
           # reason at tree scope: it is the TREE-WIDE pointer, so it lands
-          # dead last, below — a run that dies on any other object leaves the
-          # published stamp stale, which is exactly what contracts-version-
-          # guard exists to catch; C-sort alone would land it mid-tree.
+          # dead last, below; C-sort alone would land it mid-tree.
+          # scripts/check_contracts_version_pin.py owns what the published
+          # stamp then witnesses.
           if [ "$((uploaded + skipped + 1))" -ne "$expected" ]; then
             echo "::error::processed $((uploaded + skipped)) of $((expected - 1)) non-stamp schema files — the find/loop plumbing is broken" >&2
             exit 1

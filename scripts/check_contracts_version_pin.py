@@ -28,9 +28,13 @@ offline test can see:
      already retries across the publish's own pointer TTL
      (`.github/workflows/schemas-publish.yml` owns the cache-control) before
      this step ever sees the divergence. What this deliberately does NOT
-     reach: an out-of-band write to some OTHER published object after a
-     completed publish leaves the stamp intact — the stamp witnesses the last
-     completed publish, not the bucket's current contents. The remediation
+     reach: the stamp witnesses the tree as of the last schema release, the
+     only writer of the stamp. A push that changes only a hand-authored
+     document outside the registry publishes under the unchanged stamp, so a
+     failed upload of it is not witnessed until the next release PR merges;
+     likewise an out-of-band write to some OTHER published object leaves the
+     stamp intact — the stamp witnesses the last released tree, not the
+     bucket's current contents. The remediation
      once the retry budget is spent is the same flow the validator release
      already uses: land or re-run the publish, then re-run this job.
   2. The committed stamp states the pyproject version. Only the schema

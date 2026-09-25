@@ -37,10 +37,8 @@ SCRIPTS = REPO_ROOT / "scripts"
 
 # (script, write argvs, check argv). Order is the dependency order for write.
 PIPELINE = [
-    # schemas/ is the published tree: the check holds each resource's pinned
-    # versions, pointers and bump records consistent, and the versionless
-    # arrow-types and contracts-version documents to their sources.
-    # Checked in BOTH modes, never written here: `render_schemas.py release`
+    # schemas/ is the published tree; the render_schemas.py module docstring
+    # says what `check` holds it to. Checked in BOTH modes, never written here: `render_schemas.py release`
     # cuts new schema versions and calls the bump models, and only the
     # schema-release workflow runs it.
     ("render_schemas.py", [["check"]], ["check"]),

@@ -1,11 +1,10 @@
-"""Prove the contracts-version stamp is current, honest, and wired.
+"""Prove the contracts-version stamp is honest and gated, and pin the guard's copies.
 
-`schemas/contracts-version.json` is the published tree's provenance: the
-`analitiq-contract-models` version the tree was released from, written by
-`scripts/render_schemas.py release` from the package's own pyproject and
-covered by the full render `check`. CI's check only exercises the clean path —
-these tests inject the failure states (stale stamp, missing stamp, versionless
-pyproject) and pin the cross-file facts no import can carry: `scripts/check_contracts_version_pin.py` cannot import the renderer
+`schemas/contracts-version.json` is the published tree's provenance, written
+only by `scripts/render_schemas.py release`, whose module docstring says what
+each `check` mode holds it to. CI's check only exercises the clean path —
+these tests inject the failure states (lagging, missing and malformed stamps,
+a versionless pyproject) and pin the cross-file facts no import can carry: `scripts/check_contracts_version_pin.py` cannot import the renderer
 (the guard job installs nothing and the renderer imports pydantic), so the
 stamp's key, the paths, the serving host, and the probe's basename are
 stated in the guard as copies of renderer-owned values and pinned equal here.
@@ -86,15 +85,29 @@ def test_a_stamp_of_the_render_shape_passes_the_check_until_the_release(monkeypa
     assert render_schemas.main(["check"]) == 0
 
 
-def test_full_check_gates_the_stamp(monkeypatch, tmp_path):
-    """schemas-publish.yml's verify step runs only `render_schemas.py check`
-    (plus one arrow-types pytest module), so the stamp's only shape gate on
-    the publish path is the full check reaching check_contracts_version —
-    dropping it from cmd_check must fail here, not silently un-gate the
-    publish."""
-    stale = tmp_path / "contracts-version.json"
-    stale.write_text('{"analitiq-contract-models": "0.0.0"}\n')
-    monkeypatch.setattr(render_schemas, "CONTRACTS_VERSION_PATH", stale)
+@pytest.fixture
+def released_versionless(monkeypatch, tmp_path):
+    """Both versionless documents committed exactly as rendered, every
+    resource passing, so a case fails only on the document it edits."""
+    monkeypatch.setattr(render_schemas, "_check_resource", lambda resource, *, released: (True, resource.name))
+    for attr in ("ARROW_TYPES_PATH", "CONTRACTS_VERSION_PATH"):
+        monkeypatch.setattr(render_schemas, attr, tmp_path / getattr(render_schemas, attr).name)
+    render_schemas.ARROW_TYPES_PATH.write_text(render_schemas._arrow_types_text())
+    render_schemas.CONTRACTS_VERSION_PATH.write_text(render_schemas._contracts_version_text())
+    assert render_schemas.main(["check", "--released"]) == 0
+
+
+@pytest.mark.parametrize("attr", ["ARROW_TYPES_PATH", "CONTRACTS_VERSION_PATH"])
+def test_the_full_check_gates_each_versionless_document(released_versionless, attr):
+    """schemas-publish.yml runs only the bare `check` before upload, and the
+    release PR runs `check --released`, so `cmd_check` reaching each document
+    is its only gate on either path."""
+    path = getattr(render_schemas, attr)
+    rendered = path.read_text()
+    path.write_text(json.dumps(json.loads(rendered)))
+    assert render_schemas.main(["check"]) == 0
+    assert render_schemas.main(["check", "--released"]) == 1
+    path.write_text("{}")
     assert render_schemas.main(["check"]) == 1
 
 

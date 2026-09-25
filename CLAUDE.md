@@ -24,14 +24,15 @@ with the new pinned versions and their `schema-bumps/` records. Every other PR
 is kept off those paths by `render_schemas.py release-guard`. So main's tree
 trails the models until that PR merges: a test asking what the contract
 publishes reads `render_schemas.rendered_latest`, never the committed file.
-`render_schemas.py check` verifies the committed tree offline, and
-`check --released` also requires it to match the render. Never hand-edit a file
-under `schemas/`. The release also re-renders the versionless documents, and
-only the release writes them: `arrow-types.json` (from the vendored engine
-grammar) and `contracts-version.json`, the provenance stamp recording which
+`render_schemas.py check` verifies the committed tree offline; its module
+docstring says what bare `check` and `check --released` each hold. Never
+hand-edit a file under `schemas/`. The release also re-renders the
+versionless documents, and only the release writes them: `arrow-types.json`
+(from the vendored engine grammar) and `contracts-version.json`, the provenance stamp recording which
 `analitiq-contract-models` version the tree was released from plus a digest of
 it — the `contracts-version-guard` CI job holds the published copy, and
-`VALIDATOR_PIN`, to that stamp.
+`VALIDATOR_PIN`, to that stamp (`scripts/check_contracts_version_pin.py` owns
+what the stamp witnesses).
 
 The hand-authored exceptions, outside the registry and never inspected by
 `check`: `data-sync-api/openapi.json` (no version triple) and
