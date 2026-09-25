@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -265,3 +266,19 @@ def test_the_evaluation_corpus_loads_from_the_published_history():
     consecutive pinned pair and every scored pair has a change."""
     assert evaluation.historical_cases(
         render_schemas.SCHEMAS_ROOT, REPO_ROOT / "evals" / "schema_bumps" / "labels.json")
+
+
+def test_the_release_workflows_run_at_the_tool_pin():
+    """`uses:` cannot read the pin, so each caller repeats the SHA the tool is
+    installed at; a workflow at another SHA runs a tool it was not written for."""
+    pin = re.search(r"analitiq-ai/\.github@([0-9a-f]{40})#subdirectory=tools/schema-bump",
+                    (REPO_ROOT / "requirements-dev.txt").read_text())
+    assert pin, "requirements-dev.txt pins no schema-bump SHA"
+    refs = {
+        (path.name, ref)
+        for path in sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+        for ref in re.findall(r"uses: analitiq-ai/\.github/\.github/workflows/schema-[\w-]+\.yml@(\S+)",
+                              path.read_text())
+    }
+    assert {name for name, _ in refs} == {"schema-release.yml", "schema-bump-eval.yml"}
+    assert all(ref == pin[1] for _, ref in refs), refs

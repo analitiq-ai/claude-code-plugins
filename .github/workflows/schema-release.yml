@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   release:
-    uses: analitiq-ai/.github/.github/workflows/schema-release.yml@main
+    uses: analitiq-ai/.github/.github/workflows/schema-release.yml@9bd2b2997c038dd60dea1f1464189c029ac33cfa
     with:
       setup-command: pip install -r requirements-dev.txt
       release-command: python3 scripts/render_schemas.py release
@@ -23,4 +23,4 @@ jobs:
       release-branch: schema-release
     secrets:
       OPEN_ROUTER_KEY: ${{ secrets.OPEN_ROUTER_KEY }}
-      RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      RELEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}

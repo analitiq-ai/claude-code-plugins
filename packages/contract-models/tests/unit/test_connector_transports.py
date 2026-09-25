@@ -5,8 +5,8 @@ The `driver` pattern was once a closed async-driver allow-list
 `dialect+driver` pattern — sync and async DBAPIs are both admissible, and
 the contract names no drivers (whether the named driver actually exists as
 a SQLAlchemy dialect registration is checked at transport build, not
-here). Schema parity (`render_schemas.py check`) only proves the artifact
-matches the model; nothing else asserts what the model itself accepts. So
+here). Schema parity (`render_schemas.py check --released`, on the release
+PR) only proves the artifact matches the model; nothing else asserts what the model itself accepts. So
 pin the pattern verbatim and the accept/reject boundary through the model:
 any future tightening (e.g. a revert to an allow-list) or widening is then
 a recorded decision that fails loudly, together with the prose that

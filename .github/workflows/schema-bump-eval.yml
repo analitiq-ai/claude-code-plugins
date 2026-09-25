@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   eval:
-    uses: analitiq-ai/.github/.github/workflows/schema-bump-eval.yml@main
+    uses: analitiq-ai/.github/.github/workflows/schema-bump-eval.yml@9bd2b2997c038dd60dea1f1464189c029ac33cfa
     with:
       setup-command: pip install -r requirements-dev.txt
       history: schemas

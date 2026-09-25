@@ -83,13 +83,17 @@ jobs:
         # version here (tests.yml states the same rule at its install step).
         run: pip install --quiet -r requirements-dev.txt
 
-      - name: Verify schemas/ matches the contract models
+      - name: Verify schemas/ is self-consistent
         # tests.yml already gates merges with these; running them again here
         # means a hand-edited tree can't publish even if that gate is
-        # bypassed. Coverage, stated precisely: the render check covers every
-        # registered resource plus the generated versionless documents
-        # (arrow-types.json and the contracts-version.json provenance
-        # stamp); the pytest guard re-covers arrow-types.json.
+        # bypassed. Coverage, stated precisely: for every registered resource,
+        # latest.json and index.json agree with the pinned versions and every
+        # bump record justifies the versions it names; the generated
+        # versionless documents (arrow-types.json and the contracts-version.json
+        # provenance stamp) match their sources; the pytest guard re-covers
+        # arrow-types.json. Whether the models render the pinned tree is the
+        # release PR's gate (`check --released`), not this one: main may carry
+        # model changes the next release has not published yet.
         # The remaining hand-authored files have no content gate in this
         # workflow — data-sync-run-response/1.0.0.json is protected by the
         # first-write-wins byte-compare at upload, data-sync-api/openapi.json

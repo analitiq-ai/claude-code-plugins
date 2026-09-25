@@ -37,9 +37,10 @@ the rule, not that a tool agreed.
       a declared shape.
 - [ ] **Plugin prose is on a rung.** If this touches `plugins/**/*.md`, applied
       `.claude/rules/plugin-prose.md` — every fact cited, generated or pinned.
-- [ ] **Contract change is rendered.** If `packages/contract-models` moved,
-      `render_schemas.py check` and `render_prose_census.py check` are clean and
-      the re-rendered pins are in the diff. No `schemas/` file hand-edited.
+- [ ] **Contract change leaves publishing to the release.** If
+      `packages/contract-models` moved, `render_all.py check` is clean and no
+      `schemas/` file or bump record is in the diff — the schema release PR
+      publishes them. A deliberate bump is `schema-bumps/<resource>/override.json`.
 - [ ] **Tests grade the new behaviour**, and a deliberate mutation of it goes
       red. A test that passes against broken code is worse than no test.
 

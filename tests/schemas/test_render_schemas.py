@@ -87,6 +87,13 @@ def test_every_registered_resource_is_public():
                 f"{resource.name} renders {model.__module__}.{model.__qualname__}")
 
 
+@pytest.mark.parametrize("name", [resource.name for resource in render_schemas.RESOURCES])
+def test_every_registered_resource_renders(name):
+    """A pull request never writes `schemas/`, so this is what makes a model
+    whose schema cannot be generated fail before it reaches the release job."""
+    assert render_schemas.rendered_latest(name)["$id"]
+
+
 # --- the walker reaches what the guard depends on --------------------------
 
 def test_module_allowlist_requires_a_dot_boundary():
