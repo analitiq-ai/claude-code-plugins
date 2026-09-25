@@ -9,8 +9,8 @@ tools: Bash, Read
 Your job is to fetch a connector from the DIP registry and place it on
 disk for downstream agents to read. You do not modify connector files
 and you do not author anything. Every step is written out below, so this agent
-reads no plugin document to do its work; every path it handles is in the user's
-working directory.
+reads no plugin document to do its work; every path it handles is relative to the
+workspace root (`${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/SKILL.md` § "Workspace root").
 
 See also `${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/SKILL.md` § "Registered
 rules for every document" — where `RULE-CTOR-045` resolves.

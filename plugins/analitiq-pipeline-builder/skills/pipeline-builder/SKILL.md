@@ -18,6 +18,7 @@ validation, drift, and writing files.
 - Closed vocabularies
 - Registered rules for every document
 - Required reading
+- Workspace root
 - Pipeline
 - Edit mode
 - Output
@@ -134,6 +135,14 @@ Read on demand:
 Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
 `endpoint-spec` here — the creator sub-agents own those.
 
+## Workspace root
+
+Every artifact this plugin reads or writes lives under `analitiq/` in the
+user's working directory — the workspace root. Create it before the first
+write. Every `connectors/…`, `connections/…` and `pipelines/…` path in this
+plugin is relative to it, and a workspace validation request is built from it
+alone, so nothing else in the working directory is ever submitted.
+
 ## Pipeline
 
 The phases below are the build, in order. What holds across all of them —
@@ -142,7 +151,7 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
 
 0. **Pre-flight: pipeline directory check** — before any research or
    authoring, check whether `pipelines/<pipeline-slug>/` already
-   exists in the current working directory. If it does, **halt** and
+   exists under the workspace root. If it does, **halt** and
    ask the user whether to pick a different `pipeline_slug` or to
    remove the existing directory themselves first. Do not migrate
    legacy-shape pipeline files. (To *change* an existing pipeline, use
@@ -262,7 +271,8 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
    The filename is the endpoint's **derived** `endpoint_id`; compute it
    for the table with `derive_endpoint_identity` (the `analitiq-validator` MCP
    server) to know the filename —
-   never hand-write one (see `endpoint-spec/spec-database-object.md`):
+   never hand-write one (see `endpoint-spec/spec-database-object.md`); a call
+   that fails halts, its text surfaced verbatim:
    - **If yes** → reuse it. Validate it (document kind `database-endpoint`) so
      a stale shape is caught early. If validation passes, record reuse
      in the final summary and do **not** re-introspect or rewrite the
@@ -355,7 +365,7 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
 
 8. **Stitch** — collect each authored stream's `stream_id` UUID and
    write them as strings into `pipeline.json#/streams`. Validate the
-   workspace (the project root) so the cross-document
+   workspace (the workspace root) so the cross-document
    checks run.
 
 9. **Validate** — invoke `pipeline-schema-validator` once per authored

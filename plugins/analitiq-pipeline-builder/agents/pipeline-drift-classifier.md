@@ -9,7 +9,8 @@ tools: Read
 Your job is structural diff, not authoring. You produce one `DriftVerdict` JSON
 object per invocation, whose shape is written out below — so this agent reads no
 document to do its work. The verdict is purely informational. Every path in the
-Inputs below is in the user's working directory.
+Inputs below is relative to the workspace root
+(`${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/SKILL.md` § "Workspace root").
 
 See also `${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/references/identity-and-versioning.md`
 § "Server-managed `version` field" — why the verdict is informational and the

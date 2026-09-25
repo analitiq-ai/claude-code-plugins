@@ -6,15 +6,15 @@
   "seed": [
     {
       "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/postgresql.example.json",
-      "to": "connectors/postgresql-example/definition/connector.json"
+      "to": "analitiq/connectors/postgresql-example/definition/connector.json"
     },
     {
       "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/type-map.json",
-      "to": "connectors/postgresql-example/definition/type-map.json"
+      "to": "analitiq/connectors/postgresql-example/definition/type-map.json"
     },
     {
       "from": "plugins/analitiq-pipeline-builder/skills/connection-spec/examples/db.example.json",
-      "to": "connections/pg-source/connection.json",
+      "to": "analitiq/connections/pg-source/connection.json",
       "patch": {
         "connector_id": "postgresql-example",
         "connection_id": "21212121-2121-4121-8121-212121212121",
@@ -23,11 +23,11 @@
     },
     {
       "from": "plugins/analitiq-pipeline-builder/skills/endpoint-spec/examples/postgres-table.example.json",
-      "to": "connections/pg-source/definition/endpoints/public__orders__371c8422.json"
+      "to": "analitiq/connections/pg-source/definition/endpoints/public__orders__371c8422.json"
     },
     {
       "from": "plugins/analitiq-pipeline-builder/skills/connection-spec/examples/db.example.json",
-      "to": "connections/pg-warehouse/connection.json",
+      "to": "analitiq/connections/pg-warehouse/connection.json",
       "patch": {
         "connector_id": "postgresql-example",
         "connection_id": "05050505-0505-4505-8505-050505050505",
@@ -36,22 +36,22 @@
     },
     {
       "from": "plugins/analitiq-pipeline-builder/skills/endpoint-spec/examples/postgres-table.example.json",
-      "to": "connections/pg-warehouse/definition/endpoints/public__orders__371c8422.json"
+      "to": "analitiq/connections/pg-warehouse/definition/endpoints/public__orders__371c8422.json"
     }
   ],
-  "prompt": "Build a pipeline named orders-mirror that copies the public.orders table from the existing pg-source connection into the existing pg-warehouse connection. Both connections and both endpoint documents are already on disk under connections/ — reuse them exactly as they are, do not connect to any database and do not re-discover anything. Replicate incrementally using updated_at as the cursor, and upsert on id at the destination. Run it every 15 minutes. Everything you need is in this message; do not ask me questions, and make a reasonable choice if something is not stated.",
+  "prompt": "Build a pipeline named orders-mirror that copies the public.orders table from the existing pg-source connection into the existing pg-warehouse connection. Both connections and both endpoint documents are already on disk under analitiq/connections/ — reuse them exactly as they are, do not connect to any database and do not re-discover anything. Replicate incrementally using updated_at as the cursor, and upsert on id at the destination. Run it every 15 minutes. Everything you need is in this message; do not ask me questions, and make a reasonable choice if something is not stated.",
   "expect": "build",
   "validate": [
     {
-      "workspace": "."
+      "workspace": "analitiq"
     }
   ],
   "docs": {
     "pipeline": {
-      "glob": "pipelines/*/pipeline.json"
+      "glob": "analitiq/pipelines/*/pipeline.json"
     },
     "stream": {
-      "glob": "pipelines/*/streams/*.json"
+      "glob": "analitiq/pipelines/*/streams/*.json"
     }
   },
   "also_covers": [

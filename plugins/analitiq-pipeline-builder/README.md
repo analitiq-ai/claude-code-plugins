@@ -45,7 +45,8 @@ You can also **edit** an existing pipeline in place — e.g. "change the schedul
 to hourly" or "add a stream for the customers table". The plugin changes only
 what you ask and re-validates; it never regenerates or overwrites your secrets.
 
-Output lands under `connections/`, `pipelines/`, and (read-only) `connectors/`.
+Output lands under `analitiq/` in your working directory: `connections/`,
+`pipelines/`, and (read-only) `connectors/`.
 Fill in the `.secrets/` templates, then submit the connections and pipeline to
 the registry. The full file layout and identity model are documented in
 [identity-and-versioning.md](skills/pipeline-builder/references/identity-and-versioning.md);
