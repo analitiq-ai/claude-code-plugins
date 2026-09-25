@@ -233,59 +233,87 @@ def test_a_document_schemas_fault_fails_the_release_before_any_write(tree, model
     assert _files(tmp_path) == before
 
 
-def _unlink(resource, *names: str) -> None:
-    for name in names:
-        (resource.dir() / name).unlink()
+def _only(resource, keep: str) -> None:
+    """Leave `keep` as the resource's one release file."""
+    for path in [*resource.dir().iterdir(), *render_schemas.bump_record_path(resource, "1.1.0").parent.glob("*")]:
+        if path.name != keep:
+            path.unlink()
+
+
+def _stray_record(resource, text: str) -> None:
+    path = render_schemas.bump_record_path(resource, "1.1.0")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def _edit_latest(resource) -> None:
+    latest = render_schemas.load_latest(resource)
+    latest["title"] = "edited"
+    render_schemas.write_json(resource.dir() / "latest.json", latest)
+
+
+def _pin_above_latest(resource) -> None:
+    render_schemas.write_json(resource.dir() / "1.1.0.json", render_schemas.render_pinned(resource, "1.1.0"))
+    render_schemas.write_json(resource.dir() / "index.json", render_schemas.build_index(resource))
+
+
+def _corrupt_the_pin_a_record_names(resource) -> None:
+    assert _release() == 0
+    (resource.dir() / "1.0.0.json").write_text("{")
+
+
+_PIN, _LATEST, _INDEX = "schemas/workspace/1.0.0.json", "schemas/workspace/latest.json", "schemas/workspace/index.json"
+_RECORD = "schema-bumps/workspace/1.1.0.json"
 
 
 @pytest.mark.parametrize(
-    "fault",
+    ("fault", "named"),
     [
-        pytest.param(lambda r: _unlink(r, "latest.json"), id="pins-without-latest"),
-        pytest.param(lambda r: _unlink(r, "1.0.0.json", "index.json"), id="latest-without-pins"),
-        pytest.param(lambda r: _unlink(r, "1.0.0.json", "latest.json"), id="index-without-pins"),
+        # Any one release file alone is a partial release, never a new resource.
+        pytest.param(lambda r: _only(r, "1.0.0.json"), None, id="a-pin-alone"),
+        pytest.param(lambda r: _only(r, "latest.json"), None, id="latest-alone"),
+        pytest.param(lambda r: _only(r, "index.json"), None, id="index-alone"),
+        pytest.param(lambda r: (_only(r, ""), _stray_record(r, "{}")), None, id="a-record-alone"),
+        # Every release file present, disagreeing.
+        pytest.param(_edit_latest, None, id="latest-not-mirroring-its-pin"),
+        pytest.param(_pin_above_latest, None, id="a-pin-above-latest"),
         pytest.param(
-            lambda r: render_schemas.write_json(r.dir() / "1.1.0.json", render_schemas.render_pinned(r, "1.1.0")),
-            id="latest-below-the-highest-pin",
+            lambda r: render_schemas.write_json(r.dir() / "index.json", {r.name: {"latest": "1.0.0", "versions": []}}),
+            None, id="a-stale-index",
         ),
+        # Every release file the classifier reads, unparseable.
+        pytest.param(lambda r: (r.dir() / "latest.json").write_text("{"), _LATEST, id="malformed-latest"),
+        pytest.param(lambda r: (r.dir() / "1.0.0.json").write_text("{"), _PIN, id="malformed-highest-pin"),
+        pytest.param(lambda r: (r.dir() / "index.json").write_text("{"), _INDEX, id="malformed-index"),
+        pytest.param(lambda r: _stray_record(r, "{"), _RECORD, id="malformed-record"),
+        pytest.param(_corrupt_the_pin_a_record_names, _PIN, id="malformed-pin-a-record-names"),
     ],
 )
 def test_a_partial_or_inconsistent_release_fails_the_check_and_the_release_before_any_write(
-    tree, models, tmp_path, fault
+    tree, models, tmp_path, capsys, fault, named
 ):
-    """Only a tree with no release footprint at all is new; anything between that and a
-    consistent release is refused, or the release would pin from a version it never published."""
+    """Only a resource with no release file at all is new; anything between that and a
+    consistent release is refused, naming the resource and the file, or the release
+    would pin from a version it never published."""
     models.extend([_jev("minor"), _jev("minor")])
     fault(tree[0])
+    capsys.readouterr()
     assert _check() == 1
+    reports = [capsys.readouterr()]
     before = _files(tmp_path)
     assert _release() == 2
     assert _files(tmp_path) == before
+    reports.append(capsys.readouterr())
+    for output in (report.out + report.err for report in reports):
+        assert f"{NAMES[0]}:" in output
+        assert "restore them from the last release commit" in output
+        if named:
+            assert named in output
 
 
 def test_an_unreleased_model_change_passes_the_check_and_fails_the_released_check(tree):
     assert _check() == 0
     assert _check("--released") == 1
-
-
-def test_the_check_fails_when_latest_does_not_mirror_the_highest_pinned_version(tree):
-    workspace = tree[0]
-    latest = render_schemas.load_latest(workspace)
-    latest["title"] = "edited"
-    render_schemas.write_json(workspace.dir() / "latest.json", latest)
-    assert _check() == 1
-
-
-def test_the_check_fails_when_a_higher_version_is_pinned_than_latest_names(tree):
-    workspace = tree[0]
-    render_schemas.write_json(workspace.dir() / "1.1.0.json", render_schemas.render_pinned(workspace, "1.1.0"))
-    render_schemas.write_json(workspace.dir() / "index.json", render_schemas.build_index(workspace))
-    assert _check() == 1
-
-
-def test_the_check_fails_on_a_stale_index(tree):
-    render_schemas.write_json(tree[0].dir() / "index.json", {NAMES[0]: {"latest": "1.0.0", "versions": []}})
-    assert _check() == 1
 
 
 @pytest.mark.parametrize(

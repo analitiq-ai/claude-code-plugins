@@ -1918,11 +1918,19 @@ def list_published_versions(resource: Resource) -> list[str]:
     return sorted(found, key=parse_semver)
 
 
+def read_committed_json(path: Path) -> Any:
+    """Raises ValueError naming the file when it does not parse."""
+    try:
+        return json.loads(path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{_shown(path)}: not valid JSON ({exc})") from exc
+
+
 def load_latest(resource: Resource) -> dict | None:
     path = resource.dir() / "latest.json"
     if not path.exists():
         return None
-    return json.loads(path.read_text())
+    return read_committed_json(path)
 
 
 def write_json(path: Path, data: dict) -> None:
@@ -1939,7 +1947,7 @@ def build_index(resource: Resource) -> dict[str, Any]:
 
 
 def _load_pinned(resource: Resource, version: str) -> dict:
-    return json.loads((resource.dir() / f"{version}.json").read_text())
+    return read_committed_json(resource.dir() / f"{version}.json")
 
 
 def rendered_latest(name: str) -> dict[str, Any]:
@@ -1975,10 +1983,7 @@ def load_override(resource: Resource) -> dict | None:
     path = override_path(resource)
     if not path.exists():
         return None
-    try:
-        override = json.loads(path.read_text())
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"{_shown(path)}: not valid JSON ({exc})") from exc
+    override = read_committed_json(path)
     problem = cascade.override_problem(override)
     if problem:
         raise ValueError(f"{_shown(path)}: {problem}")
@@ -2011,37 +2016,42 @@ def committed_version(resource: Resource) -> str | None:
     release is committed: no pinned version, latest.json, index.json or bump
     record.
 
-    Raises ValueError for every other state: `latest.json` must mirror the
-    highest pinned version, `index.json` list what is pinned, and every bump
-    record justify the versions it names.
+    Raises ValueError, naming the resource, for every other state.
     """
     versions = list_published_versions(resource)
-    index_path = resource.dir() / "index.json"
     records = [p for p in (BUMP_RECORDS_ROOT / resource.name).glob("*") if p.name != OVERRIDE_NAME]
-    if not (versions or (resource.dir() / "latest.json").exists() or index_path.exists() or records):
+    if not (versions or (resource.dir() / "latest.json").exists()
+            or (resource.dir() / "index.json").exists() or records):
         return None
+    try:
+        problem = _release_problem(resource, versions)
+    except ValueError as exc:
+        problem = str(exc)
+    if problem:
+        raise ValueError(f"{resource.name}: {problem}; {_RESTORE_HINT}")
+    return versions[-1]
 
-    def inconsistent(problem: str) -> ValueError:
-        return ValueError(f"{resource.name}: {problem}; {_RESTORE_HINT}")
 
+def _release_problem(resource: Resource, versions: list[str]) -> str | None:
+    """Why the committed release files of `resource` are not one release, or
+    None: `latest.json` mirrors the highest pinned version, `index.json` lists
+    what is pinned, and every bump record justifies the versions it names."""
     if not versions:
-        raise inconsistent("release files are committed but no version is pinned")
+        return "release files are committed but no version is pinned"
     committed_latest = load_latest(resource)
     if committed_latest is None:
-        raise inconsistent("latest.json is missing")
+        return "latest.json is missing"
     version = committed_latest.get("version")
     if version != versions[-1]:
-        raise inconsistent(f"latest.json names {version!r}, not the highest pinned version {versions[-1]}")
+        return f"latest.json names {version!r}, not the highest pinned version {versions[-1]}"
     if committed_latest != {**_load_pinned(resource, version), "$id": f"{resource.base_url()}/latest.json"}:
-        raise inconsistent(f"latest.json does not mirror {version}.json")
+        return f"latest.json does not mirror {version}.json"
     # index.json is published to the CDN exactly like the other two, so it
     # needs the same gate.
-    if not index_path.exists() or json.loads(index_path.read_text()) != build_index(resource):
-        raise inconsistent("index.json is missing or stale")
-    record_problems = _check_bump_records(resource)
-    if record_problems:
-        raise ValueError("\n".join([*record_problems, f"{resource.name}: {_RESTORE_HINT}"]))
-    return version
+    index_path = resource.dir() / "index.json"
+    if not index_path.exists() or read_committed_json(index_path) != build_index(resource):
+        return "index.json is missing or stale"
+    return "\n".join(_check_bump_records(resource)) or None
 
 
 @dataclass(frozen=True)
@@ -2172,16 +2182,16 @@ def _check_bump_records(resource: Resource) -> list[str]:
             problems.append(f"{where}: neither {OVERRIDE_NAME} nor named <version>.json")
             continue
         try:
-            record = json.loads(path.read_text())
-        except json.JSONDecodeError as exc:
-            problems.append(f"{where}: not valid JSON ({exc})")
+            record = read_committed_json(path)
+        except ValueError as exc:
+            problems.append(str(exc))
             continue
         from_version = record.get("from") if isinstance(record, dict) else None
         pinned = [resource.dir() / f"{v}.json" for v in (from_version, match.group(1))]
         if not isinstance(from_version, str) or not all(p.exists() for p in pinned):
             problems.append(f"{where}: names a version with no pinned schema")
             continue
-        old, new = (json.loads(p.read_text()) for p in pinned)
+        old, new = (read_committed_json(p) for p in pinned)
         problem = record_problem(record, resource.name, from_version, match.group(1), old, new)
         if problem:
             problems.append(f"{where}: the bump record {problem}")
