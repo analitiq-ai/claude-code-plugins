@@ -44,8 +44,8 @@ contract (`analitiq.contracts.endpoints.DatabaseEndpointDoc`).
 API endpoints come from the connector document, not from here. This
 skill is **database-only**. API endpoints in stream `endpoint_ref`s use
 `scope: connector` and point at the connector's `definition/endpoints/`.
-Database endpoints use `scope: connection`; their file location is in the table
-at the foot of this file.
+Database endpoints use `scope: connection`; where the file sits is defined by the
+workspace schema cited at the foot of this file.
 
 ## What this skill covers
 
