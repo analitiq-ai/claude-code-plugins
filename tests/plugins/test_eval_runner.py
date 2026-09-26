@@ -388,13 +388,13 @@ def test_one_run_records_a_session_that_did_not_finish(monkeypatch):
 
 
 def test_the_agent_does_not_inherit_the_graders_environment(monkeypatch, tmp_path):
-    """The agent must resolve the validator its users would resolve.
+    """The agent must run in the environment its users have.
 
-    `_bootstrap.py` short-circuits on ANALITIQ_VALIDATOR_FROM_SOURCE, so an
-    agent handed the grader's environment validates its own work against
-    in-repo source — hiding exactly the pin gap a plugin eval exists to find.
-    Asserted on the environment actually handed to the subprocess, because the
-    leak is a keyword argument and no reading of the file can settle it.
+    Handed the grader's PYTHONPATH, an agent script importing the in-repo
+    validator would succeed where a user's fails, hiding a plugin that grades
+    locally instead of through its MCP server. Asserted on the environment
+    actually handed to the subprocess, because the leak is a keyword argument
+    and no reading of the file can settle it.
     """
     seen = {}
 
@@ -408,16 +408,14 @@ def test_the_agent_does_not_inherit_the_graders_environment(monkeypatch, tmp_pat
         return Result()
 
     monkeypatch.setattr(runner.subprocess, "run", fake_run)
-    monkeypatch.delenv("ANALITIQ_VALIDATOR_FROM_SOURCE", raising=False)
 
     runner.invoke({"id": "s", "plugin": "analitiq-pipeline-builder", "prompt": "p"}, tmp_path, 5)
     agent_env = seen["claude"] or dict(os.environ)
-    assert "ANALITIQ_VALIDATOR_FROM_SOURCE" not in agent_env
     assert str(REPO_ROOT / "packages") not in (agent_env.get("PYTHONPATH") or "")
 
     runner.run_validator(tmp_path, {"workspace": "."}, 5)
     grader_env = seen[sys.executable]
-    assert grader_env["ANALITIQ_VALIDATOR_FROM_SOURCE"] == "1", (
+    assert str(REPO_ROOT / "packages") in grader_env["PYTHONPATH"], (
         "the grader keeps the in-repo source it grades against")
 
 

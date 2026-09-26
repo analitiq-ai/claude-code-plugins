@@ -58,13 +58,6 @@ for _src in (*PACKAGE_SRC_ROOTS,
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-# Were the pipeline plugin's bootstrap imported, it would install the PUBLISHED
-# validator into a managed venv and `os.execv` into it when `importlib.metadata`
-# can't find the pin. Source on sys.path has no metadata, so it would replace the
-# pytest process mid-run. See `_FROM_SOURCE` in
-# plugins/analitiq-pipeline-builder/scripts/_bootstrap.py.
-os.environ["ANALITIQ_VALIDATOR_FROM_SOURCE"] = "1"
-
 
 @pytest.fixture
 def refuse():
