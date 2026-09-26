@@ -145,8 +145,9 @@ Where each document sits under the root is read from the published schemas,
 never from this plugin's prose; `references/schema-hosts.md` says how. This
 plugin names every document by kind and package — the connection document, the
 connection's credentials document, a stream document — and you resolve its path
-from those schemas. A sub-agent never learns the root or a location on its own:
-every dispatch passes the absolute paths its Inputs name.
+from those schemas. Every dispatch passes the absolute paths its Inputs name; a
+sub-agent given a directory resolves the documents inside it through
+`references/schema-hosts.md`.
 
 ## Pipeline
 
