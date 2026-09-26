@@ -58,8 +58,7 @@ recorded on the endpoint document (its fields:
 always agree.
 
 Omit `endpoint_id` and the contract derives it; supply it and the contract
-verifies it against the derivation (`RULE-STRM-003`). Author it whenever the
-plugin can compute it (`RULE-STRM-018`).
+verifies it against the derivation (`RULE-STRM-003`).
 
 <!-- BEGIN GENERATED: endpoint-id-derivation -->
 A database `endpoint_id` is **derived**, not chosen: it is a deterministic handle over the endpoint's verbatim locator, computed by `analitiq.contracts.endpoint_identity.derive_db_endpoint_id(catalog, schema, name)`.

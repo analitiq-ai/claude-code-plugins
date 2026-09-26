@@ -203,6 +203,10 @@ RETIRED_WITHOUT_A_RECORD = (
     # the shape rather than a check over it.
     "RULE-STRM-011",
     "RULE-STRM-013",
+    # `a connection-scoped ref SHOULD carry the derived endpoint_id`: the
+    # validator and the stream model both derive an omitted id from
+    # `database_object`, so omitting and supplying it resolve identically.
+    "RULE-STRM-018",
 )
 
 #: RFC 2119 keywords, which `statement` must use in caps. Checked rather than

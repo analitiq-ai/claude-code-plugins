@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Covers: every rule this plugin owns that binds a **`stream`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 25 of the 60 below have no validator, so nothing rejects
+all hold: 24 of the 59 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **15** shape · **16** coherence · **18** reference · **5** process · **6** choice.
+In this file: **15** shape · **16** coherence · **18** reference · **5** process · **5** choice.
 
 ## Contents
 
@@ -105,7 +105,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-STRM-032 | A stream MUST name as its parent the pipeline that references it. | `stream` | error | validator |
 | RULE-STRM-033 | A stream's source connection MUST be the one its pipeline declares as the source, and each of its destination connections MUST be one the pipeline declares as a destination. | `stream` | error | validator |
 | RULE-STRM-034 | A connection-scoped endpoint reference MUST resolve to an endpoint document belonging to the connection it names. | `stream` | error | validator |
-| RULE-STRM-042 | Every stream source and destination slot in a pipeline bundle MUST carry an `endpoint_ref`. | `stream` | error | validator |
+| RULE-STRM-042 | Every source and destination slot of a stream MUST carry an `endpoint_ref`. | `stream` | error | validator |
 | RULE-STRM-044 | A connector-scoped endpoint reference MUST resolve to an endpoint document shipped by the connector of the connection it names. | `stream` | warning | validator |
 
 ## Process
@@ -134,6 +134,5 @@ not just the statement.
 | RULE-PIPE-007 | A stream's per-destination `execution` block MUST NOT be authored as a way to change how much a run writes at a time; the batch size a run uses is the one the pipeline's runtime declares, for every stream. | `stream` | warning | — |
 | RULE-SHRD-002 | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. Where the field's declaration distinguishes a read direction from a write direction, the sample MUST have been observed on the direction being declared — a sample observed on the other direction's payload is not evidence for this direction's declaration. | `any` | error | — |
 | RULE-SHRD-004 | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. | `any` | warning | — |
-| RULE-STRM-018 | A connection-scoped endpoint reference SHOULD carry the derived endpoint_id whenever the author can compute it, so the cross-document bundle check can resolve the reference. | `stream` | warning | — |
 | RULE-STRM-039 | An incremental stream's late-arrival safety window MUST be sized from how late the source's own records arrive, and MUST NOT be authored as a rewind the stream can count on: whether a window shifts a read at all is decided by the source, not by the stream document. | `stream` | warning | — |
 | RULE-STRM-040 | A mapping assignment's validation `error_handling` MUST NOT be authored as the policy for the failures its own rules raise; how a run answers a validation failure is what the pipeline's runtime error handling declares, for every assignment. | `stream` | warning | — |

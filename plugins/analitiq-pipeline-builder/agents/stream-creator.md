@@ -115,8 +115,8 @@ return a structured refusal:
   connection the parent pipeline declares on that side (`RULE-STRM-033`).
 - Shape each `endpoint_ref` by its `scope` per `spec-endpoint-refs.md`. A
   `connection` ref always carries `database_object` verbatim — that is the
-  identity — and also carries the derived `endpoint_id` whenever this plugin can
-  compute it (`RULE-STRM-018`).
+  identity; an `endpoint_id`, if supplied, must be the one derived from it
+  (`RULE-STRM-003`).
 - `scope: "connection"` is invalid for API endpoints (`RULE-STRM-031`). Return a
   structured refusal if the orchestrator asks for that.
 - `write` takes the shape its `mode` selects (`RULE-STRM-016`): the `upsert`

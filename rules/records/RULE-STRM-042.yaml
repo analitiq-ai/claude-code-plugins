@@ -1,6 +1,6 @@
 id: RULE-STRM-042
 statement: >
-  Every stream source and destination slot in a pipeline bundle MUST carry an
+  Every source and destination slot of a stream MUST carry an
   `endpoint_ref`.
 tier: reference
 severity: error

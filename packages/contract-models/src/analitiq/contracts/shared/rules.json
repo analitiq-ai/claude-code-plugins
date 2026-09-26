@@ -4883,7 +4883,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Ownership is registry state and no authored document carries an org id, so a cross-org reference is a well-formed UUID here and is refused only when the pipeline is saved — after the whole bundle has been written. The way in is copying a connection id out of another workspace's example or an older export. Catching it locally would mean querying the registry, which the plugin never talks to.\n",
+   "rationale": "Ownership is registry state and no authored document carries an org id, so a cross-org reference is a well-formed UUID here and is refused only when the pipeline is saved — after every document it references has been written. The way in is copying a connection id out of another workspace's example or an older export. Catching it locally would mean querying the registry, which the plugin never talks to.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5109,7 +5109,7 @@
   },
   {
    "id": "RULE-PIPE-018",
-   "statement": "A pipeline bundle's pipeline document MUST declare a non-empty `pipeline_id`.\n",
+   "statement": "A pipeline package's pipeline document MUST declare a non-empty `pipeline_id`.\n",
    "tier": "reference",
    "severity": "error",
    "artifact_kinds": [
@@ -5126,7 +5126,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Every bundled stream's own parent reference, and the bundle's own identity, resolve against this id — nothing else in the bundle stands in for it. A pipeline document present but missing this field bundles without complaint and fails only when something tries to resolve against the id that never arrived, which is after the bundle has already been assembled and handed to a run.\n",
+   "rationale": "Every stream the package holds names its parent by this id, and nothing else in the package stands in for it. The pipeline model leaves the field optional, so without this check a document missing it passes validation and fails only when a stream's parent reference is resolved at run time.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6590,28 +6590,6 @@
    "superseded_by": null
   },
   {
-   "id": "RULE-STRM-018",
-   "statement": "A connection-scoped endpoint reference SHOULD carry the derived endpoint_id whenever the author can compute it, so the cross-document bundle check can resolve the reference.\n",
-   "tier": "choice",
-   "severity": "warning",
-   "artifact_kinds": [
-    "stream"
-   ],
-   "validator": null,
-   "enforcement_location": "authoring-practice",
-   "owners": [
-    "pipeline-plugin"
-   ],
-   "targets": [],
-   "fields": [],
-   "mechanism": null,
-   "symbol": null,
-   "fixture_model": null,
-   "rationale": "The contract derives the handle when it is omitted and verifies it when it is supplied, so both authorings are valid documents and only the bundle check notices the difference: with the handle present the reference is resolved against a bundled endpoint document, without it the resolution is simply not attempted. Omitting it is therefore a coverage gap rather than a defect, and stays legitimate where the derivation inputs are not in hand — a ref handed over by discovery is submitted as it stands rather than re-derived. To catch a violation someone must read the ref beside the endpoint document it was built from; nothing in this repo pairs them.\n",
-   "status": "active",
-   "superseded_by": null
-  },
-  {
    "id": "RULE-STRM-019",
    "statement": "A mapping's assignments MUST be kept in the order they were authored and MUST NOT be re-sorted, because the engine applies them in that order.\n",
    "tier": "process",
@@ -6812,7 +6790,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The `filters` map lives on the endpoint document, which is not part of the stream, so no in-process check here can compare a stream's filter against it — a connector-scoped (API) endpoint document is never carried by the pipeline bundle the local validator resolves against, only connection-scoped ones are. The engine narrows only half of what this rule requires, at read-plan time: it refuses a filter naming a field with no params-map entry at all, but that lookup is keyed on field name alone, with no operator dimension, so a field declared for one operator and filtered with a different one passes identically to a genuine match and goes out on the wire as whatever the provider does with an operator it never declared support for — a parameter the runtime owns (RULE-ENDP-002) or an operator the map simply never declared for that field.\n",
+   "rationale": "The `filters` map lives on the endpoint document, not on the stream. A workspace request carries both, and the workspace check resolving a connector-scoped reference reads the endpoint document, but no check compares a filter against its `filters` map. The engine narrows only half of what this rule requires, at read-plan time: it refuses a filter naming a field with no params-map entry at all, but that lookup is keyed on field name alone, with no operator dimension, so a field declared for one operator and filtered with a different one passes identically to a genuine match and goes out on the wire as whatever the provider does with an operator it never declared support for.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6961,7 +6939,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The parent is immutable and it is what gives a stream its run context — the schedule it runs on, the connections it is allowed to reach, the org it belongs to. A stream bundled under a pipeline it does not name is not rejected by either document: the pipeline's reference resolves, the stream's own parent is a well-formed id, and the transfer runs under a context its author never chose. The usual cause is a stream copied from one pipeline into another with the reference updated and the parent left behind, which reads as correct from whichever document you are looking at.\n",
+   "rationale": "The parent is immutable and it is what gives a stream its run context — the schedule it runs on, the connections it is allowed to reach, the org it belongs to. A stream referenced by a pipeline it does not name is not rejected by either document: the pipeline's reference resolves, the stream's own parent is a well-formed id, and the transfer runs under a context its author never chose. The usual cause is a stream copied from one pipeline into another with the reference updated and the parent left behind, which reads as correct from whichever document you are looking at.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -7204,7 +7182,7 @@
   },
   {
    "id": "RULE-STRM-042",
-   "statement": "Every stream source and destination slot in a pipeline bundle MUST carry an `endpoint_ref`.\n",
+   "statement": "Every source and destination slot of a stream MUST carry an `endpoint_ref`.\n",
    "tier": "reference",
    "severity": "error",
    "artifact_kinds": [
@@ -7771,7 +7749,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Discovery resolves each native_type through the read map once and freezes the result into the endpoint document; from then on the frozen value is what runs are configured against, so the rule is the durable record of a judgment the endpoint already recorded. Authoring the two independently — the endpoint from the discovered column, the map rule from the type name — is the ordinary path to two records of one column's type that disagree, and which one wins depends on which path reads it. Both files are on disk when the connection is authored, so this is a gap a bundle-aware check could close rather than an inherently unreachable one; today it means reading the endpoint's frozen type beside the rule.\n",
+   "rationale": "Discovery resolves each native_type through the read map once and freezes the result into the endpoint document; from then on the frozen value is what runs are configured against, so the rule is the durable record of a judgment the endpoint already recorded. Authoring the two independently — the endpoint from the discovered column, the map rule from the type name — is the ordinary path to two records of one column's type that disagree, and which one wins depends on which path reads it. Both files are on disk when the connection is authored and both sit in one connection package, so a package check could close this gap; none does, so catching a violation means reading the endpoint's frozen type beside the rule.\n",
    "status": "active",
    "superseded_by": null
   },
