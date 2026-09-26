@@ -127,10 +127,6 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator.document_set::_check_findings", "check-crashed"): (
         "a cross-document check crashed; a check may grade several rules, so "
         "the crash is attributable to no one of them"),
-    ("analitiq.validator.connectors::type_map_findings", "check-crashed"): (
-        "grading a type map crashed, leaving its model errors and every "
-        "advisory type-map rule unevaluated together, so the crash is "
-        "attributable to no one of them"),
     ("analitiq.validator.connectors::_unknown_kind_finding", "coverage-check-skipped-bad-kind"): (
         "the connector's kind is outside the closed enum the model already "
         "rejects, so coverage was never asked"),

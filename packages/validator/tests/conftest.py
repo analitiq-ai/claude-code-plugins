@@ -33,7 +33,7 @@ def validator():
 
     `analitiq` resolves as a PEP 420 namespace spanning both source trees;
     importing the package self-registers every kind's validators. The returned
-    module re-exports every symbol the tests use.
+    module is the public surface; tests reach internals through its submodules.
     """
     import analitiq.validator
 

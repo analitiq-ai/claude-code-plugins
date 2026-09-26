@@ -784,7 +784,7 @@ def test_normalize_native_is_the_canonical(validator):
 
 
 def test_arrow_type_eq_normalizes_separators_not_identifiers(validator):
-    eq = validator._arrow_type_eq
+    eq = validator.connectors._arrow_type_eq
     assert eq("Decimal128(38, 9)", "Decimal128(38,9)")          # param spacing insignificant
     assert eq("Timestamp(MICROSECOND, UTC)", "Timestamp(MICROSECOND,UTC)")
     # Whitespace INSIDE a token is significant — must NOT compare equal.
@@ -797,7 +797,7 @@ def test_walk_collects_tuple_form_items(validator):
     ep = {"operations": {"read": {"response": {"schema": {"type": "array",
         "items": [{"type": "object", "properties": {
             "x": {"native_type": "WEIRDTYPE", "arrow_type": "Utf8"}}}]}}}}}
-    pairs = validator._collect_native_arrow_pairs(ep)
+    pairs = validator.connectors._collect_native_arrow_pairs(ep)
     assert ("WEIRDTYPE", "Utf8", "/operations/read/response/schema/items/0/properties/x") in pairs
 
 
@@ -825,7 +825,7 @@ def test_coverage_distinct_endpoint_ids_pass(connector_base, validator):
 # --- endpoint_id must be the derived path locator (io-contracts resources[].key) ---
 
 def test_flatten_api_locator(validator):
-    f = validator._flatten_api_locator
+    f = validator.connectors._flatten_api_locator
     assert f("/v1/blah/something/customer") == "v1__blah__something__customer"
     assert f("/v2/blah/something/customer") == "v2__blah__something__customer"
     assert f("/ping") == "ping"
@@ -842,11 +842,11 @@ def test_flatten_api_locator(validator):
 
 def test_endpoint_id_must_match_locator(validator):
     # id equals the derived handle -> ok
-    assert validator._endpoint_locator_findings(
+    assert validator.connectors._endpoint_locator_findings(
         {"endpoint_id": "v1__records",
          "operations": {"read": {"request": {"path": "/v1/records"}}}}) == []
     # leaf-only id for a versioned path -> flagged with the expected handle
-    errs = validator._endpoint_locator_findings(
+    errs = validator.connectors._endpoint_locator_findings(
         {"endpoint_id": "records",
          "operations": {"read": {"request": {"path": "/v1/records"}}}})
     assert errs and errs[0].get("rule") == "RULE-ENDP-046"
@@ -860,11 +860,11 @@ def test_endpoint_locator_derives_from_read_canonical_path(validator):
         doc = {"endpoint_id": "v1__users", "operations": {
             "read": {"request": {"path": "/v1/users"}},
             "write": {"upsert": {"request": {"path": write_path}}}}}
-        assert validator._endpoint_locator_findings(doc) == [], write_path
+        assert validator.connectors._endpoint_locator_findings(doc) == [], write_path
     # A write-only endpoint derives from its write path.
     write_only = {"endpoint_id": "v1__events",
                   "operations": {"write": {"insert": {"request": {"path": "/v1/events"}}}}}
-    assert validator._endpoint_locator_findings(write_only) == []
+    assert validator.connectors._endpoint_locator_findings(write_only) == []
 
 
 def test_endpoint_locator_non_derivable_path_errors(validator):
@@ -875,7 +875,7 @@ def test_endpoint_locator_non_derivable_path_errors(validator):
     for path in ("/admin/api/2024-01/orders.json", "/{id}"):
         doc = {"endpoint_id": "orders",
                "operations": {"read": {"request": {"path": path}}}}
-        findings = validator._endpoint_locator_findings(doc)
+        findings = validator.connectors._endpoint_locator_findings(doc)
         assert findings and findings[0]["severity"] == "error", path
         assert findings[0].get("rule") == "RULE-ENDP-046"
         assert "must equal" not in findings[0]["message"]      # no fabricated id
@@ -1269,16 +1269,16 @@ def test_a_map_holding_a_json_null_is_graded(validator):
     assert errors, "a map holding a JSON null was graded as nothing"
 
 
-def test_endpoint_filename_findings_public_helper(validator):
+def test_endpoint_filename_findings_grades_the_filename_against_the_derived_id(validator):
     eid = derive_db_endpoint_id(None, "public", "orders")
     db = _db_endpoint(eid)
     # Mismatched stem -> exactly one RULE-PKG-031 error.
-    mismatch = _errors(validator.endpoint_filename_findings(db, "orders.json"))
+    mismatch = _errors(validator.connectors.endpoint_filename_findings(db, "orders.json"))
     assert [e.get("rule") for e in mismatch] == ["RULE-PKG-031"]
     # Correct {endpoint_id}.json -> no findings.
-    assert validator.endpoint_filename_findings(db, f"{eid}.json") == []
+    assert validator.connectors.endpoint_filename_findings(db, f"{eid}.json") == []
     # Missing/unusable endpoint_id -> notApplicable (can't verify), not a fail.
-    no_id = validator.endpoint_filename_findings({"database_object": {"name": "orders"}}, "orders.json")
+    no_id = validator.connectors.endpoint_filename_findings({"database_object": {"name": "orders"}}, "orders.json")
     assert [(f.get("rule"), f["kind"]) for f in no_id] == [("RULE-PKG-031", "notApplicable")]
 
 
@@ -1651,47 +1651,47 @@ def test_rendered_coverage_reports_only_the_uncovered_native(connector_base, val
 
 
 # ---------------------------------------------------------------------------
-# type_map_findings — the published grading of one type-map document.
+# One type-map document graded alone.
 # ---------------------------------------------------------------------------
 
-def test_type_map_findings_grades_each_section_as_its_direction(validator):
+def test_a_type_map_grades_each_section_as_its_direction(validator):
     # `native_type` is read as a render template only under `write`, so the
     # same rule is clean under one key and a defect under the other: the key a
     # rule list sits under is what decides the model it is measured against.
     rule = [{"match": "exact", "native_type": "VARCHAR${", "arrow_type": "Utf8"}]
-    assert not _errors(validator.type_map_findings(_type_map_doc(read=rule)))
-    errors = _errors(validator.type_map_findings(_type_map_doc(write=rule)))
+    assert not _errors(_document_findings(validator, _type_map_doc(read=rule), "type-map"))
+    errors = _errors(_document_findings(validator, _type_map_doc(write=rule), "type-map"))
     assert [(e["path"], e["message_id"]) for e in errors] == [
         ("/write/0", "write-exact-malformed-placeholder")], errors
 
 
-def test_type_map_findings_points_each_advisory_into_its_section(validator):
+def test_a_type_map_points_each_advisory_into_its_section(validator):
     # A rule's matcher is `native_type` under `read` and `arrow_type` under
     # `write`, so each section is deduplicated on its own matcher and every
     # warning points into the section it is about.
     doc = _type_map_doc(read=_read_rules() * 2, write=_write_rules() * 2)
-    duplicates = [f["path"] for f in validator.type_map_findings(doc)
+    duplicates = [f["path"] for f in _document_findings(validator, doc, "type-map")
                   if f["message_id"] == "duplicate-type-map-rule"]
     assert duplicates == ["/read/1", "/write/1"], duplicates
 
 
-def test_type_map_findings_reads_no_section_as_the_other_direction(validator):
+def test_a_type_map_reads_no_section_as_the_other_direction(validator):
     # These four are a legitimate many-to-one write mapping; read as matching on
     # `native_type`, they are one native matched four times.
     doc = _type_map_doc(write=[{"match": "exact", "arrow_type": a, "native_type": "BIGINT"}
                                for a in ("Int8", "Int16", "Int32", "Int64")])
     # The write-vocabulary warning is the only finding the section earns.
-    assert [f.get("rule") for f in validator.type_map_findings(doc)] == ["RULE-TMAP-017"]
+    assert [f.get("rule") for f in _document_findings(validator, doc, "type-map")] == ["RULE-TMAP-017"]
 
 
-def test_type_map_findings_reports_its_own_crash_as_unchecked(validator, monkeypatch):
+def test_a_type_map_reports_its_own_crash_as_unchecked(validator, monkeypatch):
     # a crash leaves the model errors and every advisory rule unevaluated
     # together, so the finding names no rule — and that is exactly what makes it
     # cost a pass rather than read as "nothing was wrong"
     from analitiq.validator import connectors
     monkeypatch.setattr(connectors, "_type_map_rule_warnings",
                         lambda *a, **k: (_ for _ in ()).throw(TypeError("boom")))
-    findings = validator.type_map_findings(_type_map_doc(read=_read_rules()))
+    findings = _document_findings(validator, _type_map_doc(read=_read_rules()), "type-map")
     assert len(findings) == 1, findings
     assert findings[0].get("rule") is None, findings[0]
     assert findings[0]["message_id"] == "check-crashed", findings[0]

@@ -128,8 +128,8 @@ def test_an_endpoint_finding_names_no_file_in_its_message(validator):
 
 @pytest.mark.parametrize("graded,message_id", [
     # A model error at the document root: pydantic's `loc` is empty.
-    (lambda v: v.type_map_findings(
-        [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
+    (lambda v: _single(
+        v, [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}], "type-map"),
      "model_type"),
 ])
 def test_a_whole_document_finding_has_the_empty_pointer(validator, graded, message_id):
