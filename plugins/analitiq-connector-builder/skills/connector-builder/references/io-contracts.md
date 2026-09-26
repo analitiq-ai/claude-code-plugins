@@ -358,6 +358,16 @@ access and may not guess field types).
 }
 ```
 
+The validator agent adds a finding of its own when the server never graded the request:
+
+- `validation-not-run` — `notApplicable`, `path: ""`, and the only finding in
+  an envelope whose `passed` is false: the builder failed, the tool is not
+  available (the user authorizes the `analitiq-validator` server with `/mcp`),
+  the call was refused (`isError`), or the answer carries no `passed`.
+  `message` carries the builder's stderr, the missing tool's name, or the
+  server's text verbatim. It is never a verdict on the documents: the
+  orchestrator halts on it, with no retry and no result of its own making.
+
 ## DriftVerdict
 
 <!-- BEGIN GENERATED: drift-verdict-envelope -->

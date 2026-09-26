@@ -285,105 +285,49 @@ def render_filter_operators() -> str:
     return "\n".join(out) + "\n"
 
 
-def _pipeline_validate_adapter():
-    """Import `plugins/analitiq-pipeline-builder/scripts/validate.py` by path —
-    the same technique `render_validator_claims.py`'s own `_pipeline_adapter()`
-    uses, and for the same reason: this adapter's own downstream behavior (its
-    write-coverage filter, below) is part of what a probe run through it
-    measures, so the probe has to call the adapter, not the bare validator
-    package. Import is side-effect-free — `_bootstrap`'s venv build and
-    re-exec only fire from the adapter's own `main()`, never at import time."""
-    import importlib.util
-
-    scripts_dir = str(DOCS_ROOT / "scripts")
-    spec = importlib.util.spec_from_file_location(
-        "_gen_pipeline_docs_validate_adapter", DOCS_ROOT / "scripts" / "validate.py")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    sys.path.insert(0, scripts_dir)
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.path.remove(scripts_dir)
-    return module
-
-
-def measured_reachable_connectors_ids() -> set[str]:
-    """RULE-* ids from `analitiq.validator.connectors` this adapter's own
-    entry points actually surface in its output — MEASURED by running
-    documents engineered to trip each connectors.py-bound check through the
-    same functions `plugins/analitiq-pipeline-builder/scripts/validate.py`
-    calls, and reading back which ids appear in the returned findings. A
-    hand-typed list of "reachable" functions can name a check this adapter's
-    entities never route to (an api-endpoint or connector-package check: this
-    function never builds such a document, so it is never probed); a
-    measurement cannot.
-    """
+def measured_single_document_ids() -> set[str]:
+    """RULE-* ids `validate_single_document` surfaces from a plain-function
+    check rather than a contract model — MEASURED by running documents
+    engineered to trip each such check and reading back which ids appear. A
+    hand-typed list of functions can name one the single-document route never
+    reaches; a measurement cannot."""
     import json
-    import tempfile
 
     from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
+    from analitiq.contracts.validation_requests import ValidateSingleDocumentRequest
+    from analitiq.validator import validate_single_document
 
-    adapter = _pipeline_validate_adapter()
+    def rules_for(kind: str, document: dict) -> set[str | None]:
+        request = ValidateSingleDocumentRequest(document=json.dumps(document), document_kind=kind)
+        return {f.get("rule") for f in validate_single_document(request)["findings"]}
+
     observed: set[str | None] = set()
-
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-
-        # RULE-DBEP-011: an endpoint_id disagreeing with the handle derived
-        # from database_object.
-        endpoint = {
-            "endpoint_id": "public__orders__wronghash",
-            "database_object": {"schema": "public", "name": "orders", "object_type": "table"},
-        }
-        path = root / "endpoint.json"
-        path.write_text(json.dumps(endpoint))
-        observed |= {f.get("rule") for f in adapter.diagnostics_for(
-            "database-endpoint", path)["findings"]}
-
-        # RULE-TMAP-022 (a duplicate rule) and RULE-TMAP-014 (a regex read
-        # matcher containing a lowercase literal, which an UPPERCASED native
-        # can never match) both fire on one read map.
-        read_rules = [
-            {"match": "exact", "native_type": "INT", "arrow_type": "Int32"},
-            {"match": "exact", "native_type": "INT", "arrow_type": "Int32"},
-            {"match": "regex", "native_type": "^duplicate_probe$", "arrow_type": "Utf8"},
-        ]
-        path = root / "read-map.json"
-        path.write_text(json.dumps({"$schema": TYPE_MAP_SCHEMA_URL, "read": read_rules}))
-        observed |= {f.get("rule") for f in adapter.diagnostics_for(
-            "type-map", path)["findings"]}
-
-        # RULE-TMAP-017 (write-vocabulary coverage): a write map covering too
-        # little, a connection's included.
-        path = root / "write-map.json"
-        path.write_text(json.dumps({
-            "$schema": TYPE_MAP_SCHEMA_URL,
-            "write": [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}],
-        }))
-        observed |= {f.get("rule") for f in adapter.diagnostics_for(
-            "type-map", path)["findings"]}
-
-        # RULE-PKG-031: an endpoint document under a connection's
-        # `definition/endpoints/` whose filename does not carry its
-        # endpoint_id. Laid out on disk rather than calling the gate directly,
-        # because the gate only applies to a document the adapter reached at
-        # that address — probing it out of place would record an id the
-        # adapter's own routing might not surface.
-        ep_dir = root / "connections" / "pg" / "definition" / "endpoints"
-        ep_dir.mkdir(parents=True)
-        path = ep_dir / "wrong-name.json"
-        path.write_text(json.dumps({
-            "endpoint_id": "public__orders__aaaaaaaa",
-            "database_object": {"schema": "public", "name": "orders", "object_type": "table"},
-        }))
-        observed |= {f.get("rule") for f in adapter.diagnostics_for(
-            "database-endpoint", path)["findings"]}
-
+    # RULE-DBEP-011: an endpoint_id disagreeing with the handle derived from
+    # database_object.
+    observed |= rules_for("database-endpoint", {
+        "endpoint_id": "public__orders__wronghash",
+        "database_object": {"schema": "public", "name": "orders", "object_type": "table"},
+    })
+    # RULE-TMAP-022 (a duplicate rule) and RULE-TMAP-014 (a regex read matcher
+    # containing a lowercase literal, which an UPPERCASED native can never
+    # match) both fire on one read map.
+    observed |= rules_for("type-map", {"$schema": TYPE_MAP_SCHEMA_URL, "read": [
+        {"match": "exact", "native_type": "INT", "arrow_type": "Int32"},
+        {"match": "exact", "native_type": "INT", "arrow_type": "Int32"},
+        {"match": "regex", "native_type": "^duplicate_probe$", "arrow_type": "Utf8"},
+    ]})
+    # RULE-TMAP-017: a write map covering too little of the Arrow vocabulary.
+    observed |= rules_for("type-map", {"$schema": TYPE_MAP_SCHEMA_URL, "write": [
+        {"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"},
+    ]})
     return {rule_id for rule_id in observed if rule_id is not None}
 
 
-_BUNDLE = "analitiq.validator.pipelines::validate_pipeline_bundle"
+_REQUEST_ENTRY_POINTS = frozenset({
+    "analitiq.validator.document_set::validate_single_document",
+    "analitiq.validator.document_set::validate_package",
+    "analitiq.validator.document_set::validate_workspace",
+})
 
 
 def _validator_sources() -> dict[str, str]:
@@ -393,29 +337,37 @@ def _validator_sources() -> dict[str, str]:
             for path in root.glob("*.py") if path.stem != "__init__"}
 
 
-def _bundle_reach(sources: dict[str, str]) -> set[str]:
-    """The functions `validate_pipeline_bundle` reaches by reference, as
-    `module::name` — the form a rule record's `validator` takes.
+def _reach(sources: dict[str, str], roots: set[str] | frozenset[str]) -> set[str]:
+    """The functions `roots` reach by reference, as `module::name` — the form
+    a rule record's `validator` takes.
 
-    Followed through every call and relative import, because a record names
-    the function holding its finding call, which can sit behind a helper or in
-    another module; read from the AST, never from a list of names, so a check
-    the bundle stops calling stops counting."""
+    Followed through every call, relative import and module-level table a
+    reached function reads, because a record names the function holding its
+    finding call, which can sit behind a helper, in another module or in a
+    check table; read from the AST, never from a list of names, so a check
+    nothing reaches stops counting."""
     import ast
 
     functions: dict[str, ast.FunctionDef] = {}
+    tables: dict[str, ast.expr] = {}
     imported: dict[str, str] = {}
     for module, text in sources.items():
         package = module.rsplit(".", 1)[0]
         for node in ast.parse(text).body:
             if isinstance(node, ast.FunctionDef):
                 functions[f"{module}::{node.name}"] = node
+            elif isinstance(node, (ast.Assign, ast.AnnAssign)) and node.value is not None:
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                for target in targets:
+                    if isinstance(target, ast.Name):
+                        tables[f"{module}::{target.id}"] = node.value
             elif isinstance(node, ast.ImportFrom) and node.level == 1 and node.module:
                 for alias in node.names:
                     imported[f"{module}::{alias.asname or alias.name}"] = (
                         f"{package}.{node.module}::{alias.name}")
-    if _BUNDLE not in functions:
-        raise RuntimeError(f"{_BUNDLE} no longer exists — this measurement has nothing to walk")
+    missing = sorted(set(roots) - functions.keys())
+    if missing:
+        raise RuntimeError(f"{', '.join(missing)} no longer exists — this measurement has nothing to walk")
 
     def defined(symbol: str) -> str:
         # A name re-exported from module to module resolves where it is defined;
@@ -426,63 +378,54 @@ def _bundle_reach(sources: dict[str, str]) -> set[str]:
             symbol = imported[symbol]
         return symbol
 
-    def referenced(module: str, nodes) -> set[str]:
-        found = set()
-        for node in nodes:
-            if isinstance(node, ast.Name):
-                symbol = defined(f"{module}::{node.id}")
-                if symbol in functions:
-                    found.add(symbol)
-        return found
+    def referenced(symbol: str) -> set[str]:
+        module = symbol.split("::")[0]
+        node = functions.get(symbol) or tables[symbol]
+        return {found for name in ast.walk(node) if isinstance(name, ast.Name)
+                if (found := defined(f"{module}::{name.id}")) in functions or found in tables}
 
-    def closure(start: set[str]) -> set[str]:
-        reached, pending = set(), set(start)
-        while pending:
-            symbol = pending.pop()
-            if symbol not in reached:
-                reached.add(symbol)
-                pending |= referenced(symbol.split("::")[0], ast.walk(functions[symbol]))
-        return reached
-
-    bundle = functions[_BUNDLE]
-    reached = closure(referenced(_BUNDLE.split("::")[0], ast.walk(bundle)))
-    reached.discard(_BUNDLE)
-    return reached
+    reached: set[str] = set()
+    pending = {found for root in roots for found in referenced(root)}
+    while pending:
+        symbol = pending.pop()
+        if symbol not in reached:
+            reached.add(symbol)
+            pending |= referenced(symbol)
+    return (reached & functions.keys()) - set(roots)
 
 
 def render_validator_ids() -> str:
-    """Every rule id this adapter's own `analitiq.validator` entry points can
-    actually emit, whether the check needs a second document in hand
-    (referential integrity across a bundle, filename↔id) or grades one
-    document as a plain function rather than a `@model_validator` (a database
-    endpoint's id, a type-map's own rule warnings) — never what a contract
-    model rejects on its own, which is catalogued per model in
-    `references/rules/` instead of restated here. Neither half is enumerated
-    by hand: the connectors half is measured through the live dispatch (see
-    `measured_reachable_connectors_ids`), the pipelines half read off
-    `validate_pipeline_bundle`'s own reference graph. A single-document
-    contract-model rejection with no `rules.violation` behind it carries a
-    rule id too, when the model raised one, but that half is open-ended by
-    construction: it is whichever rule the model names, not a set this
-    function could enumerate."""
+    """Every rule id a validation request can surface beyond what a contract
+    model rejects on its own: the checks that need a second document in hand,
+    read off the package and workspace entry points' own reference graph, and
+    the single-document checks that are plain functions rather than
+    `@model_validator`s, measured through `validate_single_document` (see
+    `measured_single_document_ids`). A single-document contract-model rejection
+    carries a rule id too, when the model raised one, but that half is
+    open-ended by construction: it is whichever rule the model names, not a set
+    this function could enumerate."""
     from analitiq.contracts.shared.rules import all_rules
 
-    reachable_connectors_ids = measured_reachable_connectors_ids()
-    reached = _bundle_reach(_validator_sources())
+    single_document_ids = measured_single_document_ids()
+    reached = _reach(_validator_sources(), _REQUEST_ENTRY_POINTS)
+    # A workspace also carries the connector packages this plugin downloads and
+    # never authors; their rules are rendered in the connector plugin, not here.
     ids = sorted(
         rule.id for rule in all_rules()
-        if rule.validator in reached or rule.id in reachable_connectors_ids
+        if "pipeline-plugin" in rule.owners
+        and (rule.validator in reached or rule.id in single_document_ids)
     )
     if not ids:
-        raise RuntimeError("no rule is bound to a validator function this adapter reaches")
+        raise RuntimeError("no rule is bound to a validator function a request reaches")
     out = [
-        "Rule ids this adapter's own `analitiq.validator` entry points can "
-        "actually emit, whether the check needs a second document in hand "
-        "(referential integrity across a bundle, filename↔id) or grades one "
+        "Rule ids on the documents this plugin authors that a validation request "
+        "can surface beyond what a contract model "
+        "rejects on its own, whether the check needs a second document in hand "
+        "(references across a package or workspace, filename↔id) or grades one "
         "document as a plain function rather than a `@model_validator` "
-        "(a database endpoint's id, a type-map's own rule warnings) — never "
-        "what a contract model rejects on its own, which is catalogued per "
-        "model in `references/rules/` instead of restated here:",
+        "(a database endpoint's id, a type-map's own rule warnings) — what a "
+        "contract model rejects is catalogued per model in `references/rules/` "
+        "instead of restated here:",
         "",
         ", ".join(f"`{v}`" for v in ids),
     ]
@@ -518,7 +461,8 @@ def render_endpoint_id_derivation() -> str:
         "",
         "Derivation must stay deterministic: a handle that changes for an unchanged "
         "resource mints a new endpoint and breaks every stream pinned to the old one. "
-        "Never hand-write one — call the helper (`scripts/endpoint_id.py` wraps it).",
+        "Never hand-write one — take it from the `derive_endpoint_identity` tool of the "
+        "`analitiq-validator` MCP server, which runs that function.",
     ]
     return "\n".join(out) + "\n"
 

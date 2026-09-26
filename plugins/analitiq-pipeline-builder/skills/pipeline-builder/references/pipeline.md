@@ -27,18 +27,19 @@ For each artifact:
 
 1. Run the validator.
 2. If `passed: true`, accept and move on.
-3. If any finding's `validator` is `adapter-crash`, halt immediately and
-   surface it instead of entering the fix loop below: it names a validator or
-   runtime failure, not an authored-document defect, so the creator has no
-   correction to make — feeding it in would re-invoke the creator against an
-   artifact that may already be valid.
-4. Otherwise, collect the findings and re-invoke the matching creator with the
+3. If any finding's `message_id` is `validation-not-run`, halt and surface it
+   (`references/io-contracts.md` defines it) instead of entering the fix loop
+   below.
+4. If a finding's `path` names a document this run did not author — one under
+   `connectors/`, or under a connection the run reused — halt and surface it:
+   no creator of this run owns that file, and the run is not done.
+5. Otherwise, collect the findings and re-invoke the matching creator with the
    findings attached, asking it to fix exactly the reported errors — and only
    those, no opportunistic edits.
-5. Re-validate. Increment the pass counter.
-6. Stop after **5 passes** regardless of state. If still failing, halt and
+6. Re-validate. Increment the pass counter.
+7. Stop after **5 passes** regardless of state. If still failing, halt and
    surface the diagnostics.
 
 The validator is stateless — the pass cap and the discipline live here, not in
-`scripts/validate.py`, and every artifact the orchestrator writes goes through
-this same loop.
+`pipeline-schema-validator`, and every artifact the orchestrator writes goes
+through this same loop.

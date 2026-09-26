@@ -58,6 +58,8 @@ CLAUDE.local.md
 
 # Local MCP server config — machine-specific tooling, not project contract.
 .mcp.json
+# Each plugin's own `.mcp.json` ships with it.
+!/plugins/*/.mcp.json
 
 
 # Eval run log — one JSON line per finished run, appended locally by

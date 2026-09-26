@@ -46,7 +46,6 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from collections import Counter
 from pathlib import Path
 from typing import NamedTuple
@@ -55,8 +54,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2] / "plugins" / "analitiq-pipeline-builder"
 SKILLS = ROOT / "skills"
-sys.path.insert(0, str(ROOT / "scripts"))
-import validate as V  # noqa: E402
+from _validate import validate_as  # noqa: E402  (pytest puts this dir on sys.path)
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
@@ -238,7 +236,7 @@ _CONVENTION = (
 
 class Marker(NamedTuple):
     kind: str            # "validate" | "invalid" | "illustrative"
-    entity: str | None   # validate: adapter entity the spliced doc grades as
+    entity: str | None   # validate: document kind the spliced doc grades as
     pointer: str | None  # validate: JSON pointer ("/a/b"); None = top-level merge
     rule: str | None     # invalid: the rule the block deliberately breaks
 
@@ -520,7 +518,7 @@ def _resolve_fragment(marker: Marker, body: str, label: str):
 
 
 def _grading_entity(marker: Marker, label: str) -> str:
-    """The adapter entity a block grades as.
+    """The document kind a block grades as.
 
     A ``validate:`` marker states it. An ``invalid:`` marker states only the
     rule id; the registry's ``artifact_kinds`` field supplies the entity —
@@ -573,9 +571,7 @@ def _assert_block_upholds_marker(marker: Marker, body: str, label: str,
                                  tmp_path: Path) -> None:
     """Grade one validate/invalid block: splice, validate, judge per marker."""
     entity, fragment, segments, spliced = _spliced_document(marker, body, label)
-    doc_path = tmp_path / "spliced.json"
-    doc_path.write_text(json.dumps(spliced, indent=2))
-    diagnostics = V.diagnostics_for(entity, doc_path)
+    diagnostics = validate_as(entity, json.dumps(spliced, indent=2))
     where = "<top level>" if marker.pointer is None else marker.pointer
     if marker.kind == "validate":
         assert diagnostics["passed"], (
@@ -591,10 +587,8 @@ def _assert_block_upholds_marker(marker: Marker, body: str, label: str,
             # fragment silently decayed to one key would ride the host's
             # completeness and stay green. The pointer-less form claims
             # document shape, not a patch: the bare fragment must also
-            # validate standalone, through the same adapter.
-            alone_path = tmp_path / "standalone.json"
-            alone_path.write_text(json.dumps(fragment, indent=2))
-            alone = V.diagnostics_for(entity, alone_path)
+            # validate standalone, through the same entry point.
+            alone = validate_as(entity, json.dumps(fragment, indent=2))
             assert alone["passed"], (
                 f"{label} does not validate as {entity} standalone: "
                 + "; ".join(f"{f['path']}: {f['message']}"

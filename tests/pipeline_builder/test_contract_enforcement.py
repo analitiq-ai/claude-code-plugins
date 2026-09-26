@@ -1,4 +1,4 @@
-"""Pin the contract behaviour the orchestrator depends on, through the adapter.
+"""Pin the contract behaviour the orchestrator depends on.
 
 The validator pin is the plugin's contract with the outside world, and a bump
 changes what is rejected AND where the rejection is reported. Both matter:
@@ -10,8 +10,9 @@ changes what is rejected AND where the rejection is reported. Both matter:
     creator agent by its `path`. A finding that moves or coarsens breaks that
     routing while still "failing validation", so the paths are pinned too.
 
-These assert through `validate.py` rather than against the models directly, so
-they cover the adapter's normalization as well as the contract.
+These assert through `validate_single_document` rather than against the models
+directly, so they cover the finding paths a request reports as well as the
+contract.
 """
 from __future__ import annotations
 
@@ -25,8 +26,7 @@ from packaging.version import Version
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ROOT = REPO_ROOT / "plugins" / "analitiq-pipeline-builder"
-sys.path.insert(0, str(ROOT / "scripts"))
-import validate as V  # noqa: E402
+from _validate import validate_as  # noqa: E402  (pytest puts this dir on sys.path)
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
@@ -59,9 +59,7 @@ def _stream(source_ref=None, destination=None, filters=None):
 
 
 def _diagnose(tmp_path, doc, entity="stream"):
-    path = tmp_path / "doc.json"
-    path.write_text(json.dumps(doc))
-    return V.diagnostics_for(entity, path)
+    return validate_as(entity, json.dumps(doc))
 
 
 def _paths(diagnostics):
@@ -195,12 +193,9 @@ def test_active_pipeline_requires_a_stream(tmp_path):
 # --- the pin itself --------------------------------------------------------
 
 def test_validator_pin_matches_the_package_this_repo_ships():
-    """The pin must be a version this repo has actually published.
-
-    The plugins self-install the PUBLISHED validator at runtime (end users have
-    no checkout), so the pin cannot simply read the source tree — but it must not
-    run ahead of it either.
-    """
+    """The pin must be a version this repo has actually published, so it may
+    lag the source tree but never run ahead of it."""
+    sys.path.insert(0, str(ROOT / "scripts"))
     from _bootstrap import VALIDATOR_PIN
 
     pyproject = (REPO_ROOT / "packages" / "validator" / "pyproject.toml").read_text()
@@ -213,84 +208,11 @@ def test_validator_pin_matches_the_package_this_repo_ships():
     assert VALIDATOR_PIN.startswith("analitiq-validator=="), VALIDATOR_PIN
     pin_version = VALIDATOR_PIN.split("==", 1)[1]
 
-    # `<=`, not `==`: equal is the steady state, behind is tolerated while a
-    # release is in flight (the pin can only name a version already on PyPI, and
-    # the publish tag fires before the bump merges). Ahead is the failure — main
-    # HEAD is what users install, so an unpublished pin breaks `pip install`
-    # outright. Root CLAUDE.md explains the window.
+    # `<=`, not `==`: behind is tolerated while a release is in flight, because
+    # the publish tag fires before the version bump merges.
     assert Version(pin_version) <= Version(shipped.group(1)), (
         f"_bootstrap.VALIDATOR_PIN is {VALIDATOR_PIN!r}, ahead of the "
-        f"{shipped.group(1)} this repo ships. Agents would try to install a "
-        "version that is not published.")
-
-
-def test_connector_validator_agent_states_the_same_pin():
-    """The connector agent's self-install line is the pin's one unavoidable copy.
-
-    It is prose an agent runs, so it cannot import `VALIDATOR_PIN`. Every version
-    token in the file must equal the pin — a partial bump would leave the probe
-    checking for something the install command never installs.
-    """
-    from _bootstrap import VALIDATOR_PIN
-
-    pin_version = VALIDATOR_PIN.split("==", 1)[1]
-    agent_md = (REPO_ROOT / "plugins" / "analitiq-connector-builder"
-                / "agents" / "connector-schema-validator.md").read_text()
-
-    versions = re.findall(r"\b\d+\.\d+\.\d+rc\d+\b", agent_md)
-    assert versions, (
-        "connector-schema-validator.md no longer states any pinned version in "
-        "the X.Y.ZrcN form this test recognises (did the packages leave "
-        "pre-release?); restore the self-install pin or update this assertion.")
-    assert set(versions) == {pin_version}, (
-        f"connector-schema-validator.md states versions {sorted(set(versions))!r} "
-        f"but the runtime pin is {pin_version!r}")
-
-
-_PYTHON3_STUB = """#!/bin/sh
-case "$1" in
-  -c) echo probe >> "$CALLS"; exit "$PROBE_RC" ;;
-  -m) echo install >> "$CALLS"; exit "$INSTALL_RC" ;;
-  -)  cat > /dev/null; echo run >> "$CALLS"; echo '{"passed": true, "findings": []}' ;;
-esac
-"""
-
-
-@pytest.mark.parametrize(("probe_rc", "install_rc", "calls", "runs"), [
-    pytest.param(1, 1, ["probe", "install"], False, id="install fails"),
-    pytest.param(1, 0, ["probe", "install", "run"], True, id="install succeeds"),
-    pytest.param(0, 1, ["probe", "run"], True, id="already installed"),
-])
-def test_connector_validator_runs_only_once_the_pinned_install_succeeded(
-        tmp_path, probe_rc, install_rc, calls, runs):
-    """A failed install must print no Diagnostics JSON: whatever validator is
-    already present would otherwise answer as the pinned one, and only a
-    non-JSON stdout routes the agent to `self-install-failed`."""
-    import os
-    import shutil
-    import subprocess
-
-    agent_md = (REPO_ROOT / "plugins" / "analitiq-connector-builder"
-                / "agents" / "connector-schema-validator.md").read_text()
-    blocks = re.findall(r"^```bash\n(.*?)^```$", agent_md, re.MULTILINE | re.DOTALL)
-    assert len(blocks) == 1, f"expected one bash block, found {len(blocks)}"
-
-    stub_dir = tmp_path / "bin"
-    stub_dir.mkdir()
-    stub = stub_dir / "python3"
-    stub.write_text(_PYTHON3_STUB)
-    stub.chmod(0o755)
-    log = tmp_path / "calls"
-    log.touch()
-    env = {"PATH": f"{stub_dir}{os.pathsep}{os.path.dirname(shutil.which('sh'))}",
-           "CALLS": str(log), "PROBE_RC": str(probe_rc), "INSTALL_RC": str(install_rc)}
-
-    done = subprocess.run([shutil.which("bash"), "-c", blocks[0]], env=env,
-                          capture_output=True, text=True, check=False)
-
-    assert log.read_text().split() == calls
-    assert (done.returncode == 0) is runs, done
-    assert bool(done.stdout) is runs, done.stdout
+        f"{shipped.group(1)} this repo ships.")
 
 
 def test_suite_exercises_in_repo_source_not_an_installed_wheel():

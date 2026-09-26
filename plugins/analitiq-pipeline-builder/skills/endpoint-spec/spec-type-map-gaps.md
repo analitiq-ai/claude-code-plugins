@@ -22,7 +22,7 @@ fixable: this file governs authoring the connection-scoped map that closes it.
 
 The connection's map is `connections/<connection-slug>/definition/type-map.json`:
 a whole `{$schema, read, write}` document, not a bare rules array, validated as
-entity `type-map`. The section a rule sits under is its direction — `read`
+document kind `type-map`. The section a rule sits under is its direction — `read`
 rules map native → Arrow, `write` rules map Arrow → native DDL — and a map
 carries only the sections it has rules for. The `$schema` value is in this
 skill's own `SKILL.md` schema-URL table.
@@ -35,14 +35,15 @@ do not restate their vocabulary here.
 ## Gap detection
 
 Resolution semantics (normalization, first-match-wins, `${name}` substitution)
-live in the published packages — never eyeball a regex. Probe with the helper,
-maps in precedence order (connection first, when one exists, then connector):
+live in the contract — never eyeball a regex. Resolve with the `resolve_types`
+tool of the `analitiq-validator` MCP server, passing each map's file text in
+precedence order (connection first, when one exists, then connector):
 
-```bash
-printf '%s' '["citext", "vector(3)"]' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/type_map_gaps.py" \
-  --direction read \
-  --map connections/<slug>/definition/type-map.json \
-  --map connectors/<connector-slug>/definition/type-map.json
+<!-- illustrative -->
+```jsonc
+{"direction": "read", "types": ["citext", "vector(3)"],
+ "maps": ["<connections/<slug>/definition/type-map.json text>",
+          "<connectors/<connector-slug>/definition/type-map.json text>"]}
 ```
 
 - **Read probes** — the distinct `native_type` strings introspected across the
@@ -50,10 +51,9 @@ printf '%s' '["citext", "vector(3)"]' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/t
 - **Write probes** — the distinct `arrow_type` strings frozen into the endpoint
   documents, after read-side resolution and judgment are complete.
 
-`--direction` names the probes' vocabulary — `read` for native types, `write`
-for `arrow_type` strings — and each `--map` contributes its section for that
-direction. A run where no `--map` carries that section is refused as an input
-error (exit 2).
+`direction` names the probes' vocabulary — `read` for native types, `write`
+for `arrow_type` strings — and each map contributes its section for that
+direction. A call where no map carries that section is refused.
 `resolved` gives the rendered value per covered probe; `gaps` lists the
 uncovered ones. Pass only map files that exist.
 
@@ -70,7 +70,7 @@ connect or run time.
 ## Authoring rules
 
 - **Gap-only** (`RULE-TMAP-018` for write, `RULE-TMAP-024` for read). The
-  probes to author for are the ones `type_map_gaps.py` reports under `gaps`. A
+  probes to author for are the ones `resolve_types` reports under `gaps`. A
   connection rule for anything the connector already covers *overrides* the
   connector for every stream on this connection — never shadow. A
   write-coverage warning is not a reason to add one.
@@ -84,7 +84,7 @@ connect or run time.
   (`RULE-TMAP-021`). Generalize a parameterized native family with one regex rule
   and `${name}` captures (`vector(3)` observed → match the family, not the
   instance); spell a regex's literals the way the engine normalizes the probe
-  (`RULE-TMAP-014`) — probe with the helper rather than eyeballing it.
+  (`RULE-TMAP-014`) — probe with `resolve_types` rather than eyeballing it.
 - **Write rules.** For an uncovered canonical, render the discovered native
   that produced it — the deployment's own spelling is the one type the
   deployment certainly accepts as DDL. When **several distinct** discovered

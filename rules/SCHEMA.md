@@ -166,11 +166,9 @@ produced by a check in `analitiq.validator`. Every finding carries:
 | `path` | Where the finding applies. A path that is empty or starts with `/` is a JSON Pointer into the document that was validated, in RFC 6901 §5 string form; the empty pointer is the whole document. Any other path is `<reference>#<pointer>`, about another document the check read: the reference is that document's path relative to the validated document's directory, percent-encoded as an RFC 3986 relative reference, and the pointer is the same §5 form, never percent-encoded. A consumer splits at the first `#` and percent-decodes only the reference. A package result has no single validated document, so each of its findings is `<key>#<pointer>`, the key read from the package root and encoded as a reference is. |
 | `message` | The human-readable complaint. |
 
-The pipeline plugin's own adapter (`plugins/analitiq-pipeline-builder/scripts/validate.py`)
-mints ids of its own — outside `analitiq.validator`, documented in
-`plugins/analitiq-pipeline-builder/skills/pipeline-builder/references/io-contracts.md`
-— and is not this shape either before or after; this registry does not govern
-it.
+The plugins' validator agents mint ids of their own for findings they add —
+outside `analitiq.validator`, documented in each plugin's `io-contracts.md` —
+and this registry does not govern them.
 
 ### `kind`
 

@@ -107,7 +107,7 @@ Every authored document must:
    procedure in `spec-envelope.md`). For each key the contract routes to secret
    storage, write an `env:` pointer into `secret_refs` and add the env-var name
    to `.secrets/credentials.json`.
-4. Pass the validator (`pipeline-schema-validator`, entity `connection`) with
+4. Pass the validator (`pipeline-schema-validator`, document kind `connection`) with
    zero error findings.
 
 <!-- BEGIN GENERATED: schema-urls -->

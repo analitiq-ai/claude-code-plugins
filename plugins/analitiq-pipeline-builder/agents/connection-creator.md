@@ -39,6 +39,8 @@ Also read:
 
 The orchestrator passes:
 
+- `workspace` (required) — absolute path to the workspace root. Every
+  `connectors/…` and `connections/…` path below resolves against it.
 - `connection_id` (required) — the UUID the orchestrator minted for this
   connection.
 - `connection_slug` (required) — directory name; shape per the directory-slug

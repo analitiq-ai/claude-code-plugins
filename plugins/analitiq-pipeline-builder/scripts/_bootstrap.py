@@ -1,8 +1,8 @@
 """Shared dependency bootstrap for the plugin's Python helpers.
 
-Both `validate.py` and `endpoint_id.py` consume the published
-`analitiq-validator` (which pulls `analitiq-contract-models`). This module
-guarantees that package is importable: if the current interpreter lacks the
+No plugin helper imports this module; the pin guards read `VALIDATOR_PIN` from
+it. It guarantees the published `analitiq-validator` (which pulls
+`analitiq-contract-models`) is importable: if the current interpreter lacks the
 pinned version it installs it into a managed virtualenv and re-execs the calling
 script under it. A venv sidesteps PEP-668 externally-managed interpreters; pip
 output is routed to stderr so a caller's stdout stays clean.
@@ -14,11 +14,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Single source of the validator pin — the PUBLISHED release both plugins
-# self-install at runtime. Nothing else may restate this version; the connector
-# plugin's validator agent carries the one unavoidable copy (prose, not code)
-# and is pinned to it by tests/pipeline_builder/test_contract_enforcement.py,
-# which also holds the pin at or behind packages/validator/pyproject.toml.
+# Single source of the validator pin — a PUBLISHED release. Nothing else may
+# restate this version; tests/pipeline_builder/test_contract_enforcement.py
+# holds it at or behind packages/validator/pyproject.toml.
 # requirements-dev.txt deliberately does NOT carry it — installing the wheel
 # would shadow the in-repo source.
 VALIDATOR_PIN = "analitiq-validator==1.0.0rc28"
@@ -86,7 +84,7 @@ def ensure_deps_or_reexec(script_path: str) -> None:
         # `find_spec` alone is satisfied by a BARE DIRECTORY: a leftover or
         # half-deleted `analitiq/validator/` resolves as a namespace package with
         # `origin` None, so this would report success and the real failure would
-        # surface much later as an opaque ImportError inside validate.py.
+        # surface much later as an opaque ImportError inside the caller.
         if spec is None or spec.origin in (None, "namespace"):
             raise RuntimeError(
                 f"{_FROM_SOURCE} is set but `analitiq.validator` has no importable "

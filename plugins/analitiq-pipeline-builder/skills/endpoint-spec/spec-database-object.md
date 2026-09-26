@@ -32,10 +32,10 @@ A database `endpoint_id` is **derived**, not chosen: it is a deterministic handl
 | — | `public` | `orders` | `public__orders__371c8422` |
 | `cat` | `Public` | `Orders` | `public__orders__cat__a688ced5` |
 
-Derivation must stay deterministic: a handle that changes for an unchanged resource mints a new endpoint and breaks every stream pinned to the old one. Never hand-write one — call the helper (`scripts/endpoint_id.py` wraps it).
+Derivation must stay deterministic: a handle that changes for an unchanged resource mints a new endpoint and breaks every stream pinned to the old one. Never hand-write one — take it from the `derive_endpoint_identity` tool of the `analitiq-validator` MCP server, which runs that function.
 <!-- END GENERATED: endpoint-id-derivation -->
 
-Compute both together with `scripts/endpoint_id.py` (see
+Compute both together with `derive_endpoint_identity` (see
 `private-endpoint-creator`): the id must equal the handle derived from the
 verbatim locator (`RULE-DBEP-011`).
 

@@ -129,12 +129,20 @@ either kind.
 
 ### 4. Validate the domain (barrier)
 
-Invoke `connector-schema-validator` over the connector body and type
-map; it detects each document's kind from its own shape.
+Stage the connector body and type map at their release paths, then invoke
+`connector-schema-validator`:
+
+- `kind = database` — with that `package` directory. The package is complete:
+  no endpoint ships with it.
+- `kind = api` — once per document, as a `document` (`document_kind`
+  `connector`, then `type-map`). A package without endpoints fails
+  (`RULE-PKG-035`), so the package request waits for the phase-5 join.
+
 <!-- PROBE: type-map-section-missing -->
 The map is one `type-map.json` carrying a section for each direction the
 connector's `kind` calls for (`RULE-PKG-030`); a section the kind needs and the
-map lacks fails the connector.
+map lacks fails the connector package — at this phase for `database`, at the
+phase-5 join for `api`.
 
 Validation covers the JSON documents above; the package files are
 governed by rules of their own (`RULE-PKG-007`, `RULE-PKG-009`,
@@ -147,12 +155,15 @@ field types through the read map. For `kind = database` this completes
 validation — a connector release ships no database endpoint documents
 (`RULE-DBEP-006`), so phase 5 is skipped.
 
-In `validate` mode, run the validator once over **every** on-disk document
-— the connector, `type-map.json`, and all
+In `validate` mode, run the validator once with the on-disk connector
+package as `package` — it carries the connector, `type-map.json` and every
 `definition/endpoints/*.json` — report the resulting `Diagnostics`, and
 stop. There is no fix loop and no creator re-dispatch (phases 1–3 and 5
 were skipped, so there is no `CreatorOutput` to revise). The fix loop
 below applies to `build` and `update` only.
+
+If any finding's `message_id` is `validation-not-run`, halt
+and surface it, in every mode (`references/io-contracts.md` defines it).
 
 In `build` / `update` mode the orchestrator should attempt at most 5 fix
 passes per artifact — re-dispatch the matching creator with the
@@ -189,7 +200,8 @@ Database connectors skip this phase entirely.
      echoes the connector-wide pagination (`ProviderFacts.pagination` →
      style + params) into the branch's `EndpointFacts.pagination`
      (`io-contracts.md` §EndpointFacts).
-   - `connector-schema-validator` validates the endpoint, with the same
+   - `connector-schema-validator` validates the endpoint as a `document`
+     (`document_kind` `api-endpoint`), with the same
      per-artifact 5-pass fix loop as phase 4 (re-dispatch
      `endpoint-creator` with `Diagnostics.findings` and the
      `EndpointCreatorOutput` it produced).
@@ -199,7 +211,7 @@ Database connectors skip this phase entirely.
    dropping the endpoint.
 4. **Join, then validate the package.** When the worklist is drained (no
    `pending` / `running`), stage `connector.json`, the type map and every
-   authored endpoint at their release paths and validate the **connector**,
+   authored endpoint at their release paths and validate that **package**,
    not the endpoint documents on their own. Coverage is connector-anchored:
    the per-branch pass in step 2 grades one endpoint against the endpoint
    contract and can say nothing about the sibling read map, so a native a

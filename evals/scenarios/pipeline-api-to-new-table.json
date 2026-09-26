@@ -1,72 +1,58 @@
 {
   "id": "pipeline-api-to-new-table",
   "plugin": "analitiq-pipeline-builder",
-  "network": false,
+  "network": true,
   "why": "The plainest whole-pipeline run, and the one that reaches the most obligations nothing rejects: routing each connection-contract input by its declared storage, keeping a secret as a pointer, supplying CA material for a verifying TLS mode, and authoring no default the contract already declares. Both connectors are seeded, so the run needs no registry and no live system — an API source reads its endpoints out of the connector document, and a destination table that does not exist yet is derived without connecting.",
   "seed": [
     {
       "from": "plugins/analitiq-connector-builder/skills/connector-spec-api/examples/api-key/api-key.example.json",
-      "to": "connectors/api-key-example/definition/connector.json"
+      "to": "analitiq/connectors/api-key-example/definition/connector.json"
     },
     {
       "from": "plugins/analitiq-connector-builder/skills/connector-spec-api/examples/api-key/endpoints/v1__items.json",
-      "to": "connectors/api-key-example/definition/endpoints/v1__items.json"
+      "to": "analitiq/connectors/api-key-example/definition/endpoints/v1__items.json"
     },
     {
       "from": "plugins/analitiq-connector-builder/skills/connector-spec-api/examples/api-key/type-map.json",
-      "to": "connectors/api-key-example/definition/type-map.json"
+      "to": "analitiq/connectors/api-key-example/definition/type-map.json"
     },
     {
       "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/postgresql.example.json",
-      "to": "connectors/postgresql-example/definition/connector.json"
+      "to": "analitiq/connectors/postgresql-example/definition/connector.json"
     },
     {
       "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/type-map.json",
-      "to": "connectors/postgresql-example/definition/type-map.json"
+      "to": "analitiq/connectors/postgresql-example/definition/type-map.json"
     }
   ],
-  "prompt": "Build a pipeline named items-sync from the api-key-example connector to the postgresql-example connector. Both connectors are already downloaded under connectors/ — use them as they are, do not fetch anything. Stream the source endpoint v1__items into a destination table public.items that does not exist yet, so derive it as a new table rather than connecting to the database. Full refresh, insert on write, run it manually with no schedule. For the destination connection use host db.internal, port 5432, database analytics, username loader, ssl_mode verify-full. Everything you need is in this message; do not ask me questions, and make a reasonable choice if something is not stated.",
+  "prompt": "Build a pipeline named items-sync from the api-key-example connector to the postgresql-example connector. Both connectors are already downloaded under analitiq/connectors/ — use them as they are, do not fetch anything. Stream the source endpoint v1__items into a destination table public.items that does not exist yet, so derive it as a new table rather than connecting to the database. Full refresh, insert on write, run it manually with no schedule. For the destination connection use host db.internal, port 5432, database analytics, username loader, ssl_mode verify-full. Everything you need is in this message; do not ask me questions, and make a reasonable choice if something is not stated.",
   "expect": "build",
   "validate": [
     {
-      "glob": "pipelines/*/pipeline.json",
-      "entity": "pipeline",
-      "bundle_root": "."
-    },
-    {
-      "glob": "pipelines/*/streams/*.json",
-      "entity": "stream"
-    },
-    {
-      "glob": "connections/*/connection.json",
-      "entity": "connection"
-    },
-    {
-      "glob": "connections/*/definition/endpoints/*.json",
-      "entity": "database-endpoint"
+      "workspace": "analitiq"
     }
   ],
   "docs": {
     "pipeline": {
-      "glob": "pipelines/*/pipeline.json"
+      "glob": "analitiq/pipelines/*/pipeline.json"
     },
     "stream": {
-      "glob": "pipelines/*/streams/*.json"
+      "glob": "analitiq/pipelines/*/streams/*.json"
     },
     "api_connection": {
-      "glob": "connections/*/connection.json",
+      "glob": "analitiq/connections/*/connection.json",
       "where": {
         "connector_id": "api-key-example"
       }
     },
     "db_connection": {
-      "glob": "connections/*/connection.json",
+      "glob": "analitiq/connections/*/connection.json",
       "where": {
         "connector_id": "postgresql-example"
       }
     },
     "db_endpoint": {
-      "glob": "connections/*/definition/endpoints/*.json"
+      "glob": "analitiq/connections/*/definition/endpoints/*.json"
     }
   },
   "also_covers": [

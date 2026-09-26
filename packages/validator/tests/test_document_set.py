@@ -585,6 +585,13 @@ def test_a_valid_workspace_passes(validator):
         "passed": True, "findings": []}
 
 
+@pytest.mark.parametrize("documents", [{}, {"notes/readme.json": "{}"}])
+def test_a_workspace_locating_no_package_fails(validator, documents):
+    result = validator.validate_workspace(ValidateWorkspaceRequest(documents=documents))
+    assert result["passed"] is False
+    assert _ids(result) == ["workspace-empty"]
+
+
 def test_a_connection_scoped_endpoint_must_be_in_its_connection(validator):
     documents = _workspace_documents()
     del documents[f"connections/{_DST}/definition/endpoints/{_EID}.json"]

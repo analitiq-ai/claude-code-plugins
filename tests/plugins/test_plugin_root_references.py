@@ -24,7 +24,7 @@ The file-reference forms, each checked in every plugin:
   required-reading lists use. Reaches every shipped file, scripts
   included.
 - `` `spec-x.md` `` / `` `references/io-contracts.md` `` /
-  `` `../stream-spec/spec-destinations.md` `` / `` `scripts/validate.py` `` —
+  `` `../stream-spec/spec-destinations.md` `` / `` `scripts/validation_request.py` `` —
   the backticked form used for cross-references between sibling specs and for
   the helper scripts an agent is told to run, with or without leading `../`
   segments. This is the dominant form by an
@@ -95,7 +95,7 @@ _PLUGIN_ROOT_REF = re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}/([A-Za-z0-9_./-]+)")
 
 # A backticked markdown or script filename: `spec-tls.md`,
 # `references/io-contracts.md`, `../stream-spec/spec-x.md`,
-# `scripts/validate.py`. Leading `../` segments are allowed and stripped by
+# `scripts/validation_request.py`. Leading `../` segments are allowed and stripped by
 # `_cleaned`, so a relative cross-skill reference resolves by the same suffix
 # rule. A `.md` name may stand bare; a `.py` name needs a directory segment —
 # a bare Python filename (`connector.py`, `__init__.py`) names a file the

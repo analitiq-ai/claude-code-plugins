@@ -69,7 +69,7 @@ A database `endpoint_id` is **derived**, not chosen: it is a deterministic handl
 | — | `public` | `orders` | `public__orders__371c8422` |
 | `cat` | `Public` | `Orders` | `public__orders__cat__a688ced5` |
 
-Derivation must stay deterministic: a handle that changes for an unchanged resource mints a new endpoint and breaks every stream pinned to the old one. Never hand-write one — call the helper (`scripts/endpoint_id.py` wraps it).
+Derivation must stay deterministic: a handle that changes for an unchanged resource mints a new endpoint and breaks every stream pinned to the old one. Never hand-write one — take it from the `derive_endpoint_identity` tool of the `analitiq-validator` MCP server, which runs that function.
 <!-- END GENERATED: endpoint-id-derivation -->
 
 That derived handle is an **Analitiq slug, not a database object name**: never
@@ -100,7 +100,8 @@ Destination `endpoint_ref`s must be unique within a single stream
 
 ## Cross-document consistency
 
-<!-- PROBE: stream-cross-document-unchecked-alone, stream-connection-role-bundle-rejected, stream-connection-endpoint-bundle-rejected -->
-The connection roles (`RULE-STRM-033`) and connection-scoped endpoint
-resolution (`RULE-STRM-034`) are checked only with `--bundle-root`, since
-neither can be settled from the stream document alone.
+<!-- PROBE: stream-cross-document-unchecked-alone, stream-connection-role-package-rejected, stream-connection-endpoint-workspace-rejected -->
+The connection roles (`RULE-STRM-033`) are checked once the stream is validated
+in its pipeline's package, and connection-scoped endpoint resolution
+(`RULE-STRM-034`) once it is validated in the workspace, since neither can be
+settled from the stream document alone.

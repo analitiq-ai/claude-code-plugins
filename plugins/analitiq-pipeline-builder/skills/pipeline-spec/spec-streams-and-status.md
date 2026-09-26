@@ -22,7 +22,7 @@ Rules:
 
 - Duplicate stream references: `RULE-PIPE-003`.
 - A referenced stream must name this pipeline as its parent (`RULE-STRM-032`);
-  `--bundle-root` is how the validator sees it.
+  validating the pipeline's package is how the validator sees it.
 - Array order is **display-only** (`RULE-PIPE-010`).
 - A pipeline that is scheduled must reference a stream (`RULE-PIPE-004`).
 
@@ -40,8 +40,8 @@ value means operationally:
 
 <!-- PROBE: pipeline-active-empty-streams-rejected, pipeline-draft-runnability-unchecked -->
 An `active` pipeline with an empty `streams` list is rejected from the pipeline
-document alone; that at least one referenced stream is runnable needs
-`--bundle-root`. A **draft** pipeline is legitimately not yet runnable, so
+document alone; that at least one referenced stream is runnable needs the
+pipeline's package. A **draft** pipeline is legitimately not yet runnable, so
 runnability is enforced only once the pipeline is `active`.
 
 ## Authoring sequence

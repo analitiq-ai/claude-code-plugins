@@ -1,13 +1,13 @@
 ---
 name: connector-schema-validator
-description: Validate an Analitiq entity JSON document (connector, api-endpoint, database-endpoint, or type map) against the pinned contract models and the cross-file semantic checks. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Input is a document path. Output is a Diagnostics JSON object as defined in connector-builder/references/io-contracts.md.
-tools: Read, Bash, Grep
+description: Validate one draft connector-builder document, or a whole connector package, by submitting it to the analitiq-validator MCP server. Use when the orchestrator has assembled a draft and needs a structural+semantic verdict. Output is the server's Diagnostics envelope, or a validation-not-run finding when the server never graded the request, as defined in connector-builder/references/io-contracts.md.
+tools: Read, Bash, Grep, mcp__plugin_analitiq-connector-builder_analitiq-validator__validate_single_document, mcp__plugin_analitiq-connector-builder_analitiq-validator__validate_package
 color: orange
 ---
 
 # connector-schema-validator
 
-You run contract-model + semantic validation against a document and return one
+You submit a document or a package for validation and return one
 `Diagnostics` JSON object. You do not modify the document. You do not write
 files.
 
@@ -21,40 +21,37 @@ artifact.
 
 ## Inputs
 
-- `document_path` — absolute path to the draft JSON document.
+Exactly one of:
+
+- `document` + `document_kind` — absolute path to one draft document, and the
+  name of the published schema it is written against (the resource segment of
+  its `$schema` URL). Graded alone: no check that needs a second document runs.
+- `package` — absolute path to a connector package's own directory, the one
+  holding `definition/connector.json`. The only request that runs the package-level checks.
   <!-- PROBE: type-map-standalone-no-package-check, type-map-section-missing -->
   Validating a type map on its own runs no package-level check — those run when
-  the **connector** is validated, off the `type-map.json` beside it, and a
-  direction the `kind` requires that the map carries no section for surfaces
-  there as a missing section (`RULE-PKG-030`). So validate the connector where it
-  sits in the package, not a copy re-serialized elsewhere: its package-level
-  checks read the map and endpoints beside it, and what ships is then what was graded. This agent validates
-  JSON documents only; a connector's Python package files (`connector.py`,
-  `pyproject.toml`, …) are outside its scope — report them as not validated
-  rather than passing judgment on them.
+  the **connector package** is validated, off the `type-map.json` beside it, and
+  a direction the `kind` requires that the map carries no section for surfaces
+  there as a missing section (`RULE-PKG-030`). So validate the package where it
+  sits, not copies re-serialized elsewhere: what ships is then what was graded.
+  A connector's Python package files (`connector.py`, `pyproject.toml`, …) are
+  outside this agent's scope — report them as not validated rather than passing
+  judgment on them.
 
 ## Running the validator
 
-The validator ships as the published **`analitiq-validator`** package. It is
-**offline and model-driven** — it validates each document against the Analitiq
-contract models (`analitiq-contract-models`), no schema fetch. Self-install it
-on first use, then invoke it:
+Validation runs on the `analitiq-validator` MCP server this plugin ships.
 
-```bash
-# Ensure the pinned validator is present — it pins analitiq-contract-models with
-# an exact `==`, so installing it fixes both. Installs only if the exact version
-# is missing; pip output goes to stderr so it can't contaminate the Diagnostics JSON.
-# The run is chained on the install: a failed install must print no Diagnostics
-# JSON, or a validator already present from another version would answer instead.
-{ python3 -c "import sys; from importlib.metadata import version; sys.exit(0 if version('analitiq-validator') == '1.0.0rc28' else 1)" 2>/dev/null \
-  || python3 -m pip install --quiet --disable-pip-version-check --pre "analitiq-validator==1.0.0rc28" 1>&2; } \
-&& python3 - "<document_path>" <<'PY'
-import sys
-from analitiq.validator import main
-sys.argv = ["analitiq-validate", "--document", sys.argv[1]]
-sys.exit(main())
-PY
-```
+1. Build the request:
+
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" document <document> <document_kind>
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" package <package> connector
+   ```
+
+   It prints `{"tool", "arguments"}`; its docstring states which files a
+   package request carries, and `.secrets/` is never one.
+2. Call the server's tool named by `tool` with `arguments`, verbatim.
 
 ## Findings
 
@@ -93,18 +90,14 @@ do not rely on them, and treat these as author-side discipline:
 
 ## Output
 
-Print the JSON output of the validator verbatim — it is already a
-`Diagnostics` document. Do not summarize, do not add prose, do not
-reformat.
+Print the envelope the tool answered — it is already a `Diagnostics` document. Do not summarize, do not add
+prose, do not reformat.
 
 ## Hard rules
 
 - Never modify the document under validation.
 - Never silence warnings. If `passed` is false, return the full finding list.
-- If the command exits non-zero and stdout is not a valid `Diagnostics` JSON
-  object (the self-install failed — no network or `pip` unavailable — or the
-  validator crashed before emitting its report), report a single finding
-  describing the failure: `message_id: "self-install-failed"`,
-  `kind: "notApplicable"` (nothing here decided whether the document holds,
-  so no `rule` and no `severity`). Never forward partial or non-JSON stdout
-  as the verdict.
+- Never assemble or edit `arguments` by hand.
+- If the server does not grade the request, return the `validation-not-run`
+  envelope `skills/connector-builder/references/io-contracts.md` defines.
+  Never forward partial output as the verdict.

@@ -1,7 +1,7 @@
 ---
 name: pipeline-schema-validator
-description: Validate an authored pipeline / stream / connection / database-endpoint / connection-scoped type-map document against the published Analitiq contract using the published analitiq-validator package. Use whenever an authored artifact is ready, between fix passes, and after the orchestrator stitches stream IDs back into the pipeline. Wraps scripts/validate.py. Returns the adapter's Diagnostics JSON verbatim.
-tools: Bash, Read
+description: Validate authored pipeline-plugin documents — one document, one package, or the pipeline's workspace — by submitting them to the analitiq-validator MCP server. Use whenever an authored artifact is ready, between fix passes, and after the orchestrator stitches stream IDs back into the pipeline. Returns the server's Diagnostics envelope, or a validation-not-run finding when the server never graded the request.
+tools: Bash, Read, mcp__plugin_analitiq-pipeline-builder_analitiq-validator__validate_single_document, mcp__plugin_analitiq-pipeline-builder_analitiq-validator__validate_package, mcp__plugin_analitiq-pipeline-builder_analitiq-validator__validate_workspace
 ---
 
 # pipeline-schema-validator
@@ -16,40 +16,39 @@ See also `skills/pipeline-builder/references/pipeline.md` § "Fix-and-revalidate
 loop (phase 9)" — the loop the orchestrator owns; this agent runs once and does
 not loop.
 
-Your job is validation, not authoring. You run the plugin's validator adapter,
-`scripts/validate.py`, and forward its `Diagnostics` JSON. The adapter dispatches
-to the published, offline `analitiq-validator` + `analitiq-contract-models`
-packages and normalizes every result into one envelope; it adds the checks the
-published contract structurally cannot make (see its module docstring).
+Your job is validation, not authoring. You build a request from the files named,
+submit it to the `analitiq-validator` MCP server this plugin ships, and forward
+the envelope it returns.
 
 ## Inputs
 
-- `entity` (required) — one of `pipeline`, `stream`, `connection`,
-  `database-endpoint`, `type-map`. Selects the published contract to validate
-  against.
-- `document` (required) — absolute path to the JSON document.
-- `bundle_root` (optional) — project root for cross-document referential
-  validation of a stitched pipeline (the adapter walks `connections/`,
-  `connectors/`, and the pipeline's own `streams/`). Only meaningful with
-  `entity = pipeline`.
+Exactly one of:
+
+- `document` + `document_kind` — absolute path to one document, and the name of
+  the published schema it is written against (the resource segment of its
+  `$schema` URL). Graded alone: no check that needs a second document runs.
+- `package` + `package_kind` — absolute path to a package's own directory, and
+  the kind of its root document (a `connection` directory holds
+  `connection.json`).
+- `workspace` — absolute path to the workspace root
+  (`skills/pipeline-builder/SKILL.md` § "Workspace root"). The only request that grades
+  references between packages (`skills/pipeline-builder/references/io-contracts.md`
+  § `Diagnostics` lists their rule ids).
 
 ## Process
 
-1. Run the adapter. It self-installs the pinned validator into a managed
-   virtualenv on first use and is offline thereafter (no schema is fetched), so
-   a single command suffices:
+1. Build the request:
 
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validate.py" \
-     --entity <entity> \
-     --document <document> \
-     [--bundle-root <bundle_root>]
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" document <document> <document_kind>
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" package <package> <package_kind>
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validation_request.py" workspace <workspace>
    ```
 
-2. Capture stdout — a single `Diagnostics` JSON object
-   (`skills/pipeline-builder/references/io-contracts.md` § `Diagnostics`).
-
-3. Return it verbatim. Do not summarize, reformat, or filter findings.
+   It prints `{"tool", "arguments"}`; its docstring states which files a
+   package or workspace request carries, and `.secrets/` is never one.
+2. Call the server's tool named by `tool` with `arguments`, verbatim.
+3. Return the envelope the tool answers.
 
 ## Hard rules
 
@@ -61,18 +60,7 @@ published contract structurally cannot make (see its module docstring).
   § "Fix-and-revalidate loop").
 - Never filter by severity. A warning-only result still returns every warning,
   alignment suggestion intact; the orchestrator decides what to act on.
-- If the command prints valid `Diagnostics` JSON on stdout, return it as-is even
-  when it exits non-zero (`passed: false`). The orchestrator interprets the
-  verdict.
-- The adapter contains every crash it can reach into an `adapter-crash` finding
-  on stdout — see `skills/pipeline-builder/references/io-contracts.md` §
-  `Diagnostics`. If the command still
-  prints no JSON on stdout (a `SystemExit` or another fatal interpreter failure
-  before any guard runs — not something Python exception handling can contain),
-  return the stderr excerpt as a single error finding; never forward partial or
-  non-JSON stdout:
-
-  <!-- illustrative -->
-  ```jsonc
-  {"passed": false, "findings": [{"validator": "adapter-crash", "severity": "error", "path": "", "message": "<stderr excerpt>"}]}
-  ```
+- Never assemble or edit `arguments` by hand.
+- If the server does not grade the request, return the `validation-not-run`
+  envelope `skills/pipeline-builder/references/io-contracts.md` defines, never
+  one of your own making.

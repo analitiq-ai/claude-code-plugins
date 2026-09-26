@@ -58,7 +58,7 @@ pipeline-builder (skill, orchestrator)
 | `private-endpoint-creator` | Database connections only: introspects the live database and authors `database-endpoint` documents per selected table — or derives one, without connecting, for a new destination table the engine will create on first run — plus a connection-scoped type-map gap file (`connections/<slug>/definition/type-map.json`) when the connector's base map doesn't cover a discovered native. |
 | `pipeline-creator` | The `pipeline.json` shell referencing connections by UUID. |
 | `stream-creator` | One `stream.json` per selected endpoint. |
-| `pipeline-schema-validator` | Runs `scripts/validate.py` and returns a `Diagnostics` object. |
+| `pipeline-schema-validator` | Submits a request built by `scripts/validation_request.py` to the validator MCP server and returns its `Diagnostics` envelope. |
 | `pipeline-drift-classifier` | Structural diff against a previous release — informational; does not drive a version bump. |
 
 ## Generated prose — the CI gate

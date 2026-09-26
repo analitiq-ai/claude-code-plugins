@@ -97,11 +97,11 @@ Every authored document must:
 1. Declare `$schema` with the database-endpoint URL from the table below
    (`RULE-SHRD-003`).
 2. Carry every required field from the top-level shape table above.
-   `endpoint_id` is the **derived** handle computed by `scripts/endpoint_id.py`,
+   `endpoint_id` is the **derived** handle `derive_endpoint_identity` returns,
    never a hand-authored slug — see `spec-database-object.md`
    §Derived `endpoint_id`.
 3. Preserve identifier strings verbatim from introspection (`RULE-DBEP-009`).
-4. Pass validation (the `pipeline-schema-validator`, entity `database-endpoint`)
+4. Pass validation (the `pipeline-schema-validator`, document kind `database-endpoint`)
    with zero error findings. The `endpoint_id` must equal the handle the
    contract's derivation produces from the verbatim `database_object`
    (`RULE-DBEP-011`).

@@ -13,7 +13,7 @@ name: Publish analitiq-contract-models
 # full sequence; the short form:
 #   1. One PR bumps every coupled value (this pyproject's `version`, the
 #      validator pyproject's `version` and its `==` dep on this package,
-#      VALIDATOR_PIN, the connector agent's self-install line).
+#      VALIDATOR_PIN).
 #   2. Push a tag matching that version at the PR head:
 #      `contract-models-v1.0.0rc2`. Checkout below resolves the tag, so the
 #      commit need not be on main yet.

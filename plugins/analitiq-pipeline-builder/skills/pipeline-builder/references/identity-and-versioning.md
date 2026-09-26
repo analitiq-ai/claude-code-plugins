@@ -88,7 +88,7 @@ strip a `_v<n>` suffix from a reference the user supplied.
 
 `RULE-PIPE-011`, `RULE-PIPE-012`, `RULE-STRM-032`, `RULE-STRM-033` and
 `RULE-STRM-034` bind these values to the identities in the sibling documents.
-Run the validator with `--bundle-root` so it has those siblings in hand.
+Validate the workspace so the validator has those siblings in hand.
 
 ## Metadata fields
 
@@ -114,7 +114,7 @@ connections/<connection-slug>/definition/endpoints/<endpoint-slug>.json
 ```
 
 The slug is **only** for file organization. Cross-document refs inside the JSON
-use the identities above, never the directory slugs. The bundle checks find
+use the identities above, never the directory slugs. The workspace checks find
 stream files by walking `pipelines/<slug>/streams/` and then compare the values
 inside the documents.
 
