@@ -44,8 +44,8 @@ contract (`analitiq.contracts.endpoints.DatabaseEndpointDoc`).
 API endpoints come from the connector document, not from here. This
 skill is **database-only**. API endpoints in stream `endpoint_ref`s use
 `scope: connector` and point at the connector's `definition/endpoints/`.
-Database endpoints use `scope: connection`; their file location is in the table
-at the foot of this file.
+Database endpoints use `scope: connection`; where the file sits is defined by the
+workspace schema cited at the foot of this file.
 
 ## What this skill covers
 
@@ -107,11 +107,13 @@ Every authored document must:
    (`RULE-DBEP-011`).
 
 <!-- BEGIN GENERATED: schema-urls -->
-| Entity | Authored file | `$schema` value |
-|---|---|---|
-| Pipeline | `pipelines/<slug>/pipeline.json` | `https://schemas.analitiq.ai/pipeline/latest.json` |
-| Stream | `pipelines/<slug>/streams/<stream-slug>.json` | `https://schemas.analitiq.ai/stream/latest.json` |
-| Connection | `connections/<slug>/connection.json` | `https://schemas.analitiq.ai/connection/latest.json` |
-| Database endpoint | `connections/<slug>/definition/endpoints/<endpoint_id>.json` | `https://schemas.analitiq.ai/database-endpoint/latest.json` |
-| Connection type map | `connections/<slug>/definition/type-map.json` | `https://schemas.analitiq.ai/type-map/latest.json` |
+| Entity | `$schema` value |
+|---|---|
+| Pipeline | `https://schemas.analitiq.ai/pipeline/latest.json` |
+| Stream | `https://schemas.analitiq.ai/stream/latest.json` |
+| Connection | `https://schemas.analitiq.ai/connection/latest.json` |
+| Database endpoint | `https://schemas.analitiq.ai/database-endpoint/latest.json` |
+| Connection type map | `https://schemas.analitiq.ai/type-map/latest.json` |
+
+Where each document sits is defined by the workspace schema (`https://schemas.analitiq.ai/workspace/latest.json`), whose package entries point to each package's schema.
 <!-- END GENERATED: schema-urls -->
