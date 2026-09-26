@@ -41,8 +41,9 @@ from .connectors import _ALL_WRITE_FAMILY_PROBES
 # Import the single-document contract model under the shared DOMAIN guard (the
 # model binds the `$schema` host at import; see `contract_model_domain`).
 with contract_model_domain():
-    from pydantic import TypeAdapter
+    from pydantic import TypeAdapter, ValidationError
     from analitiq.contracts.pipelines.config import PipelineInput
+    from analitiq.contracts.stream import ConnectionEndpointRef
     from analitiq.contracts.type_map import TypeResolver
     from analitiq.contracts.pipeline_manifest import PipelineManifest
 
@@ -518,7 +519,11 @@ def _check_connection_type_map_shadow(documents: _Documents) -> list[tuple[str, 
 def _check_connection_scoped_endpoints(documents: _Documents) -> list[tuple[str, dict]]:
     """Every `scope='connection'` endpoint_ref resolves to an endpoint document
     in the package of the connection it names. `scope='connector'` refs resolve
-    from the connector's endpoints: `_check_connector_scoped_endpoints`."""
+    from the connector's endpoints: `_check_connector_scoped_endpoints`.
+
+    The ref is read through its contract model, which derives an omitted
+    `endpoint_id` from `database_object`. A ref the model refuses is the
+    stream model's finding, not this check's."""
     present = {(_base_id(doc.package_id), _content(doc).get("endpoint_id"))
                for doc in documents["database-endpoint"]}
     findings: list[tuple[str, dict]] = []
@@ -526,18 +531,14 @@ def _check_connection_scoped_endpoints(documents: _Documents) -> list[tuple[str,
         for path, ref in _stream_endpoint_refs(_content(doc)):
             if ref.get("scope") != "connection":
                 continue
-            cid, eid = ref.get("connection_id"), ref.get("endpoint_id")
+            cid = ref.get("connection_id")
             if not isinstance(cid, str) or not cid:
                 continue  # a missing connection_id is already flagged by the connection check
-            if not isinstance(eid, str) or not eid:
-                findings.append((doc.key, finding(
-                    rule="RULE-STRM-034",
-                    message_id="endpoint-ref-no-endpoint-id", kind="fail", path=path,
-                    message=(
-                        "connection-scoped endpoint_ref names no endpoint_id; its endpoint "
-                        "cannot be resolved."),
-                )))
-            elif (_base_id(cid), eid) not in present:
+            try:
+                eid = ConnectionEndpointRef.model_validate(ref).endpoint_id
+            except ValidationError:
+                continue
+            if (_base_id(cid), eid) not in present:
                 findings.append((doc.key, finding(
                     rule="RULE-STRM-034",
                     message_id="endpoint-ref-unresolved", kind="fail", path=path,

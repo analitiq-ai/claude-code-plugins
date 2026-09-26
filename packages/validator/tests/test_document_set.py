@@ -1117,11 +1117,32 @@ def test_a_connection_scoped_endpoint_resolves_by_its_endpoint_id(validator):
         ("RULE-STRM-034", f"{_STREAM_KEY}#/destinations/0/endpoint_ref")]
 
 
-def test_a_connection_scoped_endpoint_ref_without_an_endpoint_id_is_unresolvable(validator):
+def test_a_connection_scoped_endpoint_ref_resolves_by_its_derived_endpoint_id(validator):
+    """The contract derives an omitted `endpoint_id` from `database_object`,
+    so the ref resolves exactly as it would with the handle written out."""
     documents = _workspace_documents()
     del documents[_STREAM_KEY]["destinations"][0]["endpoint_ref"]["endpoint_id"]
+    assert validator.validate_workspace(_workspace_request(documents)) == {"passed": True, "findings": []}
+
+
+def test_a_ref_the_stream_model_refuses_is_the_models_finding_alone(validator):
+    """A supplied `endpoint_id` that is not the one derived from
+    `database_object` is refused by the ref's model; the endpoint check does
+    not grade the ref a second time."""
+    documents = _workspace_documents()
+    documents[_STREAM_KEY]["destinations"][0]["endpoint_ref"]["endpoint_id"] = "public__orders__00000000"
     result = validator.validate_workspace(_workspace_request(documents))
-    assert _ruled_at(result, "endpoint-ref-no-endpoint-id") == [
+    assert [f["rule"] for f in result["findings"] if f["message_id"] == "endpoint-id-not-derived"] == ["RULE-STRM-003"]
+    assert not [f for f in result["findings"]
+                if f.get("rule") == "RULE-STRM-034" or f["message_id"] == "check-crashed"]
+
+
+def test_a_ref_omitting_endpoint_id_still_needs_its_endpoint_document(validator):
+    documents = _workspace_documents()
+    del documents[_STREAM_KEY]["destinations"][0]["endpoint_ref"]["endpoint_id"]
+    del documents[f"connections/{_DST}/definition/endpoints/{_EID}.json"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "endpoint-ref-unresolved") == [
         ("RULE-STRM-034", f"{_STREAM_KEY}#/destinations/0/endpoint_ref")]
 
 
