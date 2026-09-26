@@ -20,10 +20,12 @@ rules for every document" — where `RULE-CTOR-045` resolves.
   directory name (also used as the connection's `connector_id`).
 - `target_dir` (required) — absolute path of the connector's package
   directory.
-- `package_schema` (required) — the connector-package schema. Its `required`
-  entry is the root document's path within the package; the
-  `patternProperties` key whose `$ref` is the api-endpoint schema is where
-  endpoint documents sit.
+- `package_schema` (required) — the connector-package schema. Endpoint
+  documents sit at the location whose `$ref` is the api-endpoint schema.
+
+<!-- BEGIN GENERATED: package-location-lookup -->
+In a package or workspace schema, each `patternProperties` key is a location: a pattern matched against a path from that package's own directory, or from the workspace root. Its `$ref` is the schema of the document or package that sits there. A package's root document is its schema's `required` entry, and a location marked `x-secret` holds secret values.
+<!-- END GENERATED: package-location-lookup -->
 
 ## Process
 

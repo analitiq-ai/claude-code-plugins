@@ -76,8 +76,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # put the in-repo trees on the path rather than relying on an installed wheel.
 sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
 sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 # `analitiq.contracts.shared.common` reads os.environ["DOMAIN"] at import.
 os.environ.setdefault("DOMAIN", "analitiq.ai")
+
+import package_location_docs  # noqa: E402 — needs the scripts directory on the path
 
 PLUGINS_ROOT = REPO_ROOT / "plugins"
 CONTRIBUTING_ROOT = REPO_ROOT / "contributing"
@@ -1401,13 +1404,16 @@ _DEDICATED_RENDERERS: dict[str, Callable[[], str]] = {
 _CLAIM_RENDERERS: dict[str, Callable[[], str]] = {
     f"claim:{c.id}": (lambda cid=c.id: _render_claim(cid)) for c in CLAIMS
 }
+_REGISTRIES: tuple[dict[str, Callable[[], str]], ...] = (
+    _DEDICATED_RENDERERS, _CLAIM_RENDERERS, _release_table().RENDERERS,
+    package_location_docs.RENDERERS,
+)
 RENDERERS: dict[str, Callable[[], str]] = {
-    **_DEDICATED_RENDERERS, **_CLAIM_RENDERERS, **_release_table().RENDERERS,
+    block_id: renderer for registry in _REGISTRIES for block_id, renderer in registry.items()
 }
 # A colliding id would let one registry silently shadow another's renderer —
 # and worse, `block_probe_ids` would then report the shadowed block probeless.
-if len(RENDERERS) != len(_DEDICATED_RENDERERS) + len(_CLAIM_RENDERERS) + len(
-        _release_table().RENDERERS):
+if len(RENDERERS) != sum(map(len, _REGISTRIES)):
     raise RuntimeError("block-id collision between renderer registries")
 
 
@@ -1415,6 +1421,8 @@ def block_probe_ids(block_id: str) -> set[str]:
     """The probe ids one block stands on."""
     if block_id in _release_table().RENDERERS:
         return set()  # data-backed, not probe-backed — see `_release_table`
+    if block_id in package_location_docs.RENDERERS:
+        return set()  # contract-backed: rendered from the package schemas
     if block_id == "native-normalization":
         # Contract-backed: the rows are what `normalize_native_type` returns,
         # so the function is the pin. No validator behavior is asserted.
