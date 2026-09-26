@@ -209,52 +209,16 @@ jobs:
       - name: Check the vendored consumption manifest against the published object
         run: python3 scripts/check_contract_consumption_pin.py
 
-  pinned-validator-guard:
-    # Everything in the pytest job grades the IN-REPO contract source; the
-    # plugins' runtime validator is the PUBLISHED wheel behind VALIDATOR_PIN,
-    # released on a different train. This is the only gate that exercises that
-    # wheel: install it into an isolated venv (never the job env — a wheel
-    # shadows the namespace source) and check it accepts the canonical
-    # dialect+driver values the connector-builder prose teaches. The failure
-    # mode it catches: prose teaching a driver the pinned wheel rejects, which
-    # no in-repo test can see. Strict on push — the marketplace's plugin
-    # sources are unpinned relative paths, so users install main HEAD and a
-    # contradiction on main is live exposure; a release window (pin !=
-    # shipped) therefore shows as a red main until the pin catch-up lands, by
-    # design — and on release-please branches, where merging stamps a plugin
-    # version onto the contradiction. Ordinary PRs inside a window only warn
-    # (annotated on the checks UI), so a contract-widening PR is not red with
-    # no way to unblock itself. The script owns the full semantics;
-    # stdlib-only, so no dependency install step.
-    # Live-settings caveat: nothing REQUIRES this check before merge unless a
-    # ruleset on main says so, and runs on bot-opened Release PRs start
-    # action_required until a human approves them — same settings-page class
-    # as the pypi/schemas environments.
-    name: pinned validator accepts canonical drivers
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-      - name: Check the published pin against the prose canon
-        env:
-          VALIDATOR_PIN_GUARD_STRICT: ${{ (github.event_name == 'push' || startsWith(github.head_ref, 'release-please--')) && '1' || '' }}
-        run: python3 scripts/check_validator_pin_contract.py
-
   contracts-version-guard:
     # `schemas/contracts-version.json` stamps the committed tree's
     # provenance: the analitiq-contract-models version it was released from
     # plus a digest of the tree, so the stamp moves with every schema release
     # (the only writer). This job is the network half: the PUBLISHED
     # copy at schemas.analitiq.ai must be byte-identical to the committed
-    # stamp, and VALIDATOR_PIN must agree with it — a silently failed
-    # schemas publish or a lagging pin surfaces here instead of at a
-    # consumer. The script owns the full verdict semantics, windows, and
-    # remediation; stdlib-only, so no dependency install step. The
-    # strictness expression is identical to pinned-validator-guard's above,
-    # and `tests/schemas/test_contracts_version_guard.py` pins them equal.
-    name: published contracts-version matches the repo's pins
+    # stamp — a silently failed schemas publish surfaces here instead of at
+    # a consumer. The script owns the full verdict semantics, windows, and
+    # remediation; stdlib-only, so no dependency install step.
+    name: published contracts-version matches the committed stamp
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

@@ -23,9 +23,6 @@ import re
 import sys
 import urllib.error
 import urllib.request
-from pathlib import Path
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: The serving host — a guard-side copy of the contract-owned
 #: `analitiq.contracts.shared.common.SCHEMA_BASE_URL` (the guards cannot
@@ -33,13 +30,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 #: nothing). The one copy, pinned to its owner by
 #: `tests/schemas/test_contracts_version_render.py`.
 BASE_URL = "https://schemas.analitiq.ai"
-
-#: Where `VALIDATOR_PIN` is stated — the one place (root CLAUDE.md, "The
-#: contract, and the runtime pin").
-PIN_SOURCE = (
-    REPO_ROOT / "plugins" / "analitiq-pipeline-builder" / "scripts" / "_bootstrap.py"
-)
-
 
 class GuardError(RuntimeError):
     """Infrastructure failure — the guard could not run to a verdict.
@@ -82,24 +72,6 @@ def fetch(url: str) -> bytes:
         OSError,
     ) as exc:
         raise GuardError(f"fetch failed for {url}: {exc}") from exc
-
-
-def read_pin(pin_source: Path = PIN_SOURCE) -> str:
-    """The full `analitiq-validator==X` requirement from `_bootstrap.py`."""
-    try:
-        source = pin_source.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise GuardError(f"cannot read {pin_source}: {exc}") from exc
-    match = re.search(
-        r'^VALIDATOR_PIN = "(analitiq-validator==[^"]+)"$', source, re.MULTILINE
-    )
-    if not match:
-        raise GuardError(f"VALIDATOR_PIN not found in {pin_source}")
-    return match.group(1)
-
-
-def read_pin_version(pin_source: Path = PIN_SOURCE) -> str:
-    return read_pin(pin_source).split("==", 1)[1]
 
 
 def read_strict_env(env_var: str) -> bool:

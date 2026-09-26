@@ -41,9 +41,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Same bootstrap as render_rule_reference.py and render_validator_claims.py:
 # this repo is the contract's source, so put the in-repo trees on the path
 # rather than reaching for an installed wheel, so this plugin's rendered enums
-# and its rendered rules come from one contract version. Bootstrapping the
-# published pin instead would render them from two whenever the pin lags the
-# repo.
+# and its rendered rules come from one contract version. An installed release
+# would render them from two whenever it lags the repo.
 sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
 sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))

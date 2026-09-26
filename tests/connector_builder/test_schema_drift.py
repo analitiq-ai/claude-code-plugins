@@ -19,8 +19,7 @@ to the exact contract the plugin enforces at authoring time, not a
 separately-hosted copy that can drift, 403, or 404.
 
 The suite exercises the in-repo source (whose version
-`tests/connector_builder/_pins.py` mirrors); the published pin
-(`VALIDATOR_PIN`) trails that version during a release window. When the package isn't importable the whole
+`tests/connector_builder/_pins.py` mirrors). When the package isn't importable the whole
 module is skipped (offline-dev convenience) — except in CI, which sets
 `DRIFT_REQUIRE_CONTRACT_MODELS=1` so a missing or broken package is a hard
 failure there, never a green all-skipped gate. Run `-rs` to print skip reasons.
@@ -44,8 +43,8 @@ from _pins import REPO_ROOT, assert_pinned_versions, require_contract_models  # 
 
 require_contract_models("analitiq.contracts")
 
-from pydantic import TypeAdapter  # noqa: E402  (imports gated by the guard above)
-from analitiq.contracts.connector import Connector  # noqa: E402
+from pydantic import TypeAdapter, ValidationError  # noqa: E402  (imports gated by the guard above)
+from analitiq.contracts.connector import Connector, SqlAlchemyTransport  # noqa: E402
 from analitiq.contracts.endpoints import WRITE_MODES, ApiEndpointDoc  # noqa: E402
 from analitiq.contracts.shared.common import SLUG_PATTERN  # noqa: E402
 
@@ -563,9 +562,7 @@ def test_sqlalchemy_driver_pattern_matches_schema(connector_schema: dict) -> Non
         "update the driver guidance (spec-driver-selection.md, "
         "spec-dsn-bindings.md, db-connector-creator.md, io-contracts.md, and "
         "the `redshift+redshift_connector` carve-out in enum-mappers.md "
-        "§TransportTypeMapper), the canon extraction in "
-        "scripts/check_validator_pin_contract.py, and "
-        "EXPECTED_SQLALCHEMY_DRIVER_PATTERN together."
+        "§TransportTypeMapper) and EXPECTED_SQLALCHEMY_DRIVER_PATTERN together."
     )
     if pattern is None:
         pytest.fail(
@@ -576,6 +573,39 @@ def test_sqlalchemy_driver_pattern_matches_schema(connector_schema: dict) -> Non
         f"SqlAlchemyTransport.driver pattern drift — {fix} "
         f"schema={pattern!r} expected={EXPECTED_SQLALCHEMY_DRIVER_PATTERN!r}"
     )
+
+
+_DSN_BINDINGS = PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-dsn-bindings.md"
+
+
+def _driver_examples() -> list[str]:
+    """The first-column driver of every body row under `## Driver examples`."""
+    section = re.search(
+        r"^## Driver examples$(.*?)(?=^## |\Z)",
+        _DSN_BINDINGS.read_text(encoding="utf-8"),
+        re.MULTILINE | re.DOTALL,
+    )
+    assert section, f"no `## Driver examples` section in {_DSN_BINDINGS}"
+    rows = [line for line in section.group(1).splitlines() if line.lstrip().startswith("|")]
+    drivers = []
+    for row in rows[2:]:
+        cell = re.fullmatch(r"`([^`]+)`", row.split("|")[1].strip())
+        assert cell, f"a Driver examples row whose first cell is not one backticked driver: {row!r}"
+        drivers.append(cell.group(1))
+    assert drivers, f"the Driver examples table in {_DSN_BINDINGS} has no body rows"
+    return drivers
+
+
+def test_every_driver_example_is_accepted_by_the_contract() -> None:
+    def rejected(driver: str) -> bool:
+        try:
+            SqlAlchemyTransport.model_validate({"transport_type": "sqlalchemy", "driver": driver})
+        except ValidationError:
+            return True
+        return False
+
+    assert [d for d in _driver_examples() if rejected(d)] == [], (
+        f"{_DSN_BINDINGS.name} teaches a driver SqlAlchemyTransport rejects")
 
 
 def test_dsn_encodings_match_schema(connector_schema: dict) -> None:

@@ -3,9 +3,8 @@
 The guard's network half runs only in CI (`engine-grammar-pin-guard` job), so
 its direction logic — newer publish = notice, pin-ahead = failure, malformed
 anything = GuardError — would otherwise only ever execute against live healthy
-data, where an inverted comparison is a permanent false green. Same charter as
-test_validator_pin_guard.py: every verdict branch offline, with the fetch
-monkeypatched out. The offline hash check itself is pinned by
+data, where an inverted comparison is a permanent false green. So every verdict
+branch runs here offline, with the fetch monkeypatched out. The offline hash check itself is pinned by
 packages/contract-models/tests/unit/test_arrow_grammar.py.
 """
 from __future__ import annotations

@@ -1,10 +1,9 @@
-"""Shared dependency bootstrap for the plugin's Python helpers.
+"""Dependency bootstrap no plugin helper imports.
 
-No plugin helper imports this module; the pin guards read `VALIDATOR_PIN` from
-it. It guarantees the published `analitiq-validator` (which pulls
-`analitiq-contract-models`) is importable: if the current interpreter lacks the
-pinned version it installs it into a managed virtualenv and re-execs the calling
-script under it. A venv sidesteps PEP-668 externally-managed interpreters; pip
+If imported, it installs the pinned published `analitiq-validator` (which pulls
+`analitiq-contract-models`) into a managed virtualenv when the current
+interpreter lacks it, and re-execs the caller under it. No code outside this
+module reads `VALIDATOR_PIN`. A venv sidesteps PEP-668 externally-managed interpreters; pip
 output is routed to stderr so a caller's stdout stays clean.
 """
 from __future__ import annotations
@@ -14,10 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Single source of the validator pin — a PUBLISHED release. Nothing else may
-# restate this version; tests/pipeline_builder/test_contract_enforcement.py
-# holds it at or behind packages/validator/pyproject.toml.
-# requirements-dev.txt deliberately does NOT carry it — installing the wheel
+# A PUBLISHED release. requirements-dev.txt deliberately does NOT carry it — installing the wheel
 # would shadow the in-repo source.
 VALIDATOR_PIN = "analitiq-validator==1.0.0rc28"
 

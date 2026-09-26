@@ -11,7 +11,7 @@ READMEs. These are distribution artifacts: agents execute them verbatim, so a
 wrong sentence ships wrong authoring behavior to every user. The *why* is the
 root `CLAUDE.md` → "Single source of truth (drift policy)"; the general
 invariant is `no-drift-surfaces.md`. The failure class this rule prevents:
-prose restating validator behavior, falsified by a `VALIDATOR_PIN` bump.
+prose restating validator behavior, falsified by a validator release.
 
 It governs a rule record's `statement` by the same route:
 `render_rule_reference.py` copies that sentence verbatim into the plugin
@@ -29,7 +29,7 @@ in a generated block no one may hand-edit.
   does NOT check** — engine/CDK behavior, version-coupled claims ("planned, not
   registered", "older releases…"). Negative and version-coupled claims are the
   most rot-prone facts, not exemptions from being facts.
-- The discriminator: a sentence a contract release, a `VALIDATOR_PIN` bump or an
+- The discriminator: a sentence a contract release, a validator release or an
   engine release could falsify with nobody editing it is a fact, and never
   enters prose by hand.
 
@@ -124,8 +124,9 @@ sentence takes a census disposition instead — `contract-prose.md`.
   validator, with a glob-coverage guard, making it a *pinned* copy rather than a
   drift surface. Pinned only as strongly as the validator is strict, though: an
   example inherits every validator blind spot (rung 2 tightens all examples for
-  free); the gate grades in-repo source while users run the published pin, so a
-  new-shape example lands with the prose no earlier than `VALIDATOR_PIN` moves;
+  free); the gate grades in-repo source while users are graded by the release
+  the backend serves, so a new-shape example lands with the prose no earlier
+  than the backend serves a validator release that accepts it;
   and validity never proves the example still shows the recommended shape — that
   residue is review-owned craft.
 - An example that is the *output of code* (derived ids, rendered DSNs) is

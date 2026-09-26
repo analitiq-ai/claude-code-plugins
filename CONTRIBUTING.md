@@ -3,7 +3,7 @@
 Read first, in this order:
 
 - **`README.md`** — what this repo is, install, layout, and the development loop.
-- **`CLAUDE.md`** — the drift policy, the runtime validator pin, the PR review
+- **`CLAUDE.md`** — the drift policy, who runs the validator, the PR review
   loop, and the release model. It is the authority on all of those; nothing here
   restates them.
 - **`contributing/<plugin-name>.md`** — the authoring rules for the plugin you
