@@ -5,24 +5,23 @@ name: Publish analitiq-validator
 #
 # packages/validator/scripts/build.py stages packages/validator/src verbatim as
 # the public `analitiq.validator` package, which depends on
-# `analitiq-contract-models` by exact version from PyPI. Consumers (the
-# connector-builder plugin, the registry CI) `pip install analitiq-validator`
-# and run the `analitiq-validate` console script.
+# `analitiq-contract-models` by exact version from PyPI. Consumers (the engine,
+# the backend the plugins submit to, the registry CI) `pip install
+# analitiq-validator`.
 #
 # Runbook — the tag is pushed at the PR head, BEFORE the merge, so main is only
 # ever updated to a version already on PyPI. Root CLAUDE.md "Releases" owns the
 # full sequence; the short form:
 #   1. One PR bumps every coupled value (this pyproject's `version`, the
-#      contract-models `==` dep, VALIDATOR_PIN). `pinned-validator-guard` is
-#      red until step 3.
+#      contract-models `==` dep).
 #   2. Push a tag matching that version at the PR head: `validator-v1.0.0rc2`.
 #      Checkout below resolves the tag, so the commit need not be on main yet.
 #   3. This workflow asserts tag == pyproject version, runs the validator's own
 #      test suite, builds sdist+wheel from the staged package, installs that
 #      wheel beside a contract-models wheel built from the same commit and
 #      grades every shipped rule case against it, and publishes.
-#   4. Re-run `pinned-validator-guard` (now green), then merge with a MERGE
-#      COMMIT — squashing would orphan the commit this tag points at.
+#   4. Merge with a MERGE COMMIT — squashing would orphan the commit this tag
+#      points at.
 #
 # PyPI versions are immutable (single-use): iterate with pre-release suffixes
 # (rc1, rc2, ...) and cut the final X.Y.Z once.

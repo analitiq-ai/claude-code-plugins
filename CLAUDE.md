@@ -30,9 +30,8 @@ hand-edit a file under `schemas/`. The release also re-renders the
 versionless documents, and only the release writes them: `arrow-types.json`
 (from the vendored engine grammar) and `contracts-version.json`, the provenance stamp recording which
 `analitiq-contract-models` version the tree was released from plus a digest of
-it — the `contracts-version-guard` CI job holds the published copy, and
-`VALIDATOR_PIN`, to that stamp (`scripts/check_contracts_version_pin.py` owns
-what the stamp witnesses).
+it — the `contracts-version-guard` CI job holds the published copy to that
+stamp (`scripts/check_contracts_version_pin.py` owns what the stamp witnesses).
 
 The hand-authored exceptions, outside the registry and never inspected by
 `check`: `data-sync-api/openapi.json` (no version triple) and
@@ -73,7 +72,7 @@ instructs nobody. Each plugin's contributor guide — its agents, skills and
 authoring rules — is `contributing/<plugin-name>.md`; read the one for the plugin
 you are working inside. This file covers only what spans both.
 
-## The contract, and the runtime pin
+## The contract, and who runs it
 
 This repo is the **source** of `analitiq-contract-models` and
 `analitiq-validator` (`packages/*/src`). The version of record is each package's
@@ -89,21 +88,12 @@ puts both source trees on the path and sets `ANALITIQ_VALIDATOR_FROM_SOURCE=1` s
 helper run from a checkout does not bootstrap a venv and `os.execv` out of pytest.
 `requirements-dev.txt` carries only the packages' runtime deps.
 
-The plugins **install nothing**: they submit documents to the `analitiq-validator`
-MCP server each plugin ships in its `.mcp.json`, which runs a published release.
-**`VALIDATOR_PIN` in `plugins/analitiq-pipeline-builder/scripts/_bootstrap.py` is
-the only place a published validator version is stated**, read by the pin guards
-alone; no plugin helper imports that module. Never restate it.
-
-The pin must be **at or behind** `packages/validator/pyproject.toml`. Equal is the
-steady state; behind is tolerated for merging because the publish is a hand-pushed
-tag firing before the version bump merges — the `contracts-version-guard` job reds
-its strict runs while the pin lags, as the reminder to finish the release. A pin
-**ahead** of what this repo ships names a release that does not exist.
-`PINNED_VERSION` in `tests/connector_builder/_pins.py` is a *different* value — what
-this repo ships, not what `VALIDATOR_PIN` names — so it runs ahead during a release
-window. `scripts/check_validator_pin_contract.py` (CI job `pinned-validator-guard`)
-guards the pin from the other side; its docstring owns the full semantics.
+The plugins **install nothing and pin nothing**: they submit documents to the
+`analitiq-validator` MCP server each plugin ships in its `.mcp.json`, and the
+backend behind it runs a published release. The backend deploys a validator
+release before main renders plugin prose that teaches its contract, so the suite
+grading prose against the in-repo source grades the release users will meet.
+`PINNED_VERSION` in `tests/connector_builder/_pins.py` states what this repo ships.
 
 ## The stores of record
 

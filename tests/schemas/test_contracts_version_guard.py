@@ -1,8 +1,8 @@
 """Pin the wiring and verdict semantics of `scripts/check_contracts_version_pin.py`.
 
 The guard's network half runs only in CI (`contracts-version-guard` job), so
-its verdict logic — published-vs-committed byte equality, the pin comparison,
-strict-vs-warn windows, missing-object handling, its probe corroboration and
+its verdict logic — published-vs-committed byte equality, the stamp-vs-package
+comparison, strict-vs-warn windows, missing-object handling, its probe corroboration and
 the strict-mode retry loop — would otherwise only ever execute against live
 healthy data, where an inverted comparison is a permanent false green. Same
 charter as `test_engine_grammar_guard.py` next door: every verdict branch
@@ -25,7 +25,6 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = REPO_ROOT / "scripts" / "check_contracts_version_pin.py"
-_SIBLING = REPO_ROOT / "scripts" / "check_validator_pin_contract.py"
 _WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 _PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "schemas-publish.yml"
 
@@ -114,44 +113,10 @@ def _stub_fetch(guard, monkeypatch, stamp, probe=b"{}") -> list:
     return calls
 
 
-def _pin_matching_stamp(guard, monkeypatch, tmp_path) -> None:
-    """Point PIN_SOURCE at a pin equal to the committed stamp.
-
-    The real `_bootstrap.py` pin legitimately lags the stamp on a
-    package-release PR (root CLAUDE.md, "The contract, and the runtime pin"),
-    and the offline suite must stay green through that window — so tests
-    asserting the all-equal verdict must not read the real pin.
-    """
-    stamped = tmp_path / "_bootstrap.py"
-    stamped.write_text(
-        f'VALIDATOR_PIN = "analitiq-validator=={guard.read_committed_stamp()}"\n'
-    )
-    monkeypatch.setattr(guard, "PIN_SOURCE", stamped)
-
-
-# --- the readers, against the real working tree ---------------------------
-
-
-def test_reads_the_pin_from_its_single_source(guard):
-    # `_bootstrap.py` owns the pin; the guard references it by regex. If that
-    # file is refactored so the regex misses, this fails here instead of the
-    # guard erroring in CI.
-    assert guard.read_pin_version() != ""
-
-
-def test_pin_reader_agrees_with_the_validator_guard(guard):
-    # Both guards read the pin through `_guard_lib.read_pin_version`; this
-    # catches either one re-growing a local reader that diverges from the
-    # shared one.
-    sibling = _load(_SIBLING)
-    assert guard.read_pin_version() == sibling.read_pin_version()
-
-
 # --- verdicts, fetch stubbed ----------------------------------------------
 
 
-def test_healthy_publication_passes(guard, monkeypatch, tmp_path, capsys):
-    _pin_matching_stamp(guard, monkeypatch, tmp_path)
+def test_healthy_publication_passes(guard, monkeypatch, capsys):
     calls = _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
     assert guard.main() == 0
     assert "OK: published stamp == committed stamp" in capsys.readouterr().out
@@ -180,9 +145,7 @@ def test_published_mismatch_fails_strict(guard, monkeypatch, capsys):
     assert len(calls) > 1
 
 
-def test_strict_retry_recovers_once_the_pointer_catches_up(
-    guard, monkeypatch, tmp_path, capsys
-):
+def test_strict_retry_recovers_once_the_pointer_catches_up(guard, monkeypatch, capsys):
     # The state the loop exists for: the publish already landed, the CDN
     # just hadn't caught up yet when the first sample was taken. The match
     # sits BEFORE a still-diverging response, never consumed, so this proves
@@ -190,7 +153,6 @@ def test_strict_retry_recovers_once_the_pointer_catches_up(
     # fixed number of laps — a fixed-count bug would consume the trailing
     # diverging response too and fail the `calls` / exit-code assertions
     # below instead of stopping at two.
-    _pin_matching_stamp(guard, monkeypatch, tmp_path)
     monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
     responses = iter(
         [_fact(guard, "0.0.0"), guard.COMMITTED_PATH.read_bytes(), _fact(guard, "0.0.0")]
@@ -298,32 +260,6 @@ def test_missing_probe_is_a_guard_error_not_a_missing_stamp(
     assert "GUARD ERROR" in capsys.readouterr().err
 
 
-def test_pin_lag_fails_strict(guard, monkeypatch, tmp_path, capsys):
-    monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
-    stale_pin = tmp_path / "_bootstrap.py"
-    stale_pin.write_text('VALIDATOR_PIN = "analitiq-validator==0.0.1"\n')
-    monkeypatch.setattr(guard, "PIN_SOURCE", stale_pin)
-    calls = _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
-    assert guard.main() == 1
-    err = capsys.readouterr().err
-    # The strict arm cites the tolerance it deliberately tightens.
-    assert "VALIDATOR_PIN" in err and "CLAUDE.md" in err
-    # The pin catch-up divergence is graded only after the published bytes
-    # already match — not a network race, so it must fail on the first
-    # sample rather than entering the retry loop.
-    assert len(calls) == 1
-
-
-def test_pin_lag_warns_on_ordinary_prs(guard, monkeypatch, tmp_path, capsys):
-    stale_pin = tmp_path / "_bootstrap.py"
-    stale_pin.write_text('VALIDATOR_PIN = "analitiq-validator==0.0.1"\n')
-    monkeypatch.setattr(guard, "PIN_SOURCE", stale_pin)
-    _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
-    assert guard.main() == 0
-    out = capsys.readouterr().out
-    assert "WINDOW:" in out and "VALIDATOR_PIN" in out and "CLAUDE.md" not in out
-
-
 def test_warning_is_annotated_on_actions(guard, monkeypatch, tmp_path, capsys):
     summary = tmp_path / "summary.md"
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
@@ -408,7 +344,6 @@ def _pyproject_ahead_of_the_stamp(guard, monkeypatch, tmp_path) -> None:
     ahead = tmp_path / "pyproject.toml"
     ahead.write_text('[project]\nversion = "999.0.0"\n')
     monkeypatch.setattr(guard, "PYPROJECT_PATH", ahead)
-    _pin_matching_stamp(guard, monkeypatch, tmp_path)
     _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
 
 
@@ -477,23 +412,6 @@ def test_ci_job_runs_the_guard_with_the_strictness_key():
     )
     assert "github.event_name == 'push'" in strict_line
     assert "release-please--" in strict_line
-
-
-def test_strictness_expression_is_identical_to_the_validator_guards():
-    # The job comment promises the strict window matches
-    # pinned-validator-guard's; without this pin, editing either expression
-    # leaves the other — and the promise — behind silently.
-    workflow = _WORKFLOW.read_text()
-
-    def expression(env_key: str) -> str:
-        line = next(  # skipcq: PTC-W0063
-            l for l in workflow.splitlines() if f"{env_key}:" in l
-        )
-        return line.split(f"{env_key}:", 1)[1].strip()
-
-    assert expression("CONTRACTS_VERSION_GUARD_STRICT") == expression(
-        "VALIDATOR_PIN_GUARD_STRICT"
-    )
 
 
 def test_retry_budget_covers_the_publish_ttl(guard):

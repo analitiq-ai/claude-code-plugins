@@ -1,9 +1,9 @@
 """Pin the contract behaviour the orchestrator depends on.
 
-The validator pin is the plugin's contract with the outside world, and a bump
+The validator is the plugin's contract with the outside world, and a release
 changes what is rejected AND where the rejection is reported. Both matter:
 
-  * WHAT — rc10 closed several vocabularies that rc6 left open. If a later pin
+  * WHAT — rc10 closed several vocabularies that rc6 left open. If a later release
     reopened one, the plugin would silently start authoring documents the engine
     cannot run, and no other test would notice.
   * WHERE — the orchestrator's fix-and-revalidate loop routes a finding back to a
@@ -17,15 +17,12 @@ contract.
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 
 import pytest
-from packaging.version import Version
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ROOT = REPO_ROOT / "plugins" / "analitiq-pipeline-builder"
 from _validate import validate_as  # noqa: E402  (pytest puts this dir on sys.path)
 
 pytest.importorskip("analitiq.validator",
@@ -188,31 +185,6 @@ def test_active_pipeline_requires_a_stream(tmp_path):
                for f in diagnostics["findings"])
 
 
-
-
-# --- the pin itself --------------------------------------------------------
-
-def test_validator_pin_matches_the_package_this_repo_ships():
-    """The pin must be a version this repo has actually published, so it may
-    lag the source tree but never run ahead of it."""
-    sys.path.insert(0, str(ROOT / "scripts"))
-    from _bootstrap import VALIDATOR_PIN
-
-    pyproject = (REPO_ROOT / "packages" / "validator" / "pyproject.toml").read_text()
-    # Anchor to [project]; a bare `^version =` would take whichever table came
-    # first if one were ever added above it.
-    project = pyproject.split("[project]", 1)[-1].split("\n[", 1)[0]
-    shipped = re.search(r'^version\s*=\s*"([^"]+)"', project, re.M)
-    assert shipped, "packages/validator/pyproject.toml has no [project] version"
-
-    assert VALIDATOR_PIN.startswith("analitiq-validator=="), VALIDATOR_PIN
-    pin_version = VALIDATOR_PIN.split("==", 1)[1]
-
-    # `<=`, not `==`: behind is tolerated while a release is in flight, because
-    # the publish tag fires before the version bump merges.
-    assert Version(pin_version) <= Version(shipped.group(1)), (
-        f"_bootstrap.VALIDATOR_PIN is {VALIDATOR_PIN!r}, ahead of the "
-        f"{shipped.group(1)} this repo ships.")
 
 
 def test_suite_exercises_in_repo_source_not_an_installed_wheel():
