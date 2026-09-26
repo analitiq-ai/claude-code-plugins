@@ -282,8 +282,8 @@ def _workspace_documents() -> dict:
 # ---------------------------------------------------------------------------
 
 def test_a_valid_connector_passes_alone(validator):
-    """A connector is graded by its own kind's rules: nothing asks for siblings
-    a single document cannot carry."""
+    """A connector is graded by its own kind's rules: nothing asks for the
+    other documents a single-document request cannot carry."""
     document = json.loads((CORPUS / "valid_connector.json").read_text())
     result = validator.validate_single_document(_document_request(document, "connector"))
     assert result == {"passed": True, "findings": []}
@@ -315,7 +315,6 @@ def test_a_malformed_endpoint_gets_findings_about_its_defects(validator):
     result = validator.validate_single_document(_document_request(document, "api-endpoint"))
     assert result["passed"] is False
     assert any("operations" in f["path"] or "operations" in f["message"] for f in result["findings"]), result
-    assert "unrecognized-document" not in _ids(result)
 
 
 def test_a_type_map_is_held_to_the_write_vocabulary_alone(validator):

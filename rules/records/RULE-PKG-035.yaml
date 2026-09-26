@@ -5,7 +5,7 @@ statement: >
 tier: reference
 severity: error
 artifact_kinds: [connector-package]
-validator: "analitiq.validator.connectors::check_coverage"
+validator: "analitiq.validator.connectors::_check_connector_endpoints"
 owners: [connector-plugin, engine]
 rationale: >
   `connector.json`'s `kind` says the connector is an API, and the engine reads

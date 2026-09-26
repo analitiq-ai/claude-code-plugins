@@ -2,13 +2,8 @@
 
 A rule enforced by a check in this package can carry cases under
 ``cases/<RULE-ID>/valid/<case-name>/`` and ``cases/<RULE-ID>/invalid/<case-name>/``.
-The entry file at the case root decides how the case is validated, and a case
-root holds exactly one:
-
-- ``connector.json`` — a connector package, validated at its path so its
-  sibling type map and ``endpoints/*.json`` are read beside it;
-- ``bundle.json`` — a pipeline bundle, validated as the CLI validates one,
-  and the only file its case root holds: a bundle carries its documents inline.
+A case root holds one file, ``bundle.json``: a pipeline bundle, carrying its
+documents inline, graded by ``validate_pipeline_bundle``.
 
 :func:`rule_cases` loads the corpus and :func:`case_mismatch` grades one case
 against the installed validator, so a consumer checks the validator it pins
@@ -21,14 +16,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ._core import finding_costs_a_pass, validate_document
+from analitiq.contracts.shared.corpus import corpus_items
+from analitiq.contracts.shared.rules import rule_by_id
+
+from ._core import finding_costs_a_pass
+from .pipelines import validate_pipeline_bundle
 
 if TYPE_CHECKING:  # the corpus layout, shared with the fixture corpus that ships
     from analitiq.contracts.shared.corpus import Verdict  # in analitiq-contract-models
 
 CASES_DIR = Path(__file__).with_name("cases")
 
-_CONNECTOR_ENTRY = "connector.json"
 _BUNDLE_ENTRY = "bundle.json"
 
 
@@ -48,30 +46,20 @@ def rule_cases() -> tuple[RuleCase, ...]:
 
     Raises ``ValueError`` for a corpus that cannot be graded as laid out: a
     directory for an id no record defines or for a rule no check in
-    ``analitiq.validator`` enforces, a group other than a verdict, a case
-    root without exactly one entry file, or a bundle case root holding any
-    other file.
+    ``analitiq.validator`` enforces, a group other than a verdict, or a case
+    root holding anything but its ``bundle.json``.
     """
-    # Imported here for the reason `_core` gives: a module-level import of
-    # anything under `analitiq.contracts` would raise before the kinds'
-    # missing-dependency guard.
-    from analitiq.contracts.shared.corpus import corpus_items
-
     cases: list[RuleCase] = []
     for rule_id, verdict, _, root in corpus_items(CASES_DIR, _require_validator_check):
-        if _entry_file(root).name == _BUNDLE_ENTRY:
-            _require_bundle_alone(root)
+        _require_bundle_alone(root)
         cases.append(RuleCase(rule_id=rule_id, verdict=verdict, name=root.name, root=root))
     return tuple(cases)
 
 
 def case_findings(case: RuleCase) -> list[dict]:
     """The findings the validator reports for the case's documents."""
-    entry = _entry_file(case.root)
-    document = json.loads(entry.read_text(encoding="utf-8"))
-    if entry.name == _CONNECTOR_ENTRY:
-        return validate_document(document, doc_path=entry)
-    return validate_document(document)
+    bundle = json.loads((case.root / _BUNDLE_ENTRY).read_text(encoding="utf-8"))
+    return validate_pipeline_bundle(bundle)
 
 
 def case_mismatch(case: RuleCase) -> str | None:
@@ -100,8 +88,6 @@ def _require_validator_check(rule_id: str) -> None:
     """Refuse a rule id the case corpus has no business carrying: the corpus
     grades checks in this package, so a rule enforced anywhere else — or by
     nothing — would be graded against a validator that never looks at it."""
-    from analitiq.contracts.shared.rules import rule_by_id
-
     try:
         validator = rule_by_id(rule_id).validator
     except KeyError:
@@ -113,18 +99,7 @@ def _require_validator_check(rule_id: str) -> None:
 
 
 def _require_bundle_alone(root: Path) -> None:
-    others = sorted(
-        str(path.relative_to(root)) for path in root.rglob("*")
-        if path.is_file() and path != root / _BUNDLE_ENTRY
-    )
-    if others:
-        raise ValueError(f"{root}: a bundle case holds only {_BUNDLE_ENTRY}, found {others}")
-
-
-def _entry_file(root: Path) -> Path:
-    entries = [root / name for name in (_CONNECTOR_ENTRY, _BUNDLE_ENTRY) if (root / name).is_file()]
-    if len(entries) != 1:
-        raise ValueError(
-            f"{root}: a case root holds exactly one entry file, "
-            f"{_CONNECTOR_ENTRY} or {_BUNDLE_ENTRY}")
-    return entries[0]
+    others = sorted(str(path.relative_to(root)) for path in root.rglob("*")
+                    if path != root / _BUNDLE_ENTRY)
+    if others or not (root / _BUNDLE_ENTRY).is_file():
+        raise ValueError(f"{root}: a case root holds exactly {_BUNDLE_ENTRY}, found {others}")

@@ -5832,7 +5832,7 @@
    "artifact_kinds": [
     "connector-package"
    ],
-   "validator": "analitiq.validator.connectors::check_coverage",
+   "validator": "analitiq.validator.connectors::_check_connector_endpoints",
    "enforcement_location": null,
    "owners": [
     "engine",

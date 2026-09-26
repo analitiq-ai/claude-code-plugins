@@ -2,15 +2,16 @@
 
 The Analitiq **artifact validator**. It validates Analitiq JSON documents against
 the **contract models** — the same Pydantic models the published JSON Schemas are
-generated from — plus the cross-file and cross-document checks a single-document
-model cannot express, so authoring, the connector-builder plugin, and downstream
+generated from — plus the cross-document checks a single-document model cannot
+express, so authoring, the connector-builder plugin, and downstream
 consumers all enforce one contract with no drift. It is structured so per-kind
 validators slot in without touching each other.
 
 Today it covers:
 
-- **authored single documents** — connector, endpoint, and type-map files, plus
-  `connection`, `stream`, and `pipeline` documents;
+- **authored documents** — connector, endpoint, type-map, `connection`,
+  `stream` and `pipeline` documents, one at a time or as the packages and
+  workspace that hold them;
 - **pipeline bundles** — the cross-document referential integrity of an assembled
   run (pipeline + streams + connections + connectors + endpoints).
 
@@ -19,15 +20,15 @@ to `TypeAdapter(...).validate_python` from `analitiq-contract-models`
 (`analitiq.contracts`). It runs **offline** — no schema fetch, no network. On top
 of the models it adds only what a single-document model cannot express — the
 connection / stream / pipeline kinds are pure model validation (the model IS the
-whole contract), so `analitiq-validate --document x.json` validates every authored
-kind and emits the same uniform `{passed, findings[]}`.
+whole contract). Nothing reads a file: a caller holding files reads them and
+builds the request.
 
-**Connector-package cross-file checks:**
+**Connector-package cross-document checks:**
 
-- **cross-file coverage** — a connector ships a sibling `type-map.json`
-  carrying the sections its kind calls for, and no other type-map name, and an API connector's read map covers every
-  `(native_type, arrow_type)` its endpoint files declare;
-- **filename ↔ id** — an endpoint file is named `{endpoint_id}.json`;
+- **coverage** — a connector package's type map carries the sections its
+  connector's kind calls for, and an API connector's read map covers every
+  `(native_type, arrow_type)` its endpoint documents declare;
+- **filename ↔ id** — an endpoint document sits at `{endpoint_id}.json`;
 - **advisory warnings** the contract tolerates — duplicate type-map rules, read
   patterns spelling a lowercase literal, regex natives spelling a container that
   renders a scalar, write-map vocabulary gaps.
@@ -69,8 +70,7 @@ held. That module's docstring is the contract; it is not restated here.
 ## Rule cases
 
 Some rules enforced by a cross-document check ship example document sets with
-the package, each one a directory holding a `bundle.json` or a connector package
-rooted at `connector.json`. A rule is not required to carry any, so the corpus
+the package, each one a directory holding a `bundle.json`. A rule is not required to carry any, so the corpus
 grades only the rules it holds cases for. `rule_cases()` loads them and `case_mismatch(case)`
 grades one against the installed validator, returning `None` when the
 validator agrees:
@@ -91,26 +91,23 @@ This pulls `analitiq-contract-models` (and pydantic) transitively.
 
 ## Use
 
-```bash
-analitiq-validate --document definition/connector.json
-analitiq-validate --document connection.json   # connection / stream / pipeline work too
+```python
+from analitiq.contracts.validation_requests import ValidatePackageRequest
+from analitiq.validator import validate_package
+
+verdict = validate_package(ValidatePackageRequest(
+    package_kind="connector",
+    documents={"definition/connector.json": connector_text, ...},
+))
 ```
 
-The kind is detected from the document's shape — no `--kind` flag. Point
-`--document` at `definition/connector.json` to also trigger cross-file coverage:
-it discovers the sibling `type-map.json` and
-`endpoints/*.json` from the connector's directory. A `connection` / `stream` /
-`pipeline` document is validated purely against its contract model. Validation
-is always model-driven and offline — `--document` is the only flag.
-
-Output is a JSON report (`{"passed": bool, "findings": [...]}`) on stdout; the
-process exits non-zero exactly when `passed` is `false` — a `fail` finding at
+Every entry point answers `{"passed": bool, "findings": [...]}`; `passed` is
+false exactly when some finding costs it — a `fail` finding at
 `severity: "error"`, or a `notApplicable` finding naming a rule that is (or,
 naming none, might as well be) error-tier, since a check that could not run
 gets no benefit of the doubt.
 
-A pipeline bundle is assembled from many documents, so it is validated as a
-library call rather than from a single file:
+A pipeline bundle is validated by its own call:
 
 ```python
 from analitiq.validator import validate_pipeline_bundle

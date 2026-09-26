@@ -4,15 +4,14 @@ A stream document is validated wholly against its contract model (`StreamInput`,
 the same model the published `stream` JSON Schema is generated from):
 `TypeAdapter(...).validate_python` enforces its structure *and* every cross-field
 rule (endpoint-ref shape, unique destinations, the authored-top-level guard)
-offline, no schema fetch, no drift. There is no cross-file or referential check a
+offline, no schema fetch, no drift. There is no cross-document or referential check a
 stream document needs in isolation — its wiring is checked across documents by
 `analitiq.validator.document_set` and the pipeline-bundle kind. The one check the
 model cannot carry is RULE-SHRD-003, which reports a `warning` — a severity no
 `@model_validator` can carry (`rules/SCHEMA.md`, `validator`) — so this kind's
 validator combines the two.
 
-At import this module registers that validator with the core registries, for a
-stream named by a request and one detected on the path route, so `_core` never
+At import this module registers that validator with the core registry, so `_core` never
 hard-codes a stream branch — a new kind is a new module.
 """
 from __future__ import annotations
@@ -23,7 +22,7 @@ from ._core import (
     _missing_schema_url_findings,
     _model_findings,
     contract_model_domain,
-    register_document_kind,
+    register_document_validator,
 )
 
 # Import the contract model under the shared DOMAIN guard (the model binds the
@@ -35,15 +34,8 @@ with contract_model_domain():
 _STREAM_ADAPTER = TypeAdapter(StreamInput)
 
 
-def is_stream_doc(doc: Any) -> bool:
-    """A stream binds a read `source` to write `destinations`: it is the only
-    authored kind carrying both top-level. (A pipeline nests its source/destination
-    connection refs under `connections`; it has no top-level `source`.)"""
-    return isinstance(doc, dict) and "source" in doc and "destinations" in doc
-
-
 def _validate_stream_document(doc: Any) -> list[dict]:
     return _model_findings(doc, _STREAM_ADAPTER) + _missing_schema_url_findings(doc)
 
 
-register_document_kind("stream", is_stream_doc, _validate_stream_document)
+register_document_validator("stream", _validate_stream_document)

@@ -10,14 +10,10 @@ This module owns the parts that are independent of any particular artifact kind:
   its `loc` does not spell directly; shared with the pipeline plugin's adapter;
 - `contract_model_domain()` — the env guard every kind imports its contract models
   under, defined once so the DOMAIN dance is not reimplemented per kind;
-- the KIND-VALIDATOR REGISTRY and `_dispatch()`/`validate_document()` driver — a
-  per-kind module (e.g. `connectors`) contributes a `(detector, validator_fn)`
-  pair via `register_kind()`; `_dispatch` consults the registry rather than
-  hard-coding any kind's branches, so a new kind is *register, done*;
 - the DOCUMENT-VALIDATOR REGISTRY and `validate_document_as()` — each located
-  document kind's validator, reached by the kind a request names rather than
-  by detection. `register_document_kind()` registers one validator for both
-  routes where the path route adds nothing beside the document;
+  document kind's validator, reached by the kind a request names; a per-kind
+  module (e.g. `connectors`) registers its own, so a new kind is *register,
+  done*;
 - `_Doc`, one parsed document as a cross-document check receives it;
 - `_bounded()` — the one width a diagnostic borrowed from another library, or
   a document value it echoes, is clipped to; messages the contract models write
@@ -28,55 +24,28 @@ This module owns the parts that are independent of any particular artifact kind:
   from passing; exported so a caller aggregating published findings into its
   own verdict (the pipeline plugin's adapter, say) reduces over them the same
   way `_passed()` does, rather than a second predicate that can drift from it;
-- `_passed()` — `not any(finding_costs_a_pass(f) for f in findings)`, so
-  `main()` and `analitiq.validator.document_set` answer "did this document
-  pass" identically;
-- the `main()` CLI: read the document, validate, print `{"passed", "findings"}`,
-  exit 0 iff `_passed()` says so (1 on a failing document / unreadable document;
-  2 on CLI usage errors).
+- `_passed()` — `not any(finding_costs_a_pass(f) for f in findings)`, the one
+  reduction a verdict's `passed` is.
 """
 from __future__ import annotations
 
-import argparse
 import contextlib
-import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from typing import Any, Callable, Iterator, NamedTuple
 
+from analitiq.contracts.shared.json_schema import pointer_position
+from analitiq.contracts.shared.rules import rule_by_id, rule_violations
 from pydantic import TypeAdapter, ValidationError
-
-from ._location import Location, located
-
-# `analitiq.contracts.shared.rules` (`rule_by_id`, `RuleViolation`) is
-# imported lazily, inside the functions below that need it, never at this
-# module's own top level: `connectors`/`pipelines` import THIS module before
-# their own guarded `try/except ImportError` around the contract models runs,
-# so an unconditional import here would raise before that guard ever sees it,
-# turning a missing `analitiq-contract-models` into a raw traceback instead of
-# the structured "Missing dependency" diagnostic the guard exists to produce.
 
 #: The finding shape's `kind` axis (`rules/SCHEMA.md`, "Findings — what a check
 #: reports"): whether a check found a violation at all, not which check ran.
 _KINDS = ("fail", "notApplicable", "informational")
 
 
-# The kind registry: ordered `(detector, validator_fn)` pairs. `_dispatch` runs
-# each detector in registration order and hands the document to the first
-# validator whose detector matches. A validator takes `(doc, location)` and
-# returns a list of findings.
-_Validator = Callable[[Any, "Location | None"], list[dict]]
-_KIND_REGISTRY: list[tuple[Callable[[Any], bool], _Validator]] = []
-
-
-def register_kind(detector: Callable[[Any], bool], validator: _Validator) -> None:
-    """Append a `(detector, validator_fn)` pair to the dispatch registry."""
-    _KIND_REGISTRY.append((detector, validator))
-
-
 #: Each located document kind's validator, keyed by the published schema name a
-#: request uses for it. A validator takes the parsed document alone: what the
-#: path route reads beside a document is a cross-document check here.
+#: request uses for it. A validator takes the parsed document alone: what a
+#: document needs from beside it is a cross-document check.
 _DOCUMENT_VALIDATORS: dict[str, Callable[[Any], list[dict]]] = {}
 
 
@@ -87,15 +56,6 @@ def register_document_validator(kind: str, validator: Callable[[Any], list[dict]
     if kind in _DOCUMENT_VALIDATORS:
         raise ValueError(f"a document validator for {kind!r} is already registered")
     _DOCUMENT_VALIDATORS[kind] = validator
-
-
-def register_document_kind(
-        kind: str, detector: Callable[[Any], bool], validator: Callable[[Any], list[dict]]) -> None:
-    """Register `validator` for documents of `kind` on both routes: named by a
-    request, and detected by `detector` on the path route, which for this kind
-    reads nothing beside the document."""
-    register_document_validator(kind, validator)
-    register_kind(detector, lambda doc, location=None: validator(doc))  # skipcq: PYL-W0613 — uniform registered-validator signature
 
 
 def validate_document_as(kind: str, doc: Any) -> list[dict]:
@@ -203,7 +163,6 @@ def finding(
         raise ValueError(f"unknown kind: {kind!r}")
     record = None
     if rule is not None:
-        from analitiq.contracts.shared.rules import rule_by_id
         try:
             record = rule_by_id(rule)
         except KeyError:
@@ -274,7 +233,6 @@ def finding_costs_a_pass(f: dict) -> bool:
         rule = f.get("rule")
         if rule is None:
             return True
-        from analitiq.contracts.shared.rules import rule_by_id
         return rule_by_id(rule).severity == "error"
     return False
 
@@ -308,7 +266,6 @@ def document_pointer(loc: tuple, schema: dict) -> str:
     `TypeError` when the schema uses a core schema kind the walk does not
     know, wherever it sits and not only along `loc`.
     """
-    from analitiq.contracts.shared.json_schema import pointer_position
     refs = {node["ref"]: node for node in _schema_nodes(schema) if "ref" in node}
     members = _members(schema, tuple(loc), refs)
     if members is None:
@@ -427,7 +384,6 @@ def _model_findings(doc: Any, adapter: TypeAdapter) -> list[dict]:
     existing, already-stable vocabulary reused rather than a second one
     invented beside it.
     """
-    from analitiq.contracts.shared.rules import rule_violations
     try:
         adapter.validate_python(doc)
         return []
@@ -476,35 +432,8 @@ def _missing_schema_url_findings(doc: Any) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Dispatch
+# Crash containment
 # ---------------------------------------------------------------------------
-
-def validate_document(doc: Any, doc_path: Path | Location | None = None) -> list[dict]:
-    """Detect the document kind, validate via its model, add cross-file checks.
-
-    A `doc_path` that `located` refuses raises its refusal: a finding would
-    come from the crash guard, which reports a validator bug.
-    """
-    location = None if doc_path is None else located(doc_path)
-    return _run_guarded(_dispatch, doc, location, crash_label="document validation")
-
-
-def _dispatch(doc: Any, location: Location | None) -> list[dict]:
-    for detector, validator in _KIND_REGISTRY:
-        if detector(doc):
-            return validator(doc, location)
-    # Anything no registered kind claims is a document we were asked to validate
-    # but cannot identify — that is a validation failure, not a pass.
-    return [finding(
-        message_id="unrecognized-document", kind="fail", path="",
-        message=(
-            "document does not match any known artifact (connector / api-endpoint / "
-            "database-endpoint / type-map / connection / stream / pipeline); a connector "
-            "must declare 'kind', an api-endpoint 'operations', a type-map a "
-            "'$schema' naming the published type-map URL (a 'read' or 'write' "
-            "section does not claim one), a connection a 'connector_id', a "
-            "stream 'source' + 'destinations', a pipeline 'connections'."))]
-
 
 def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None) -> list[dict]:
     """Run a check; a crash becomes one finding so other checks survive.
@@ -519,9 +448,9 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
     kind reports. `rule`, when the caller names one, is the obligation a
     crash mid-check leaves unevaluated — a caller wrapping a check bound to
     exactly one rule (`_embedded_schema_example_findings` and RULE-ENDP-063,
-    say) passes it so the crash stays routable to it; a caller wrapping
-    dispatch over an unidentified document (`validate_document`, which could
-    crash on behalf of any rule or none) leaves it `None`, which keeps the
+    say) passes it so the crash stays routable to it; a caller wrapping a
+    whole document's validator (`validate_document_as`, which could crash on
+    behalf of any rule or none) leaves it `None`, which keeps the
     finding inside the framework's own no-rule case and off the "clears the
     bar" list `passed` reduces over, so it always costs — matching what an
     unconditional `severity: error` finding always did here.
@@ -546,43 +475,13 @@ def _run_guarded(fn: Callable, *args, crash_label: str, rule: str | None = None)
 #: `RecursionError`, which is a `RuntimeError` and escapes a `ValueError` arm.
 _JSON_TEXT_REFUSALS = (ValueError, RecursionError)
 
-#: What reading a JSON document off disk raises for what the file holds rather
-#: than for this package: the path's own failure, a refusal of its text, or
-#: `located`'s refusal of the path.
-_JSON_READ_ERRORS = (OSError, *_JSON_TEXT_REFUSALS)
-
 
 def _unreadable_document_finding(exc: Exception) -> dict:
-    """The finding for a document whose text could not be read or parsed at
-    all, before any kind was even identified."""
+    """The finding for a document whose text does not parse as JSON, so no
+    validator of its kind could be run on it."""
     return finding(
         message_id="unreadable-document", kind="fail", path="",
         message=f"Cannot read document: {exc}")
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate an Analitiq connector/endpoint/type-map document.")
-    parser.add_argument("--document", required=True, help="Path to the JSON document to validate.")
-    args = parser.parse_args()
-
-    try:
-        # Read as given, so a path the kernel refuses is refused for the
-        # kernel's own reason, then located, which refuses a path it would
-        # grade somewhere other than where that read opened it.
-        document = json.loads(Path(args.document).read_bytes().decode("utf-8"))
-        location = located(Path(args.document))
-    except _JSON_READ_ERRORS as exc:
-        print(json.dumps({"passed": False, "findings": [_unreadable_document_finding(exc)]}))
-        return 1
-
-    findings = validate_document(document, doc_path=location)
-    passed = _passed(findings)
-    print(json.dumps({"passed": passed, "findings": findings}, indent=2))
-    return 0 if passed else 1
 
 
 def _passed(findings: list[dict]) -> bool:
