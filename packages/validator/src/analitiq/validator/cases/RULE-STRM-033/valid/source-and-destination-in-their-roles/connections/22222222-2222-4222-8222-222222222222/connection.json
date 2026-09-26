@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.analitiq.ai/connection/latest.json",
+  "connection_id": "22222222-2222-4222-8222-222222222222",
+  "connector_id": "wise",
+  "display_name": "Wise",
+  "parameters": {
+    "environment": "live"
+  },
+  "secret_refs": {
+    "api_token": "env:ANALITIQ_WISE_API_TOKEN"
+  }
+}

@@ -967,6 +967,164 @@ def test_workspace_findings_do_not_depend_on_key_order(validator):
     assert forward == backward
 
 
+def _ruled_at(result, message_id: str) -> list[tuple[str | None, str]]:
+    """The rule and path of every finding under `message_id`."""
+    return [(f.get("rule"), f["path"]) for f in result["findings"] if f["message_id"] == message_id]
+
+
+_PIPELINE_KEY = f"pipelines/{_PID}/pipeline.json"
+_STREAM_KEY = f"pipelines/{_PID}/streams/{_SID}.json"
+
+
+def test_a_pipeline_without_its_id_is_unresolvable_in_any_status(validator):
+    """Stream parent refs resolve against `pipeline_id`, so the fixture's
+    draft pipeline answers for it as an active one would."""
+    documents = _workspace_documents()
+    del documents[_PIPELINE_KEY]["pipeline_id"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "pipeline-missing-pipeline-id") == [
+        ("RULE-PIPE-018", f"{_PIPELINE_KEY}#/pipeline_id")]
+
+
+def test_an_active_pipeline_needs_a_stream_ref(validator):
+    documents = _workspace_documents()
+    documents[_PIPELINE_KEY] |= {"status": "active", "streams": []}
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "active-pipeline-no-stream-refs") == [
+        ("RULE-PIPE-014", f"{_PIPELINE_KEY}#/streams")]
+
+
+def test_pipeline_streams_that_are_not_a_list_resolve_nothing(validator):
+    documents = _workspace_documents()
+    documents[_PIPELINE_KEY]["streams"] = _SID
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "pipeline-streams-not-a-list") == [
+        ("RULE-PIPE-011", f"{_PIPELINE_KEY}#/streams")]
+
+
+def test_stream_refs_collapsing_to_one_base_are_duplicates(validator):
+    documents = _workspace_documents()
+    documents[_PIPELINE_KEY]["streams"] = [f"{_SID}_v1", f"{_SID}_v2"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "duplicate-stream-ref") == [("RULE-PIPE-011", f"{_PIPELINE_KEY}#/streams/1")]
+    assert "stream-ref-unresolved" not in _ids(result)
+
+
+def test_two_stream_documents_declaring_one_id_are_duplicates(validator):
+    documents = _workspace_documents()
+    twin = f"pipelines/{_PID}/streams/66666666-6666-4666-8666-666666666666.json"
+    documents[twin] = copy.deepcopy(documents[_STREAM_KEY])
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "duplicate-bundled-stream-id") == [("RULE-PIPE-011", f"{twin}#/stream_id")]
+
+
+def test_a_stream_without_its_id_is_unresolvable(validator):
+    documents = _workspace_documents()
+    del documents[_STREAM_KEY]["stream_id"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "bundled-stream-missing-id") == [("RULE-PIPE-011", f"{_STREAM_KEY}#/stream_id")]
+
+
+def test_a_stream_without_a_parent_is_not_under_another_pipeline(validator):
+    """A missing `pipeline_id` is the stream model's to report, never a
+    parent mismatch."""
+    documents = _workspace_documents()
+    del documents[_STREAM_KEY]["pipeline_id"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert result["passed"] is False
+    assert "stream-wrong-parent-pipeline" not in _ids(result)
+
+
+@pytest.mark.parametrize("slot, pointer, message_id", [
+    ("source", "/source/endpoint_ref", "stream-source-no-endpoint-ref"),
+    ("destination", "/destinations/0/endpoint_ref", "stream-destination-no-endpoint-ref"),
+])
+def test_a_stream_slot_without_an_endpoint_ref_references_nothing(validator, slot, pointer, message_id):
+    documents = _workspace_documents()
+    stream = documents[_STREAM_KEY]
+    if slot == "source":
+        del stream["source"]["endpoint_ref"]
+    else:
+        del stream["destinations"][0]["endpoint_ref"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, message_id) == [("RULE-STRM-042", f"{_STREAM_KEY}#{pointer}")]
+
+
+def test_two_connections_collapsing_to_one_base_are_duplicates(validator):
+    documents = _workspace_documents()
+    documents[f"connections/{_SRC}_v2/connection.json"] = copy.deepcopy(_CONN_WISE)
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "duplicate-bundled-connection") == [
+        ("RULE-PIPE-012", f"connections/{_SRC}_v2/connection.json#")]
+
+
+def test_a_pipeline_pinning_two_versions_of_one_connection_is_ambiguous(validator):
+    documents = _workspace_documents()
+    documents[_PIPELINE_KEY]["connections"]["destinations"] = [_DST, f"{_SRC}_v2"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "connection-version-conflict") == [
+        ("RULE-PIPE-013", f"{_PIPELINE_KEY}#/connections")]
+
+
+@pytest.mark.parametrize("slot, connection_id, pointer, message_id", [
+    ("source", _DST, "/source/endpoint_ref/connection_id", "stream-source-wrong-connection"),
+    ("source", None, "/source/endpoint_ref/connection_id", "stream-source-no-connection-id"),
+    ("destination", _SRC, "/destinations/0/endpoint_ref/connection_id", "stream-destination-wrong-connection"),
+])
+def test_a_stream_slot_names_the_connection_of_its_role(validator, slot, connection_id, pointer, message_id):
+    """A source names `connections.source` and a destination one of
+    `connections.destinations`; another pipeline connection does not do."""
+    documents = _workspace_documents()
+    stream = documents[_STREAM_KEY]
+    ref = stream["source"]["endpoint_ref"] if slot == "source" else stream["destinations"][0]["endpoint_ref"]
+    if connection_id is None:
+        del ref["connection_id"]
+    else:
+        ref["connection_id"] = connection_id
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, message_id) == [("RULE-STRM-033", f"{_STREAM_KEY}#{pointer}")]
+
+
+def test_a_connection_without_a_connector_id_is_unresolvable(validator):
+    documents = _workspace_documents()
+    del documents[f"connections/{_DST}/connection.json"]["connector_id"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "connection-no-connector-id") == [
+        ("RULE-CONN-011", f"connections/{_DST}/connection.json#/connector_id")]
+
+
+def test_a_connector_id_is_matched_whole_never_version_stripped(validator):
+    """Unlike a stream or connection ref, a connector's version is a field of
+    its own, so `postgresql_v2` does not name the `postgresql` connector."""
+    documents = _workspace_documents()
+    documents[f"connections/{_DST}/connection.json"]["connector_id"] = "postgresql_v2"
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "connector-ref-unresolved") == [
+        ("RULE-CONN-011", f"connections/{_DST}/connection.json#/connector_id")]
+
+
+def test_a_connection_scoped_endpoint_resolves_by_its_endpoint_id(validator):
+    """An endpoint of the named connection under another id does not resolve
+    the ref: presence is keyed on the connection and the endpoint together."""
+    documents = _workspace_documents()
+    del documents[f"connections/{_DST}/definition/endpoints/{_EID}.json"]
+    other_id = derive_db_endpoint_id(None, "public", "customers")
+    documents[f"connections/{_DST}/definition/endpoints/{other_id}.json"] = copy.deepcopy(_DB_ENDPOINT) | {
+        "endpoint_id": other_id, "database_object": build_database_object(None, "public", "customers"),
+        "display_name": "public.customers"}
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "endpoint-ref-unresolved") == [
+        ("RULE-STRM-034", f"{_STREAM_KEY}#/destinations/0/endpoint_ref")]
+
+
+def test_a_connection_scoped_endpoint_ref_without_an_endpoint_id_is_unresolvable(validator):
+    documents = _workspace_documents()
+    del documents[_STREAM_KEY]["destinations"][0]["endpoint_ref"]["endpoint_id"]
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert _ruled_at(result, "endpoint-ref-no-endpoint-id") == [
+        ("RULE-STRM-034", f"{_STREAM_KEY}#/destinations/0/endpoint_ref")]
+
+
 # ---------------------------------------------------------------------------
 # Routing (FR-010): where each check runs is computed from what it reads.
 # ---------------------------------------------------------------------------

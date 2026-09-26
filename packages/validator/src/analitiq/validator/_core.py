@@ -95,8 +95,8 @@ def contract_model_domain() -> Iterator[None]:
     would otherwise make them reject every `schemas.analitiq.ai` document. Scope
     the override to exactly the import window and restore the caller's ambient
     `DOMAIN` afterwards: importing this package must not leak a process-wide env
-    mutation onto a host that reads `DOMAIN` at runtime (e.g. an in-process
-    consumer of a bundle), which would silently repoint it. The models keep the
+    mutation onto a host that reads `DOMAIN` at runtime (e.g. a service calling
+    the validator in-process), which would silently repoint it. The models keep the
     `analitiq.ai` host they captured at import.
     """
     ambient = os.environ.get("DOMAIN")

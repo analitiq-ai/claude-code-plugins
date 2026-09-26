@@ -134,12 +134,6 @@ RULELESS_SITES: dict[tuple[str, str], str] = {
     ("analitiq.validator.connectors::_unknown_kind_finding", "coverage-check-skipped-bad-kind"): (
         "the connector's kind is outside the closed enum the model already "
         "rejects, so coverage was never asked"),
-    ("analitiq.validator.pipelines::validate_pipeline_bundle", "bundle-not-a-mapping"): (
-        "rejects before any referential check the registry binds could even "
-        "begin"),
-    ("analitiq.validator.pipelines::validate_pipeline_bundle", "bundle-missing-pipeline-document"): (
-        "rejects before any referential check the registry binds could even "
-        "begin"),
 }
 
 

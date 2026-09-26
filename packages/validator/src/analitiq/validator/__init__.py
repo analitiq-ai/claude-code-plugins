@@ -3,8 +3,7 @@
 Validates Analitiq connector / endpoint / type-map / connection / stream /
 pipeline JSON documents against the **contract models**
 (`analitiq-contract-models`) plus the cross-document coverage and advisory
-checks a single-document model cannot express, and validates an assembled
-**pipeline bundle** for cross-document referential integrity. Every answer is
+checks a single-document model cannot express. Every answer is
 one `{"passed": bool, "findings": [...]}` verdict; `finding_costs_a_pass` owns
 when a finding costs `passed`, which also fails closed on an unchecked
 error-tier rule, not only a `fail` finding at `severity: "error"`.
@@ -44,7 +43,6 @@ from .connectors import (  # skipcq: PY-W2000
     _endpoint_locator_findings,
     _flatten_api_locator,
 )
-from .pipelines import validate_pipeline_bundle
 
 __all__ = [
     "finding",
@@ -56,5 +54,4 @@ __all__ = [
     "validate_workspace",
     "endpoint_filename_findings",
     "type_map_findings",
-    "validate_pipeline_bundle",
 ]

@@ -1270,10 +1270,6 @@ def test_a_map_holding_a_json_null_is_graded(validator):
 
 
 def test_endpoint_filename_findings_public_helper(validator):
-    # The filename gate is exported so a bundle-assembling consumer —
-    # which validates filename-less in-memory docs via validate_pipeline_bundle and
-    # so cannot reach the gate there — calls ONE shared implementation instead of
-    # reimplementing the ~4-line check, keeping the invariant define-once.
     eid = derive_db_endpoint_id(None, "public", "orders")
     db = _db_endpoint(eid)
     # Mismatched stem -> exactly one RULE-PKG-031 error.

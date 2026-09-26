@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schemas.analitiq.ai/database-endpoint/latest.json",
+  "endpoint_id": "public__orders__371c8422",
+  "display_name": "public.orders",
+  "database_object": {
+    "name": "orders",
+    "object_type": "table",
+    "schema": "public"
+  },
+  "columns": [
+    {
+      "name": "id",
+      "native_type": "bigint",
+      "arrow_type": "Int64",
+      "nullable": false,
+      "ordinal_position": 1
+    },
+    {
+      "name": "updated_at",
+      "native_type": "timestamptz",
+      "arrow_type": "Timestamp(MICROSECOND, UTC)",
+      "nullable": false,
+      "ordinal_position": 2
+    }
+  ],
+  "primary_keys": [
+    "id"
+  ]
+}

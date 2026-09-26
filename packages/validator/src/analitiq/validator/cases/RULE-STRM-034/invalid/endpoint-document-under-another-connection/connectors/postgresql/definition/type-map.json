@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schemas.analitiq.ai/type-map/latest.json",
+  "read": [
+    {
+      "match": "exact",
+      "native_type": "bigint",
+      "arrow_type": "Int64"
+    }
+  ],
+  "write": [
+    {
+      "match": "exact",
+      "native_type": "bigint",
+      "arrow_type": "Int64"
+    },
+    {
+      "match": "regex",
+      "native_type": "TEXT",
+      "arrow_type": ".*"
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schemas.analitiq.ai/stream/latest.json",
+  "stream_id": "44444444-4444-4444-8444-444444444444",
+  "pipeline_id": "11111111-1111-4111-8111-111111111111",
+  "display_name": "orders",
+  "source": {
+    "endpoint_ref": {
+      "scope": "connector",
+      "connection_id": "22222222-2222-4222-8222-222222222222",
+      "endpoint_id": "transfers"
+    },
+    "replication": {
+      "method": "incremental",
+      "cursor_field": "updated_at"
+    }
+  },
+  "destinations": [
+    {
+      "endpoint_ref": {
+        "scope": "connection",
+        "connection_id": "33333333-3333-4333-8333-333333333333",
+        "endpoint_id": "public__orders__371c8422",
+        "database_object": {
+          "name": "orders",
+          "object_type": "table",
+          "schema": "public"
+        }
+      },
+      "write": {
+        "mode": "upsert",
+        "conflict_keys": [
+          "id"
+        ]
+      }
+    },
+    {
+      "endpoint_ref": {
+        "scope": "connection",
+        "connection_id": "55555555-5555-4555-8555-555555555555",
+        "endpoint_id": "public__orders__371c8422",
+        "database_object": {
+          "name": "orders",
+          "object_type": "table",
+          "schema": "public"
+        }
+      },
+      "write": {
+        "mode": "upsert",
+        "conflict_keys": [
+          "id"
+        ]
+      }
+    }
+  ],
+  "status": "draft"
+}

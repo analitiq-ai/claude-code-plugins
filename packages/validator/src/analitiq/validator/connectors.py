@@ -46,6 +46,9 @@ import reprlib
 from pathlib import PurePosixPath
 from typing import Any, Iterator, Mapping
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError
+
 from ._core import (
     _Doc,
     contract_model_domain,
@@ -212,15 +215,7 @@ def _unreadable_as_2020_12(schema: dict) -> str | None:
       comparison — a single one, since `##` is not a spelling of this URI and
       naming another dialect is exactly what this half exists to catch. An
       absent `$schema` is fine: the engine reads an undeclared schema as
-      2020-12, and a valid authored write `input.schema` may omit it.
-
-    `jsonschema` is imported lazily HERE, not at module load: some callers import
-    `analitiq.validator` only to run `validate_pipeline_bundle` and never reach
-    this api-endpoint path, so a module-level import would force `jsonschema` onto
-    every consumer even where it is not installed. Only endpoint meta-validation
-    needs it."""
-    from jsonschema import Draft202012Validator
-    from jsonschema.exceptions import SchemaError
+      2020-12, and a valid authored write `input.schema` may omit it."""
 
     try:
         Draft202012Validator.check_schema(schema)

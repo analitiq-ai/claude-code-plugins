@@ -2,8 +2,8 @@
 
 A rule enforced by a check in this package can carry cases under
 ``cases/<RULE-ID>/valid/<case-name>/`` and ``cases/<RULE-ID>/invalid/<case-name>/``.
-A case root holds one file, ``bundle.json``: a pipeline bundle, carrying its
-documents inline, graded by ``validate_pipeline_bundle``.
+A case root is a workspace: its files, keyed by path from the case root, are
+the documents of one workspace request, graded by ``validate_workspace``.
 
 :func:`rule_cases` loads the corpus and :func:`case_mismatch` grades one case
 against the installed validator, so a consumer checks the validator it pins
@@ -11,23 +11,21 @@ with the grading this repo's own suite runs rather than a second copy of it.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from analitiq.contracts.shared.corpus import corpus_items
 from analitiq.contracts.shared.rules import rule_by_id
+from analitiq.contracts.validation_requests import ValidateWorkspaceRequest
 
 from ._core import finding_costs_a_pass
-from .pipelines import validate_pipeline_bundle
+from .document_set import validate_workspace
 
 if TYPE_CHECKING:  # the corpus layout, shared with the fixture corpus that ships
     from analitiq.contracts.shared.corpus import Verdict  # in analitiq-contract-models
 
 CASES_DIR = Path(__file__).with_name("cases")
-
-_BUNDLE_ENTRY = "bundle.json"
 
 
 @dataclass(frozen=True)
@@ -46,20 +44,19 @@ def rule_cases() -> tuple[RuleCase, ...]:
 
     Raises ``ValueError`` for a corpus that cannot be graded as laid out: a
     directory for an id no record defines or for a rule no check in
-    ``analitiq.validator`` enforces, a group other than a verdict, or a case
-    root holding anything but its ``bundle.json``.
+    ``analitiq.validator`` enforces, or a group other than a verdict.
     """
     cases: list[RuleCase] = []
     for rule_id, verdict, _, root in corpus_items(CASES_DIR, _require_validator_check):
-        _require_bundle_alone(root)
         cases.append(RuleCase(rule_id=rule_id, verdict=verdict, name=root.name, root=root))
     return tuple(cases)
 
 
 def case_findings(case: RuleCase) -> list[dict]:
-    """The findings the validator reports for the case's documents."""
-    bundle = json.loads((case.root / _BUNDLE_ENTRY).read_text(encoding="utf-8"))
-    return validate_pipeline_bundle(bundle)
+    """The findings the validator reports for the case's workspace."""
+    documents = {path.relative_to(case.root).as_posix(): path.read_text(encoding="utf-8")
+                 for path in sorted(case.root.rglob("*")) if path.is_file()}
+    return validate_workspace(ValidateWorkspaceRequest(documents=documents))["findings"]
 
 
 def case_mismatch(case: RuleCase) -> str | None:
@@ -97,9 +94,3 @@ def _require_validator_check(rule_id: str) -> None:
             f"cases for {rule_id!r}, whose validator {validator!r} is not a check "
             "in analitiq.validator")
 
-
-def _require_bundle_alone(root: Path) -> None:
-    others = sorted(str(path.relative_to(root)) for path in root.rglob("*")
-                    if path != root / _BUNDLE_ENTRY)
-    if others or not (root / _BUNDLE_ENTRY).is_file():
-        raise ValueError(f"{root}: a case root holds exactly {_BUNDLE_ENTRY}, found {others}")
