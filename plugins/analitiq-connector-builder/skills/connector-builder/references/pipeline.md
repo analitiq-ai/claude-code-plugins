@@ -56,7 +56,7 @@ VCS), do not attempt workarounds: surface the OS-level error and let them
 resolve it before re-running.
 
 **`update`** — `connector_path` points at the existing connector. Read
-its directory name and `connector.json` `connector_id` up front (the
+its directory name and its connector document's `connector_id` up front (the
 target artifact, not spec material) and record it as the read-only drift
 baseline (the default `previous_release_path`). Proceed to phase 1; do
 not edit it in place — phase 7 regenerates the tree. If research/authoring
@@ -66,9 +66,8 @@ changed slug is a new connector, not an update). If `connector_path` does
 NOT exist there is nothing to update: fall back to `build` semantics and
 tell the user.
 
-**`validate`** — read the on-disk documents under `connector_path`
-(`definition/connector.json`, `definition/type-map.json`, and
-`definition/endpoints/*.json`) and skip directly to phase 4; do no
+**`validate`** — read the on-disk connector package at `connector_path`
+(its connector document, type map and endpoint documents) and skip directly to phase 4; do no
 research, authoring, or writing. If `connector_path` does NOT exist, halt
 and tell the user there is nothing to validate.
 
@@ -139,7 +138,7 @@ Stage the connector body and type map at their release paths, then invoke
   (`RULE-PKG-035`), so the package request waits for the phase-5 join.
 
 <!-- PROBE: type-map-section-missing -->
-The map is one `type-map.json` carrying a section for each direction the
+The connector's type map carries a section for each direction the
 connector's `kind` calls for (`RULE-PKG-030`); a section the kind needs and the
 map lacks fails the connector package — at this phase for `database`, at the
 phase-5 join for `api`.
@@ -156,8 +155,8 @@ validation — a connector release ships no database endpoint documents
 (`RULE-DBEP-006`), so phase 5 is skipped.
 
 In `validate` mode, run the validator once with the on-disk connector
-package as `package` — it carries the connector, `type-map.json` and every
-`definition/endpoints/*.json` — report the resulting `Diagnostics`, and
+package as `package` — it carries the connector document, its type map and
+every endpoint document — report the resulting `Diagnostics`, and
 stop. There is no fix loop and no creator re-dispatch (phases 1–3 and 5
 were skipped, so there is no `CreatorOutput` to revise). The fix loop
 below applies to `build` and `update` only.
@@ -210,8 +209,8 @@ Database connectors skip this phase entirely.
    siblings. The orchestrator reports partial results rather than silently
    dropping the endpoint.
 4. **Join, then validate the package.** When the worklist is drained (no
-   `pending` / `running`), stage `connector.json`, the type map and every
-   authored endpoint at their release paths and validate that **package**,
+   `pending` / `running`), stage the connector document, the type map and every
+   authored endpoint at their release locations and validate that **package**,
    not the endpoint documents on their own. Coverage is connector-anchored:
    the per-branch pass in step 2 grades one endpoint against the endpoint
    contract and can say nothing about the sibling read map, so a native a
@@ -261,16 +260,13 @@ tree — the prior files were read as the drift baseline in phase 6 and
 are never edited in place. Report that the tree was regenerated and
 recommend the user review `git diff` before committing. Otherwise write
 the connector document, type map, package files (database only), any
-endpoint files, and the README (`RULE-PKG-025`) to disk at predictable
-paths. The connector root IS the Python package for database connectors:
+endpoint files, and the README (`RULE-PKG-025`) to disk. Each
+definition document goes where `https://schemas.analitiq.ai/connector-package/latest.json`
+locates its kind (`spec-connector-package.md`). The connector root IS the
+Python package for database connectors:
 
 ```
 {connector_id}/
-├── definition/
-│   ├── connector.json
-│   ├── type-map.json               # `read`: native → Arrow; `write`: Arrow → native DDL; which kinds carry which: RULE-PKG-030
-│   └── endpoints/
-│       └── {endpoint_id}.json      # api connectors only — one file per endpoint; RULE-PKG-031
 ├── __init__.py                     # database only — see RULE-PKG-009
 ├── connector.py                    # database only — see RULE-PKG-010
 ├── requirements.txt                # database only — see RULE-PKG-027
@@ -282,10 +278,10 @@ paths. The connector root IS the Python package for database connectors:
 `ProviderFacts` + creator logic, so hand edits to a connector are not
 preserved.
 
-Write the creator's type map as the one `type-map.json`, carrying a section
-for each direction the connector's `kind` calls for (`RULE-PKG-030`).
+Write the creator's type map with a section for each direction the
+connector's `kind` calls for (`RULE-PKG-030`).
 
-Write each endpoint to `endpoints/{endpoint_id}.json` (`RULE-PKG-031`) —
+Write each endpoint document named for its `endpoint_id` (`RULE-PKG-031`) —
 never renamed, aliased, or nested. The engine resolves an endpoint by id
 and reaches the file by that name, so a divergent filename is
 unreachable at runtime.

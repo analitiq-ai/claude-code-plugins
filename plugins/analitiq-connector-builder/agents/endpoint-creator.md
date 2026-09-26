@@ -77,8 +77,8 @@ was raised.
 2. Set `endpoint_id` to `endpoint_facts.resource` **verbatim** — it is
    already the derived full-locator key (see the `resources[].key` rule in
    `io-contracts.md`, which also carries the slug pattern); do not shorten,
-   re-slugify, or alias it. The orchestrator writes the file as
-   `endpoints/{endpoint_id}.json` (`RULE-PKG-031`).
+   re-slugify, or alias it. The orchestrator names the file for it
+   (`RULE-PKG-031`).
 
    The id is **not** free-form: it is derived from the resource locator the
    operations declare — the read `request.path` when there is one, else the

@@ -20,17 +20,16 @@ carry only what that statement does not say.
 | `default_transport` | Names a transport this document declares (`RULE-CTOR-001`). |
 | `sql_capabilities` | A `database` connector declares it (`RULE-CTOR-040`); authoring: `connector-spec-db/spec-sql-write-path.md`. |
 
-Note: the connector's type map is **not** a top-level field. It ships as one
-sibling artifact, `type-map.json`, with a section for each direction its
-`kind` calls for (`RULE-PKG-030`) — authoring:
-`connector-spec-db/spec-type-maps.md`; on-disk path: `pipeline.md` §7.
+Note: the connector's type map is **not** a top-level field. It ships as a
+document of its own, with a section for each direction its `kind` calls for (`RULE-PKG-030`) — authoring:
+`connector-spec-db/spec-type-maps.md`; location:
+`connector-spec-db/spec-connector-package.md` § Required layout.
 
 ## Authoring `connector_id`
 
-The plugin authors `connector_id` on every connector document, so the contract
-path `connectors/{connector_id}/definition/connector.json`, the registry repo
-name and the plugin's output directory are one string (`RULE-CTOR-042`,
-`RULE-CTOR-045`). Pattern: `RULE-CTOR-023`.
+The plugin authors `connector_id` on every connector document, and the registry
+repo name and the plugin's output directory are that same string
+(`RULE-CTOR-042`, `RULE-CTOR-045`). Pattern: `RULE-CTOR-023`.
 
 ## Registry-stamped fields
 

@@ -34,7 +34,7 @@ writing files.
   **Modes** below.
 - `connector_path` (required for `update` / `validate`) — path to the
   existing connector directory. Its directory name is the `connector_id`
-  and its `connector.json` carries the authoritative slug; read both up
+  and its connector document carries the authoritative slug; read both up
   front (this is the target artifact, not spec material). Unused in
   `build` mode.
 - `previous_release_path` (optional) — path to the prior released version

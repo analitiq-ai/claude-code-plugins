@@ -104,19 +104,14 @@ connection-contract input key keeps whatever spelling the provider uses.
 
 ## Directory layout vs. document identity
 
-Directories use human-readable slugs:
-
-```
-pipelines/<pipeline-slug>/pipeline.json
-pipelines/<pipeline-slug>/streams/<stream-slug>.json
-connections/<connection-slug>/connection.json
-connections/<connection-slug>/definition/endpoints/<endpoint-slug>.json
-```
+A pipeline's and a connection's package directory, and a stream document's
+filename stem, are human-readable slugs; an endpoint document's stem is its
+`endpoint_id` (`RULE-PKG-031`). Where each sits is the workspace schema's
+(`../SKILL.md` § "Workspace root").
 
 The slug is **only** for file organization. Cross-document refs inside the JSON
-use the identities above, never the directory slugs. The workspace checks find
-stream files by walking `pipelines/<slug>/streams/` and then compare the values
-inside the documents.
+use the identities above, never the slugs. The workspace checks find stream
+documents by their location and then compare the values inside the documents.
 
 ## "Lifecycle" means three unrelated things
 

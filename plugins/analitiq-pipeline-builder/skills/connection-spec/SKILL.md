@@ -1,6 +1,6 @@
 ---
 name: connection-spec
-description: Connection authoring vocabulary — the parameters/selections/discovered/secret_refs envelope, storage-driven routing, and the `.secrets/` template workflow. Loaded by connection-creator only. Not invoked directly by users.
+description: Connection authoring vocabulary — the parameters/selections/discovered/secret_refs envelope, storage-driven routing, and the credentials-template workflow. Loaded by connection-creator only. Not invoked directly by users.
 user-invocable: false
 ---
 
@@ -22,7 +22,7 @@ document: one user's configured **instance** of a connector.
 
 - `spec-envelope.md` — the author-time maps
   (`parameters`/`selections`/`discovered`/`secret_refs`), the storage-driven
-  routing rule, and the `env:` secret-pointer + `.secrets/` template workflow.
+  routing rule, and the `env:` secret-pointer + credentials-template workflow.
 - The closest `examples/*.example.json` for the connector's `auth.type` (shape
   guidance only; the connector contract's `storage` is authoritative for
   routing, so the example set never needs to grow when a new connector ships).
@@ -37,7 +37,7 @@ service from the connector's post-auth discovery (`RULE-CONN-005`), and a
 The authoring jobs that implies: routing each `connection_contract` input /
 post-auth output into its map (`RULE-CONN-006`; see `spec-envelope.md`), and
 scaffolding `secret_refs` as `env:` pointers with the matching
-`.secrets/credentials.json` template.
+credentials-document template.
 
 The artifacts that merely hang off a connection are separate documents:
 endpoints, discovery artifacts and connection-scoped type maps are authored by
@@ -106,7 +106,7 @@ Every authored document must:
 3. Route every contract input/output by its `storage` (`RULE-CONN-006`;
    procedure in `spec-envelope.md`). For each key the contract routes to secret
    storage, write an `env:` pointer into `secret_refs` and add the env-var name
-   to `.secrets/credentials.json`.
+   to the connection's credentials document.
 4. Pass the validator (`pipeline-schema-validator`, document kind `connection`) with
    zero error findings.
 

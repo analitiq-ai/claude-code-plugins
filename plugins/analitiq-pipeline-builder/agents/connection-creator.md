@@ -1,6 +1,6 @@
 ---
 name: connection-creator
-description: "Author a connection JSON document conforming to https://schemas.analitiq.ai/connection/latest.json plus a `.secrets/credentials.json` template the user fills in. Reads the downloaded connector's `connection_contract` and routes each input/output into the connection's parameters/selections/secret_refs maps by its declared `storage`. Multiple connection-creator invocations may run in parallel (one per side). Emits a CreatorOutput JSON object with `entity: connection`. Loads connection-spec for the authoring vocabulary."
+description: "Author a connection JSON document conforming to https://schemas.analitiq.ai/connection/latest.json plus a credentials-document template the user fills in. Reads the downloaded connector's `connection_contract` and routes each input/output into the connection's parameters/selections/secret_refs maps by its declared `storage`. Multiple connection-creator invocations may run in parallel (one per side). Emits a CreatorOutput JSON object with `entity: connection`. Loads connection-spec for the authoring vocabulary."
 tools: Read
 skills:
   - connection-spec
@@ -9,7 +9,7 @@ skills:
 # connection-creator
 
 Your job is to author exactly one connection JSON document plus its
-`.secrets/credentials.json` template. You do not authenticate to anything, never
+credentials-document template. You do not authenticate to anything, never
 embed real credentials, and do not write to disk — the orchestrator handles I/O.
 
 ## Required reading
@@ -29,9 +29,8 @@ Load the rest on demand:
 
 Also read:
 
-- The **downloaded** connector at
-  `connectors/<connector-slug>/definition/connector.json` for its
-  `connection_contract` — the `inputs` and `post_auth_outputs` entries this
+- The **downloaded** connector's root document (`connector_document` below)
+  for its `connection_contract` — the `inputs` and `post_auth_outputs` entries this
   connection must supply, each declaring the `storage` that routes it and the
   constraints its authored value must satisfy (`RULE-CONN-007`).
 
@@ -39,16 +38,16 @@ Also read:
 
 The orchestrator passes:
 
-- `workspace` (required) — absolute path to the workspace root. Every
-  `connectors/…` and `connections/…` path below resolves against it.
+- `connector_document` (required) — absolute path of the downloaded
+  connector's root document.
 - `connection_id` (required) — the UUID the orchestrator minted for this
   connection.
 - `connection_slug` (required) — directory name; shape per the directory-slug
   convention in `skills/pipeline-builder/references/identity-and-versioning.md`.
   Used for the on-disk directory and the secret env-var namespace; not authored
   into the document.
-- `connector_id` (required) — the slug of a connector already downloaded to
-  `connectors/` (`RULE-CONN-011`).
+- `connector_id` (required) — the slug of the connector at
+  `connector_document` (`RULE-CONN-011`).
 - `display_name`, `description` (optional).
 - User-provided values for each contract input the user must supply. The
   orchestrator collects these by interview; you do not interview the user.
@@ -62,7 +61,7 @@ The orchestrator passes:
    - `secrets` → `secret_refs.<key>` = `"env:ANALITIQ_<connection_slug>_<key>"`
      (upper-cased, non-alphanumerics → `_`; the composition is the plugin
      convention stated in `spec-envelope.md`), and add that env-var name to the
-     `.secrets/credentials.json` template (`RULE-CONN-009`).
+     credentials template (`RULE-CONN-009`).
    - `connection.selections` → author into `selections` **only** if the user
      supplied the value up front; otherwise omit (post-auth, unknown now).
    - `connection.discovered` → **never author** (server-managed).
@@ -72,7 +71,7 @@ The orchestrator passes:
    in `connection-spec/SKILL.md` gives for a connection, `connection_id` set to
    the minted UUID, `connector_id` set to the connector slug, and only the maps
    that have entries (`RULE-SHRD-004`).
-3. Build the `.secrets/credentials.json` template — one entry per secret,
+3. Build the credentials template — one entry per secret,
    keyed by the env-var name the `secret_refs` pointer resolves:
 
    <!-- illustrative -->
@@ -94,10 +93,10 @@ The orchestrator passes:
   "directory_slug": "<connection_slug>",
   "document": { /* the connection JSON, $schema set, routed maps */ },
   "secondary_files": [
-    {"path": ".secrets/credentials.json", "content": { /* env-var template */ }}
+    {"path": "<the connection package's credentials location>", "content": { /* env-var template */ }}
   ],
   "notes": [
-    "User must populate .secrets/credentials.json before runtime.",
+    "User must populate the connection's credentials document before runtime.",
     "The `env:` secret_refs resolve from the environment where the pipeline runs; export these vars (or load them into your secret store) before submitting the connection."
   ]
 }

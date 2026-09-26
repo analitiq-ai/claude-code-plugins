@@ -34,8 +34,8 @@ The plugin then:
 1. **Interviews you** — replication method, write mode, schedule, naming.
 2. **Downloads** the source and destination connectors from the DIP registry
    (read-only; reused if already on disk).
-3. **Authors** a connection per side (with a `.secrets/credentials.json`
-   template you fill in), the endpoint documents, the pipeline shell, and one
+3. **Authors** a connection per side (with a credentials template you fill
+   in), the endpoint documents, the pipeline shell, and one
    stream per endpoint.
 4. **Validates** every artifact on the `analitiq-validator` MCP server the
    plugin ships (`.mcp.json`), and the assembled pipeline as a workspace.
@@ -45,10 +45,10 @@ You can also **edit** an existing pipeline in place — e.g. "change the schedul
 to hourly" or "add a stream for the customers table". The plugin changes only
 what you ask and re-validates; it never regenerates or overwrites your secrets.
 
-Output lands under `analitiq/` in your working directory: `connections/`,
-`pipelines/`, and (read-only) `connectors/`.
-Fill in the `.secrets/` templates, then submit the connections and pipeline to
-the registry. The full file layout and identity model are documented in
+Output lands under `analitiq/` in your working directory, laid out as the
+published workspace schema defines; downloaded connectors are read-only.
+Fill in the credentials templates, then submit the connections and pipeline to
+the registry. The identity model is documented in
 [identity-and-versioning.md](skills/pipeline-builder/references/identity-and-versioning.md);
 the secrets workflow in
 [spec-envelope.md](skills/connection-spec/spec-envelope.md).
@@ -57,7 +57,7 @@ the secrets workflow in
 
 The `pipeline-schema-validator` agent builds each request with
 `scripts/validation_request.py` — whose docstring states which files a request
-carries; `.secrets/` never leaves the machine — and sends it to the MCP server. The plugin installs nothing. This plugin's suite lives at the
+carries; a credentials document never leaves the machine — and sends it to the MCP server. The plugin installs nothing. This plugin's suite lives at the
 repo root under `tests/pipeline_builder/`. From the repo root:
 `pip install -r requirements-dev.txt`, then `pytest tests/pipeline_builder/`.
 

@@ -28,8 +28,7 @@ Exactly one of:
   the published schema it is written against (the resource segment of its
   `$schema` URL). Graded alone: no check that needs a second document runs.
 - `package` + `package_kind` — absolute path to a package's own directory, and
-  the kind of its root document (a `connection` directory holds
-  `connection.json`).
+  the kind of its root document (a connection package's is `connection`).
 - `workspace` — absolute path to the workspace root
   (`skills/pipeline-builder/SKILL.md` § "Workspace root"). The only request that grades
   references between packages (`skills/pipeline-builder/references/io-contracts.md`
@@ -46,7 +45,8 @@ Exactly one of:
    ```
 
    It prints `{"tool", "arguments"}`; its docstring states which files a
-   package or workspace request carries, and `.secrets/` is never one.
+   package or workspace request carries, and a credentials document is never
+   one.
 2. Call the server's tool named by `tool` with `arguments`, verbatim.
 3. Return the envelope the tool answers.
 

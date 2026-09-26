@@ -6,7 +6,7 @@ and database connectors.
 ## The rule
 
 `endpoint_id` is a **lookup handle, not the target** (`RULE-DBEP-007`). The
-engine uses it only to resolve the on-disk file (`endpoints/{endpoint_id}.json`)
+engine uses it only to resolve the endpoint document's file (`RULE-PKG-031`)
 and to namespace checkpoint / state. The **verbatim locator** lives in a
 separate field the engine reads:
 
@@ -49,7 +49,7 @@ on every re-author / re-discovery (idempotent).
 ## Invariants
 
 - Charset `^[a-z0-9][a-z0-9_-]*$`; `__` is reserved as the level delimiter.
-- The file ships at `endpoints/{endpoint_id}.json` (`RULE-PKG-031`).
+- The endpoint document's filename carries it (`RULE-PKG-031`).
 - Unique across the release (`RULE-PKG-032`); a database endpoint gets
   uniqueness from its derivation (`RULE-DBEP-011`).
 - The verbatim locator field is the **sole** source for building the query /

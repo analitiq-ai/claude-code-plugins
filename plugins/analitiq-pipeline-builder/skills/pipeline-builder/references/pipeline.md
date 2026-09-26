@@ -30,8 +30,8 @@ For each artifact:
 3. If any finding's `message_id` is `validation-not-run`, halt and surface it
    (`references/io-contracts.md` defines it) instead of entering the fix loop
    below.
-4. If a finding's `path` names a document this run did not author — one under
-   `connectors/`, or under a connection the run reused — halt and surface it:
+4. If a finding's `path` names a document this run did not author — one in a
+   connector's package, or in a connection the run reused — halt and surface it:
    no creator of this run owns that file, and the run is not done.
 5. Otherwise, collect the findings and re-invoke the matching creator with the
    findings attached, asking it to fix exactly the reported errors — and only

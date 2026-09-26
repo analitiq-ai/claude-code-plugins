@@ -37,20 +37,20 @@ substitute a hand-derived result.
 
 One invocation runs exactly one mode. Every mode takes:
 
-- `workspace` (required) — absolute path to the workspace root. Every
-  `connectors/…` and `connections/…` path below resolves against it.
+- `documents` (required) — absolute paths of the connection document, the
+  connection's credentials document, the connection's type map and the
+  connector's type map. A type map not on disk has no rules to apply.
 
 ### Mode 1: `discover-schemas`
 
-1. Read the connection JSON at
-   `connections/<connection-slug>/connection.json`. Non-secret connection
+1. Read the connection document. Non-secret connection
    settings (host, port, database, username, ssl_mode, …) live in the
    `parameters` map.
 2. Resolve each secret the driver needs from `secret_refs`. Every value carries
    an explicit scheme (the accepted set is the `secret-ref-grammar` block in
    `skills/connection-spec/spec-envelope.md`). Resolve only `env:<NAME>`, the
    plugin's default: read `<NAME>` from the environment, and if it is unset read
-   `<NAME>` from the connection's `.secrets/credentials.json`, which is keyed by
+   `<NAME>` from the connection's credentials document, which is keyed by
    the same env-var name and which the user fills in. How any other scheme
    resolves is engine-owned — never infer it from the prefix; halt and ask the
    user to export the value into the environment instead. If a required secret
@@ -116,7 +116,7 @@ One invocation runs exactly one mode. Every mode takes:
 6. Derive a **fully-qualified** `arrow_type` for **every** column. First resolve
    the distinct native types through the type maps with `resolve_types`,
    direction `read` (maps in precedence order: the
-   connection's own `definition/type-map.json` if present, then the
+   connection's own type map if present, then the
    connector's) and freeze the rendered `arrow_type` for every covered
    `native_type`
    (`RULE-DBEP-004`). Only for the `native_type`s in `gaps` derive the
@@ -158,7 +158,7 @@ One invocation runs exactly one mode. Every mode takes:
        }
      ],
      "type_map": {
-       "document": { /* full type-map.json document per spec-type-map-gaps.md#Files, or null */ },
+       "document": { /* full type-map document per spec-type-map-gaps.md#Files, or null */ },
        "ambiguities": [ {"arrow_type": "…", "candidates": ["<native>", "<native>"]} ],
        "notes": []
      }
@@ -166,12 +166,11 @@ One invocation runs exactly one mode. Every mode takes:
    ```
 
    `directory_slug` equals the endpoint's derived `endpoint_id` and becomes the
-   filename stem (`connections/<connection-slug>/definition/endpoints/<endpoint_id>.json`).
+   filename stem (`RULE-PKG-031`).
    `type_map.document` is the complete `{$schema, read, write}` document,
    carrying only the sections it has rules for
    (`skills/endpoint-spec/spec-type-map-gaps.md#Files` names the `$schema`
-   value) the orchestrator writes to
-   `connections/<connection-slug>/definition/type-map.json` — `null` means no
+   value) the orchestrator writes as the connection's type map — `null` means no
    rule was added in any direction and nothing is written (never emit an empty
    rule list).
 

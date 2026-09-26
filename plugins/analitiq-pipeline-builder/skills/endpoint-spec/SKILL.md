@@ -43,9 +43,9 @@ contract (`analitiq.contracts.endpoints.DatabaseEndpointDoc`).
 
 API endpoints come from the connector document, not from here. This
 skill is **database-only**. API endpoints in stream `endpoint_ref`s use
-`scope: connector` and point at the connector's `definition/endpoints/`.
-Database endpoints use `scope: connection`; where the file sits is defined by the
-workspace schema cited at the foot of this file.
+`scope: connector` and point at an endpoint document the connector ships.
+Database endpoints use `scope: connection`; where each document sits is defined
+by the workspace schema cited at the foot of this file.
 
 ## What this skill covers
 
@@ -54,9 +54,7 @@ workspace schema cited at the foot of this file.
 - The column shape per table/view/collection.
 - Primary keys: every declared name must name a column this document declares
   (`RULE-DBEP-003`).
-- A connection-scoped type map
-  (`connections/<connection-slug>/definition/type-map.json`),
-  authored only when discovery surfaces natives the connector's map doesn't
+- The connection's type map, authored only when discovery surfaces natives the connector's map doesn't
   cover — see `spec-type-map-gaps.md`.
 - Endpoints for destination tables that do not exist yet, derived from the
   source endpoint instead of introspection — see `spec-new-table.md`.

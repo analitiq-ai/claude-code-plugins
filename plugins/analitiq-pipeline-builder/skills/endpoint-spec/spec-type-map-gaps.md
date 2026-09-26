@@ -1,7 +1,7 @@
 # Connection-scoped type maps (gap authoring)
 
 A connector ships a *documented base vocabulary* in its
-`definition/type-map.json`, not every type a live
+type map, not every type a live
 deployment can surface — extension types (`citext`, `ltree`, `hstore`,
 `vector(N)`, PostGIS geometries), custom domains/enums, parameterized variants.
 The engine composes a **connection-scoped** map as primary over the connector
@@ -20,7 +20,7 @@ fixable: this file governs authoring the connection-scoped map that closes it.
 
 ## Files
 
-The connection's map is `connections/<connection-slug>/definition/type-map.json`:
+The connection's type map is
 a whole `{$schema, read, write}` document, not a bare rules array, validated as
 document kind `type-map`. The section a rule sits under is its direction — `read`
 rules map native → Arrow, `write` rules map Arrow → native DDL — and a map
@@ -28,8 +28,8 @@ carries only the sections it has rules for. The `$schema` value is in this
 skill's own `SKILL.md` schema-URL table.
 
 The rule shape (exact/regex `match`, matcher vs rendered key per direction,
-`${name}` captures) is identical to the connector's own map — the connector
-`type-map.json` you resolve against during gap detection is the live reference for it;
+`${name}` captures) is identical to the connector's own map — the connector's
+type map you resolve against during gap detection is the live reference for it;
 do not restate their vocabulary here.
 
 ## Gap detection
@@ -42,8 +42,8 @@ precedence order (connection first, when one exists, then connector):
 <!-- illustrative -->
 ```jsonc
 {"direction": "read", "types": ["citext", "vector(3)"],
- "maps": ["<connections/<slug>/definition/type-map.json text>",
-          "<connectors/<connector-slug>/definition/type-map.json text>"]}
+ "maps": ["<the connection's type map, as text>",
+          "<the connector's type map, as text>"]}
 ```
 
 - **Read probes** — the distinct `native_type` strings introspected across the

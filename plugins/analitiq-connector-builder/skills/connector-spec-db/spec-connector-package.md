@@ -6,8 +6,8 @@ resolves a connector in two steps: `kind` selects the generic fallback
 class, `connector_id` selects the connector package's own class via
 Python entry points.
 
-An `api` connector ships the definition (`connector.json`,
-`type-map.json`, `endpoints/`) and a README (`RULE-PKG-025`) — no Python
+An `api` connector ships its definition documents (the connector document,
+its type map, its endpoint documents) and a README (`RULE-PKG-025`) — no Python
 package files (`RULE-CTOR-043`) and no `write` section in its map
 (`RULE-PKG-030`).
 
@@ -22,13 +22,18 @@ package files (`RULE-CTOR-043`) and no `write` section in its map
 
 ## Required layout
 
-The connector root IS the Python package (`RULE-PKG-002`):
+Where each definition document of a connector package sits — the connector
+document, its type map, each endpoint document — is the location table of
+`https://schemas.analitiq.ai/connector-package/latest.json`: its
+`patternProperties` map each location to a document kind, and `required` names
+the root, the connector document. Write every definition document at the
+location that schema assigns to its kind.
+
+The connector root IS the Python package (`RULE-PKG-002`). Beside the
+definition documents it carries:
 
 ```
 {connector_id}/
-  definition/
-    connector.json                   # connector_id; transports; sql_capabilities
-    type-map.json                    # `read`: native → Arrow; `write`: Arrow → native; see spec-type-maps.md
   __init__.py                        # RULE-PKG-009
   connector.py                       # {Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector)
   requirements.txt                   # THIS connector's driver(s) only
@@ -36,7 +41,7 @@ The connector root IS the Python package (`RULE-PKG-002`):
   README.md                          # RULE-PKG-025
 ```
 
-The release directory is named for the `connector_id` its `connector.json`
+The release directory is named for the `connector_id` its connector document
 declares (`RULE-CTOR-042`) — the same slug the engine resolves the connector
 class by (`RULE-PKG-007`).
 

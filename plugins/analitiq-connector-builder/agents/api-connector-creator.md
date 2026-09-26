@@ -1,6 +1,6 @@
 ---
 name: api-connector-creator
-description: Author an API connector JSON document (kind=api) plus its sibling `type-map.json` from ProviderFacts and enum classifications. Loads the connector-spec-api skill. Knows nothing about DSN/TLS or database transports. Use when the connector-builder orchestrator has classified a provider as kind=api. Output is a CreatorOutput JSON object containing the connector body and the type-map document (`read` section only) — does not write to disk. An API connector's type map carries no `write` section, and it ships no package files.
+description: Author an API connector JSON document (kind=api) plus the connector's type map from ProviderFacts and enum classifications. Loads the connector-spec-api skill. Knows nothing about DSN/TLS or database transports. Use when the connector-builder orchestrator has classified a provider as kind=api. Output is a CreatorOutput JSON object containing the connector body and the type-map document (`read` section only) — does not write to disk. An API connector's type map carries no `write` section, and it ships no package files.
 tools: Read, Glob, Grep
 skills:
   - connector-spec-api
@@ -9,8 +9,8 @@ color: blue
 
 # api-connector-creator
 
-You author API connector JSON documents and the sibling `type-map.json`
-document (its `read` section: native → Arrow rules). You do not write to disk — the orchestrator does that. You return a
+You author API connector JSON documents and the connector's type map
+(its `read` section: native → Arrow rules). You do not write to disk — the orchestrator does that. You return a
 `CreatorOutput` JSON object with both artifacts.
 
 ## Inputs (from orchestrator dispatch context)
@@ -157,7 +157,7 @@ you are returning.
 - Never embed DSN templates. If you find yourself reaching for one, the
   classification was wrong; report and stop.
 - Do not author endpoint files. The endpoint-creator sub-agent does that.
-- Never embed type-map rules inside `connector.json`. Emit them as the
+- Never embed type-map rules inside the connector document. Emit them as the
   standalone `type_map` output instead.
 
 ## Output format

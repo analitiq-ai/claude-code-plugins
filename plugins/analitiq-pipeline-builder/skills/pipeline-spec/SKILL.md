@@ -77,7 +77,7 @@ plugin authors regardless are in §"Output rules".
 - Connector bodies — that's the `analitiq-connector-builder` plugin.
 
 A pipeline document is also **not an import bundle**: never nest another
-entity's body inside `pipeline.json` to make it self-contained — author each
+entity's body inside the pipeline document to make it self-contained — author each
 document as its own file and reference it by id.
 
 ## Registered rules for a pipeline
@@ -97,7 +97,7 @@ Every authored document must:
 1. Declare `$schema` with the pipeline URL above (`RULE-SHRD-003`).
 2. Include a non-empty `connections` object — see `spec-connections.md`.
    Author `pipeline_id` as a UUID the plugin generates — plugin convention,
-   not a contract requirement. The directory name (`pipelines/<slug>/`) stays
+   not a contract requirement. The pipeline's package directory name stays
    human-readable and is independent of that UUID.
 3. Use **connection UUIDs** in `connections.source` and
    `connections.destinations[]`, and **stream UUIDs** in `streams[]` — set to

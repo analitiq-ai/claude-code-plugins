@@ -17,14 +17,14 @@ plugin authors no `version`.
 ## Inputs
 
 - `current_root` (required) — absolute path of the just-authored pipeline's
-  directory, `pipelines/<pipeline-slug>/` under the workspace root, holding
-  `pipeline.json` and `streams/`. The pipeline slug is its name.
+  package directory, holding its pipeline document and stream documents. The
+  pipeline slug is its name.
 - `previous_release_path` (required) — absolute path of the prior release's
-  pipeline directory, laid out the same way.
+  pipeline package directory.
 
 ## Process
 
-1. Read both pipeline JSON files and their stream files.
+1. Read both pipeline documents and their stream documents.
 2. Compute the change list (each entry is one JSON object in
    `changes[]`). Streams are matched across releases by `stream_id`
    (UUID); pipeline-level facts are compared by their authored values:
