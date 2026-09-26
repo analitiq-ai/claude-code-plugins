@@ -20,8 +20,8 @@ to `TypeAdapter(...).validate_python` from `analitiq-contract-models`
 (`analitiq.contracts`). It runs **offline** — no schema fetch, no network. On top
 of the models it adds only what a single-document model cannot express — the
 connection / stream / pipeline kinds are pure model validation (the model IS the
-whole contract). Nothing reads a file: a caller holding files reads them and
-builds the request.
+whole contract). No grading entry point reads a document from a file: a caller
+holding files reads them and builds the request.
 
 **Connector-package cross-document checks:**
 

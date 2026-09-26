@@ -17,7 +17,8 @@ registry at import. The public surface is re-exported here.
 memory, graded as the kinds the request names. Its entry points take the
 request models in `analitiq.contracts.validation_requests`, which own the
 request shape and are where a malformed argument is refused. It is imported
-after the per-kind modules, whose checks it routes. Nothing here reads a file.
+after the per-kind modules, whose checks it routes. No grading entry point reads
+a document from a file.
 """
 from ._core import finding, finding_costs_a_pass
 from . import connectors  # noqa: F401  — imported for its self-registration side effect

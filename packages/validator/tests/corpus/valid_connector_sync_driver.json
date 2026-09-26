@@ -3,7 +3,7 @@
   "kind": "database",
   "connector_id": "sync-driver-corpus",
   "display_name": "Sync Driver Corpus",
-  "description": "Corpus connector pinning the open SqlAlchemyTransport.driver boundary end-to-end: a sync dialect+driver (the canonical Redshift value) must validate error-free through validate_document.",
+  "description": "Corpus connector pinning the open SqlAlchemyTransport.driver boundary end-to-end: a sync dialect+driver (the canonical Redshift value) must validate error-free as a connector document.",
   "version": "1.0.0",
   "default_transport": "database",
   "transports": {
