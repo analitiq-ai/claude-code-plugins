@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.5.0](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.4.0...analitiq-pipeline-builder-v0.5.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* submit plugin validation through the analitiq-validator MCP server
+
+### Features
+
+* **analitiq-pipeline-builder:** keep the workspace under analitiq/ in the working directory ([2c8cefc](https://github.com/analitiq-ai/claude-code-plugins/commit/2c8cefc3077e622ac9b84d862a9460e74801bb8f))
+* **analitiq-pipeline-builder:** list the rule ids a validation request reaches ([180ffb4](https://github.com/analitiq-ai/claude-code-plugins/commit/180ffb436a1a90383343972345c4cba4f493a638))
+* **contracts:** resolve types in the contract models and release 1.0.0rc28 ([#466](https://github.com/analitiq-ai/claude-code-plugins/issues/466)) ([600730c](https://github.com/analitiq-ai/claude-code-plugins/commit/600730ca695058fd80e2e2604fa37b6e98764eca))
+* send only allowed-extension files, never a dot entry ([9235185](https://github.com/analitiq-ai/claude-code-plugins/commit/92351857d04e65467c67fff9e6b9ab17900f31c2))
+* send the whole package or workspace directory to the validator ([1f72a40](https://github.com/analitiq-ai/claude-code-plugins/commit/1f72a400036474c0b73c344ae0e8fe69591ed258))
+* submit plugin validation through the analitiq-validator MCP server ([1f0eb50](https://github.com/analitiq-ai/claude-code-plugins/commit/1f0eb50a3940f47ea555789e3da4f324ffc0cc21))
+
+
+### Bug Fixes
+
+* allowlist each validator agent's MCP tools; load the grader once ([3abb65a](https://github.com/analitiq-ai/claude-code-plugins/commit/3abb65a5daeb1492927ac84aba94cb0f119b6234))
+* **analitiq-pipeline-builder:** halt on a finding in a document the run did not author ([207f933](https://github.com/analitiq-ai/claude-code-plugins/commit/207f933a95b2a90adcf5b86402453e4142cf677f))
+* **analitiq-pipeline-builder:** the schema-urls table cites the workspace schema for file locations ([#486](https://github.com/analitiq-ai/claude-code-plugins/issues/486)) ([0f3fff1](https://github.com/analitiq-ai/claude-code-plugins/commit/0f3fff162c133c70795bce922dd54ad3df5e7c44))
+* count a left-out directory as reporting every key beneath it ([c63a9cc](https://github.com/analitiq-ai/claude-code-plugins/commit/c63a9ccad4cc3de157ac081f823f72bcdaa2a4ad))
+* decide a named pipeline from the walk alone ([b267dcc](https://github.com/analitiq-ai/claude-code-plugins/commit/b267dccbc21d97db3a76f06cd1cb6609a24a1b42))
+* define validation-not-run once per plugin and cite it everywhere ([37b74b3](https://github.com/analitiq-ai/claude-code-plugins/commit/37b74b35392747c9d2427827b159ce2a100ea164))
+* each validator call takes the request its phase can satisfy ([be7c730](https://github.com/analitiq-ai/claude-code-plugins/commit/be7c73056576a5b27dca39cde4aea24edc8185bb))
+* let the location tables, not filesystem shape, decide what a request carries ([d42bda5](https://github.com/analitiq-ai/claude-code-plugins/commit/d42bda529805b1460e7fe89ad4bd8a81fa40b614))
+* no prose names the retired pin guards ([4782e49](https://github.com/analitiq-ai/claude-code-plugins/commit/4782e495f329367b8c81794b2c73d5e1b7eeb134))
+* no prose presents the unimported bootstrap as a live call path ([f524b98](https://github.com/analitiq-ai/claude-code-plugins/commit/f524b98053e5fee1f73325e3abad4e766800cfe2))
+* **pipeline-builder:** every workspace-reading agent takes the root as an absolute path ([0dfe178](https://github.com/analitiq-ai/claude-code-plugins/commit/0dfe178bf3a527b41b901b608eba2cb31ebcb272))
+* **pipeline-builder:** registry downloads land under the workspace root ([9b8bffd](https://github.com/analitiq-ai/claude-code-plugins/commit/9b8bffdc8b93571d2d9816d60f5e4edde2bc688c))
+* read document locations from the published schemas, never from prose ([#491](https://github.com/analitiq-ai/claude-code-plugins/issues/491)) ([40e94f2](https://github.com/analitiq-ai/claude-code-plugins/commit/40e94f27aad208676870bfb6ab024fb87f9a2824))
+* request builder decides links by name alone ([4e2a907](https://github.com/analitiq-ai/claude-code-plugins/commit/4e2a9076021d5b1199b91f3b312c68770b95e5ca))
+* request builder types every path through one lstat probe ([2f20096](https://github.com/analitiq-ai/claude-code-plugins/commit/2f20096307d13b4543dfee6902f37074f7d6b3e0))
+* request walk leaves out every link and non-regular entry ([772264f](https://github.com/analitiq-ai/claude-code-plugins/commit/772264ffead7655231cebef4b0f2fa287a2b0d7e))
+* reword the rule records that still describe the pipeline bundle ([#489](https://github.com/analitiq-ai/claude-code-plugins/issues/489)) ([94deb07](https://github.com/analitiq-ai/claude-code-plugins/commit/94deb07aafe010bd8032afe8d4d028476ff3a8a4))
+* select request files by one settled scope table ([a59d0f8](https://github.com/analitiq-ai/claude-code-plugins/commit/a59d0f8cd4c124db731d3b199ca8b730290a5315))
+* **validator:** read files as exact UTF-8, not the host locale ([#459](https://github.com/analitiq-ai/claude-code-plugins/issues/459)) ([45f3433](https://github.com/analitiq-ai/claude-code-plugins/commit/45f3433a1202f352fad85397b4f8928447fa3b9d))
+
 ## [0.4.0](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.3.0...analitiq-pipeline-builder-v0.4.0) (2026-09-24)
 
 
