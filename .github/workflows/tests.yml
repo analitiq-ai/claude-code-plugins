@@ -218,7 +218,7 @@ jobs:
     # stamp — a silently failed schemas publish surfaces here instead of at
     # a consumer. The script owns the full verdict semantics, windows, and
     # remediation; stdlib-only, so no dependency install step.
-    name: published contracts-version matches the repo's pins
+    name: published contracts-version matches the committed stamp
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
