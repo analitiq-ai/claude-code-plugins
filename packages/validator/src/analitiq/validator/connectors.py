@@ -799,7 +799,7 @@ def _database_endpoint_locator_findings(ep_doc: Any) -> list[dict]:
 
 
 def endpoint_filename_findings(ep_doc: Any, filename: str) -> list[dict]:
-    """Public gate: an endpoint file must be named `{endpoint_id}.json`.
+    """An endpoint file must be named `{endpoint_id}.json`.
 
     Returns findings citing RULE-PKG-031: `kind: "fail"`
     (carrying `severity: "error"`) when `filename` disagrees with the doc's
@@ -846,22 +846,12 @@ def _validate_api_endpoint_document(ep_doc: Any) -> list[dict]:
     return findings
 
 
-def type_map_findings(doc: Any) -> list[dict]:
-    """Validate a type-map document: model errors + advisory rule warnings for
-    each direction's section + write-vocabulary coverage. `doc` is nominally
-    the whole `{$schema, read, write}` object — a malformed map can hand it any
-    JSON-parseable value instead, which `_model_findings` rejects — and each
-    advisory reads only the section of its own direction, because a rule's
-    matcher is `native_type` under `read` and `arrow_type` under `write`.
-
-    A map is graded by its kind alone, so a connection's gap-only map
-    (`RULE-TMAP-018`) earns the write-vocabulary warning (`RULE-TMAP-017`) as a
-    connector's does."""
-    return _run_guarded(_validate_type_map_document, doc, crash_label="type-map grading")
-
-
 def _validate_type_map_document(doc: Any) -> list[dict]:
-    """A type map graded on its own, held to the whole write vocabulary."""
+    """A type map graded on its own, held to the whole write vocabulary, so a
+    connection's gap-only map (`RULE-TMAP-018`) earns `RULE-TMAP-017` as a
+    connector's does. Each advisory reads only its own direction's section: a
+    rule's matcher is `native_type` under `read` and `arrow_type` under
+    `write`."""
     findings = _model_findings(doc, _TYPE_MAP_ADAPTER)
     if not isinstance(doc, dict):
         return findings

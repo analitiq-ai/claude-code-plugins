@@ -31,18 +31,6 @@ from .document_set import (
     validate_single_document,
     validate_workspace,
 )
-# The underscore names below are test-facing internals: packages/validator/tests
-# exercises them through the package root (see test_validation.py). Deliberately
-# NOT in __all__ — that would widen the published star-import surface.
-from .connectors import (  # skipcq: PY-W2000
-    endpoint_filename_findings,
-    type_map_findings,
-    _arrow_type_eq,
-    _collect_native_arrow_pairs,
-    _database_endpoint_locator_findings,
-    _endpoint_locator_findings,
-    _flatten_api_locator,
-)
 
 __all__ = [
     "finding",
@@ -52,6 +40,4 @@ __all__ = [
     "validate_package",
     "validate_single_document",
     "validate_workspace",
-    "endpoint_filename_findings",
-    "type_map_findings",
 ]
