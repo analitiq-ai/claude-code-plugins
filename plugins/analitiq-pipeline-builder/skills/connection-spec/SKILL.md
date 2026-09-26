@@ -111,11 +111,13 @@ Every authored document must:
    zero error findings.
 
 <!-- BEGIN GENERATED: schema-urls -->
-| Entity | Authored file | `$schema` value |
-|---|---|---|
-| Pipeline | `pipelines/<slug>/pipeline.json` | `https://schemas.analitiq.ai/pipeline/latest.json` |
-| Stream | `pipelines/<slug>/streams/<stream-slug>.json` | `https://schemas.analitiq.ai/stream/latest.json` |
-| Connection | `connections/<slug>/connection.json` | `https://schemas.analitiq.ai/connection/latest.json` |
-| Database endpoint | `connections/<slug>/definition/endpoints/<endpoint_id>.json` | `https://schemas.analitiq.ai/database-endpoint/latest.json` |
-| Connection type map | `connections/<slug>/definition/type-map.json` | `https://schemas.analitiq.ai/type-map/latest.json` |
+| Entity | `$schema` value |
+|---|---|
+| Pipeline | `https://schemas.analitiq.ai/pipeline/latest.json` |
+| Stream | `https://schemas.analitiq.ai/stream/latest.json` |
+| Connection | `https://schemas.analitiq.ai/connection/latest.json` |
+| Database endpoint | `https://schemas.analitiq.ai/database-endpoint/latest.json` |
+| Connection type map | `https://schemas.analitiq.ai/type-map/latest.json` |
+
+Where each document sits is defined by the workspace schema (`https://schemas.analitiq.ai/workspace/latest.json`), whose package entries point to each package's schema.
 <!-- END GENERATED: schema-urls -->

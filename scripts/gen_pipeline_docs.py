@@ -117,18 +117,23 @@ def render_schema_urls() -> str:
     from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
     from analitiq.contracts.stream import STREAM_SCHEMA_URL
     from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
+    from analitiq.contracts.shared.common import schema_url_for
+    from render_schemas import RESOURCES_BY_NAME
 
     rows = [
-        ("Pipeline", "pipelines/<slug>/pipeline.json", PIPELINE_SCHEMA_URL),
-        ("Stream", "pipelines/<slug>/streams/<stream-slug>.json", STREAM_SCHEMA_URL),
-        ("Connection", "connections/<slug>/connection.json", CONNECTION_SCHEMA_URL),
-        ("Database endpoint", "connections/<slug>/definition/endpoints/<endpoint_id>.json",
-         DATABASE_ENDPOINT_SCHEMA_URL),
-        ("Connection type map", "connections/<slug>/definition/type-map.json",
-         TYPE_MAP_SCHEMA_URL),
+        ("Pipeline", PIPELINE_SCHEMA_URL),
+        ("Stream", STREAM_SCHEMA_URL),
+        ("Connection", CONNECTION_SCHEMA_URL),
+        ("Database endpoint", DATABASE_ENDPOINT_SCHEMA_URL),
+        ("Connection type map", TYPE_MAP_SCHEMA_URL),
     ]
-    out = ["| Entity | Authored file | `$schema` value |", "|---|---|---|"]
-    out += [f"| {e} | {_code(f)} | {_code(u)} |" for e, f, u in rows]
+    out = ["| Entity | `$schema` value |", "|---|---|"]
+    out += [f"| {e} | {_code(u)} |" for e, u in rows]
+    # The lookup fails the render if the workspace resource is renamed, rather
+    # than publishing a link to a schema that no longer exists.
+    workspace = schema_url_for(RESOURCES_BY_NAME["workspace"].name)
+    out += ["", f"Where each document sits is defined by the workspace schema ({_code(workspace)}), "
+                "whose package entries point to each package's schema."]
     return "\n".join(out) + "\n"
 
 
