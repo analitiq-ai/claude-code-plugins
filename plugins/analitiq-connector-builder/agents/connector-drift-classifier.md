@@ -191,9 +191,9 @@ Rollup: any major-tier category → bump = `major`; else any minor-tier →
 ## Hard rules
 
 - Never bump major silently. Major bumps require a `note` per change.
-- If the previous file is missing, return `bump: "none"` with a single
-  rationale entry explaining the absence; the orchestrator treats this as a
-  first release and sets the version manually (`RULE-CTOR-032`).
+- If a document either release must hold does not resolve (`package-locations.md`),
+  stop and report its path; return no `DriftVerdict`. A first release has no
+  previous release and is never classified (`RULE-CTOR-032`).
 - Do not modify either document.
 
 ## Output format

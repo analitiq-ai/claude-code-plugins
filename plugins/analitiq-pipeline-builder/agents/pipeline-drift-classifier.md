@@ -16,15 +16,14 @@ plugin authors no `version`.
 
 ## Inputs
 
-- `current_root` (required) — absolute path of the just-authored pipeline's
-  package directory, holding its pipeline document and stream documents. The
-  pipeline slug is its name.
-- `previous_release_path` (required) — absolute path of the prior release's
-  pipeline package directory.
+- `current_documents` (required) — absolute paths of the just-authored
+  pipeline document and each of its stream documents.
+- `previous_documents` (required) — the same, for the prior release.
 
 ## Process
 
-1. Read both pipeline documents and their stream documents.
+1. Read every document both inputs name. A path that cannot be read stops the
+   run: report it and return no `DriftVerdict`.
 2. Compute the change list (each entry is one JSON object in
    `changes[]`). Streams are matched across releases by `stream_id`
    (UUID); pipeline-level facts are compared by their authored values:
