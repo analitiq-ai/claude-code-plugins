@@ -251,9 +251,9 @@ freshly-authored draft to a temporary path first.
   `connector-drift-classifier` the same way (staged draft as
   `current_path`) and apply `next_version`; otherwise this is a first
   release (`RULE-CTOR-032`).
-- A `none` on an unchanged draft leaves `version` as it was. If the
-  classifier stops on a path that did not resolve, halt and surface it —
-  never fall back to a first release.
+- A `none` on an unchanged draft leaves `version` as it was. On an
+  `unresolved` answer, halt and surface its path — never fall back to a first
+  release.
 
 ### 7. Write
 

@@ -392,11 +392,12 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
     enforced only once it is `active`).
 
 10. **Drift (optional)** — if `previous_release_path` was supplied,
-    invoke `pipeline-drift-classifier` with each release's pipeline and
-    stream document paths. It surfaces structural changes so the user can
-    decide whether to publish. The plugin does not author
-    `version` (`references/identity-and-versioning.md` §"Server-managed
-    `version` field"). The classifier is informational only in this plugin.
+    invoke `pipeline-drift-classifier` with each release's pipeline document
+    and the document of every `stream_id` its `streams` names; halt on one not
+    at its location, or on an `unresolved` answer. It surfaces structural
+    changes so the user can decide whether to publish; it is informational
+    only (`references/identity-and-versioning.md` §"Server-managed `version`
+    field").
 
 ## Edit mode
 

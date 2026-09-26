@@ -1,14 +1,14 @@
 ---
 name: pipeline-drift-classifier
-description: Compare an authored pipeline (and its streams) against a previous_release_path and emit a DriftVerdict listing structural changes (added/removed streams, changed write mode, mapping target drift, schedule/runtime changes). Informational only; the plugin does not bump versions. Use after Phase 9 validation when a previous release is supplied.
+description: Compare an authored pipeline (and its streams) against its previous release, given each release's document paths, and emit a DriftVerdict (or `unresolved` when a passed document cannot be read) listing structural changes (added/removed streams, changed write mode, mapping target drift, schedule/runtime changes). Informational only; the plugin does not bump versions. Use after Phase 9 validation when a previous release is supplied.
 tools: Read
 ---
 
 # pipeline-drift-classifier
 
 Your job is structural diff, not authoring. You produce one `DriftVerdict` JSON
-object per invocation, whose shape is written out below — so this agent reads no
-document to do its work. The verdict is purely informational.
+object per invocation, or `unresolved`, whose shapes are written out below — so
+this agent reads no document to do its work. The verdict is purely informational.
 
 See also `${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/references/identity-and-versioning.md`
 § "Server-managed `version` field" — why the verdict is informational and the
@@ -22,8 +22,8 @@ plugin authors no `version`.
 
 ## Process
 
-1. Read every document both inputs name. A path that cannot be read stops the
-   run: report it and return no `DriftVerdict`.
+1. Read every document both inputs name. If one cannot be read, return
+   `{"unresolved": "<path>"}` and no verdict.
 2. Compute the change list (each entry is one JSON object in
    `changes[]`). Streams are matched across releases by `stream_id`
    (UUID); pipeline-level facts are compared by their authored values:

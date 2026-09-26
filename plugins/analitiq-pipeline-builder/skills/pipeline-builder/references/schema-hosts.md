@@ -20,8 +20,8 @@ is a location, and its `$ref` names the schema of the package or document that
 sits there. A package directory's segment is its slug
 (`identity-and-versioning.md`), a package's root document is its schema's
 `required` entry, and a location marked `x-secret` holds secret values.
-If a schema cannot be read, or a package's root document is not at its
-location, stop and report the URL or path; nothing is inferred from its absence.
+If a schema cannot be read, stop and report its URL. Whether a document missing
+from its location is an error is decided by the step reading it.
 
 <!-- PROBE: pipeline-schema-pinned-url-rejected -->
 There is no authorable pinned form. Only the `latest.json` URL above validates;

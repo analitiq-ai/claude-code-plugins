@@ -417,6 +417,11 @@ The validator agent adds a finding of its own when the server never graded the r
 ```
 <!-- END GENERATED: drift-verdict-envelope -->
 
+In place of a verdict, `connector-drift-classifier` returns
+`{"unresolved": "<path>"}` when a document a release must hold — its connector
+document, or the type map its `kind` calls for (`RULE-PKG-030`) — cannot be
+read. It is never a verdict: the orchestrator halts on it.
+
 ## CreatorOutput
 
 Returned by `api-connector-creator` and `db-connector-creator`.

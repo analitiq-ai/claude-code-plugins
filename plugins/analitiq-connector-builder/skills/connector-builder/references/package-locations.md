@@ -12,7 +12,5 @@ its connector document declares (`RULE-CTOR-042`).
 Read that schema for placement only: to write, stage or read a document of the
 package. It is never read to interpret a validator finding.
 
-If the schema cannot be read, or the connector document or the type map its
-`kind` calls for (`RULE-PKG-030`) is not at its location, stop and report the
-URL or path. A document counts as absent only at a location the schema resolved
-and the package does not require.
+If the schema cannot be read, stop and report its URL. Whether a document
+missing from its location is an error is decided by the step reading it.
