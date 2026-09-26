@@ -86,8 +86,8 @@ jobs:
         # containing no status-check function gets an implicit `success() &&`
         # prepended, which would skip this step whenever ANY earlier step
         # failed - including the test step, i.e. exactly the runs it exists
-        # to explain. No DOMAIN env and no FROM_SOURCE flag: these are
-        # repo-root generators that bootstrap the in-repo trees themselves.
+        # to explain. No DOMAIN env: these are repo-root generators that
+        # bootstrap the in-repo trees themselves.
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: python3 scripts/render_all.py check
       - name: Package build guards
