@@ -203,8 +203,8 @@ def _wrap_type_map(**sections: list) -> dict:
     return {"$schema": TYPE_MAP_SCHEMA_URL, **sections}
 
 
-CONNECTOR_KEY = "definition/connector.json"
-TYPE_MAP_KEY = "definition/type-map.json"
+CONNECTOR_KEY = "definition/connector.json"  # skipcq: SCT-A000 — a package location, not a credential
+TYPE_MAP_KEY = "definition/type-map.json"  # skipcq: SCT-A000 — a package location, not a credential
 
 
 def _example_package(example_dir: Path) -> dict[str, Any]:
