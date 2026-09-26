@@ -84,8 +84,7 @@ ships a generated `analitiq/contracts/__init__.py`, making it a *regular* packag
 while the in-repo tree deliberately has none, making it a *namespace portion* — and
 a regular package wins regardless of `sys.path`, so an installed copy silently
 shadows the source and the suite grades the wrong code. The repo-root `conftest.py`
-puts both source trees on the path and sets `ANALITIQ_VALIDATOR_FROM_SOURCE=1` so a
-helper run from a checkout does not bootstrap a venv and `os.execv` out of pytest.
+puts both source trees on the path and sets `ANALITIQ_VALIDATOR_FROM_SOURCE=1`.
 `requirements-dev.txt` carries only the packages' runtime deps.
 
 The plugins **install nothing and pin nothing**: they submit documents to the
