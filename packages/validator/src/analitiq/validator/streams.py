@@ -6,7 +6,7 @@ the same model the published `stream` JSON Schema is generated from):
 rule (endpoint-ref shape, unique destinations, the authored-top-level guard)
 offline, no schema fetch, no drift. There is no cross-document or referential check a
 stream document needs in isolation — its wiring is checked across documents by
-`analitiq.validator.document_set` and the pipeline-bundle kind. The one check the
+`analitiq.validator.document_set`. The one check the
 model cannot carry is RULE-SHRD-003, which reports a `warning` — a severity no
 `@model_validator` can carry (`rules/SCHEMA.md`, `validator`) — so this kind's
 validator combines the two.
