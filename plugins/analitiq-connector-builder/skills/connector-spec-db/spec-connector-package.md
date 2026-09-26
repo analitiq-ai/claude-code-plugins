@@ -23,11 +23,9 @@ package files (`RULE-CTOR-043`) and no `write` section in its map
 ## Required layout
 
 Where each definition document of a connector package sits — the connector
-document, its type map, each endpoint document — is the location table of
-`https://schemas.analitiq.ai/connector-package/latest.json`: its
-`patternProperties` map each location to a document kind, and `required` names
-the root, the connector document. Write every definition document at the
-location that schema assigns to its kind.
+document, its type map, each endpoint document — is the location table of the
+connector-package schema; `connector-builder/references/package-locations.md`
+says how to read it.
 
 The connector root IS the Python package (`RULE-PKG-002`). Beside the
 definition documents it carries:

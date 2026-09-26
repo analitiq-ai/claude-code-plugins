@@ -91,6 +91,7 @@ Always load:
 - `references/pipeline.md`
 - `references/enum-mappers.md`
 - `references/io-contracts.md`
+- `references/package-locations.md`
 
 Do NOT load `connector-spec-api` or `connector-spec-db` here — the creator
 sub-agents own those skills.
@@ -145,13 +146,14 @@ Report to the user:
 - **The orchestrator never diagnoses findings and never reads spec
   material.** Do not load or read the kind-specific spec skills
   (`connector-spec-api` / `connector-spec-db`), their example/reference
-  files, or the published JSON Schemas, and never fetch a schema URL to
-  interpret a failure. When the validator returns findings, do not
+  files, or the published JSON Schemas other than the connector-package
+  schema read for placement (`references/package-locations.md`), and never
+  fetch a schema URL to interpret a failure. When the validator returns findings, do not
   reason about the schema yourself — re-dispatch the owning
   creator/endpoint agent with the findings verbatim and let it triage
   and fix. Your only specs are the orchestrator references
-  (`pipeline.md`, `io-contracts.md`, `enum-mappers.md`, plus
-  `value-expressions.md` for scope lookups).
+  (`pipeline.md`, `io-contracts.md`, `enum-mappers.md`,
+  `package-locations.md`, plus `value-expressions.md` for scope lookups).
 - Every cross-cutting context reference comes from the documented scopes
   in `references/value-expressions.md` (`RULE-SHRD-008`). Unknown scope =
   stop and ask.

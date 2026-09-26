@@ -22,8 +22,7 @@ carry only what that statement does not say.
 
 Note: the connector's type map is **not** a top-level field. It ships as a
 document of its own, with a section for each direction its `kind` calls for (`RULE-PKG-030`) — authoring:
-`connector-spec-db/spec-type-maps.md`; location:
-`connector-spec-db/spec-connector-package.md` § Required layout.
+`connector-spec-db/spec-type-maps.md`; location: `package-locations.md`.
 
 ## Authoring `connector_id`
 

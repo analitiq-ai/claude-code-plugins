@@ -19,6 +19,8 @@ resolves against this list. The input paths below are elsewhere on disk.
   — the `DriftVerdict` shape.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
   — the release table the bump classification follows.
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/package-locations.md`
+  — where each release's type map and endpoint documents sit.
 
 A cited `RULE-*` id resolves in one of the rule files under
 `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/`; the index

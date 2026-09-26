@@ -147,7 +147,7 @@ For each successfully built connector:
 Beside these sit the connector document, its type map (`RULE-PKG-030`) and,
 for api connectors, its endpoint documents (`RULE-PKG-031`), each where the
 connector-package schema locates its kind
-(`skills/connector-spec-db/spec-connector-package.md` § Required layout).
+(`skills/connector-builder/references/package-locations.md`).
 
 `connector_id` is the stable connector slug; the plugin authors it into
 the connector document (`RULE-CTOR-042`). Registry-stamped fields (`created_at`,

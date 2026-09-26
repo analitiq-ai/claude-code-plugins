@@ -2,6 +2,8 @@
 
 Phase-by-phase contract for the `connector-builder` orchestrator —
 always loaded by the orchestrator skill (`SKILL.md` §Required reading).
+Every location below — a release location, an on-disk document of the
+package — resolves as `package-locations.md` says.
 
 ## Contents
 
@@ -261,8 +263,8 @@ are never edited in place. Report that the tree was regenerated and
 recommend the user review `git diff` before committing. Otherwise write
 the connector document, type map, package files (database only), any
 endpoint files, and the README (`RULE-PKG-025`) to disk. Each
-definition document goes where `https://schemas.analitiq.ai/connector-package/latest.json`
-locates its kind (`spec-connector-package.md`). The connector root IS the
+definition document goes where the connector-package schema locates its
+kind (`package-locations.md`). The connector root IS the
 Python package for database connectors:
 
 ```
