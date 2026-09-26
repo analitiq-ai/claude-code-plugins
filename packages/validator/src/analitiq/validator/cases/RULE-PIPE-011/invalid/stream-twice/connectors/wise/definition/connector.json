@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schemas.analitiq.ai/connector/latest.json",
+  "connector_id": "wise",
+  "kind": "api",
+  "display_name": "Wise",
+  "description": "Cross-border money transfer platform.",
+  "documentation_url": "https://docs.wise.com/api-docs",
+  "version": "1.0.0",
+  "default_transport": "api",
+  "transports": {
+    "api": {
+      "transport_type": "http",
+      "base_url": "https://api.wise.com",
+      "headers": {
+        "Accept": "application/json",
+        "Authorization": {
+          "template": "Bearer ${secrets.api_token}"
+        }
+      },
+      "timeout_seconds": 30
+    }
+  },
+  "auth": {
+    "type": "api_key"
+  },
+  "connection_contract": {
+    "inputs": {
+      "api_token": {
+        "source": "user",
+        "phase": "pre_auth",
+        "storage": "secrets",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "ui": {
+          "label": "API Token",
+          "widget": "password",
+          "help_text": "Wise API token."
+        }
+      }
+    },
+    "required_for_activation": [
+      "secrets.api_token"
+    ]
+  }
+}

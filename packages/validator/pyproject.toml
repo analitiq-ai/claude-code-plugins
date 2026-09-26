@@ -11,7 +11,7 @@ name = "analitiq-validator"
 # release unit and ship in sync. `test_contract_models_pin.py`
 # fails the build if this version, or the exact pin below, diverges from it.
 version = "1.0.0rc28"
-description = "The Analitiq artifact validator: offline validation of Analitiq documents against the contract models (`analitiq-contract-models`) plus the cross-document checks a single-document model cannot express. It grades documents, packages and workspaces handed over in memory, and the referential integrity of an assembled pipeline bundle. Import as `analitiq.validator`."
+description = "The Analitiq artifact validator: offline validation of Analitiq documents against the contract models (`analitiq-contract-models`) plus the cross-document checks a single-document model cannot express. It grades documents, packages and workspaces handed over in memory. Import as `analitiq.validator`."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"

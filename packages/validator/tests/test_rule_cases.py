@@ -88,6 +88,7 @@ def _write_case(root: Path, rule_id: str, group: str, name: str, *entries: str) 
     case_root = root / rule_id / group / name
     case_root.mkdir(parents=True)
     for entry in entries:
+        (case_root / entry).parent.mkdir(parents=True, exist_ok=True)
         (case_root / entry).write_text("{}")
 
 
@@ -97,7 +98,7 @@ def _load_from(monkeypatch, root: Path):
 
 
 def test_a_directory_for_an_unknown_rule_is_refused(monkeypatch, tmp_path):
-    _write_case(tmp_path, "RULE-NONE-999", "valid", "a", "bundle.json")
+    _write_case(tmp_path, "RULE-NONE-999", "valid", "a", "pipelines/p/pipeline.json")
     with pytest.raises(ValueError, match="RULE-NONE-999"):
         _load_from(monkeypatch, tmp_path)
 
@@ -114,29 +115,13 @@ def test_a_rule_not_enforced_by_a_validator_check_is_refused(monkeypatch, tmp_pa
         "every rule is enforced by a validator check, so there is no rule "
         "this refusal could be shown on — this test grades nothing"
     )
-    _write_case(tmp_path, rule.id, "valid", "a", "bundle.json")
+    _write_case(tmp_path, rule.id, "valid", "a", "pipelines/p/pipeline.json")
     with pytest.raises(ValueError, match=rule.id):
         _load_from(monkeypatch, tmp_path)
 
 
 def test_a_group_other_than_a_verdict_is_refused(monkeypatch, tmp_path):
-    _write_case(tmp_path, "RULE-PIPE-011", "maybe", "a", "bundle.json")
+    _write_case(tmp_path, "RULE-PIPE-011", "maybe", "a", "pipelines/p/pipeline.json")
     with pytest.raises(ValueError, match="maybe"):
         _load_from(monkeypatch, tmp_path)
 
-
-def test_a_case_without_its_bundle_is_refused(monkeypatch, tmp_path):
-    _write_case(tmp_path, "RULE-PIPE-011", "valid", "a")
-    with pytest.raises(ValueError, match="bundle.json"):
-        _load_from(monkeypatch, tmp_path)
-
-
-def test_a_case_holding_another_file_is_refused(monkeypatch, tmp_path):
-    """A bundle is validated from `bundle.json` alone, so a document beside it
-    would grade nothing."""
-    _write_case(tmp_path, "RULE-PIPE-011", "valid", "a", "bundle.json")
-    stray = tmp_path / "RULE-PIPE-011" / "valid" / "a" / "endpoints" / "x.json"
-    stray.parent.mkdir()
-    stray.write_text("{}")
-    with pytest.raises(ValueError, match="endpoints/x.json"):
-        _load_from(monkeypatch, tmp_path)

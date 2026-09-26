@@ -1,0 +1,15 @@
+{
+  "$schema": "https://schemas.analitiq.ai/connection/latest.json",
+  "connection_id": "33333333-3333-4333-8333-333333333333",
+  "connector_id": "postgresql",
+  "display_name": "Prod Postgres",
+  "parameters": {
+    "host": "db.example.com",
+    "port": 5432,
+    "database": "analytics",
+    "ssl_mode": "verify-full"
+  },
+  "secret_refs": {
+    "password": "env:ANALITIQ_POSTGRESQL_PASSWORD"
+  }
+}

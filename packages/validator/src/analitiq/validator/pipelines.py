@@ -1,11 +1,9 @@
-"""Pipeline validation: the pipeline-side cross-document checks, the documents
-graded alone, and the assembled pipeline-run bundle.
+"""Pipeline validation: the pipeline-side cross-document checks and the
+documents graded alone.
 
 Each `_check_*` function takes documents by kind (`_Doc`s) and returns findings
-keyed to the document they concern. `document_set` routes the same functions to
-a package or a workspace by the kinds they read; `validate_pipeline_bundle`
-runs them over a bundle it lays out as documents, so both surfaces apply one
-implementation of each rule.
+keyed to the document they concern. `document_set` routes them to a package or
+a workspace by the kinds they read.
 
 A check does NOT assume each document was already contract-validated: a missing
 reference field (a connection naming no connector, a stream slot with no
@@ -38,7 +36,7 @@ from ._core import (
     finding,
     register_document_validator,
 )
-from .connectors import _ALL_WRITE_FAMILY_PROBES, _check_endpoint_ids_unique
+from .connectors import _ALL_WRITE_FAMILY_PROBES
 
 # Import the single-document contract model under the shared DOMAIN guard (the
 # model binds the `$schema` host at import; see `contract_model_domain`).
@@ -77,31 +75,6 @@ def _pipeline_connection_ids(pipeline: dict) -> set[str]:
         return set()
     refs = (conns.get("source"), *(conns.get("destinations") or ()))
     return {_base_id(r) for r in refs if isinstance(r, str) and r}
-
-
-def _connector_ids(connectors: Any) -> set[str]:
-    """The connector identities present in the bundle.
-
-    Matched verbatim, not base-form: a connector is referenced by its whole
-    identity (slug or id), with the version carried separately — unlike a
-    stream/connection ref, `foo_v2` and `foo_v3` are not the same connector.
-    Accepts the identity set however the assembler holds it: a mapping keyed by
-    connector id, or an iterable of id strings / connector-meta dicts.
-    """
-    ids: set[str] = set()
-    if isinstance(connectors, dict):
-        return {k for k in connectors if isinstance(k, str)}
-    if isinstance(connectors, (list, tuple, set)):
-        for item in connectors:
-            if isinstance(item, str) and item:
-                ids.add(item)
-            elif isinstance(item, dict):
-                for key in ("connector_id", "slug", "id"):
-                    value = item.get(key)
-                    if isinstance(value, str) and value:
-                        ids.add(value)
-                        break
-    return ids
 
 
 def _content(doc: _Doc) -> dict:
@@ -601,85 +574,8 @@ def _check_connector_scoped_endpoints(documents: _Documents) -> list[tuple[str, 
 
 
 # ---------------------------------------------------------------------------
-# Bundle adapter + registration
+# Registration
 # ---------------------------------------------------------------------------
-
-def _bundle_documents(bundle: dict, pipeline: dict) -> dict[str, tuple[_Doc, ...]]:
-    """The bundle's documents as the referential checks read them, each keyed
-    by its pointer into the bundle. A connection or endpoint sits in the
-    package its `connection_id` names, and a connector in the one its id names;
-    a bundled endpoint entry is a connection-scoped endpoint unless it says
-    otherwise."""
-    def _package(cid: Any) -> str:
-        return f"connections/{_base_id(cid)}/" if isinstance(cid, str) and cid else ""
-
-    def _listed(value: Any) -> list:
-        return value if isinstance(value, list) else []
-
-    endpoints = [
-        _Doc(f"/endpoints/{j}", _package(e.get("connection_id")), e)
-        for j, e in enumerate(_listed(bundle.get("endpoints")))
-        if isinstance(e, dict) and e.get("scope", "connection") == "connection"
-        and isinstance(e.get("connection_id"), str) and isinstance(e.get("endpoint_id"), str)]
-    return {
-        "pipeline": (_Doc("/pipeline", "", pipeline),),
-        "stream": tuple(_Doc(f"/streams/{i}", "", s) for i, s in enumerate(_listed(bundle.get("streams")))),
-        "connection": tuple(
-            _Doc(f"/connections/{i}", _package(c.get("connection_id") if isinstance(c, dict) else None), c)
-            for i, c in enumerate(_listed(bundle.get("connections")))),
-        "connector": tuple(_Doc("/connectors", f"connectors/{cid}/", None)
-                           for cid in sorted(_connector_ids(bundle.get("connectors")))),
-        "database-endpoint": tuple(endpoints),
-    }
-
-
-def validate_pipeline_bundle(bundle: Any) -> list[dict]:
-    """Validate referential integrity across an assembled pipeline bundle.
-
-    `bundle` is a mapping of the already-parsed documents:
-    `{pipeline, streams, connections, connectors, endpoints}`. `connectors` and
-    `endpoints` supply only identity — the connector ids present, and the
-    connection-scoped endpoint documents (`connection_id` + `endpoint_id`). Returns
-    a list of findings (empty == referentially sound); every referential defect is
-    error severity.
-
-    An `active` pipeline is additionally held to carrying a runnable stream; a
-    pipeline in any other status is not, so a draft answers on its references
-    alone.
-    """
-    if not isinstance(bundle, dict):
-        # No rule to name: this rejects before any referential check — the ones
-        # rule records bind — could even begin (rules/SCHEMA.md's generalized
-        # first ruleless-fail case).
-        return [finding(
-            message_id="bundle-not-a-mapping", kind="fail", path="",
-            message=(
-                "pipeline bundle must be a mapping of pipeline/streams/connections/"
-                "connectors/endpoints."),
-        )]
-    pipeline = bundle.get("pipeline")
-    if not isinstance(pipeline, dict):
-        return [finding(
-            message_id="bundle-missing-pipeline-document",
-            kind="fail", path="/pipeline",
-            message="pipeline bundle is missing its 'pipeline' document.",
-        )]
-    documents = _bundle_documents(bundle, pipeline)
-    checks = [
-        _check_pipeline_id,
-        _check_stream_refs,
-        _check_stream_parent_pipeline,
-        _check_stream_endpoint_targets,
-        _check_connection_version_conflicts,
-        _check_connections_present,
-        _check_stream_connection_roles,
-        _check_connection_connector_refs,
-        _check_connection_scoped_endpoints,
-        _check_endpoint_ids_unique,
-        _check_pipeline_active_gate,
-    ]
-    return [{**f, "path": key + f["path"]} for check in checks for key, f in check(documents)]
-
 
 def _validate_pipeline_document(doc: Any) -> list[dict]:
     return _model_findings(doc, _PIPELINE_ADAPTER) + _missing_schema_url_findings(doc)

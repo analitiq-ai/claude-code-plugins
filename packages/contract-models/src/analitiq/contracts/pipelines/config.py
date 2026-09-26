@@ -399,7 +399,7 @@ class PipelineAuthored(StrictModel):
         `status: "active"` requires at least one stream reference. The companion
         "≥1 runnable stream" half needs the referenced stream documents and is
         enforced at the stream-aware gates (the pipeline API write path and the
-        validator's bundle path); it cannot be checked from a lone pipeline
+        validator's pipeline package check); it cannot be checked from a lone pipeline
         document. `draft`/`inactive` allow an empty `streams` array.
         """
         if self.status == "active" and not self.streams:

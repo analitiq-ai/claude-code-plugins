@@ -131,7 +131,6 @@ def test_an_endpoint_finding_names_no_file_in_its_message(validator):
     (lambda v: v.type_map_findings(
         [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]),
      "model_type"),
-    (lambda v: v.validate_pipeline_bundle(["not", "a", "bundle"]), "bundle-not-a-mapping"),
 ])
 def test_a_whole_document_finding_has_the_empty_pointer(validator, graded, message_id):
     [found] = [f for f in graded(validator) if f["message_id"] == message_id]

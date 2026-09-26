@@ -6,9 +6,8 @@ generated from): `TypeAdapter(...).validate_python` enforces its structure *and*
 every cross-field rule (the storage-map / `secret_refs` scheme rules, the
 authored-top-level guard) offline, no schema fetch, no drift. There is no
 cross-document or referential check a connection document needs in isolation — its
-place among other documents is checked by `analitiq.validator.document_set` and
-the pipeline-bundle kind. The one check
-the model cannot carry is RULE-SHRD-003, which reports a `warning` — a severity
+place among other documents is checked by `analitiq.validator.document_set`.
+The one check the model cannot carry is RULE-SHRD-003, which reports a `warning` — a severity
 no `@model_validator` can carry (`rules/SCHEMA.md`, `validator`) — so this kind's
 validator combines the two.
 
