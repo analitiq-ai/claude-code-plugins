@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.5.0](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-connector-builder-v0.4.0...analitiq-connector-builder-v0.5.0) (2026-09-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* submit plugin validation through the analitiq-validator MCP server
+
+### Features
+
+* **contracts:** refuse a batched write with a form content_type ([#457](https://github.com/analitiq-ai/claude-code-plugins/issues/457)) ([9f320d8](https://github.com/analitiq-ai/claude-code-plugins/commit/9f320d8305ab20d2918ef5bb1e4e6543a8795bfb))
+* **contracts:** resolve types in the contract models and release 1.0.0rc28 ([#466](https://github.com/analitiq-ai/claude-code-plugins/issues/466)) ([600730c](https://github.com/analitiq-ai/claude-code-plugins/commit/600730ca695058fd80e2e2604fa37b6e98764eca))
+* send only allowed-extension files, never a dot entry ([9235185](https://github.com/analitiq-ai/claude-code-plugins/commit/92351857d04e65467c67fff9e6b9ab17900f31c2))
+* send the whole package or workspace directory to the validator ([1f72a40](https://github.com/analitiq-ai/claude-code-plugins/commit/1f72a400036474c0b73c344ae0e8fe69591ed258))
+* submit plugin validation through the analitiq-validator MCP server ([1f0eb50](https://github.com/analitiq-ai/claude-code-plugins/commit/1f0eb50a3940f47ea555789e3da4f324ffc0cc21))
+
+
+### Bug Fixes
+
+* allowlist each validator agent's MCP tools; load the grader once ([3abb65a](https://github.com/analitiq-ai/claude-code-plugins/commit/3abb65a5daeb1492927ac84aba94cb0f119b6234))
+* **contracts:** refuse a non-finite Param enum member under RULE-ENDP-076 ([#455](https://github.com/analitiq-ai/claude-code-plugins/issues/455)) ([34e97cb](https://github.com/analitiq-ai/claude-code-plugins/commit/34e97cb358956ef632955ad4d7c1db3f4adc7c81))
+* count a left-out directory as reporting every key beneath it ([c63a9cc](https://github.com/analitiq-ai/claude-code-plugins/commit/c63a9ccad4cc3de157ac081f823f72bcdaa2a4ad))
+* decide a named pipeline from the walk alone ([b267dcc](https://github.com/analitiq-ai/claude-code-plugins/commit/b267dccbc21d97db3a76f06cd1cb6609a24a1b42))
+* define validation-not-run once per plugin and cite it everywhere ([37b74b3](https://github.com/analitiq-ai/claude-code-plugins/commit/37b74b35392747c9d2427827b159ce2a100ea164))
+* each validator call takes the request its phase can satisfy ([be7c730](https://github.com/analitiq-ai/claude-code-plugins/commit/be7c73056576a5b27dca39cde4aea24edc8185bb))
+* hold each plugin's MCP call surface exactly to what its agents call ([1a77c14](https://github.com/analitiq-ai/claude-code-plugins/commit/1a77c143e1659d22dc51b1f1837d0d1b3c9d002f))
+* let the location tables, not filesystem shape, decide what a request carries ([d42bda5](https://github.com/analitiq-ai/claude-code-plugins/commit/d42bda529805b1460e7fe89ad4bd8a81fa40b614))
+* read document locations from the published schemas, never from prose ([#491](https://github.com/analitiq-ai/claude-code-plugins/issues/491)) ([40e94f2](https://github.com/analitiq-ai/claude-code-plugins/commit/40e94f27aad208676870bfb6ab024fb87f9a2824))
+* remove the validator's path-taking entry points and its CLI ([b416adf](https://github.com/analitiq-ai/claude-code-plugins/commit/b416adfc8cc88638353200f5c33f6a1a83687bda))
+* remove the validator's path-taking entry points and its CLI ([c60324b](https://github.com/analitiq-ai/claude-code-plugins/commit/c60324b3b3a7620173f8915c199ae169f335728f))
+* request builder decides links by name alone ([4e2a907](https://github.com/analitiq-ai/claude-code-plugins/commit/4e2a9076021d5b1199b91f3b312c68770b95e5ca))
+* request builder types every path through one lstat probe ([2f20096](https://github.com/analitiq-ai/claude-code-plugins/commit/2f20096307d13b4543dfee6902f37074f7d6b3e0))
+* request walk leaves out every link and non-regular entry ([772264f](https://github.com/analitiq-ai/claude-code-plugins/commit/772264ffead7655231cebef4b0f2fa287a2b0d7e))
+* resolve three sample-evidence prose contradictions in connector-builder ([#254](https://github.com/analitiq-ai/claude-code-plugins/issues/254)) ([399fb51](https://github.com/analitiq-ai/claude-code-plugins/commit/399fb518e21dbfd493dbc0b507e735547f464758)), closes [#218](https://github.com/analitiq-ai/claude-code-plugins/issues/218)
+* select request files by one settled scope table ([a59d0f8](https://github.com/analitiq-ai/claude-code-plugins/commit/a59d0f8cd4c124db731d3b199ca8b730290a5315))
+
 ## [0.4.0](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-connector-builder-v0.3.0...analitiq-connector-builder-v0.4.0) (2026-09-24)
 
 
