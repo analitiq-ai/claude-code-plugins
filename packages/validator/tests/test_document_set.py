@@ -1117,11 +1117,20 @@ def test_a_connection_scoped_endpoint_resolves_by_its_endpoint_id(validator):
         ("RULE-STRM-034", f"{_STREAM_KEY}#/destinations/0/endpoint_ref")]
 
 
-def test_a_connection_scoped_endpoint_ref_without_an_endpoint_id_is_unresolvable(validator):
+def test_a_connection_scoped_endpoint_ref_resolves_by_its_derived_endpoint_id(validator):
+    """The contract derives an omitted `endpoint_id` from `database_object`,
+    so the ref resolves exactly as it would with the handle written out."""
     documents = _workspace_documents()
     del documents[_STREAM_KEY]["destinations"][0]["endpoint_ref"]["endpoint_id"]
+    assert validator.validate_workspace(_workspace_request(documents)) == {"passed": True, "findings": []}
+
+
+def test_a_ref_omitting_endpoint_id_still_needs_its_endpoint_document(validator):
+    documents = _workspace_documents()
+    del documents[_STREAM_KEY]["destinations"][0]["endpoint_ref"]["endpoint_id"]
+    del documents[f"connections/{_DST}/definition/endpoints/{_EID}.json"]
     result = validator.validate_workspace(_workspace_request(documents))
-    assert _ruled_at(result, "endpoint-ref-no-endpoint-id") == [
+    assert _ruled_at(result, "endpoint-ref-unresolved") == [
         ("RULE-STRM-034", f"{_STREAM_KEY}#/destinations/0/endpoint_ref")]
 
 
