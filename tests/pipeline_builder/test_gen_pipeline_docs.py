@@ -117,13 +117,9 @@ def test_every_schema_url_in_prose_is_published():
     one the contract source actually emits.
     """
     from analitiq.contracts.shared.common import schema_url_for
+    from render_schemas import RESOURCES_BY_NAME
 
-    published = {
-        schema_url_for(resource)
-        for resource in ("pipeline", "stream", "connection", "database-endpoint",
-                         "api-endpoint", "connector", "credentials",
-                         "type-map")
-    }
+    published = {schema_url_for(name) for name in RESOURCES_BY_NAME}
     url_re = re.compile(r"https://schemas\.analitiq\.ai/[A-Za-z0-9._/-]+")
     offenders = {}
     for path in sorted(G.DOCS_ROOT.rglob("*")):
