@@ -12,7 +12,7 @@ targets: [PipelineConnections]
 rationale: >
   Ownership is registry state and no authored document carries an org id, so a
   cross-org reference is a well-formed UUID here and is refused only when the
-  pipeline is saved — after the whole bundle has been written. The way in is
+  pipeline is saved — after every document it references has been written. The way in is
   copying a connection id out of another workspace's example or an older
   export. Catching it locally would mean querying the registry, which the
   plugin never talks to.

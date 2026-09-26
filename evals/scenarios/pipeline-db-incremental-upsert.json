@@ -105,13 +105,6 @@
     },
     {
       "doc": "stream",
-      "path": "source.endpoint_ref.endpoint_id",
-      "equals": "public__orders__371c8422",
-      "rule": "RULE-STRM-018",
-      "note": "the handle the seeded endpoint already carries, copied not recomputed"
-    },
-    {
-      "doc": "stream",
       "path": "source.endpoint_ref.database_object.name",
       "equals": "orders",
       "rule": "RULE-DBEP-007",

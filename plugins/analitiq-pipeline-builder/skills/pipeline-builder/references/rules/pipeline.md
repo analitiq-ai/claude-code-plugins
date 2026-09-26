@@ -82,7 +82,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-PIPE-012 | Every connection a pipeline references MUST resolve to exactly one connection document in the run assembled from it. | `pipeline` | error | validator |
 | RULE-PIPE-013 | A pipeline MUST NOT reference two connections that reduce to the same version-stripped base id. | `pipeline` | error | validator |
 | RULE-PIPE-014 | A pipeline in the status that schedules it MUST reference at least one stream that is itself in a runnable status. | `pipeline` | error | validator |
-| RULE-PIPE-018 | A pipeline bundle's pipeline document MUST declare a non-empty `pipeline_id`. | `pipeline` | error | validator |
+| RULE-PIPE-018 | A pipeline package's pipeline document MUST declare a non-empty `pipeline_id`. | `pipeline` | error | validator |
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 

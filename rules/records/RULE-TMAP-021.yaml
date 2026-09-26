@@ -17,8 +17,8 @@ rationale: >
   from the discovered column, the map rule from the type name — is the ordinary
   path to two records of one column's type that disagree, and which one wins
   depends on which path reads it. Both files are on disk when the connection is
-  authored, so this is a gap a bundle-aware check could close rather than an
-  inherently unreachable one; today it means reading the endpoint's frozen
-  type beside the rule.
+  authored and both sit in one connection package, so a package check could
+  close this gap; none does, so catching a violation means reading the
+  endpoint's frozen type beside the rule.
 status: active
 superseded_by: null

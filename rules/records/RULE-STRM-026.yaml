@@ -10,11 +10,10 @@ enforcement_location: unenforced
 owners: [pipeline-plugin, engine]
 targets: [Filter]
 rationale: >
-  The `filters` map lives on the endpoint document, which is not part of the
-  stream, so no in-process check here can compare a stream's filter against
-  it — a connector-scoped (API) endpoint document is never carried by the
-  pipeline bundle the local validator resolves against, only
-  connection-scoped ones are. The engine narrows only half of what this rule
+  The `filters` map lives on the endpoint document, not on the stream. A
+  workspace request carries both, and the workspace check resolving a
+  connector-scoped reference reads the endpoint document, but no check
+  compares a filter against its `filters` map. The engine narrows only half of what this rule
   requires, at read-plan time: it refuses a filter naming a field with no
   params-map entry at all, but that lookup is keyed on field name alone, with
   no operator dimension, so a field declared for one operator and filtered
