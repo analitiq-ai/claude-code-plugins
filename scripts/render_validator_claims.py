@@ -1461,8 +1461,7 @@ def _pipeline_gen():
 
     Its renderer registry decides which pipeline-plugin generated blocks are
     real; restating that set (or its marker grammar) here would be a drift
-    surface. Import is side-effect-free — the dependency bootstrap only runs
-    when its `main()` calls it.
+    surface.
     """
     import importlib.util
 

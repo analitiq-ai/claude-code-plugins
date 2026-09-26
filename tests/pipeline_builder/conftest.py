@@ -43,8 +43,7 @@ def pytest_collectstart(collector):
             # so fall through to the same message instead of a bare traceback.
             spec = None
         # `origin` None means a bare namespace directory, not an importable
-        # module - the same false positive the plugin's own bootstrap guards
-        # against.
+        # module.
         if spec is None or spec.origin in (None, "namespace"):
             raise pytest.UsageError(
                 f"DRIFT_REQUIRE_CONTRACT_MODELS=1 but `{module}` has no "

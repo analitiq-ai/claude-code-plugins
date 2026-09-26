@@ -123,7 +123,6 @@ RULE_RECORDS = REPO_ROOT / "rules" / "records"
 # It must never reach the agent: the agent validates through the plugin's MCP
 # server, as its users do, and nothing it runs reads these variables.
 GRADER_ENV = {
-    "ANALITIQ_VALIDATOR_FROM_SOURCE": "1",
     "DOMAIN": os.environ.get("DOMAIN", "analitiq.ai"),
     "PYTHONPATH": os.pathsep.join([
         str(REPO_ROOT / "packages" / "contract-models" / "src"),
