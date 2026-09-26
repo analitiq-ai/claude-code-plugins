@@ -9,8 +9,8 @@ validator: "analitiq.validator.pipelines::_check_pipeline_id"
 owners: [pipeline-plugin, engine]
 rationale: >
   Every stream the package holds names its parent by this id, and nothing
-  else in the package stands in for it. A pipeline document missing this
-  field fails only when something resolves against the id that never
-  arrived, which is after the package has been handed to a run.
+  else in the package stands in for it. The pipeline model leaves the field
+  optional, so without this check a document missing it passes validation and
+  fails only when a stream's parent reference is resolved at run time.
 status: active
 superseded_by: null

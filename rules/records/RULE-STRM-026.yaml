@@ -19,7 +19,6 @@ rationale: >
   no operator dimension, so a field declared for one operator and filtered
   with a different one passes identically to a genuine match and goes out on
   the wire as whatever the provider does with an operator it never declared
-  support for — a parameter the runtime owns (RULE-ENDP-002) or an operator
-  the map simply never declared for that field.
+  support for.
 status: active
 superseded_by: null

@@ -5126,7 +5126,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Every stream the package holds names its parent by this id, and nothing else in the package stands in for it. A pipeline document missing this field fails only when something resolves against the id that never arrived, which is after the package has been handed to a run.\n",
+   "rationale": "Every stream the package holds names its parent by this id, and nothing else in the package stands in for it. The pipeline model leaves the field optional, so without this check a document missing it passes validation and fails only when a stream's parent reference is resolved at run time.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6790,7 +6790,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The `filters` map lives on the endpoint document, not on the stream. A workspace request carries both, and the workspace check resolving a connector-scoped reference reads the endpoint document, but no check compares a filter against its `filters` map. The engine narrows only half of what this rule requires, at read-plan time: it refuses a filter naming a field with no params-map entry at all, but that lookup is keyed on field name alone, with no operator dimension, so a field declared for one operator and filtered with a different one passes identically to a genuine match and goes out on the wire as whatever the provider does with an operator it never declared support for — a parameter the runtime owns (RULE-ENDP-002) or an operator the map simply never declared for that field.\n",
+   "rationale": "The `filters` map lives on the endpoint document, not on the stream. A workspace request carries both, and the workspace check resolving a connector-scoped reference reads the endpoint document, but no check compares a filter against its `filters` map. The engine narrows only half of what this rule requires, at read-plan time: it refuses a filter naming a field with no params-map entry at all, but that lookup is keyed on field name alone, with no operator dimension, so a field declared for one operator and filtered with a different one passes identically to a genuine match and goes out on the wire as whatever the provider does with an operator it never declared support for.\n",
    "status": "active",
    "superseded_by": null
   },
