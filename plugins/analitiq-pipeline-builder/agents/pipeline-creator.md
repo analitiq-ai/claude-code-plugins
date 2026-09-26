@@ -66,7 +66,6 @@ stitches in `stream_id` UUIDs in phase 8.
   "entity": "pipeline",
   "directory_slug": "<pipeline_slug>",
   "document": { /* the pipeline JSON, $schema set, pipeline_id authored */ },
-  "secondary_files": [],
   "notes": []
 }
 ```

@@ -50,7 +50,7 @@ Validation runs on the `analitiq-validator` MCP server this plugin ships.
    ```
 
    It prints `{"tool", "arguments"}`; its docstring states which files a
-   package request carries, and `.secrets/` is never one.
+   package request carries.
 2. Call the server's tool named by `tool` with `arguments`, verbatim.
 
 ## Findings

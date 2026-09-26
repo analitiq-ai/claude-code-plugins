@@ -122,12 +122,10 @@ Always load:
 - `references/enum-mappers.md`
 - `references/io-contracts.md`
 - `references/identity-and-versioning.md`
+- `references/schema-hosts.md`
 
 Read on demand:
 
-- `references/schema-hosts.md` — when resolving a document's location, or
-  explaining or troubleshooting the published schema host or how validation
-  runs.
 - `references/reserved-fields.md` — when a validator finding names an unknown
   field, or when a name discovered from a provider matches an artifact field:
   what to do with a server-managed name that leaked into an authored document,
@@ -143,14 +141,12 @@ user's working directory — the workspace root. Create it before the first
 write. A workspace validation request is built from it alone, so nothing else
 in the working directory is ever submitted.
 
-Where each document sits is read from the workspace schema
-(`references/schema-hosts.md`) and the package schemas it points to: each
-`patternProperties` key is a location whose `$ref` names what sits there, a
-package's root document is its schema's `required` entry, `x-secret` marks a
-secret location, and a package directory's segment is its slug
-(`references/identity-and-versioning.md`). This plugin names documents by kind
-and package, never by path. A sub-agent never learns the root or a location on
-its own: every dispatch passes the absolute paths its Inputs name.
+Where each document sits under the root is read from the published schemas,
+never from this plugin's prose; `references/schema-hosts.md` says how. This
+plugin names every document by kind and package — the connection document, the
+connection's credentials document, a stream document — and you resolve its path
+from those schemas. A sub-agent never learns the root or a location on its own:
+every dispatch passes the absolute paths its Inputs name.
 
 ## Pipeline
 
@@ -160,14 +156,15 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
 
 0. **Pre-flight: pipeline directory check** — before any research or
    authoring, check whether the pipeline's package directory already
-   exists. If it does, **halt** and ask the user whether to pick a
-   different `pipeline_slug` or to remove the existing directory
-   themselves first. Do not migrate
+   exists. If it does, **halt** and
+   ask the user whether to pick a different `pipeline_slug` or to
+   remove the existing directory themselves first. Do not migrate
    legacy-shape pipeline files. (To *change* an existing pipeline, use
    **edit** mode instead of rebuilding.)
 
    Existing connector and connection package directories are **not**
-   collisions. These are user property — downloaded connectors and configured
+   collisions.
+   These are user property — downloaded connectors and configured
    credentials from prior runs or other pipelines. The orchestrator
    reuses them in phases 2, 4, and 5 rather than asking the user to
    delete them. Adding a new pipeline to systems the user has already
@@ -254,12 +251,14 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
      want to remove the existing connection themselves first. Do not
      overwrite.
    - **If no** → invoke `connection-creator`. It writes:
-     - the connection document — validates as document kind `connection`. Authors `connection_id` as the
+     - the connection document — validates as
+       document kind `connection`. Authors `connection_id` as the
        orchestrator-minted UUID, `connector_id` as the connector slug,
        and routes each connector-contract input into the
        `parameters` / `selections` / `secret_refs` maps by its
        `storage` (secrets as `env:` pointers).
-     - the connection's credentials document —
+     - the connection's credentials document — its `credentials_template`,
+       written at the connection-package schema's `x-secret` location: a
        template the user fills in with the real secret values (keyed by
        the env-var names the `secret_refs` pointers resolve).
 

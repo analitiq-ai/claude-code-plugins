@@ -92,9 +92,7 @@ The orchestrator passes:
   "entity": "connection",
   "directory_slug": "<connection_slug>",
   "document": { /* the connection JSON, $schema set, routed maps */ },
-  "secondary_files": [
-    {"path": "<the connection package's credentials location>", "content": { /* env-var template */ }}
-  ],
+  "credentials_template": { /* env-var template */ },
   "notes": [
     "User must populate the connection's credentials document before runtime.",
     "The `env:` secret_refs resolve from the environment where the pipeline runs; export these vars (or load them into your secret store) before submitting the connection."

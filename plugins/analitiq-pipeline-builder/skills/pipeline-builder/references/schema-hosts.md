@@ -15,6 +15,12 @@ its row names below.
 Where each document sits is defined by the workspace schema (`https://schemas.analitiq.ai/workspace/latest.json`), whose package entries point to each package's schema.
 <!-- END GENERATED: schema-urls -->
 
+To resolve a document's path, read those schemas: each `patternProperties` key
+is a location, and its `$ref` names the schema of the package or document that
+sits there. A package directory's segment is its slug
+(`identity-and-versioning.md`), a package's root document is its schema's
+`required` entry, and a location marked `x-secret` holds secret values.
+
 <!-- PROBE: pipeline-schema-pinned-url-rejected -->
 There is no authorable pinned form. Only the `latest.json` URL above validates;
 a version-pinned `…/<X.Y.Z>.json` variant is rejected outright.

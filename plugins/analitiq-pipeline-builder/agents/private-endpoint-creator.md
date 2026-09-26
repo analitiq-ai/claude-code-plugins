@@ -39,7 +39,9 @@ One invocation runs exactly one mode. Every mode takes:
 
 - `documents` (required) — absolute paths of the connection document, the
   connection's credentials document, the connection's type map and the
-  connector's type map. A type map not on disk has no rules to apply.
+  connector's type map. The connection's type map is optional; the
+  connector's is not, and when it is missing return a structured refusal
+  naming its path.
 
 ### Mode 1: `discover-schemas`
 
@@ -153,7 +155,6 @@ One invocation runs exactly one mode. Every mode takes:
          "entity": "database-endpoint",
          "directory_slug": "<endpoint_id>",
          "document": { /* the endpoint JSON, $schema + endpoint_id set */ },
-         "secondary_files": [],
          "notes": []
        }
      ],
@@ -166,7 +167,7 @@ One invocation runs exactly one mode. Every mode takes:
    ```
 
    `directory_slug` equals the endpoint's derived `endpoint_id` and becomes the
-   endpoint document's filename stem.
+   filename stem (`RULE-PKG-031`).
    `type_map.document` is the complete `{$schema, read, write}` document,
    carrying only the sections it has rules for
    (`skills/endpoint-spec/spec-type-map-gaps.md#Files` names the `$schema`
@@ -227,6 +228,8 @@ Load the rest on demand:
   the column-derivation and `native_type` rules.
 - A matching `skills/endpoint-spec/examples/*.example.json` for the database
   dialect (`postgres`, `mysql`, `bigquery`, `mongodb`).
+- `skills/pipeline-builder/references/rules/shared.md` — for `RULE-PKG-031`,
+  the endpoint filename rule.
 - `skills/connection-spec/spec-envelope.md` for the `secret-ref-grammar` block.
 
 ## Hard rules

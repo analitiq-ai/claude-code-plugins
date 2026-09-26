@@ -90,9 +90,7 @@ The orchestrator handles disk I/O.
   "entity": "pipeline",                       // "pipeline" | "stream" | "connection" | "database-endpoint"
   "directory_slug": "wise_to_postgresql",     // names the location: package directory or filename stem
   "document": { /* the authored JSON, $schema set, no server-managed fields */ },
-  "secondary_files": [                        // optional — e.g., a credentials template
-    {"path": "<the connection package's credentials location>", "content": { /* … */ }}
-  ],
+  "credentials_template": { /* … */ },        // connection only — the env-var template
   "notes": []                                 // human-readable rationale / caveats
 }
 ```
