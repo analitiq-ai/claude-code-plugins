@@ -117,7 +117,6 @@ def render_schema_urls() -> str:
     from analitiq.contracts.pipelines.config import PIPELINE_SCHEMA_URL
     from analitiq.contracts.stream import STREAM_SCHEMA_URL
     from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
-    from analitiq.validator import TYPE_MAP_FILENAME
 
     rows = [
         ("Pipeline", "pipelines/<slug>/pipeline.json", PIPELINE_SCHEMA_URL),
@@ -125,7 +124,7 @@ def render_schema_urls() -> str:
         ("Connection", "connections/<slug>/connection.json", CONNECTION_SCHEMA_URL),
         ("Database endpoint", "connections/<slug>/definition/endpoints/<endpoint_id>.json",
          DATABASE_ENDPOINT_SCHEMA_URL),
-        ("Connection type map", f"connections/<slug>/definition/{TYPE_MAP_FILENAME}",
+        ("Connection type map", "connections/<slug>/definition/type-map.json",
          TYPE_MAP_SCHEMA_URL),
     ]
     out = ["| Entity | Authored file | `$schema` value |", "|---|---|---|"]

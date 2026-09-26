@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING, Callable, Literal, Mapping, NamedTuple, TypedDict
+from urllib.parse import quote
 
 from analitiq.contracts.validation_requests import PACKAGE_KINDS
 from analitiq.contracts.workspace import PACKAGE_MODELS, Workspace
@@ -51,7 +52,6 @@ from ._core import (
     qualified,
     validate_document_as,
 )
-from ._location import relative_reference
 from .connectors import (
     _check_connector_endpoints,
     _check_endpoint_filenames,
@@ -126,9 +126,15 @@ class ValidationEnvelope(TypedDict):
 
 def _envelope(findings: list[Finding]) -> ValidationEnvelope:
     """Wrap `findings` in the one `ValidationEnvelope` shape every entry point
-    in this module answers with, via `_core._passed` so `main()` and this
-    module answer "did this document pass" identically."""
+    in this module answers with."""
     return {"passed": _passed(findings), "findings": findings}
+
+
+def relative_reference(path: str) -> str:
+    """The POSIX `path` as the relative reference RFC 3986 spells it:
+    percent-encoded, so a `#` in a name cannot end the reference early and a
+    `:` in its first segment cannot read as a scheme."""
+    return quote(path)
 
 
 _Documents = Mapping[str, tuple[_Doc, ...]]

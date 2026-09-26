@@ -65,9 +65,7 @@ import functools
 import json
 import os
 import re
-import shutil
 import sys
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -80,8 +78,6 @@ sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
 sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
 # `analitiq.contracts.shared.common` reads os.environ["DOMAIN"] at import.
 os.environ.setdefault("DOMAIN", "analitiq.ai")
-
-from analitiq.validator import TYPE_MAP_FILENAME  # noqa: E402
 
 PLUGINS_ROOT = REPO_ROOT / "plugins"
 CONTRIBUTING_ROOT = REPO_ROOT / "contributing"
@@ -133,10 +129,28 @@ class Probe:
     require_re: str = ""
 
 
-def _validate(doc: Any, doc_path: Path | None = None) -> list[dict]:
-    from analitiq.validator import validate_document
+def _document_findings(kind: str, doc: Any) -> list[dict]:
+    """`doc` graded as a single document of `kind`."""
+    from analitiq.contracts.validation_requests import ValidateSingleDocumentRequest
+    from analitiq.validator import validate_single_document
 
-    return validate_document(doc, doc_path=doc_path)
+    request = ValidateSingleDocumentRequest(document_kind=kind, document=json.dumps(doc))
+    return validate_single_document(request)["findings"]
+
+
+def _package_findings(package_kind: str, documents: dict[str, Any]) -> list[dict]:
+    """`documents`, keyed by package location, graded as one package."""
+    from analitiq.contracts.validation_requests import ValidatePackageRequest
+    from analitiq.validator import validate_package
+
+    request = ValidatePackageRequest(
+        package_kind=package_kind,
+        documents={key: json.dumps(doc) for key, doc in documents.items()})
+    return validate_package(request)["findings"]
+
+
+def _endpoint_findings(doc: dict) -> list[dict]:
+    return _document_findings("api-endpoint", doc)
 
 
 def _read_endpoint() -> dict:
@@ -178,7 +192,7 @@ def _example_body(example_dir: Path) -> dict:
     if body is None:
         raise FileNotFoundError(
             f"no *.example.json under {example_dir} — the example tree the "
-            "probes stage moved; repoint the *_EXAMPLE constants")
+            "probes read moved; repoint the *_EXAMPLE constants")
     return json.loads(body.read_text())
 
 
@@ -189,42 +203,49 @@ def _wrap_type_map(**sections: list) -> dict:
     return {"$schema": TYPE_MAP_SCHEMA_URL, **sections}
 
 
+CONNECTOR_KEY = "definition/connector.json"  # skipcq: SCT-A000 — a package location, not a credential
+TYPE_MAP_KEY = "definition/type-map.json"  # skipcq: SCT-A000 — a package location, not a credential
+
+
+def _example_package(example_dir: Path) -> dict[str, Any]:
+    """The example connector in `example_dir` as package documents keyed by
+    package location.
+
+    Examples are laid out for reading — `<name>.example.json` beside its
+    `type-map.json` and `endpoints/` — so each file is re-keyed to the location
+    a connector package holds it at.
+    """
+    documents: dict[str, Any] = {
+        CONNECTOR_KEY: _example_body(example_dir),
+        TYPE_MAP_KEY: json.loads((example_dir / "type-map.json").read_text()),
+    }
+    for endpoint in sorted((example_dir / "endpoints").glob("*.json")):
+        documents[f"definition/endpoints/{endpoint.name}"] = json.loads(endpoint.read_text())
+    return documents
+
+
 def _example_rules(example_dir: Path, direction: str) -> list:
     """The `direction` rule list of the type map `example_dir` ships."""
-    return json.loads((example_dir / TYPE_MAP_FILENAME).read_text())[direction]
+    return _example_package(example_dir)[TYPE_MAP_KEY][direction]
 
 
-def _staged_connector(mutate: Callable[[dict], dict], example_dir: Path,
-                      read_map: list | None = None, write_map: list | None = None) -> list[dict]:
-    """Validate a mutated example connector with its siblings staged on disk.
-
-    Staging mirrors `tests/connector_builder/test_examples_validate.py`: the
-    cross-file coverage checks walk a `definition/` directory, so the type map
-    (and endpoints, for the API example) must sit beside the document.
-    `read_map`/`write_map` are bare rule lists, each replacing that section of
-    the example's own map before it is staged.
+def _connector_package(mutate: Callable[[dict], dict], example_dir: Path,
+                       read_map: list | None = None, write_map: list | None = None) -> list[dict]:
+    """A mutated example connector graded as a package with the example's type
+    map and endpoints — the request whose checks read the connector together
+    with its type map. `read_map`/`write_map` are bare rule lists, each
+    replacing that section of the example's own map.
     """
-    doc = mutate(_example_body(example_dir))
-    with tempfile.TemporaryDirectory() as tmp:
-        definition = Path(tmp) / "definition"
-        definition.mkdir()
-        (definition / "connector.json").write_text(json.dumps(doc))
-        type_map = json.loads((example_dir / TYPE_MAP_FILENAME).read_text())
-        for direction, override in (("read", read_map), ("write", write_map)):
-            if override is not None:
-                type_map[direction] = override
-        (definition / TYPE_MAP_FILENAME).write_text(json.dumps(type_map))
-        if (example_dir / "endpoints").is_dir():
-            shutil.copytree(example_dir / "endpoints", definition / "endpoints")
-        return _validate(doc, doc_path=definition / "connector.json")
+    documents = _example_package(example_dir)
+    documents[CONNECTOR_KEY] = mutate(documents[CONNECTOR_KEY])
+    for direction, override in (("read", read_map), ("write", write_map)):
+        if override is not None:
+            documents[TYPE_MAP_KEY][direction] = override
+    return _package_findings("connector", documents)
 
 
-def _staged_type_map(**sections: list) -> list[dict]:
-    doc = _wrap_type_map(**sections)
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / TYPE_MAP_FILENAME
-        path.write_text(json.dumps(doc))
-        return _validate(doc, doc_path=path)
+def _single_type_map(**sections: list) -> list[dict]:
+    return _document_findings("type-map", _wrap_type_map(**sections))
 
 
 def _first_transport(doc: dict) -> dict:
@@ -234,7 +255,7 @@ def _first_transport(doc: dict) -> dict:
 # --- endpoint probes: read-side scope guarantees ---------------------------
 
 def _p_read_body_path_typo() -> list[dict]:
-    return _validate(_endpoint_with_stop_when("response.body.nope"))
+    return _endpoint_findings(_endpoint_with_stop_when("response.body.nope"))
 
 
 def _p_read_body_path_untyped() -> list[dict]:
@@ -245,19 +266,19 @@ def _p_read_body_path_untyped() -> list[dict]:
     doc["operations"]["read"]["pagination"]["stop_when"] = {
         "empty": {"ref": "response.body.meta.next"},
     }
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_read_subscope_typo() -> list[dict]:
-    return _validate(_endpoint_with_stop_when("response.bodyy.data"))
+    return _endpoint_findings(_endpoint_with_stop_when("response.bodyy.data"))
 
 
 def _p_read_records_tail() -> list[dict]:
-    return _validate(_endpoint_with_stop_when("response.records.next_cursor"))
+    return _endpoint_findings(_endpoint_with_stop_when("response.records.next_cursor"))
 
 
 def _p_read_headers_tail() -> list[dict]:
-    return _validate(_endpoint_with_stop_when("response.headers.X-Made-Up"))
+    return _endpoint_findings(_endpoint_with_stop_when("response.headers.X-Made-Up"))
 
 
 def _p_read_status_ref() -> list[dict]:
@@ -265,11 +286,11 @@ def _p_read_status_ref() -> list[dict]:
     doc["operations"]["read"]["pagination"]["stop_when"] = {
         "eq": [{"ref": "response.status"}, {"literal": 200}],
     }
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_read_record_count() -> list[dict]:
-    return _validate(_endpoint_with_stop_when("response.record_count"))
+    return _endpoint_findings(_endpoint_with_stop_when("response.record_count"))
 
 
 def _p_read_metadata_undeclared() -> list[dict]:
@@ -278,67 +299,67 @@ def _p_read_metadata_undeclared() -> list[dict]:
     doc["operations"]["read"]["pagination"]["stop_when"] = {
         "empty": {"ref": "response.metadata.nope"},
     }
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_read_leading_scope_typo() -> list[dict]:
-    return _validate(_endpoint_with_stop_when("conection.parameters.x"))
+    return _endpoint_findings(_endpoint_with_stop_when("conection.parameters.x"))
 
 
 def _p_scope_tail_unchecked() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["request"]["headers"]["X-T"] = {"ref": "connection.discovered.nope"}
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_auth_state_tail() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["request"]["headers"]["X-T"] = {"ref": "connection.auth_state.token"}
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_runtime_tail() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["pagination"]["limit"]["default"] = {"ref": "runtime.run_id"}
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_request_slot_response_ref() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["request"]["query"]["cursor"] = {"ref": "response.body.data"}
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_request_slot_direct_runtime() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["request"]["query"]["t"] = {"ref": "runtime.batch_size"}
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_request_slot_template_smuggle() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["request"]["query"]["t"] = {"template": "v-${runtime.batch_size}"}
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_read_pathparam_from_input() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["request"]["path"] = "/v1/items/{id}"
     doc["operations"]["read"]["request"]["path_params"] = {"id": {"from_input": "record.id"}}
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_read_pathparam_bare_ref() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["request"]["path"] = "/v1/items/{id}"
     doc["operations"]["read"]["request"]["path_params"] = {"id": {"ref": "connection.parameters.x"}}
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_endpoint_schema_host() -> list[dict]:
     doc = _read_endpoint()
     doc["$schema"] = "https://schemas.analitiq.example/api-endpoint/latest.json"
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_endpoint_function_name() -> list[dict]:
@@ -348,60 +369,60 @@ def _p_endpoint_function_name() -> list[dict]:
         "default": {"function": "jwt_sign", "input": {"key": {"ref": "secrets.k"}}},
     }
     doc["operations"]["read"]["request"]["headers"]["X-Sig"] = {"from_param": "sig"}
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 # --- endpoint probes: write-side scope guarantees --------------------------
 
 def _p_write_body_path_typo() -> list[dict]:
-    return _validate(_endpoint_with_write(
+    return _endpoint_findings(_endpoint_with_write(
         response={"success_when": {"eq": [{"ref": "response.body.stauts"}, {"literal": "ok"}]}},
     ))
 
 
 def _p_write_subscope_typo() -> list[dict]:
-    return _validate(_endpoint_with_write(
+    return _endpoint_findings(_endpoint_with_write(
         response={"success_when": {"empty": {"ref": "response.bodyy.errors"}}},
     ))
 
 
 def _p_write_record_count_barred() -> list[dict]:
-    return _validate(_endpoint_with_write(
+    return _endpoint_findings(_endpoint_with_write(
         response={"success_when": {"eq": [{"ref": "response.record_count"}, {"literal": 1}]}},
     ))
 
 
 def _p_write_metadata_undeclared() -> list[dict]:
-    return _validate(_endpoint_with_write(
+    return _endpoint_findings(_endpoint_with_write(
         response={"metadata": {"n": {"ref": "response.body.n"}},
                   "success_when": {"empty": {"ref": "response.metadata.nope"}}},
     ))
 
 
 def _p_write_request_slot_response_ref() -> list[dict]:
-    return _validate(_endpoint_with_write(request_extra={"query": {"c": {"ref": "response.body.id"}}}))
+    return _endpoint_findings(_endpoint_with_write(request_extra={"query": {"c": {"ref": "response.body.id"}}}))
 
 
 def _p_write_records_barred() -> list[dict]:
-    return _validate(_endpoint_with_write(
+    return _endpoint_findings(_endpoint_with_write(
         response={"success_when": {"empty": {"ref": "response.records.errors"}}},
     ))
 
 
 def _p_write_headers_tail() -> list[dict]:
-    return _validate(_endpoint_with_write(
+    return _endpoint_findings(_endpoint_with_write(
         response={"success_when": {"eq": [{"ref": "response.headers.X-Made-Up"}, {"literal": "x"}]}},
     ))
 
 
 def _p_write_status_ref() -> list[dict]:
-    return _validate(_endpoint_with_write(
+    return _endpoint_findings(_endpoint_with_write(
         response={"success_when": {"eq": [{"ref": "response.status"}, {"literal": 200}]}},
     ))
 
 
 def _p_write_truncate_insert() -> list[dict]:
-    return _validate(_endpoint_with_write(mode="truncate_insert", batching={"max_records": 100}))
+    return _endpoint_findings(_endpoint_with_write(mode="truncate_insert", batching={"max_records": 100}))
 
 
 # --- connector-document probes ---------------------------------------------
@@ -416,7 +437,7 @@ def _p_connector_default_header_scope_checked() -> list[dict]:
             "ref": "garbage_nonsense"
         }
         return doc
-    return _staged_connector(mutate, API_EXAMPLE)
+    return _connector_package(mutate, API_EXAMPLE)
 
 
 def _p_connector_literal_field_unchecked() -> list[dict]:
@@ -427,7 +448,7 @@ def _p_connector_literal_field_unchecked() -> list[dict]:
             "max_requests": 10, "time_window_seconds": "${garbage_nonsense}",
         }
         return doc
-    return _staged_connector(mutate, API_EXAMPLE)
+    return _connector_package(mutate, API_EXAMPLE)
 
 
 def _p_connector_ref_tail_unchecked() -> list[dict]:
@@ -440,7 +461,7 @@ def _p_connector_ref_tail_unchecked() -> list[dict]:
             "ref": "connection.discovered.nothing_produces_this"
         }
         return doc
-    return _staged_connector(mutate, API_EXAMPLE)
+    return _connector_package(mutate, API_EXAMPLE)
 
 
 def _p_connector_function_name() -> list[dict]:
@@ -449,7 +470,7 @@ def _p_connector_function_name() -> list[dict]:
             "function": "jwt_sign", "input": {"key": {"literal": "k"}},
         }
         return doc
-    return _staged_connector(mutate, API_EXAMPLE)
+    return _connector_package(mutate, API_EXAMPLE)
 
 
 def _p_connector_lookup_map() -> list[dict]:
@@ -463,21 +484,21 @@ def _p_connector_lookup_map() -> list[dict]:
             "map": {"eu": "eu-1"},
         }
         return doc
-    return _staged_connector(mutate, API_EXAMPLE)
+    return _connector_package(mutate, API_EXAMPLE)
 
 
 def _p_connector_schema_optional() -> list[dict]:
     def mutate(doc: dict) -> dict:
         doc.pop("$schema", None)
         return doc
-    return _staged_connector(mutate, API_EXAMPLE)
+    return _connector_package(mutate, API_EXAMPLE)
 
 
 def _p_connector_secret_literal() -> list[dict]:
     def mutate(doc: dict) -> dict:
         _first_transport(doc).setdefault("headers", {})["X-Api-Key"] = {"literal": "hunter2-a-real-secret"}
         return doc
-    return _staged_connector(mutate, API_EXAMPLE)
+    return _connector_package(mutate, API_EXAMPLE)
 
 
 def _p_tls_coherence() -> list[dict]:
@@ -489,7 +510,7 @@ def _p_tls_coherence() -> list[dict]:
             name: spec for name, spec in inputs.items() if "ssl" not in name
         }
         return doc
-    return _staged_connector(mutate, DB_EXAMPLE)
+    return _connector_package(mutate, DB_EXAMPLE)
 
 
 def _p_sql_capabilities_shape_checked() -> list[dict]:
@@ -498,7 +519,7 @@ def _p_sql_capabilities_shape_checked() -> list[dict]:
     def mutate(doc: dict) -> dict:
         doc["sql_capabilities"]["merge_form"] = "not_a_real_form"
         return doc
-    return _staged_connector(mutate, DB_EXAMPLE)
+    return _connector_package(mutate, DB_EXAMPLE)
 
 
 def _p_sql_capabilities_pairing_unchecked() -> list[dict]:
@@ -511,36 +532,33 @@ def _p_sql_capabilities_pairing_unchecked() -> list[dict]:
     def mutate(doc: dict) -> dict:
         doc["sql_capabilities"]["bulk_load"] = {"sqlalchemy": "copy_from"}
         return doc
-    return _staged_connector(mutate, DB_EXAMPLE)
+    return _connector_package(mutate, DB_EXAMPLE)
 
 
 def _p_read_map_completeness() -> list[dict]:
     read_map = _example_rules(DB_EXAMPLE, "read")
-    return _staged_connector(lambda doc: doc, DB_EXAMPLE, read_map=read_map[:1])
+    return _connector_package(lambda doc: doc, DB_EXAMPLE, read_map=read_map[:1])
 
 
 def _p_read_map_native_semantics() -> list[dict]:
     read_map = _example_rules(DB_EXAMPLE, "read")
     read_map = [r for r in read_map if "JSONB" not in json.dumps(r)]
     read_map.append({"match": "exact", "native_type": "JSONB", "arrow_type": "Utf8"})
-    return _staged_connector(lambda doc: doc, DB_EXAMPLE, read_map=read_map)
+    return _connector_package(lambda doc: doc, DB_EXAMPLE, read_map=read_map)
 
 
-def _staged_api_endpoint(endpoint: dict) -> list[dict]:
-    """Validate the example API connector with `endpoint` as its only endpoint.
+def _api_package_with_endpoint(endpoint: dict) -> list[dict]:
+    """The example API connector graded as a package with `endpoint` as its
+    only endpoint.
 
-    Coverage is connector-anchored — `check_coverage` reads the endpoint files
-    from disk beside `connector.json` — so a probe about type-map coverage has
-    to enter through the connector, never through the endpoint document alone.
+    Coverage reads the endpoints together with the package's type map, so a
+    probe about type-map coverage has to enter through the package, never
+    through the endpoint document alone.
     """
-    doc = _example_body(API_EXAMPLE)
-    with tempfile.TemporaryDirectory() as tmp:
-        definition = Path(tmp) / "definition"
-        (definition / "endpoints").mkdir(parents=True)
-        (definition / "connector.json").write_text(json.dumps(doc))
-        shutil.copy(API_EXAMPLE / TYPE_MAP_FILENAME, definition / TYPE_MAP_FILENAME)
-        (definition / "endpoints" / "v1__items.json").write_text(json.dumps(endpoint))
-        return _validate(doc, doc_path=definition / "connector.json")
+    documents = {key: doc for key, doc in _example_package(API_EXAMPLE).items()
+                 if not key.startswith("definition/endpoints/")}
+    documents[f"definition/endpoints/{endpoint['endpoint_id']}.json"] = endpoint
+    return _package_findings("connector", documents)
 
 
 def _p_endpoint_pair_unresolved() -> list[dict]:
@@ -549,7 +567,7 @@ def _p_endpoint_pair_unresolved() -> list[dict]:
     record["properties"]["mystery"] = {
         "type": "string", "native_type": "MYSTERY_TYPE", "arrow_type": "Utf8",
     }
-    return _staged_api_endpoint(endpoint)
+    return _api_package_with_endpoint(endpoint)
 
 
 def _p_write_input_pair_unresolved() -> list[dict]:
@@ -563,11 +581,11 @@ def _p_write_input_pair_unresolved() -> list[dict]:
     node = endpoint["operations"]["write"]["insert"]["input"]["schema"]["properties"]["id"]
     node["native_type"] = "MYSTERY_WRITE_TYPE"
     node["arrow_type"] = "Utf8"
-    return _staged_api_endpoint(endpoint)
+    return _api_package_with_endpoint(endpoint)
 
 
 def _p_write_input_unannotated() -> list[dict]:
-    return _staged_api_endpoint(_endpoint_with_write())
+    return _api_package_with_endpoint(_endpoint_with_write())
 
 
 def _p_param_key_provider_spelling() -> list[dict]:
@@ -581,7 +599,7 @@ def _p_param_key_provider_spelling() -> list[dict]:
         "in": "path", "type": "string", "required": True,
         "default": {"ref": "connection.selections.object_id"},
     }
-    return _staged_api_endpoint(endpoint)
+    return _api_package_with_endpoint(endpoint)
 
 
 # --- type-map probes --------------------------------------------------------
@@ -589,7 +607,7 @@ def _p_param_key_provider_spelling() -> list[dict]:
 def _p_write_map_regex_case() -> list[dict]:
     rules = _example_rules(DB_EXAMPLE, "write")
     rules.append({"match": "regex", "arrow_type": "^utf8$", "native_type": "TEXT"})
-    return _staged_type_map(write=rules)
+    return _single_type_map(write=rules)
 
 
 def _p_write_coverage_sample_gap() -> list[dict]:
@@ -598,23 +616,13 @@ def _p_write_coverage_sample_gap() -> list[dict]:
         {"match": "exact", "arrow_type": "Int64", "native_type": "BIGINT"},
         {"match": "exact", "arrow_type": "Boolean", "native_type": "BOOLEAN"},
     ]
-    return _staged_type_map(write=rules)
+    return _single_type_map(write=rules)
 
 
 def _p_type_map_schema_required() -> list[dict]:
-    # Beside its connector, because that is where a map missing `$schema` is
-    # still read as one: the package reaches it by the name the directory
-    # holds it under, where dispatch over a loose document has only the
-    # `$schema` to go on.
-    doc = _example_body(DB_EXAMPLE)
-    with tempfile.TemporaryDirectory() as tmp:
-        definition = Path(tmp) / "definition"
-        definition.mkdir()
-        (definition / "connector.json").write_text(json.dumps(doc))
-        unlabelled = {direction: _example_rules(DB_EXAMPLE, direction)
-                      for direction in ("read", "write")}
-        (definition / TYPE_MAP_FILENAME).write_text(json.dumps(unlabelled))
-        return _validate(doc, doc_path=definition / "connector.json")
+    unlabelled = {direction: _example_rules(DB_EXAMPLE, direction)
+                  for direction in ("read", "write")}
+    return _document_findings("type-map", unlabelled)
 
 
 def _p_type_map_rule_graded_by_section() -> list[dict]:
@@ -622,45 +630,40 @@ def _p_type_map_rule_graded_by_section() -> list[dict]:
     # it is the key it sits under choosing the rule model — nothing else in the
     # document names a direction. A regex rule, because an exact one is valid
     # under whichever section holds it, so it would pass every section's model.
-    return _staged_type_map(read=[{
+    return _single_type_map(read=[{
         "match": "regex", "arrow_type": "^Decimal128\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$",
         "native_type": "NUMERIC(${p}, ${s})"}])
 
 
 def _p_type_map_section_missing() -> list[dict]:
     # A database connector whose map carries no `write` section.
-    doc = _example_body(DB_EXAMPLE)
-    with tempfile.TemporaryDirectory() as tmp:
-        definition = Path(tmp) / "definition"
-        definition.mkdir()
-        (definition / "connector.json").write_text(json.dumps(doc))
-        (definition / TYPE_MAP_FILENAME).write_text(json.dumps(
-            _wrap_type_map(read=_example_rules(DB_EXAMPLE, "read"))))
-        return _validate(doc, doc_path=definition / "connector.json")
+    documents = _example_package(DB_EXAMPLE)
+    del documents[TYPE_MAP_KEY]["write"]
+    return _package_findings("connector", documents)
 
 
 def _p_type_map_standalone_no_package_check() -> list[dict]:
     # A map carrying no write section, validated on its own: beside a database
     # connector the same map fails for the missing section.
-    return _staged_type_map(read=_example_rules(DB_EXAMPLE, "read"))
+    return _single_type_map(read=_example_rules(DB_EXAMPLE, "read"))
 
 
 def _p_pagination_limit_bare_zero() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["pagination"]["limit"]["default"] = 0
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_pagination_limit_literal() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["pagination"]["limit"]["default"] = {"literal": 50}
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _p_pagination_page_step_literal() -> list[dict]:
     doc = _read_endpoint()
     doc["operations"]["read"]["pagination"]["page"]["increment_by"] = {"literal": 1}
-    return _validate(doc)
+    return _endpoint_findings(doc)
 
 
 def _offset_paginated_endpoint(increment_by: Any) -> dict:
@@ -688,14 +691,14 @@ def _offset_paginated_endpoint(increment_by: Any) -> dict:
 
 
 def _p_pagination_offset_step_literal() -> list[dict]:
-    return _validate(_offset_paginated_endpoint({"literal": 50}))
+    return _endpoint_findings(_offset_paginated_endpoint({"literal": 50}))
 
 
 def _p_pagination_offset_step_bare() -> list[dict]:
     # The same document with the spelling the prose recommends. Without it the
     # rejection above could come from the staging rather than from the literal
     # form, and the probe would keep passing after the exclusion was dropped.
-    return _validate(_offset_paginated_endpoint(50))
+    return _endpoint_findings(_offset_paginated_endpoint(50))
 
 
 # --- connection / pipeline / stream probes ---------------------------------
@@ -706,7 +709,7 @@ def _p_connection_sidecar_name() -> list[dict]:
         .read_text())
     key = next(iter(doc["secret_refs"]))
     doc["secret_refs"][key] = "sidecar:name-that-matches-no-input"
-    return _validate(doc)
+    return _document_findings("connection", doc)
 
 
 def _p_stream_selected_columns() -> list[dict]:
@@ -714,7 +717,7 @@ def _p_stream_selected_columns() -> list[dict]:
         (PIPELINE_PLUGIN / "skills" / "stream-spec" / "examples"
          / "db-full-refresh-truncate-insert.example.json").read_text())
     doc["source"]["selected_columns"] = ["no_such_column_xyz"]
-    return _validate(doc)
+    return _document_findings("stream", doc)
 
 
 def _p_stream_mapping_target() -> list[dict]:
@@ -722,13 +725,13 @@ def _p_stream_mapping_target() -> list[dict]:
         (PIPELINE_PLUGIN / "skills" / "stream-spec" / "examples"
          / "db-full-refresh-truncate-insert.example.json").read_text())
     doc["mapping"]["assignments"][0]["target"]["path"] = "no_such_destination_column"
-    return _validate(doc)
+    return _document_findings("stream", doc)
 
 def _p_pipeline_active_empty() -> list[dict]:
     doc = json.loads(PIPELINE_EXAMPLE.read_text())
     doc["status"] = "active"
     doc["streams"] = []
-    return _validate(doc)
+    return _document_findings("pipeline", doc)
 
 
 def _p_pipeline_schema_pinned_url() -> list[dict]:
@@ -738,7 +741,7 @@ def _p_pipeline_schema_pinned_url() -> list[dict]:
     # tells authors there is no pinned form to reach for; this is why.
     doc = json.loads(PIPELINE_EXAMPLE.read_text())
     doc["$schema"] = "https://schemas.analitiq.ai/pipeline/1.0.0.json"
-    return _validate(doc)
+    return _document_findings("pipeline", doc)
 
 
 def _p_pipeline_cron_inner_spec() -> list[dict]:
@@ -751,7 +754,7 @@ def _p_pipeline_cron_inner_spec() -> list[dict]:
         "cron_expression": "cron(not a spec any scheduler accepts)",
         "timezone": doc["schedule"]["timezone"],
     }
-    return _validate(doc)
+    return _document_findings("pipeline", doc)
 
 
 def _p_pipeline_copied_default() -> list[dict]:
@@ -767,7 +770,7 @@ def _p_pipeline_copied_default() -> list[dict]:
         "type": Schedule.model_fields["type"].default,
         "timezone": Schedule.model_fields["timezone"].default,
     }
-    return _validate(doc)
+    return _document_findings("pipeline", doc)
 
 
 def _wired_examples(status: str, mutate_stream: Callable[[dict], None] | None) -> dict:
@@ -799,15 +802,11 @@ def _wired_examples(status: str, mutate_stream: Callable[[dict], None] | None) -
 def _pipeline_package(status: str, mutate_stream: Callable[[dict], None] | None = None) -> list[dict]:
     """The wired pipeline and its stream graded as a pipeline package, the
     smallest request whose checks read both."""
-    from analitiq.contracts.validation_requests import ValidatePackageRequest
-    from analitiq.validator import validate_package
-
     wired = _wired_examples(status, mutate_stream)
-    request = ValidatePackageRequest(package_kind="pipeline", documents={
-        "pipeline.json": json.dumps(wired["pipeline"]),
-        "streams/s.json": json.dumps(wired["stream"]),
+    return _package_findings("pipeline", {
+        "pipeline.json": wired["pipeline"],
+        "streams/s.json": wired["stream"],
     })
-    return validate_package(request)["findings"]
 
 
 def _workspace(mutate_stream: Callable[[dict], None] | None = None) -> list[dict]:
@@ -869,14 +868,10 @@ def _unbacked_connection_endpoint(stream: dict) -> None:
 def _p_stream_cross_document_unchecked_alone() -> list[dict]:
     """One stream document carrying both defects, graded as a stream document:
     the whole of what a single-document request can see."""
-    from analitiq.contracts.validation_requests import ValidateSingleDocumentRequest
-    from analitiq.validator import validate_single_document
-
     stream = json.loads(STREAM_EXAMPLE.read_text())
     _wrong_connection_role(stream)
     _unbacked_connection_endpoint(stream)
-    request = ValidateSingleDocumentRequest(document=json.dumps(stream), document_kind="stream")
-    return validate_single_document(request)["findings"]
+    return _document_findings("stream", stream)
 
 
 def _p_stream_connection_role_package() -> list[dict]:
@@ -892,7 +887,7 @@ def _p_stream_filter_field_local() -> list[dict]:
     doc["source"].setdefault("filters", []).append(
         {"field": "no_such_field_anywhere", "operator": "eq", "value": "x"},
     )
-    return _validate(doc)
+    return _document_findings("stream", doc)
 
 
 PROBES: tuple[Probe, ...] = (
@@ -981,7 +976,7 @@ PROBES: tuple[Probe, ...] = (
     # unannotated node is resolved against nothing, and a warning-tier report
     # naming the read map would falsify it without producing an error.
     Probe("write-input-unannotated-uncovered", "clean", _p_write_input_unannotated,
-          forbid_re=r"type-map\.json"),
+          forbid_re=r"(?i)type map"),
     # The asymmetry spec-request-binding.md teaches: the placeholder takes the
     # contract's form while the param it binds keeps the provider's spelling.
     # `forbid_re` covers the severity `expect="clean"` does not — a
@@ -1005,7 +1000,7 @@ PROBES: tuple[Probe, ...] = (
     Probe("type-map-section-missing", "error", _p_type_map_section_missing,
           message_re=r"carries no 'write' section"),
     Probe("type-map-standalone-no-package-check", "clean", _p_type_map_standalone_no_package_check,
-          forbid_re=r"(?i)requires a sibling|carries no '(read|write)' section|coverage"),
+          forbid_re=r"(?i)requires a type map|carries no|coverage"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
           message_re=r"greater than or equal to 1"),
     Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,

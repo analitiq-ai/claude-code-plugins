@@ -8,10 +8,10 @@ validate_python`, which enforces structure *and* every cross-field rule the
 contract defines — offline, no schema fetch, no drift. On top of the models this
 module adds only what a single-document model cannot express:
 
-- **cross-file coverage** (`RULE-PKG-030`/`RULE-PKG-033`/`RULE-PKG-035`): a
-  connector's sibling `type-map.json` must carry a rule list for each direction
-  its kind needs, and an API connector's read rules must cover every
-  `(native_type, arrow_type)` its endpoint files declare;
+- **cross-document coverage** (`RULE-PKG-030`/`RULE-PKG-033`/`RULE-PKG-035`):
+  a connector package's type map must carry a rule list for each direction its
+  connector's kind needs, and an API connector's read rules must cover every
+  `(native_type, arrow_type)` its endpoint documents declare;
 - **filename ↔ id** (`RULE-PKG-031`): an endpoint file must be named
   `{endpoint_id}.json`;
 - **endpoint id uniqueness** (`RULE-PKG-032`): each `endpoint_id` is unique
@@ -27,43 +27,35 @@ module adds only what a single-document model cannot express:
   `database_object` (`slug(schema)__slug(table)[__slug(catalog)]__hash8`, via the
   shared `analitiq.contracts.endpoint_identity`);
 - **endpoint → transport** (`RULE-ENDP-047`): an endpoint's
-  `request.transport_ref` must name a transport the sibling connector.json
+  `request.transport_ref` must name a transport its package's connector
   declares. `ConnectorBase._transport_refs_resolvable` enforces the same rule for
-  every connector-internal ref site, but an endpoint document is a separate file
-  and structurally invisible to that model validator — so the cross-file half of
+  every connector-internal ref site, but an endpoint is a separate document and
+  structurally invisible to that model validator — so the cross-document half of
   the rule lives here;
 - **advisory quality warnings** the contract tolerates: duplicate type-map
   rules, read patterns spelling a lowercase literal, regex natives spelling a
   container that renders a scalar, and write-rule vocabulary gaps
   (`RULE-TMAP-022`/`RULE-TMAP-014`/`RULE-TMAP-002`/`RULE-TMAP-017`).
 
-At import this module registers its kinds with `_core`'s registries.
+At import this module registers its kinds' validators with `_core`'s registry.
 """
 from __future__ import annotations
 
-import json
 import re
 import reprlib
-import sys
-from dataclasses import dataclass
-from enum import Enum
-from pathlib import Path, PurePath, PurePosixPath
-from typing import Any, Callable, Iterator, Mapping, TypeVar
+from pathlib import PurePosixPath
+from typing import Any, Iterator, Mapping
 
 from ._core import (
     _Doc,
-    _JSON_TEXT_REFUSALS,
     contract_model_domain,
     finding,
-    qualified,
     register_document_validator,
-    register_kind,
     _bounded,
     _missing_schema_url_findings,
     _model_findings,
     _run_guarded,
 )
-from ._location import Location, located, reference
 from ._sample_budget import BudgetedGrader
 
 # The contract models resolve from the `analitiq-contract-models` dependency —
@@ -72,50 +64,33 @@ from ._sample_budget import BudgetedGrader
 # `Literal`, so import them under the shared `contract_model_domain()` guard
 # (which pins `analitiq.ai` for the import window and restores the caller's
 # ambient `DOMAIN`).
-try:
-    with contract_model_domain():
-        from pydantic import TypeAdapter
-        from analitiq.contracts.connector import Connector
-        from analitiq.contracts.endpoints import (
-            ApiEndpointDoc,
-            DatabaseEndpointDoc,
-            SLUG_RE,
-        )
-        from analitiq.contracts.shared.json_schema import (
-            escape_pointer_token,
-            pointer_position,
-            walk_structural_positions,
-        )
-        from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
-        from analitiq.contracts.type_map import TYPE_MAP_DIRECTIONS, TYPE_MAP_SCHEMA_URL, TypeMapDoc
-        # The contract's resolution and container test, so the validator's
-        # rendering and warnings can't drift from the model's rule-validation.
-        from analitiq.contracts.type_map import TypeResolver, _guard_container_not_collapsed
-        # The executable Arrow vocabulary — the write-coverage probe set is
-        # derived from it rather than sampled by hand.
-        from analitiq.contracts import arrow_grammar
-        # The single source of truth for read-match normalization — imported, not
-        # re-implemented, so the validator's coverage check normalizes exactly as
-        # every runtime reader does (`analitiq.contracts.type_map`).
-        from analitiq.contracts.type_map import normalize_native_type as _normalize_native
-except ImportError as exc:  # pragma: no cover - dependency guard
-    # notApplicable, not fail: nothing here decided whether any rule holds —
-    # the dependency itself is missing, so no rule was even reachable to ask
-    # about. Naming none keeps it in the framework's no-rule case, which
-    # always costs `passed` the same way an unconditional error once did.
-    print(json.dumps({
-        "passed": False,
-        "findings": [finding(
-            message_id="missing-contract-models-dependency",
-            kind="notApplicable", path="",
-            message=f"Missing dependency: {exc}. Install `analitiq-contract-models`.")],
-    }))
-    sys.exit(1)
+with contract_model_domain():
+    from pydantic import TypeAdapter
+    from analitiq.contracts.connector import Connector
+    from analitiq.contracts.endpoints import (
+        ApiEndpointDoc,
+        DatabaseEndpointDoc,
+        SLUG_RE,
+    )
+    from analitiq.contracts.shared.json_schema import (
+        escape_pointer_token,
+        pointer_position,
+        walk_structural_positions,
+    )
+    from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
+    from analitiq.contracts.type_map import TYPE_MAP_DIRECTIONS, TypeMapDoc
+    # The contract's resolution and container test, so the validator's
+    # rendering and warnings can't drift from the model's rule-validation.
+    from analitiq.contracts.type_map import TypeResolver, _guard_container_not_collapsed
+    # The executable Arrow vocabulary — the write-coverage probe set is
+    # derived from it rather than sampled by hand.
+    from analitiq.contracts import arrow_grammar
+    # The single source of truth for read-match normalization — imported, not
+    # re-implemented, so the validator's coverage check normalizes exactly as
+    # every runtime reader does (`analitiq.contracts.type_map`).
+    from analitiq.contracts.type_map import normalize_native_type as _normalize_native
 
 
-TYPE_MAP_FILENAME = "type-map.json"
-
-_CONNECTOR_SENTINELS = ("transports", "connection_contract", "default_transport", "auth")
 _STORAGE_KINDS = ("file", "s3", "stdout")
 # Database-family kinds own database-endpoint documents and need a read section
 # (source) and a write section (destination DDL rendering).
@@ -123,25 +98,8 @@ _DATABASE_KINDS = ("database", "nosql", "document")
 _CONNECTOR_KINDS = ("api", *_DATABASE_KINDS, *_STORAGE_KINDS)
 
 
-def is_connector_doc(doc: Any) -> bool:
-    return isinstance(doc, dict) and "kind" in doc
-
-
-def is_api_endpoint_doc(doc: Any) -> bool:
-    return isinstance(doc, dict) and "kind" not in doc and "operations" in doc
-
-
-def is_database_endpoint_doc(doc: Any) -> bool:
-    return (
-        isinstance(doc, dict)
-        and "kind" not in doc
-        and "operations" not in doc
-        and ("database_object" in doc or "columns" in doc)
-    )
-
-
 # ---------------------------------------------------------------------------
-# Type-map rendering (read/write coverage) — cross-file / advisory only
+# Type-map rendering (read/write coverage) — cross-document / advisory only
 # ---------------------------------------------------------------------------
 
 _NARROWING_ARROW_TYPES = {"Object", "List"}
@@ -299,7 +257,7 @@ def _embedded_schema_example_findings(ep_doc: dict) -> list[dict]:
 
     This is the only check over an endpoint that reads a value rather than
     another declaration. Every other one compares `native_type` to `arrow_type`
-    to the sibling type map to the canonical vocabulary, and they agree because
+    to the package's type map to the canonical vocabulary, and they agree because
     each reads the same claim restated — so a field declared boolean whose
     provider sends the strings `"0"` and `"1"` passes all of them and fails on
     the first batch, where the cast is attempted for real. A recorded sample is
@@ -700,14 +658,14 @@ def _api_operation_transport_refs(ep_doc: dict) -> list[tuple[str, Any]]:
 
 
 def _endpoint_transport_ref_findings(ep_doc: Any, transports: Any) -> list[dict]:
-    """Cross-file gate: every `request.transport_ref` an endpoint declares must
-    name a transport the sibling connector.json declares in `transports`.
+    """Cross-document gate: every `request.transport_ref` an endpoint declares
+    must name a transport its package's connector declares in `transports`.
 
-    This is the cross-file half of the contract's §Transport Selection rule.
+    This is the cross-document half of the contract's §Transport Selection rule.
     `ConnectorBase._transport_refs_resolvable` already enforces it for every
     connector-INTERNAL ref site (auth ops, post-auth requests, resource
     discovery), but an endpoint lives in its own document, so no single-document
-    model validator can see both sides — only a connector-anchored walk can.
+    model validator can see both sides — only a check holding both documents can.
     The wording mirrors that model validator's so one rule reads the same
     wherever it fires.
 
@@ -725,8 +683,8 @@ def _endpoint_transport_ref_findings(ep_doc: Any, transports: Any) -> list[dict]
             rule="RULE-ENDP-047",
             message_id="transport-ref-undeclared", kind="fail", path=pointer,
             message=(
-                f"{pointer} transport_ref={ref!r} is not declared in the sibling "
-                f"connector.json `transports` (declared: {sorted(transports)!r}; "
+                f"{pointer} transport_ref={ref!r} is not declared in the package's "
+                f"connector `transports` (declared: {sorted(transports)!r}; "
                 "spec: §Transport Selection). A request dispatches only through a "
                 "transport the connector declares.")))
     return findings
@@ -851,13 +809,7 @@ def endpoint_filename_findings(ep_doc: Any, filename: str) -> list[dict]:
     Returns findings citing RULE-PKG-031: `kind: "fail"`
     (carrying `severity: "error"`) when `filename` disagrees with the doc's
     `endpoint_id`, `kind: "notApplicable"` (no `severity`) when the id is
-    missing/unusable, empty when they agree. Exported so a filesystem-walking
-    consumer that assembles a pipeline bundle (and so cannot reach the gate
-    through `validate_document`, whose bundle entry point takes filename-less
-    in-memory docs) enforces the invariant through this one shared
-    implementation instead of duplicating it. Pair with
-    `is_stem_addressed_endpoint_path` to apply the gate on the same layout
-    condition the validator uses."""
+    missing/unusable, empty when they agree."""
     if not isinstance(ep_doc, dict):
         return []
     endpoint_id = ep_doc.get("endpoint_id")
@@ -899,154 +851,6 @@ def _validate_api_endpoint_document(ep_doc: Any) -> list[dict]:
     return findings
 
 
-def _api_endpoint_document_findings(
-        ep_doc: Any, transports: Any, *, filename: str = "") -> list[dict]:
-    """An api-endpoint document's findings on the path route: its own, its
-    filename's where the engine resolves it by one, and its `transport_ref`
-    sites against the connector `transports` they resolve against.
-
-    Called from both `check_coverage`'s sibling-endpoint loop and the
-    standalone `_validate_api_endpoint` route, so a document is told the same
-    whichever reached it. What stays outside is route-specific:
-    `check_coverage`'s cross-sibling checks, and `_validate_api_endpoint`'s
-    resolution of `transports` from a sibling `connector.json`."""
-    findings = _validate_api_endpoint_document(ep_doc)
-    if filename:
-        findings.extend(endpoint_filename_findings(ep_doc, filename))
-    findings.extend(_endpoint_transport_ref_findings(ep_doc, transports))
-    return findings
-
-
-def is_stem_addressed_endpoint_path(doc_path: PurePath) -> bool:
-    """True iff `doc_path` is an authored connection-scoped endpoint file the engine
-    locates by its filename stem — `.../definition/endpoints/{endpoint_id}.json`.
-
-    Database endpoints have two on-disk shapes and only one is stem-addressed. The
-    other is the hash-addressed snapshot `.../endpoints/{endpoint_id}/schemas/
-    {schema_hash}.json`, whose basename is a content hash by design — the
-    filename↔id gate must NOT fire there. The parent directory (`endpoints` under
-    `definition` vs `schemas`) is the discriminator, so a snapshot is left
-    unchecked while the authored file the engine resolves by stem is gated."""
-    parent = doc_path.parent
-    return parent.name == "endpoints" and parent.parent.name == "definition"
-
-
-def is_addressed_endpoint_path(doc_path: PurePath) -> bool:
-    """True iff `doc_path` is an endpoint file sitting at the home the engine
-    resolves it from — an `endpoints/` directory, whatever carries that
-    directory: a connector release for an api endpoint, a connection's
-    `definition/` for a connection-scoped one.
-
-    Wider than `is_stem_addressed_endpoint_path`, which additionally demands
-    `definition/` because a DATABASE endpoint has a second on-disk shape whose
-    basename is a content hash. An api endpoint has only the one shape, so the
-    `endpoints/` parent is the whole question. What both exclude is a bare or
-    staged path: a file not yet at its home carries no filename the engine will
-    ever resolve, so RULE-PKG-031 has nothing to grade there and reporting it
-    would fire on every pass of an authoring fix loop."""
-    return doc_path.parent.name == "endpoints"
-
-
-class _Operation(Enum):
-    """What a check asked of the package's tree. Each value is what an author
-    changes so the kernel grants it where the kernel refused the permission."""
-
-    LOOKUP = "Make every directory on the path to it searchable"
-    LISTING = "Make it readable, and every directory on the path to it searchable"
-    READ = "Make it readable"
-    WALK = ("Make it and every directory below it readable and searchable, and every "
-            "directory on the path to it searchable")
-
-
-@dataclass(frozen=True)
-class _Failed:
-    """`operation` failed, which says nothing about what is there: a check
-    reading its answer is withheld, never graded as if nothing were. Only a
-    refused permission is the author's to grant, so only it names a remedy."""
-
-    operation: _Operation
-    error: OSError
-
-    @property
-    def why(self) -> str:
-        asked = self.operation.name.lower()
-        if isinstance(self.error, PermissionError):
-            return (f"could not be opened: the {asked} was refused ({self.error}). "
-                    f"{self.operation.value}, then re-run")
-        return f"could not be opened: the {asked} failed ({self.error})"
-
-
-_Answer = TypeVar("_Answer")
-
-
-def _asked(operation: _Operation, question: Callable[[], _Answer]) -> _Answer | _Failed:
-    """The tree's answer to `question`, or the failure it raised instead.
-
-    Every lookup, listing and read a check makes beside the document goes
-    through here, so no failed one is read as absence and none escapes a check.
-    """
-    try:
-        return question()
-    except OSError as error:
-        return _Failed(operation, error)
-
-
-@dataclass(frozen=True)
-class _Read:
-    """A sibling's document: whatever the file held, `null` among them."""
-
-    doc: Any
-
-
-@dataclass(frozen=True)
-class _Unparseable:
-    error: ValueError | RecursionError
-
-    @property
-    def why(self) -> str:
-        return f"could not be read or parsed ({self.error})"
-
-
-class _NotAFile:
-    why = "is not a regular file; nothing was read from it"
-
-
-_NOT_A_FILE = _NotAFile()
-
-_Sibling = _Read | _NotAFile | _Failed | _Unparseable
-
-
-def _read_sibling(path: Location) -> _Sibling:
-    """What the sibling JSON document at `path` turned out to be."""
-    is_file = _asked(_Operation.LOOKUP, path.is_file)
-    if isinstance(is_file, _Failed):
-        return is_file
-    if not is_file:
-        # Only a regular file is read. A directory raises with an errno that
-        # says nothing about the package; a FIFO waits for a writer that never
-        # comes, and the check never returns at all.
-        return _NOT_A_FILE
-    try:
-        text = _asked(_Operation.READ, path.read_text)
-        return text if isinstance(text, _Failed) else _Read(json.loads(text))
-    except _JSON_TEXT_REFUSALS as error:
-        return _Unparseable(error)
-
-
-def _unread(path: Location, sibling: _NotAFile | _Failed | _Unparseable) -> str:
-    return f"sibling {path.name} {sibling.why}."
-
-
-def _load_json_sibling(path: Location, *, message_id: str) -> tuple[_Sibling, list[dict]]:
-    """Read a sibling JSON document, failing without a rule when no document
-    was read: which rule went unchecked is the caller's to name."""
-    sibling = _read_sibling(path)
-    if isinstance(sibling, _Read):
-        return sibling, []
-    return sibling, [finding(
-        rule=None, message_id=message_id, kind="fail", path="", message=_unread(path, sibling))]
-
-
 def type_map_findings(doc: Any) -> list[dict]:
     """Validate a type-map document: model errors + advisory rule warnings for
     each direction's section + write-vocabulary coverage. `doc` is nominally
@@ -1058,136 +862,32 @@ def type_map_findings(doc: Any) -> list[dict]:
     A map is graded by its kind alone, so a connection's gap-only map
     (`RULE-TMAP-018`) earns the write-vocabulary warning (`RULE-TMAP-017`) as a
     connector's does."""
-    return _graded_type_map(doc, renders_write_vocabulary=True)
-
-
-def _graded_type_map(doc: Any, *, renders_write_vocabulary: bool) -> list[dict]:
-    return _run_guarded(_type_map_document_findings, doc, renders_write_vocabulary,
-                        crash_label="type-map grading")
+    return _run_guarded(_validate_type_map_document, doc, crash_label="type-map grading")
 
 
 def _validate_type_map_document(doc: Any) -> list[dict]:
     """A type map graded on its own, held to the whole write vocabulary."""
-    return _type_map_document_findings(doc, renders_write_vocabulary=True)
-
-
-def _type_map_document_findings(doc: Any, renders_write_vocabulary: bool) -> list[dict]:
     findings = _model_findings(doc, _TYPE_MAP_ADAPTER)
     if not isinstance(doc, dict):
         return findings
     for direction in TYPE_MAP_DIRECTIONS:
         findings.extend(_type_map_rule_warnings(doc.get(direction), direction))
     write = doc.get("write")
-    if renders_write_vocabulary and isinstance(write, list):
+    if isinstance(write, list):
         findings.extend(_write_vocabulary_findings(write))
     return findings
 
 
-def _about(sibling: Location, findings: list[dict], *, seen_from: Location) -> list[dict]:
-    """`findings`, graded on the document at `sibling`, reported beside the
-    document at `seen_from`.
-
-    Each locates itself with a pointer into `sibling`, which beside another
-    document reads as a node of that one.
-    """
-    at = reference(sibling, seen_from=seen_from)
-    return [qualified(f, at) for f in findings]
-
-
-@dataclass(frozen=True)
-class TypeMapLoad:
-    """The type map one `definition/` directory holds.
-
-    `document` is what its `type-map.json` held — `None` when that file held
-    JSON `null` — and `loaded` says whether anything was read at all. Asking for
-    the document when nothing was read raises `LookupError`: there is no stand-in
-    that grades as a file that is not there. Absence is no finding: whether a
-    directory must hold a map is its caller's to say. `sections` is the
-    directions the document carries a section for — present and not `null`,
-    whether or not what is there is a valid rule list: a malformed section is
-    the model's to report, never a section the directory lacks.
-
-    `findings` pairs each finding with the path of the entry it concerns,
-    relative to the directory and `.` for the directory itself, so a caller
-    holding the directory at a different site roots it by joining that path onto
-    the site.
-
-    `unread` names the map where its lookup or read failed, and `.` where the
-    listing of the directory failed. What the map holds is then unknown, so
-    while `unread` names anything no direction can be said to lack a section.
-    """
-
-    _read: _Read | None
-    findings: list[tuple[str, dict]]
-    unread: list[str]
-
-    @property
-    def loaded(self) -> bool:
-        return self._read is not None
-
-    @property
-    def document(self) -> Any:
-        if self._read is None:
-            raise LookupError(f"no {TYPE_MAP_FILENAME} was read")
-        return self._read.doc
-
-    @property
-    def sections(self) -> frozenset[str]:
-        doc = self._read.doc if self._read is not None else None
-        if not isinstance(doc, dict):
-            return frozenset()
-        return frozenset(d for d in TYPE_MAP_DIRECTIONS if doc.get(d) is not None)
-
-
-def load_type_map(parent: Path | Location, *, rule: str | None) -> TypeMapLoad:
-    """Load the type map in `parent`.
-
-    Published because a connector's map and a connection's are loaded by one
-    rule, and any second implementation of it answers differently at the
-    edges. `rule` is what the loader's own findings cite: the record binding the
-    directory being loaded, which differs by scope, so it is the caller's to
-    name — `None` where no record binds it.
-
-    A `parent` that `located` refuses raises its refusal.
-    """
-    parent = located(parent)
-    listed = _asked(_Operation.LISTING, lambda: any(True for _ in parent.glob(TYPE_MAP_FILENAME)))
-    if isinstance(listed, _Failed):
-        return TypeMapLoad(None, [(".", finding(
-            rule=rule,
-            message_id="type-map-dir-unlisted", kind="notApplicable", path="",
-            message=f"type map not loaded: the directory {listed.why}."))], unread=["."])
-    read: _Read | None = None
-    findings: list[tuple[str, dict]] = []
-    unread: list[str] = []
-    if listed:
-        path = parent / TYPE_MAP_FILENAME
-        sibling = _read_sibling(path)
-        if isinstance(sibling, _Read):
-            read = sibling
-        elif isinstance(sibling, _Failed):
-            unread.append(TYPE_MAP_FILENAME)
-            findings.append((TYPE_MAP_FILENAME, finding(
-                rule=rule, message_id="type-map-unreadable", kind="notApplicable", path="",
-                message=_unread(path, sibling))))
-        else:
-            findings.append((TYPE_MAP_FILENAME, finding(
-                rule=rule, message_id="type-map-unparseable", kind="fail", path="",
-                message=_unread(path, sibling))))
-    return TypeMapLoad(read, findings, unread)
-
-
-def _missing_section(kind: str, direction: str, what: str, load: TypeMapLoad) -> dict:
+def _missing_section(kind: str, direction: str, what: str, *, carried: bool) -> dict:
     """The RULE-PKG-030 finding for a `direction` the connector's kind needs
-    and its map does not carry. It says whether the map was read at all — absent,
-    or present but not loadable, which its own finding reports — or was read and
-    lacks the section, because those ask for different edits."""
-    reason = (f"{TYPE_MAP_FILENAME} carries no {direction!r} section"
-              if load.loaded else f"no {TYPE_MAP_FILENAME} was read")
+    and its package's type map does not carry. It says whether the package
+    carries a map at all, because the two ask for different edits."""
+    reason = (f"its type map carries no {direction!r} section"
+              if carried else "the package carries no type map")
     return finding(
         rule="RULE-PKG-030",
         message_id=f"{direction}-map-missing", kind="fail", path="",
-        message=(f"{kind} connector requires a sibling {TYPE_MAP_FILENAME} carrying a "
+        message=(f"{kind} connector requires a type map carrying a "
                  f"{direction!r} rule list ({what}); {reason}."))
 
 
@@ -1202,26 +902,29 @@ def _unknown_kind_finding(kind: Any) -> dict:
             "closed enum (the model enforces this)."))
 
 
-def _type_map_relation_findings(kind: str, type_map: TypeMapLoad) -> list[tuple[str, dict]]:
-    """RULE-PKG-030 between a connector of `kind` and its type map: each
-    finding paired with the kind of document it is about, `connector` or
-    `type-map`."""
+def _type_map_relation_findings(connector: _Doc, kind: str, type_map: _Doc | None) -> list[tuple[str, dict]]:
+    """RULE-PKG-030 between a connector of `kind` and its package's type map,
+    `None` where the package carries none. A section counts as carried when it
+    is present and not `null`, whether or not it is a valid rule list: a
+    malformed section is the model's to report, never one the map lacks."""
     if kind in _STORAGE_KINDS:
         return []
-    sections = type_map.sections
+    content = type_map.content if type_map is not None else None
+    sections = {d for d in TYPE_MAP_DIRECTIONS
+                if isinstance(content, dict) and content.get(d) is not None}
+    carried = type_map is not None
     findings: list[tuple[str, dict]] = []
-    # While the map went unread, what it carries is unknown: no section is missing.
-    if "read" not in sections and not type_map.unread:
-        findings.append(("connector", _missing_section(kind, "read", "native → Arrow", type_map)))
+    if "read" not in sections:
+        findings.append((connector.key, _missing_section(kind, "read", "native → Arrow", carried=carried)))
     if kind in _DATABASE_KINDS:
-        if "write" not in sections and not type_map.unread:
-            findings.append(("connector", _missing_section(kind, "write", "Arrow → native DDL", type_map)))
+        if "write" not in sections:
+            findings.append((connector.key, _missing_section(kind, "write", "Arrow → native DDL", carried=carried)))
     elif "write" in sections:
-        findings.append(("type-map", finding(
+        findings.append((type_map.key, finding(
             rule="RULE-PKG-030",
             message_id="write-map-not-allowed", kind="fail", path="/write",
             message=(
-                f"api connector's {TYPE_MAP_FILENAME} must not carry a 'write' rule "
+                "api connector's type map must not carry a 'write' rule "
                 "list; an api connector has no write direction."))))
     return findings
 
@@ -1235,8 +938,8 @@ def _native_coverage_skipped_finding() -> dict:
         rule="RULE-PKG-033",
         message_id="native-type-coverage-skipped", kind="notApplicable", path="",
         message=(
-            "native_type coverage against the read rules was not rendered: no "
-            f"{TYPE_MAP_FILENAME} was read, or its 'read' section is absent or not "
+            "native_type coverage against the read rules was not rendered: the "
+            "package carries no type map, or its 'read' section is absent or not "
             "a list. Endpoint native_type/arrow_type agreement is unverified until "
             "it is fixed."))
 
@@ -1254,14 +957,14 @@ def _native_coverage_findings(ep_doc: dict, read_rules: list) -> list[dict]:
                 message_id="native-type-unresolved", kind="fail", path=pointer,
                 message=(
                     f"native_type {native!r} has no matching rule in the 'read' "
-                    f"section of sibling {TYPE_MAP_FILENAME}.")))
+                    "section of the package's type map.")))
         elif not _arrow_type_eq(rendered, arrow) and not (rendered == "Json" and arrow in _NARROWING_ARROW_TYPES):
             findings.append(finding(
                 rule="RULE-PKG-033",
                 message_id="native-type-arrow-mismatch", kind="fail", path=pointer,
                 message=(
                     f"native_type {native!r} resolves to {rendered!r} via the "
-                    f"'read' section of {TYPE_MAP_FILENAME} but the endpoint "
+                    "'read' section of the package's type map but the endpoint "
                     f"declares arrow_type={arrow!r}.")))
     return findings
 
@@ -1291,115 +994,6 @@ def _duplicate_endpoint_id_findings(endpoints: list[tuple[str, Any]]) -> dict[st
     return findings
 
 
-def check_coverage(doc: dict, doc_path: Path | Location | None) -> list[dict]:
-    """Connector ↔ sibling type-map coverage (the irreducibly cross-file check).
-
-    A connector's `doc_path` that `located` refuses raises its refusal.
-    """
-    if not isinstance(doc, dict) or not any(k in doc for k in _CONNECTOR_SENTINELS):
-        return []
-    if doc_path is None:
-        # No rule to name: PKG-030/032/033/035 are each about a sibling file
-        # or directory this function reads beside the document, so without a
-        # location none of them can be checked, let alone singled out. A document validated
-        # this way can no longer report coverage passed — that question was
-        # never asked of it.
-        return [finding(
-            message_id="coverage-check-skipped-no-path",
-            kind="notApplicable", path="",
-            message="type-map coverage skipped: no filesystem-anchored document path.")]
-    kind = doc.get("kind")
-    if kind not in _CONNECTOR_KINDS:
-        return [_unknown_kind_finding(kind)]
-
-    anchor = located(doc_path)
-    package = anchor.parent
-    type_map = load_type_map(package, rule="RULE-PKG-030")
-    # `.` is the directory itself, which is the connector's package.
-    findings = [f if entry == "." else _about(package / entry, [f], seen_from=anchor)[0]
-                for entry, f in type_map.findings]
-    map_path = package / TYPE_MAP_FILENAME
-    if type_map.loaded:
-        # An api connector's write section is refused whole below, so holding
-        # it to the write vocabulary would ask for rules the same pass removes.
-        findings.extend(_about(map_path, _graded_type_map(
-            type_map.document, renders_write_vocabulary=kind != "api"), seen_from=anchor))
-    for about, f in _type_map_relation_findings(kind, type_map):
-        findings.append(f if about == "connector" else _about(map_path, [f], seen_from=anchor)[0])
-    if kind != "api":
-        return findings
-
-    # Every endpoint's natives must be covered by the read rules. Read rules
-    # that cannot be rendered from are carried forward rather than returned on:
-    # returning here would withhold every endpoint-anchored check too, hiding
-    # every defect in every endpoint document behind one broken file. What is
-    # carried need not be a list, so the readers below ask that.
-    read_rules = type_map.document["read"] if "read" in type_map.sections else None
-    if not isinstance(read_rules, list):
-        findings.append(_native_coverage_skipped_finding())
-    endpoint_dir = package / "endpoints"
-    present = _asked(_Operation.LOOKUP, endpoint_dir.is_dir)
-    if present is False:
-        findings.append(finding(
-            rule="RULE-PKG-035",
-            message_id="endpoints-dir-missing", kind="fail", path="",
-            message="api connector requires a sibling 'endpoints/' directory; missing."))
-        return findings
-    # Scan recursively: every *.json the walk reaches under endpoints/ must sit
-    # at exactly `endpoints/{endpoint_id}.json` (flat), so a nested or misplaced
-    # file is flagged rather than reported as a false pass.
-    endpoint_files = present if isinstance(present, _Failed) else _asked(
-        _Operation.WALK, lambda: sorted(endpoint_dir.rglob("*.json")))
-    if isinstance(endpoint_files, _Failed):
-        findings.append(finding(
-            rule="RULE-PKG-031",
-            message_id="endpoints-dir-unlisted", kind="notApplicable", path="",
-            message=f"endpoint documents not checked: 'endpoints/' {endpoint_files.why}."))
-        return findings
-    if not endpoint_files:
-        findings.append(finding(
-            rule="RULE-PKG-035",
-            message_id="endpoints-dir-empty", kind="fail", path="",
-            message="api connector's 'endpoints/' directory has no *.json files."))
-        return findings
-    # Each endpoint file is read, then the reads are graded together, so the
-    # duplicate check sees every endpoint before any is reported on.
-    endpoints: list[tuple[Location, _Sibling | None, list[dict]]] = []
-    for ep_path in endpoint_files:
-        rel = ep_path.key.relative_to(endpoint_dir.key).as_posix()
-        if "/" in rel:
-            endpoints.append((ep_path, None, [finding(
-                rule="RULE-PKG-031",
-                message_id="endpoint-file-nested", kind="fail", path="",
-                message=(
-                    f"endpoint file 'endpoints/{rel}' is nested; endpoints must be flat "
-                    "at 'endpoints/{endpoint_id}.json' (the engine resolves them by id)."))]))
-            continue
-        endpoint, load = _load_json_sibling(ep_path, message_id="endpoint-file-unreadable")
-        endpoints.append((ep_path, endpoint, load))
-    duplicates = _duplicate_endpoint_id_findings([
-        (f"endpoints/{ep_path.name}", endpoint.doc)
-        for ep_path, endpoint, _ in endpoints if isinstance(endpoint, _Read)])
-    for ep_path, endpoint, load in endpoints:
-        if not isinstance(endpoint, _Read):
-            findings.extend(_about(ep_path, load, seen_from=anchor))
-            continue
-        ep_doc = endpoint.doc
-        endpoint_findings = _api_endpoint_document_findings(
-            ep_doc, doc.get("transports"), filename=ep_path.name)
-        duplicate = duplicates.get(f"endpoints/{ep_path.name}")
-        if duplicate is not None:
-            endpoint_findings.append(duplicate)
-        # A JSON array/string endpoint file is already a recorded model error,
-        # and the coverage walk would crash on it. Rules that did not load skip
-        # the rendering, and the notApplicable finding raised beside the
-        # connector says the coverage question went unanswered.
-        if isinstance(ep_doc, dict) and isinstance(read_rules, list):
-            endpoint_findings.extend(_native_coverage_findings(ep_doc, read_rules))
-        findings.extend(_about(ep_path, endpoint_findings, seen_from=anchor))
-    return findings
-
-
 # ---------------------------------------------------------------------------
 # Package checks: each takes the documents of the kinds it reads, keyed by
 # kind, and returns `(key, finding)` pairs whose pointer is into the document
@@ -1415,9 +1009,7 @@ def _check_type_map_relation(documents: Mapping[str, tuple[_Doc, ...]]) -> list[
     if kind not in _CONNECTOR_KINDS:
         return [(connector.key, _unknown_kind_finding(kind))]
     maps = documents["type-map"]
-    type_map = TypeMapLoad(_Read(maps[0].content) if maps else None, [], [])
-    return [(connector.key if about == "connector" else maps[0].key, f)
-            for about, f in _type_map_relation_findings(kind, type_map)]
+    return _type_map_relation_findings(connector, kind, maps[0] if maps else None)
 
 
 def _check_connector_endpoints(documents: Mapping[str, tuple[_Doc, ...]]) -> list[tuple[str, dict]]:
@@ -1489,175 +1081,10 @@ def _validate_connector_document(doc: Any) -> list[dict]:
     return _model_findings(doc, _CONNECTOR_ADAPTER) + _missing_schema_url_findings(doc)
 
 
-def _validate_connector(doc: Any, location: Location | None) -> list[dict]:
-    return _validate_connector_document(doc) + check_coverage(doc, location)
-
-
-def _validate_api_endpoint(doc: Any, location: Location | None) -> list[dict]:
-    transports: Any = None
-    sibling_findings: list[dict] = []
-    addressed = location is not None and is_addressed_endpoint_path(location.key)
-    if isinstance(doc, dict):
-        # RULE-ENDP-047 is cross-document: it needs the sibling connector.json's
-        # `transports`. Where that cannot be read, say so rather than
-        # returning a silent clean pass — an author validating a single
-        # endpoint file would otherwise read `passed: true` as "the
-        # transport_ref is fine", which is reassurance the check never earned.
-        # notApplicable, not fail, matching `endpoint_filename_findings`'s
-        # convention for a check it cannot perform from the given path.
-        declared_refs = sorted({
-            ref for _, ref in _api_operation_transport_refs(doc) if isinstance(ref, str)
-        })
-        if declared_refs:
-            # Look up the sibling connector when the layout gives us one:
-            # `endpoints/{id}.json` sits one level below `connector.json`. The
-            # connector-builder skill validates each endpoint on its own, so a
-            # blind warning here would fire on every pass of its fix loop and
-            # could never be cleared — an alarm that cannot be acted on trains
-            # authors to ignore the id. Outside that layout no connector is
-            # read: a connector two levels up is not this endpoint's.
-            sibling = location.parent.parent / "connector.json" if addressed else None
-            connector: _Sibling = _NOT_A_FILE
-            if sibling is not None:
-                # A failed read has not evaluated RULE-ENDP-047 one way or the
-                # other; the branch below names it, as notApplicable.
-                connector, load_findings = _load_json_sibling(
-                    sibling, message_id="sibling-connector-unreadable")
-                # No regular file there is not a failure to read one: an
-                # endpoint validated before its connector exists has none.
-                if connector is not _NOT_A_FILE:
-                    sibling_findings.extend(_about(sibling, load_findings, seen_from=location))
-            connector_doc = connector.doc if isinstance(connector, _Read) else None
-            transports = connector_doc.get("transports") if isinstance(connector_doc, dict) else None
-            # `transports` resolved: RULE-ENDP-047 is graded against it by
-            # `_api_endpoint_document_findings` below. What is left to report
-            # here is the cases where it could not be resolved, each naming
-            # which one happened.
-            if not isinstance(transports, dict):
-                if isinstance(connector, _Read):
-                    # Connector found, but its `transports` is missing or not an
-                    # object. `_endpoint_transport_ref_findings` returns [] there —
-                    # correct at the CONNECTOR-anchored call site, where the
-                    # connector's own model error already stands. Here the connector
-                    # model never runs, so returning [] would report a clean pass on
-                    # an endpoint whose `transport_ref` resolves to nothing. Say what
-                    # could not be checked and why. notApplicable, not fail: the
-                    # check knows exactly which rule it would grade (RULE-ENDP-047).
-                    sibling_findings.append(finding(
-                        rule="RULE-ENDP-047",
-                        message_id="transport-ref-check-skipped-no-transports",
-                        kind="notApplicable", path="",
-                        message=(
-                            f"transport_ref {declared_refs!r} not checked: the sibling "
-                            "connector.json was read but declares no usable `transports` "
-                            "object, so there was nothing to resolve the name against. "
-                            "Validate the connector to see why.")))
-                elif isinstance(connector, _Failed):
-                    # Neither absent nor unparseable: the connector may be there
-                    # and sound, and either remedy would send the author astray.
-                    sibling_findings.append(finding(
-                        rule="RULE-ENDP-047",
-                        message_id="transport-ref-check-skipped-sibling-unreadable",
-                        kind="notApplicable", path="",
-                        message=(
-                            f"transport_ref {declared_refs!r} not checked: the sibling "
-                            f"connector.json at {sibling} could not be opened, so its "
-                            "`transports` could not be read. Fix the error reported "
-                            "above and re-run.")))
-                elif isinstance(connector, _Unparseable):
-                    # The file IS there and did not parse. Reporting it as absent
-                    # would contradict the parse finding emitted beside it.
-                    sibling_findings.append(finding(
-                        rule="RULE-ENDP-047",
-                        message_id="transport-ref-check-skipped-unparseable",
-                        kind="notApplicable", path="",
-                        message=(
-                            f"transport_ref {declared_refs!r} not checked: the sibling "
-                            f"connector.json at {sibling} could not be parsed, so its "
-                            "`transports` could not be read. Fix the error reported "
-                            "above and re-run.")))
-                else:
-                    if location is None:
-                        reason = ("no path was given, so there is no directory to "
-                                  "read the connector from. Validate it at its path, "
-                                  "`endpoints/{endpoint_id}.json` beside its connector")
-                    elif addressed:
-                        reason = ("there is no connector.json file beside the "
-                                  "`endpoints/` directory holding this document. "
-                                  "Place the connector there and re-run")
-                    else:
-                        reason = ("the document is not directly inside an "
-                                  "`endpoints/` directory, so no connector is read "
-                                  "for it. Place it at `endpoints/{endpoint_id}.json` "
-                                  "beside its connector")
-                    sibling_findings.append(finding(
-                        rule="RULE-ENDP-047",
-                        message_id="transport-ref-check-skipped-no-sibling",
-                        kind="notApplicable", path="",
-                        message=f"transport_ref {declared_refs!r} not checked: {reason}."))
-    # Each api-endpoint document goes through the checks shared with
-    # `check_coverage`'s sibling-endpoint loop; `transports` is not a dict
-    # wherever the branches above could not resolve it, and RULE-ENDP-047 stays silent
-    # there rather than reporting on an unresolved comparison. Silence is the
-    # whole answer only when the document declares no `transport_ref` at all —
-    # every other way of arriving here with `transports` unresolved has already
-    # appended the `notApplicable` naming which one it was. The filename is
-    # graded only where the engine resolves the document by it.
-    findings = _api_endpoint_document_findings(
-        doc, transports,
-        filename=location.name if addressed else "")
-    findings.extend(sibling_findings)
-    return findings
-
-
 def _validate_database_endpoint_document(doc: Any) -> list[dict]:
     return _model_findings(doc, _DATABASE_ENDPOINT_ADAPTER) + _database_endpoint_locator_findings(doc)
 
 
-def _validate_database_endpoint(doc: Any, location: Location | None) -> list[dict]:
-    # The filename↔id gate applies only to the authored connection-scoped file the
-    # engine locates by stem (`.../definition/endpoints/{endpoint_id}.json`), not to
-    # the hash-addressed materialized snapshot (`.../endpoints/{endpoint_id}/schemas/
-    # {schema_hash}.json`), whose basename is a content hash by design. Mirrors the
-    # api-endpoint path, reusing the one shared `endpoint_filename_findings` so the
-    # invariant is defined once — but gated on the layout, since a bare/staged path
-    # not yet at its final home carries no filename to check. The id itself is always
-    # gated against database_object regardless of location.
-    findings = _validate_database_endpoint_document(doc)
-    if location is not None and is_stem_addressed_endpoint_path(location.key):
-        findings += endpoint_filename_findings(doc, location.name)
-    return findings
-
-
-def _validate_type_map(doc: Any, location: Location | None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature
-    return type_map_findings(doc)
-
-
-def is_type_map_doc(doc: Any) -> bool:
-    """A `$schema` naming the published type-map URL claims a type map, and
-    nothing else does — not a `$schema` naming another resource, and not a
-    section. The model requires the field, so reading only it misses no map a
-    caller could author, and a stray top-level `read` or `write` in a malformed
-    document of another kind stays that document's extra key instead of making
-    it a map whose every other key is extra."""
-    return isinstance(doc, dict) and doc.get("$schema") == TYPE_MAP_SCHEMA_URL
-
-
-# Registration order is dispatch precedence: connector, api-endpoint,
-# database-endpoint, type-map, then the kindless-connector fallback.
-# `_core._dispatch` runs these in order and falls through to the
-# "unrecognized document" verdict if none match.
-register_kind(is_connector_doc, _validate_connector)
-register_kind(is_api_endpoint_doc, _validate_api_endpoint)
-register_kind(is_database_endpoint_doc, _validate_database_endpoint)
-register_kind(is_type_map_doc, _validate_type_map)
-# A dict carrying connector sentinels but no `kind` is a connector missing its
-# discriminator: the model reports the missing `kind`, rather than it passing
-# as unrecognized.
-register_kind(
-    lambda doc: isinstance(doc, dict) and any(k in doc for k in _CONNECTOR_SENTINELS),
-    lambda doc, location: _validate_connector_document(doc),  # skipcq: PYL-W0613 — uniform registered-validator signature
-)
 register_document_validator("connector", _validate_connector_document)
 register_document_validator("api-endpoint", _validate_api_endpoint_document)
 register_document_validator("database-endpoint", _validate_database_endpoint_document)

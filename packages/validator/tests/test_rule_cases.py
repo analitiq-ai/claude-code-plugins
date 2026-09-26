@@ -10,19 +10,14 @@ rule's case directory removes its coverage without failing this suite.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
 from analitiq.contracts.shared.rules import all_rules
-from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
-from analitiq.validator import TYPE_MAP_FILENAME
 import analitiq.validator.rule_cases as corpus
 from analitiq.validator.rule_cases import RuleCase, case_mismatch, rule_cases
-
-CORPUS = Path(__file__).resolve().parent / "corpus"
 
 
 def test_the_corpus_module_is_reachable_by_its_dotted_name():
@@ -86,35 +81,6 @@ def test_a_finding_naming_the_rule_without_failing_is_a_mismatch(monkeypatch, ve
     assert case_mismatch(_case("RULE-PIPE-011", verdict))
 
 
-def _connector_package(root: Path, *, covered: bool) -> Path:
-    """A connector package whose read map covers its endpoint's native type or not."""
-    connector = json.loads((CORPUS / "valid_connector.json").read_text())
-    endpoint = json.loads((CORPUS / "valid_read.json").read_text())
-    endpoint["operations"]["read"]["response"]["schema"]["items"]["properties"] = {
-        "a": {"type": "string", "native_type": "STRING", "arrow_type": "Utf8"},
-    }
-    native = "STRING" if covered else "TEXT"
-    type_map = {
-        "$schema": TYPE_MAP_SCHEMA_URL,
-        "read": [{"match": "exact", "native_type": native, "arrow_type": "Utf8"}],
-    }
-    (root / "endpoints").mkdir(parents=True)
-    (root / "connector.json").write_text(json.dumps(connector))
-    (root / TYPE_MAP_FILENAME).write_text(json.dumps(type_map))
-    (root / "endpoints" / f"{endpoint['endpoint_id']}.json").write_text(json.dumps(endpoint))
-    return root
-
-
-def test_a_connector_case_is_graded_with_its_sibling_files(tmp_path):
-    """`connector.json` is validated at its path, so the sibling read map and
-    endpoints are what coverage reads — without them no coverage rule could
-    fail, and a valid case would not pass."""
-    covered = _connector_package(tmp_path / "covered", covered=True)
-    uncovered = _connector_package(tmp_path / "uncovered", covered=False)
-    assert case_mismatch(RuleCase("RULE-PKG-033", "valid", "covered", covered)) is None
-    assert case_mismatch(RuleCase("RULE-PKG-033", "invalid", "uncovered", uncovered)) is None
-
-
 # --- Layout refusals ----------------------------------------------------------
 
 
@@ -159,14 +125,13 @@ def test_a_group_other_than_a_verdict_is_refused(monkeypatch, tmp_path):
         _load_from(monkeypatch, tmp_path)
 
 
-@pytest.mark.parametrize("entries", [(), ("bundle.json", "connector.json")], ids=["neither", "both"])
-def test_a_case_needs_exactly_one_entry_file(monkeypatch, tmp_path, entries):
-    _write_case(tmp_path, "RULE-PIPE-011", "valid", "a", *entries)
-    with pytest.raises(ValueError, match="entry file"):
+def test_a_case_without_its_bundle_is_refused(monkeypatch, tmp_path):
+    _write_case(tmp_path, "RULE-PIPE-011", "valid", "a")
+    with pytest.raises(ValueError, match="bundle.json"):
         _load_from(monkeypatch, tmp_path)
 
 
-def test_a_bundle_case_holding_another_file_is_refused(monkeypatch, tmp_path):
+def test_a_case_holding_another_file_is_refused(monkeypatch, tmp_path):
     """A bundle is validated from `bundle.json` alone, so a document beside it
     would grade nothing."""
     _write_case(tmp_path, "RULE-PIPE-011", "valid", "a", "bundle.json")

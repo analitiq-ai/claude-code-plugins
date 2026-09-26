@@ -83,8 +83,8 @@ generated from. It runs:
 1. **Contract-model validation** — structure, plus the cross-field rules the
    models themselves apply.
    <!-- PROBE: type-map-rule-graded-by-section, type-map-section-missing -->
-   Discriminating keys in the document body select the model, and inside a type
-   map the section a rule sits under — `read` or `write` — is its direction. A
+   The kind a request names selects the model, never the document's content,
+   and inside a type map the section a rule sits under — `read` or `write` — is its direction. A
    connector package's map is its one `definition/type-map.json`, which carries
    the sections its `kind` calls for (`RULE-PKG-030`). Each kind is graded against the model behind this
    schema:
@@ -97,8 +97,8 @@ generated from. It runs:
    <!-- PROBE: connector-secret-literal-undetected, runtime-tail-unchecked -->
    Some rules hold only at
    connect or run time, so a clean run is not proof every rule holds.
-2. **Checks the contract models can't express** — cross-file relationships
-   (sibling type-map coverage, filename ↔ endpoint_id, endpoint id uniqueness,
+2. **Checks the contract models can't express** — cross-document relationships
+   in a package (type-map coverage, filename ↔ endpoint_id, endpoint id uniqueness,
    endpoint id ↔ locator, endpoint → transport), embedded-schema validity, a
    recorded sample against the node declaring it, and quality warnings on a
    type map.

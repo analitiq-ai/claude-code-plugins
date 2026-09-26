@@ -22,8 +22,8 @@ matched whole (their version is a separate field, not a ref suffix).
 
 The `pipeline` document is validated against `PipelineInput` plus RULE-SHRD-003,
 which reports a `warning` — a severity no `@model_validator` can carry
-(`rules/SCHEMA.md`, `validator`). At import this module registers its kinds and
-document validators with the `_core` dispatch registry.
+(`rules/SCHEMA.md`, `validator`). At import this module registers its document
+validators with the `_core` registry.
 """
 from __future__ import annotations
 
@@ -36,9 +36,7 @@ from ._core import (
     _model_findings,
     contract_model_domain,
     finding,
-    register_document_kind,
     register_document_validator,
-    register_kind,
 )
 from .connectors import _ALL_WRITE_FAMILY_PROBES, _check_endpoint_ids_unique
 
@@ -66,26 +64,6 @@ def _base_id(ref: Any) -> Any:
     if not isinstance(ref, str):
         return ref
     return _VERSION_SUFFIX_RE.sub("", ref)
-
-
-def is_pipeline_bundle(doc: Any) -> bool:
-    """A bundle is a mapping carrying a `pipeline` document plus its `streams` and
-    `connections` collections — the assembled run inputs. Structurally distinct
-    from every single-document kind (connector / endpoint / type-map / pipeline)."""
-    return (
-        isinstance(doc, dict)
-        and isinstance(doc.get("pipeline"), dict)
-        and "streams" in doc
-        and "connections" in doc
-    )
-
-
-def is_pipeline_doc(doc: Any) -> bool:
-    """A single pipeline document declares its source/destination wiring under
-    `connections` and, unlike a bundle, carries no nested `pipeline` document. The
-    bundle detector (registered first) claims the assembled-run shape, so a
-    `connections`-bearing mapping that is not a bundle is a pipeline document."""
-    return isinstance(doc, dict) and "connections" in doc and "pipeline" not in doc
 
 
 # ---------------------------------------------------------------------------
@@ -703,15 +681,6 @@ def validate_pipeline_bundle(bundle: Any) -> list[dict]:
     return [{**f, "path": key + f["path"]} for check in checks for key, f in check(documents)]
 
 
-def _validate_pipeline_bundle(doc: Any, location: Any = None) -> list[dict]:  # skipcq: PYL-W0613 — uniform registered-validator signature; a bundle reads nothing beside itself
-    """Kind entry point: dispatch a bundle document to the referential validator.
-
-    A bundle carries every document it references, so it reads nothing
-    beside its `location` (the registry's per-kind signature), unused here.
-    """
-    return validate_pipeline_bundle(doc)
-
-
 def _validate_pipeline_document(doc: Any) -> list[dict]:
     return _model_findings(doc, _PIPELINE_ADAPTER) + _missing_schema_url_findings(doc)
 
@@ -720,9 +689,5 @@ def _validate_pipeline_manifest_document(doc: Any) -> list[dict]:
     return _model_findings(doc, _PIPELINE_MANIFEST_ADAPTER)
 
 
-# The bundle is registered BEFORE the single-pipeline document so the bundle
-# detector claims an assembled-run mapping first; `is_pipeline_doc` then only sees
-# a `connections`-bearing mapping with no nested `pipeline` document.
-register_kind(is_pipeline_bundle, _validate_pipeline_bundle)
-register_document_kind("pipeline", is_pipeline_doc, _validate_pipeline_document)
+register_document_validator("pipeline", _validate_pipeline_document)
 register_document_validator("pipeline-manifest", _validate_pipeline_manifest_document)

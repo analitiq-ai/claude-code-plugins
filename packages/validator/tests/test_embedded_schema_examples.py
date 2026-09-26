@@ -4,21 +4,26 @@ Every other check over an endpoint compares one declaration with another, so a
 node whose declared type contradicts what the provider actually sends passes all
 of them. A value under `examples` is copied off the wire, which makes it the one
 thing in the document those checks can be graded against; these tests drive that
-grading through both entry points — a single endpoint document, and the
-connector-anchored walk that labels findings with the endpoint's filename.
+grading as a single endpoint document and as an endpoint inside a connector
+package, whose findings name the endpoint's key.
 """
 import json
 import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
-from conftest import CLI_DEADLINE_SECONDS
+from conftest import SUBPROCESS_DEADLINE_SECONDS
 
 from analitiq.contracts.endpoints import WRITE_MODES
 from analitiq.contracts.type_map import TYPE_MAP_SCHEMA_URL
+from analitiq.contracts.validation_requests import (
+    ValidatePackageRequest,
+    ValidateSingleDocumentRequest,
+)
 from analitiq.contracts.shared.json_schema import (
     JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
     JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
@@ -63,9 +68,30 @@ def _write_endpoint(properties, modes=("insert",), endpoint_id="widgets"):
         }}}
 
 
+def _endpoint_request(doc):
+    return ValidateSingleDocumentRequest(document_kind="api-endpoint", document=json.dumps(doc))
+
+
+def _endpoint_findings(validator, doc):
+    return validator.validate_single_document(_endpoint_request(doc))["findings"]
+
+
+def _package_request(endpoint):
+    """A connector package carrying the corpus connector, a read map covering
+    `STRING_FLAG`'s native type, and `endpoint` under its id's key."""
+    corpus = Path(__file__).resolve().parent / "corpus" / CORPUS_CONNECTOR
+    return ValidatePackageRequest(package_kind="connector", documents={
+        "definition/connector.json": corpus.read_text(),
+        "definition/type-map.json": json.dumps(
+            {"$schema": TYPE_MAP_SCHEMA_URL,
+             "read": [{"match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean"}]}),
+        f"definition/endpoints/{endpoint['endpoint_id']}.json": json.dumps(endpoint),
+    })
+
+
 def _model_errors(doc):
     """Whether the api-endpoint contract model itself rejects `doc` — checked
-    directly against the model rather than by filtering `validate_document`'s
+    directly against the model rather than by filtering the validator's
     findings, since a model rejection carries no category of its own to filter
     on and a rule id only when a `rules.violation` raised it."""
     from pydantic import TypeAdapter, ValidationError
@@ -93,7 +119,7 @@ STRING_FLAG = {"type": ["boolean", "null"], "native_type": "BOOLEAN",
 
 def test_string_flag_under_a_boolean_node_errors(validator):
     doc = _read_endpoint({"paid": STRING_FLAG})
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     errors = _sample_findings(findings)
     assert len(errors) == 2, findings
     assert all(e["severity"] == "error" for e in errors)
@@ -119,20 +145,20 @@ def test_a_write_input_node_is_graded_in_every_mode(mode, validator):
     if _model_errors(doc):
         doc["operations"]["write"][mode]["conflict_keys"] = ["paid"]
     assert not _model_errors(doc), _model_errors(doc)
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert len(errors) == 2, errors
     assert all(e["path"].startswith(f"/operations/write/{mode}/input/schema") for e in errors)
 
 
 def test_every_write_mode_of_one_endpoint_is_graded(validator):
     doc = _write_endpoint({"paid": STRING_FLAG}, modes=("insert", "truncate_insert"))
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert {e["path"].split("/")[3] for e in errors} == {"insert", "truncate_insert"}
 
 
 def test_a_satisfied_sample_produces_nothing(validator):
     doc = _read_endpoint({"paid": {"type": ["boolean", "null"], "examples": [True, None]}})
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     assert not _errors(findings), findings   # clean for the right reason
     assert not _sample_findings(findings)
 
@@ -143,14 +169,14 @@ def test_a_node_with_no_samples_is_graded_on_nothing(validator):
         "paid": {"type": "boolean"},
         "nested": {"type": "object", "properties": {"deep": {"type": "integer"}}},
     })
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     assert not _errors(findings), findings
     assert not _sample_findings(findings)
 
 
 def test_an_empty_samples_list_produces_nothing(validator):
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": []}})
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     assert not _errors(findings), findings
     assert not _sample_findings(findings)
 
@@ -159,7 +185,7 @@ def test_each_entry_is_graded_and_located_separately(validator):
     """The satisfied entries are silent and each contradicting one is reported
     at its own index — a finding naming only the node would not say which."""
     doc = _read_endpoint({"n": {"type": "integer", "examples": [1, "two", 3, "four"]}})
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert [e["path"].rsplit("/", 1)[-1] for e in errors] == ["1", "3"]
 
 
@@ -171,7 +197,7 @@ def test_a_node_reached_through_defs_and_composition_is_graded(validator):
              "n": {"type": "integer", "examples": ["nope"]}}}]}},
         defs={"flag": {"type": "boolean", "examples": ["0"]}},
     )
-    paths = {e["path"] for e in _sample_findings(validator.validate_document(doc))}
+    paths = {e["path"] for e in _sample_findings(_endpoint_findings(validator, doc))}
     assert paths == {
         "/operations/read/response/schema/$defs/flag/examples/0",
         "/operations/read/response/schema/items/properties/meta/allOf/0/properties/n/examples/0",
@@ -211,7 +237,7 @@ def test_every_recursion_position_the_contract_declares_is_graded(key, validator
             else {"type": "integer", "examples": ["nope"]})
     placed, segment = _at_position(key, node)
     doc = _read_endpoint({"f": {"type": "object", **placed}})
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert [e["path"] for e in errors] == [
         f"/operations/read/response/schema/items/properties/f/{segment}/examples/0"
     ], errors
@@ -228,7 +254,7 @@ def test_a_name_carrying_pointer_syntax_is_escaped(validator):
     """
     doc = _read_endpoint({"a/b": {"type": "integer", "examples": ["nope"]},
                           "c~d": {"type": "integer", "examples": ["nope"]}})
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert len(errors) == 2, errors
     for err in errors:
         node = doc
@@ -248,7 +274,7 @@ def test_data_shaped_like_a_schema_is_not_walked(validator):
         "c": {"type": "object", "enum": [{"properties": {"x": contradicted}}]},
         "d": {"type": "object", "examples": [{"properties": {"x": contradicted}}]},
     })
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     assert not _errors(findings), findings
     assert not _sample_findings(findings)
 
@@ -258,7 +284,7 @@ def test_a_schema_the_meta_check_rejects_is_not_graded(validator):
     not applied — grading would report the sample for the author's typo."""
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]}})
     doc["operations"]["read"]["response"]["schema"]["items"]["required"] = "paid"
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     assert not _sample_findings(findings)
     assert [f.get("rule") for f in _errors(findings)] == ["RULE-ENDP-048"]
 
@@ -274,7 +300,7 @@ def test_an_ungradeable_sample_is_reported_and_costs_only_itself(validator):
         # A defect this check does not own, to show the crash costs it nothing.
         "other": {"native_type": "STRING", "arrow_type": "NotAnArrowType"},
     })
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     errors = _sample_findings(findings)
     by_path = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
     assert set(by_path) == {"big/examples/0", "gone/examples/0", "paid/examples/0"}
@@ -310,7 +336,7 @@ def test_a_crash_in_the_check_costs_no_other_check(validator, monkeypatch):
         "params": {},
         "input": {"schema": {"$schema": JS, "type": "object", "required": "paid"}},
     }}
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     assert "RULE-ENDP-048" in {f.get("rule") for f in findings}
     crashes = [f for f in findings if f.get("message_id") == "check-crashed"]
     assert len(crashes) == 1 and "crashed unexpectedly" in crashes[0]["message"]
@@ -333,7 +359,7 @@ def test_a_node_asserting_nothing_is_graded_against_nothing(validator):
     """
     doc = _read_endpoint({"paid": {
         "native_type": "BOOLEAN", "arrow_type": "Boolean", "examples": ["0"]}})
-    assert not _sample_findings(validator.validate_document(doc))
+    assert not _sample_findings(_endpoint_findings(validator, doc))
 
 
 def test_a_node_asserting_without_a_type_is_still_graded(validator):
@@ -345,7 +371,7 @@ def test_a_node_asserting_without_a_type_is_still_graded(validator):
         "status": {"enum": ["open", "closed"], "examples": ["paid"]},
         "size": {"maximum": 10, "examples": [11]},
     })
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert {e["path"].split("/properties/")[1] for e in errors} == {
         "country/examples/0", "status/examples/0", "size/examples/0"}
 
@@ -356,7 +382,7 @@ def test_a_schema_declaring_another_draft_is_not_graded(validator):
     keywords that were never going to apply to it."""
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]}},
                          dialect="http://json-schema.org/draft-07/schema#")
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     assert not _sample_findings(findings)
     assert [f.get("rule") for f in _errors(findings)] == ["RULE-ENDP-048"]
 
@@ -375,7 +401,7 @@ def test_a_remote_ref_is_refused_without_reaching_the_network(validator):
     """
     doc = _read_endpoint({"x": {"$ref": "http://192.0.2.1/nothing.json",
                                 "examples": [1]}})
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert len(errors) == 1, errors
     assert "could not be resolved" in errors[0]["message"]
     assert "budget" not in errors[0]["message"], "grading stalled instead of refusing"
@@ -403,7 +429,7 @@ def test_an_in_document_ref_still_resolves_under_the_offline_registry(shape, val
     defs, ref, extra = IN_DOCUMENT_REFS[shape]
     doc = _read_endpoint({"paid": {"$ref": ref, "examples": ["0"]}}, defs=defs)
     doc["operations"]["read"]["response"]["schema"].update(extra)
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert len(errors) == 1, errors
     assert errors[0]["path"] == (
         "/operations/read/response/schema/items/properties/paid/examples/0")
@@ -427,7 +453,7 @@ def test_an_unresolved_reference_does_not_paste_the_schema_into_the_finding(vali
         fields = {f"filler_{i}": {"type": "string"} for i in range(field_count)}
         fields["gone"] = {"$ref": "#/$defs/missing", "examples": [1]}
         doc = _read_endpoint(fields)
-        errors = _sample_findings(validator.validate_document(doc))
+        errors = _sample_findings(_endpoint_findings(validator, doc))
         assert len(errors) == 1, errors
         return errors[0]["message"]
 
@@ -446,7 +472,7 @@ def test_a_reference_ring_costs_only_the_entry_that_walks_into_it(validator):
          "after": {"type": "boolean", "examples": ["0"]}},
         defs={"a": {"$ref": "#/$defs/b"}, "b": {"$ref": "#/$defs/a"}},
     )
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     by_field = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
     assert set(by_field) == {"ring/examples/0", "after/examples/0"}
     assert "could not be resolved" in by_field["ring/examples/0"]
@@ -467,7 +493,7 @@ def test_a_finding_does_not_grow_with_what_the_keyword_echoes(node, label, valid
     finding rather than a copy of the document that produced it.
     """
     doc = _read_endpoint({"p": node})
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert len(errors) == 1, errors
     assert len(errors[0]["message"]) < 1000, f"{label}: {len(errors[0]['message'])} chars"
 
@@ -481,7 +507,7 @@ def test_no_authored_string_defeats_the_finding_size_bound(node, validator):
     sample, the keyword's echo, the reference, and the path within the sample.
     An unbounded one is enough on its own to make a finding larger than the
     document it was found in."""
-    errors = _sample_findings(validator.validate_document(_read_endpoint({"a": node})))
+    errors = _sample_findings(_endpoint_findings(validator, _read_endpoint({"a": node})))
     assert len(errors) == 1, errors
     assert len(errors[0]["message"]) < 1000, len(errors[0]["message"])
 
@@ -495,33 +521,20 @@ def test_an_oversized_property_name_does_not_defeat_the_bound(node, validator):
     the message twice. The finding's `path` keeps the exact pointer, because a
     consumer resolves it; the message does not."""
     doc = _read_endpoint({"k" * 10_000: node})
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert len(errors) == 1, errors
     assert len(errors[0]["message"]) < 1000, len(errors[0]["message"])
     # ...and `path` is still the exact pointer a consumer can resolve.
     assert errors[0]["path"].count("k" * 10_000) == 1
 
 
-def test_the_connector_walk_locates_findings_in_the_endpoint_file(tmp_path, validator):
-    """The other entry point: a connector package, where a finding must name the
-    endpoint file it came from."""
-    from pathlib import Path
-
-    corpus = Path(__file__).resolve().parent / "corpus" / CORPUS_CONNECTOR
-    connector = json.loads(corpus.read_text())
-    (tmp_path / "endpoints").mkdir(parents=True)
-    (tmp_path / "connector.json").write_text(json.dumps(connector))
-    (tmp_path / "type-map.json").write_text(json.dumps(
-        {"$schema": TYPE_MAP_SCHEMA_URL,
-         "read": [{"match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean"}]}))
-    (tmp_path / "endpoints" / "widgets.json").write_text(
-        json.dumps(_read_endpoint({"paid": STRING_FLAG})))
-
-    findings = validator.validate_document(
-        connector, doc_path=tmp_path / "connector.json")
-    errors = _sample_findings(findings)
-    assert len(errors) == 2, findings
-    assert all(e["path"].startswith("endpoints/widgets.json#/operations/read/")
+def test_a_package_locates_findings_under_the_endpoint_key(validator):
+    """In a connector package a finding must name the endpoint document it came
+    from."""
+    result = validator.validate_package(_package_request(_read_endpoint({"paid": STRING_FLAG})))
+    errors = _sample_findings(result["findings"])
+    assert len(errors) == 2, result
+    assert all(e["path"].startswith("definition/endpoints/widgets.json#/operations/read/")
                for e in errors), errors
 
 
@@ -545,26 +558,51 @@ _NEAR_MISS = "a" * 32 + "X"
 _RUNAWAY_NODE = {"type": "string", "pattern": _RUNAWAY_PATTERN,
                  "examples": [_NEAR_MISS]}
 
-def _sample_findings_via_cli(validator_cli, doc, filename="doc.json"):
-    """This document's RULE-ENDP-063 findings, from a child process.
+#: Runs the entry point named in argv over the request on stdin and writes the
+#: envelope to stdout.
+_ENTRY_POINT_PROGRAM = """\
+import json, sys
+from analitiq.contracts import validation_requests
+from analitiq.validator import document_set
+entry_point, request_model = sys.argv[1:]
+request = getattr(validation_requests, request_model).model_validate_json(sys.stdin.read())
+json.dump(getattr(document_set, entry_point)(request), sys.stdout)
+"""
+
+
+def _validated_in_child(entry_point, request):
+    """`entry_point` over `request`, run in a child process.
 
     A regression in the bound does not make this check answer wrongly, it makes it
-    not answer, so a direct call would hang the suite where the CLI fixture fails
-    it. The deadline and the child's import path are the fixture's.
+    not answer, so a direct call would hang the suite where the deadline fails it.
     """
-    result = validator_cli.on_document(doc, filename)
-    assert result.returncode in (0, 1), result.stderr
-    return _sample_findings(json.loads(result.stdout)["findings"])
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _ENTRY_POINT_PROGRAM, entry_point, type(request).__name__],
+            input=request.model_dump_json(), capture_output=True, text=True,
+            timeout=SUBPROCESS_DEADLINE_SECONDS,
+            env={**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)},
+            check=False)
+    except subprocess.TimeoutExpired:
+        pytest.fail(f"{entry_point} did not return within {SUBPROCESS_DEADLINE_SECONDS}s")
+    assert proc.returncode == 0, proc.stderr
+    return proc
 
 
-def test_a_sample_past_the_budget_is_reported_and_costs_only_itself(validator_cli):
+def _sample_findings_in_child(doc):
+    """This endpoint's RULE-ENDP-063 findings, graded in a child process."""
+    proc = _validated_in_child("validate_single_document", _endpoint_request(doc))
+    return _sample_findings(json.loads(proc.stdout)["findings"])
+
+
+def test_a_sample_past_the_budget_is_reported_and_costs_only_itself():
     """The shape every other ungradeable entry already has: the sample is named,
     the verdict says nothing was decided, and the entries beside it still get
     theirs."""
     doc = _read_endpoint({"before": {"type": "integer", "examples": ["one"]},
                           "code": dict(_RUNAWAY_NODE),
                           "paid": {"type": "boolean", "examples": ["0"]}})
-    errors = _sample_findings_via_cli(validator_cli, doc)
+    errors = _sample_findings_in_child(doc)
     by_field = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
     assert set(by_field) == {"before/examples/0", "code/examples/0", "paid/examples/0"}
     # Graded on the worker generation the breach then killed.
@@ -580,34 +618,24 @@ def test_a_sample_past_the_budget_is_reported_and_costs_only_itself(validator_cl
      "examples": [{_NEAR_MISS: 1}]},
     {"propertyNames": {"pattern": _RUNAWAY_PATTERN}, "examples": [{_NEAR_MISS: 1}]},
 ], ids=["patternProperties", "propertyNames"])
-def test_the_budget_bounds_every_keyword_not_only_pattern(node, validator_cli):
+def test_the_budget_bounds_every_keyword_not_only_pattern(node):
     """`pattern` is the reachable instance, not the class. Both keywords below
     apply the author's regex to the sample's KEYS, and a bound that reached only
     the keyword named in the report would leave them running."""
-    errors = _sample_findings_via_cli(validator_cli, _read_endpoint({"bag": node}))
+    errors = _sample_findings_in_child(_read_endpoint({"bag": node}))
     assert len(errors) == 1, errors
     assert "was not graded" in errors[0]["message"]
 
 
-def test_the_connector_walk_bounds_a_pathological_sample(tmp_path, validator_cli):
-    """The second entry point. It reaches the same grading through a different
-    caller, so a bound applied at the single-document call site would leave a
-    connector package unprotected."""
-    from pathlib import Path
-
-    corpus = Path(__file__).resolve().parent / "corpus" / CORPUS_CONNECTOR
-    connector = json.loads(corpus.read_text())
-    (tmp_path / "endpoints").mkdir(parents=True)
-    (tmp_path / "connector.json").write_text(json.dumps(connector))
-    (tmp_path / "type-map.json").write_text(json.dumps(
-        {"$schema": TYPE_MAP_SCHEMA_URL,
-         "read": [{"match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean"}]}))
-    (tmp_path / "endpoints" / "widgets.json").write_text(
-        json.dumps(_read_endpoint({"code": dict(_RUNAWAY_NODE)})))
-
-    errors = _sample_findings_via_cli(validator_cli, connector, "connector.json")
+def test_a_package_bounds_a_pathological_sample():
+    """A package reaches the same grading through a different caller, so a bound
+    applied at the single-document call site would leave a connector package
+    unprotected."""
+    proc = _validated_in_child(
+        "validate_package", _package_request(_read_endpoint({"code": dict(_RUNAWAY_NODE)})))
+    errors = _sample_findings(json.loads(proc.stdout)["findings"])
     assert len(errors) == 1, errors
-    assert errors[0]["path"].startswith("endpoints/widgets.json#/operations/read/"), errors
+    assert errors[0]["path"].startswith("definition/endpoints/widgets.json#/operations/read/"), errors
     assert "was not graded" in errors[0]["message"]
 
 
@@ -621,7 +649,7 @@ def test_a_document_with_no_samples_starts_no_worker(validator, monkeypatch):
 
     monkeypatch.setattr(_sample_budget.subprocess, "Popen", refuse)
     doc = _read_endpoint({"paid": {"type": "boolean"}})
-    assert not _sample_findings(validator.validate_document(doc))
+    assert not _sample_findings(_endpoint_findings(validator, doc))
 
 
 # ---------------------------------------------------------------------------
@@ -709,7 +737,7 @@ def test_a_spent_document_budget_reports_rather_than_passes(validator, monkeypat
                         lambda: BudgetedGrader(document_budget=0.0))
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]},
                           "n": {"type": "integer", "examples": ["two"]}})
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert {e["path"].split("/properties/")[1] for e in errors} == {
         "paid/examples/0", "n/examples/0"}
     assert all(e["kind"] == "notApplicable" for e in errors), errors
@@ -734,7 +762,7 @@ def test_a_worker_that_cannot_start_is_reported_per_sample_and_attempted_once(
 
     monkeypatch.setattr(_sample_budget.subprocess, "Popen", refuse)
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert len(errors) == 2, errors
     assert all(e["kind"] == "notApplicable" for e in errors), errors
     assert all("cannot allocate memory" in e["message"] for e in errors), errors
@@ -752,7 +780,7 @@ def test_a_worker_lost_mid_document_costs_only_the_sample_that_lost_it(
     doc = _read_endpoint({"first": {"type": "boolean", "examples": ["0"]},
                           "second": {"type": "boolean", "examples": ["1"]},
                           "third": {"type": "boolean", "examples": ["2"]}})
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert len(errors) == 1, errors
     assert errors[0]["path"].endswith("/first/examples/0"), errors
     assert "was not graded" in errors[0]["message"]
@@ -774,7 +802,7 @@ def test_a_reply_that_is_not_a_verdict_is_refused_and_quoted(
     every finding the document had earned with one generic validator-bug notice."""
     fake_worker(mode)
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]}})
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     errors = _sample_findings(findings)
     assert len(errors) == 1, findings
     assert errors[0]["kind"] == "notApplicable"
@@ -783,7 +811,7 @@ def test_a_reply_that_is_not_a_verdict_is_refused_and_quoted(
     assert "crashed unexpectedly" not in errors[0]["message"]
 
 
-def test_a_document_that_is_not_json_reports_every_sample_rather_than_crashing(validator):
+def test_a_document_that_is_not_json_reports_every_sample_rather_than_crashing():
     """A recorded sample is a value read out of a JSON document, so handing it to
     another process costs nothing — but a caller that built the document in Python
     can hold a value no JSON document could.
@@ -795,9 +823,11 @@ def test_a_document_that_is_not_json_reports_every_sample_rather_than_crashing(v
     notice."""
     from decimal import Decimal
 
+    from analitiq.validator._core import validate_document_as
+
     doc = _read_endpoint({"amount": {"type": "integer", "examples": [Decimal("1.5")]},
                           "paid": {"type": "boolean", "examples": ["0"]}})
-    findings = validator.validate_document(doc)
+    findings = validate_document_as("api-endpoint", doc)
     by_field = {e["path"].split("/properties/")[1]: e["message"]
                 for e in _sample_findings(findings)}
     assert set(by_field) == {"amount/examples/0", "paid/examples/0"}
@@ -822,14 +852,15 @@ def test_the_worker_writes_only_verdicts_to_its_stdout():
     assert proc.stdout == '{"v": "pong"}\n', proc.stdout
 
 
-def test_a_budget_breach_leaves_no_traceback_on_stderr(validator_cli):
+def test_a_budget_breach_leaves_no_traceback_on_stderr():
     """A breach is an ordinary outcome, so it must not look like a crash.
 
     The worker is killed with its pipes still buffered; left to finalization those
-    raise, and the interpreter prints the traceback on the validator's own stderr
-    — which is exactly where a caller looks when the JSON report is missing."""
-    proc = validator_cli.on_document(_read_endpoint({"code": dict(_RUNAWAY_NODE)}))
-    assert proc.returncode in (0, 1), proc.stderr
+    raise, and the interpreter prints the traceback on the stderr of the process
+    running the validator — which is exactly where a caller looks when the report
+    is missing."""
+    proc = _validated_in_child(
+        "validate_single_document", _endpoint_request(_read_endpoint({"code": dict(_RUNAWAY_NODE)})))
     assert "Traceback" not in proc.stderr, proc.stderr
     assert "BrokenPipeError" not in proc.stderr, proc.stderr
 
@@ -838,8 +869,7 @@ def test_a_budget_breach_leaves_no_traceback_on_stderr(validator_cli):
     ({"type": "array", "items": {"type": "integer"}}, (1, 2)),
     ({"type": "object", "required": ["1"]}, {1: "x"}),
 ], ids=["a tuple written as an array", "a key written as a string"])
-def test_a_value_json_would_normalise_is_reported_rather_than_converted(
-        node, sample, validator):
+def test_a_value_json_would_normalise_is_reported_rather_than_converted(node, sample):
     """Encoding succeeding is not proof the round trip was lossless.
 
     `json.dumps` normalises: a tuple is written as an array, a non-string mapping
@@ -847,8 +877,10 @@ def test_a_value_json_would_normalise_is_reported_rather_than_converted(
     and are accepted once normalised, so trusting the encoder would turn a
     rejection into a silent pass — the one outcome bounding the evaluation exists
     to make impossible."""
+    from analitiq.validator._core import validate_document_as
+
     doc = _read_endpoint({"a": dict(node, examples=[sample])})
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(validate_document_as("api-endpoint", doc))
     assert len(errors) == 1, errors
     assert "was not graded" in errors[0]["message"]
     assert "not JSON data" in errors[0]["message"], errors[0]["message"]
@@ -869,7 +901,7 @@ def test_a_worker_whose_diagnostic_file_cannot_be_opened_is_reported(
 
     monkeypatch.setattr(_sample_budget.tempfile, "TemporaryFile", refuse)
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     errors = _sample_findings(findings)
     assert len(errors) == 2, findings
     assert all("no space left on device" in e["message"] for e in errors), errors
@@ -897,7 +929,7 @@ def test_a_worker_ends_itself_when_its_deadline_passes():
     ))
     proc = subprocess.run(
         [sys.executable, _sample_budget._WORKER_SCRIPT], input=jobs,
-        capture_output=True, text=True, timeout=CLI_DEADLINE_SECONDS,
+        capture_output=True, text=True, timeout=SUBPROCESS_DEADLINE_SECONDS,
         env={**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)},
         check=False)
     assert proc.returncode != 0, "the worker outlived its deadline"
@@ -925,7 +957,7 @@ def test_a_restart_cannot_outlast_what_is_left_of_the_document_budget(
     doc = _read_endpoint({"one": {"type": "boolean", "examples": ["0"]},
                           "two": {"type": "boolean", "examples": ["1"]}})
     started = time.monotonic()
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     elapsed = time.monotonic() - started
     assert elapsed < 15.0, f"the stalled restart was not bounded ({elapsed:.1f}s)"
     assert len(errors) == 2, errors
@@ -982,7 +1014,7 @@ def test_a_host_that_cannot_host_a_worker_is_asked_once_and_said_once(
     monkeypatch.setattr(_sample_budget.subprocess, "Popen", counted)
     monkeypatch.setattr(getattr(_sample_budget, holder), target, refuse)
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     errors = _sample_findings(findings)
     assert len(errors) == 2, findings
     assert all(e["kind"] == "notApplicable" for e in errors), errors
@@ -1020,7 +1052,7 @@ def test_a_failure_while_grading_is_not_held_against_the_next_sample(
     monkeypatch.setattr(_sample_budget.subprocess, "Popen", counted)
     monkeypatch.setattr(_sample_budget, "_encoded", refuse_to_encode_a_grade)
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0", "1"]}})
-    findings = validator.validate_document(doc)
+    findings = _endpoint_findings(validator, doc)
     errors = _sample_findings(findings)
     assert len(errors) == 2, findings
     assert all("failed unexpectedly" in e["message"] for e in errors), errors
@@ -1047,7 +1079,7 @@ def test_a_restart_that_spends_the_budget_leaves_none_for_the_sample(
                         lambda: BudgetedGrader(sample_budget=0.5, document_budget=1.5))
     doc = _read_endpoint({"one": {"type": "boolean", "examples": ["0"]},
                           "two": {"type": "boolean", "examples": ["1"]}})
-    errors = _sample_findings(validator.validate_document(doc))
+    errors = _sample_findings(_endpoint_findings(validator, doc))
     assert len(errors) == 2, errors
     assert "the grading worker was lost" in errors[0]["message"], errors[0]["message"]
     assert "budget was already spent" in errors[1]["message"], errors[1]["message"]

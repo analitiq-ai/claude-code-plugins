@@ -57,8 +57,8 @@ Validation runs on the `analitiq-validator` MCP server this plugin ships.
 
 Report every finding as the validator emits it; never re-map its `rule` id
 yourself — resolve it in the rule files per this file's header note above.
-`rule` is absent on some findings — an unrecognized document, an
-unattributed model rejection, a check that could not run — and that is the
+`rule` is absent on some findings — an unattributed model rejection, a
+check that could not run — and that is the
 framework saying so, not a gap to fill in.
 
 <!-- BEGIN GENERATED: validator-blind-spots -->
