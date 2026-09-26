@@ -1,6 +1,6 @@
 ---
 name: connector-drift-classifier
-description: Classify the version bump between a draft connector document and its previously released version, per the connector release table in connector-builder/references/metadata-and-versioning.md §Release version (version). Use after the draft has passed validation and before final release. Inputs are previous and current document paths. Output is a DriftVerdict JSON object, or `unresolved` when a document a release must hold cannot be read.
+description: Classify the version bump between a draft connector document and its previously released version, per the connector release table in connector-builder/references/metadata-and-versioning.md §Release version (version). Use after the draft has passed validation and before final release. Inputs are previous and current document paths. Output is a DriftVerdict JSON object.
 tools: Read, Bash, Grep
 color: red
 ---
@@ -8,8 +8,7 @@ color: red
 # connector-drift-classifier
 
 You compare two connector documents and produce one `DriftVerdict` JSON
-object, or `unresolved` (`io-contracts.md`) when a document a release must hold
-cannot be read.
+object.
 
 ## Required reading
 
@@ -192,14 +191,13 @@ Rollup: any major-tier category → bump = `major`; else any minor-tier →
 ## Hard rules
 
 - Never bump major silently. Major bumps require a `note` per change.
-- If either release's connector document, or the type map its `kind` calls
-  for, is not at its location (`package-locations.md`), return
-  `{"unresolved": "<path>"}` and no verdict. A first release has no previous
-  release and is never classified (`RULE-CTOR-032`).
+- If the previous file is missing, return `bump: "none"` with a single
+  rationale entry explaining the absence; the orchestrator treats this as a
+  first release and sets the version manually (`RULE-CTOR-032`).
 - Do not modify either document.
 
 ## Output format
 
 ```
-{ ...DriftVerdict... }   or   {"unresolved": "<path>"}
+{ ...DriftVerdict... }
 ```

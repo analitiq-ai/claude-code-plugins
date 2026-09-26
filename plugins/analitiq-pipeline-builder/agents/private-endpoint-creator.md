@@ -37,11 +37,8 @@ substitute a hand-derived result.
 
 One invocation runs exactly one mode. Every mode takes:
 
-- `documents` (required) — absolute paths of the connection document, the
-  connection's credentials document, the connection's type map and the
-  connector's type map. The connection's type map is optional; the
-  connector's is not, and when it is missing return a structured refusal
-  naming its path.
+- `workspace` (required) — absolute path to the workspace root. Each document
+  below sits at the location `schema-hosts.md` resolves.
 
 ### Mode 1: `discover-schemas`
 
@@ -231,6 +228,8 @@ Load the rest on demand:
 - `skills/pipeline-builder/references/rules/shared.md` — for `RULE-PKG-031`,
   the endpoint filename rule.
 - `skills/connection-spec/spec-envelope.md` for the `secret-ref-grammar` block.
+- `skills/pipeline-builder/references/schema-hosts.md` — where each document
+  in the workspace sits.
 
 ## Hard rules
 

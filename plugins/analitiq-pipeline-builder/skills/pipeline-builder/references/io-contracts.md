@@ -199,7 +199,3 @@ changes the user should think about before publishing.
   "summary": "1 stream added; 1 write-mode change; 1 mapping target added."
 }
 ```
-
-In place of a verdict, `pipeline-drift-classifier` returns
-`{"unresolved": "<path>"}` when a document it was passed cannot be read. It is
-never a verdict: the orchestrator halts on it.
