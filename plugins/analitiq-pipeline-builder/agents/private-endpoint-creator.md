@@ -166,7 +166,7 @@ One invocation runs exactly one mode. Every mode takes:
    ```
 
    `directory_slug` equals the endpoint's derived `endpoint_id` and becomes the
-   filename stem (`RULE-PKG-031`).
+   endpoint document's filename stem.
    `type_map.document` is the complete `{$schema, read, write}` document,
    carrying only the sections it has rules for
    (`skills/endpoint-spec/spec-type-map-gaps.md#Files` names the `$schema`
