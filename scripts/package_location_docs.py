@@ -5,7 +5,8 @@ Both plugins place and find documents by reading the published package and
 workspace schemas, so both carry the same paragraph on how to read one. It is
 rendered here once and registered with each plugin's generator —
 `gen_pipeline_docs.py` for the pipeline tree, `render_validator_claims.py` for
-the connector tree — so the two copies are one block id and cannot diverge.
+the connector tree — so every occurrence, in either plugin's tree, is one block
+id rendered by one function.
 The secret-location marker is read off the rendered package schemas, which own
 it.
 """
