@@ -31,9 +31,7 @@ identity — see `../pipeline-builder/references/identity-and-versioning.md`.
 
 ## What is NOT in this block
 
-- Connection bodies. Those live in
-  `connections/<connection-slug>/connection.json`.
-- Connection credentials. Those live in
-  `connections/<connection-slug>/.secrets/`.
+- Connection bodies. Those live in each connection document.
+- Connection credentials. Those live in each connection's credentials document.
 - The connector reference. The pipeline references **connections**, not
   connectors — see `connection-spec`.

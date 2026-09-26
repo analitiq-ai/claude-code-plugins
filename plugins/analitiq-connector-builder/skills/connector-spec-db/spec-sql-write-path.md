@@ -13,7 +13,7 @@ they are checked **against each other**:
 
 | Where | What |
 |---|---|
-| `definition/connector.json` | the `sql_capabilities` block — declared facts |
+| the connector document | the `sql_capabilities` block — declared facts |
 | `connector.py`'s dialect | the statement renderers those facts oblige |
 
 The engine **refuses, it does not guess**: it reads the declaration
@@ -32,7 +32,7 @@ at registry CI. Author them together, never one alone.
 
 ## `sql_capabilities` — the declaration
 
-Top-level in `connector.json`, beside `transports`. The contract leaves the
+Top-level in the connector document, beside `transports`. The contract leaves the
 block optional; declare it on every database connector (`RULE-CTOR-040`).
 Read and write are both first-class here, so the write capability that
 obliges it (`RULE-CTOR-049`) always holds.

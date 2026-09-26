@@ -53,7 +53,7 @@ per the field notes below.
 
 - The discovery transport may be the same as the data transport, or a
   separate discovery-only transport with restricted credentials.
-- The read map in the connector-level `type-map.json` (see
+- The read map in the connector's type map (see
   `spec-type-maps.md`) provides the seed mapping for native types encountered during
   discovery. Connection-scoped type maps are out of scope for this
   plugin; see `shared/type-maps.md` for runtime resolution rules.

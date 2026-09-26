@@ -22,7 +22,8 @@ and nothing here changes when a new connector ships:
 
 - `connection.parameters` → `parameters.<key>` = the user's value.
 - `secrets` → `secret_refs.<key>` = a secret **pointer** (see below); the value
-  goes in `.secrets/`, never the document.
+  goes in the connection's credentials document, never the connection
+  document.
 - `connection.selections` → `selections.<key>` **only if** the user supplies it
   up front; usually omit (a post-auth selection isn't known at authoring time).
 - `connection.discovered` → **never author** (`RULE-CONN-005`); the connections
@@ -65,8 +66,8 @@ routes like any other input — by its declared `storage`, which is normally
 
 ## Secrets — reference, never embed (`RULE-CONN-009`)
 
-The real value goes in a gitignored `.secrets/credentials.json` the user
-provisions; the plugin never holds or logs one.
+The real value goes in the connection's credentials document, which the user
+provisions and keeps out of version control; the plugin never holds or logs one.
 
 Author an **`env:` pointer** by default — portable and resolved from the runtime
 environment. `examples/db.example.json` is the worked document: one pointer per
@@ -80,7 +81,7 @@ the user names their own variable. Emit the sibling template the user fills in:
 
 <!-- illustrative -->
 ```jsonc
-// .secrets/credentials.json
+// the connection's credentials document
 {
   "ANALITIQ_POSTGRESQL_PASSWORD": "<paste-password-here>",
   "ANALITIQ_POSTGRESQL_SSL_CA_CERTIFICATE": "<paste-ca-pem-here>"
@@ -89,7 +90,7 @@ the user names their own variable. Emit the sibling template the user fills in:
 
 The user (or CI) exports these into the environment where the pipeline runs (or
 loads them into their secret store) before submission; nothing on the
-connection-authoring path reads `.secrets/` — only `private-endpoint-creator`
+connection-authoring path reads the credentials document — only `private-endpoint-creator`
 does, as the fallback when an `env:` variable is unset.
 
 The file's shape is the published credentials-sidecar contract
@@ -98,7 +99,7 @@ constrains no key, which is why the env-var-keyed template above conforms to it.
 Write string values: the engine string-coerces on read, so JSON-encode a
 structured credential into a string rather than authoring a nested object.
 
-### `.secrets/credentials.json` is not a `sidecar:` file
+### The credentials template is not a `sidecar:` file
 
 The two look alike and resolve completely differently. Do not conflate them:
 

@@ -1,7 +1,6 @@
 # Type maps
 
-How to author the standalone `type-map.json` that ships alongside every
-connector. A type map connects provider-native type labels and Apache
+How to author the type map that ships in every connector package. A type map connects provider-native type labels and Apache
 Arrow canonical types, with a section for each direction the connector's
 `kind` calls for (`RULE-PKG-030`):
 
@@ -36,16 +35,11 @@ connector's `read` alone.
 
 ## On-disk location
 
-The map is a **standalone** sibling of `connector.json`:
-
-```
-{connector_id}/definition/type-map.json
-```
-
-It validates against `https://schemas.analitiq.ai/type-map/latest.json`. The
+The map is a **standalone** document of the connector package, located as
+`spec-connector-package.md` § Required layout says. It validates against `https://schemas.analitiq.ai/type-map/latest.json`. The
 `write` section shares the `read` section's rule shape but inverts the direction
 (`arrow_type` matches, `native_type` renders). The map is never embedded inside
-`connector.json` or any endpoint document (`RULE-PKG-030`).
+the connector document or any endpoint document (`RULE-PKG-030`).
 
 ## File shape
 

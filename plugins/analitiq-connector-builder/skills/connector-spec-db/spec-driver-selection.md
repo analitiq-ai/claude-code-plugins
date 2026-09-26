@@ -1,7 +1,7 @@
 # Driver selection
 
 Every database connector package ships its own driver (`RULE-PKG-027`) and
-picks its transport in `definition/connector.json` via `transport_type`.
+picks its transport in its connector document via `transport_type`.
 This is the decision guide for choosing the driver and bulk-write path when
 authoring a connector for a new system.
 

@@ -86,7 +86,6 @@ The orchestrator passes:
   "entity": "stream",
   "directory_slug": "<stream_slug>",
   "document": { /* the stream JSON, $schema set, stream_id + pipeline_id authored */ },
-  "secondary_files": [],
   "notes": []
 }
 ```
@@ -100,7 +99,6 @@ return a structured refusal:
   "entity": "stream",
   "directory_slug": null,
   "document": null,
-  "secondary_files": [],
   "notes": [
     "Storage-kind destinations (file/s3/stdout) are accepted by the schema but the engine does not yet execute them. The plugin declines to author a stream binding for this destination until engine support lands."
   ]

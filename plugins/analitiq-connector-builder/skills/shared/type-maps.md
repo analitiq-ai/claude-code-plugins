@@ -10,10 +10,10 @@ never by this plugin.
 
 ## The two scopes
 
-| Scope | File | Authored by |
+| Scope | Ships in | Authored by |
 |---|---|---|
-| Connector | `{connector_id}/definition/type-map.json` | this plugin (`spec-type-maps.md`) |
-| Connection | `connections/<connection-slug>/definition/type-map.json` | `analitiq-pipeline-builder`, for natives the connector map doesn't cover on that deployment |
+| Connector | the connector package | this plugin (`spec-type-maps.md`) |
+| Connection | the connection package | `analitiq-pipeline-builder`, for natives the connector map doesn't cover on that deployment |
 
 Both scopes share one document shape and one published schema
 (`https://schemas.analitiq.ai/type-map/latest.json`): a `read` rule list and a

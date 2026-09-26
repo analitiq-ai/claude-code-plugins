@@ -35,7 +35,8 @@ common way a stream stops resolving against the endpoint it was built for.
 
 Refers to a public endpoint baked into the connector document (typically API
 endpoints), pinned by the connection's `connector_version` at runtime.
-`endpoint_id` matches a key under the connector's `definition/endpoints/*.json`.
+`endpoint_id` is the filename stem of an endpoint document the connector ships
+(`RULE-PKG-031`).
 
 ## `scope: "connection"` — private database endpoint
 

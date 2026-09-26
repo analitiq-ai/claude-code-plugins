@@ -19,6 +19,8 @@ resolves against this list. The input paths below are elsewhere on disk.
   — the `DriftVerdict` shape.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
   — the release table the bump classification follows.
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/package-locations.md`
+  — where each release's type map and endpoint documents sit.
 
 A cited `RULE-*` id resolves in one of the rule files under
 `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/`; the index
@@ -28,14 +30,14 @@ rules for every document" says which file carries which artifact.
 ## Inputs
 
 - `previous_release_path` — absolute path to the prior released
-  connector directory or `connector.json`.
+  connector directory or its connector document.
 - `current_path` — absolute path to the assembled draft (connector JSON
   or its directory).
 
 ## Process
 
-1. Read both documents, the sibling `type-map.json` (`RULE-PKG-030`), and every endpoint document under the `endpoints/`
-   directory beside each `connector.json` (`RULE-PKG-031`) — a database connector release ships
+1. Read both documents, each release's type map (`RULE-PKG-030`), and every endpoint
+   document each release ships (`RULE-PKG-031`) — a database connector release ships
    none (`RULE-DBEP-006`). Each file is diffed independently; a change in any
    of them drives the bump.
 2. Compute the structural diff. Use `diff` or `jq` via Bash, or compare in

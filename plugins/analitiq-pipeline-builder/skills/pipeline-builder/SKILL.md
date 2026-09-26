@@ -122,11 +122,10 @@ Always load:
 - `references/enum-mappers.md`
 - `references/io-contracts.md`
 - `references/identity-and-versioning.md`
+- `references/schema-hosts.md`
 
 Read on demand:
 
-- `references/schema-hosts.md` — when explaining or troubleshooting the
-  published schema host or how validation runs.
 - `references/reserved-fields.md` — when a validator finding names an unknown
   field, or when a name discovered from a provider matches an artifact field:
   what to do with a server-managed name that leaked into an authored document,
@@ -139,11 +138,16 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
 
 Every artifact this plugin reads or writes lives under `analitiq/` in the
 user's working directory — the workspace root. Create it before the first
-write. Every `connectors/…`, `connections/…` and `pipelines/…` path in this
-plugin is relative to it, and a workspace validation request is built from it
-alone, so nothing else in the working directory is ever submitted. A sub-agent
-never learns the root on its own: every dispatch passes the absolute paths its
-Inputs name.
+write. A workspace validation request is built from it alone, so nothing else
+in the working directory is ever submitted.
+
+Where each document sits under the root is read from the published schemas,
+never from this plugin's prose; `references/schema-hosts.md` says how. This
+plugin names every document by kind and package — the connection document, the
+connection's credentials document, a stream document — and you resolve its path
+from those schemas. Every dispatch passes the absolute paths its Inputs name; a
+sub-agent given a directory resolves the documents inside it through
+`references/schema-hosts.md`.
 
 ## Pipeline
 
@@ -152,15 +156,15 @@ what halting means, how a phase dispatches in parallel, and the
 fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
 
 0. **Pre-flight: pipeline directory check** — before any research or
-   authoring, check whether `pipelines/<pipeline-slug>/` already
-   exists under the workspace root. If it does, **halt** and
+   authoring, check whether the pipeline's package directory already
+   exists. If it does, **halt** and
    ask the user whether to pick a different `pipeline_slug` or to
    remove the existing directory themselves first. Do not migrate
    legacy-shape pipeline files. (To *change* an existing pipeline, use
    **edit** mode instead of rebuilding.)
 
-   Existing `connectors/<connector-slug>/` and
-   `connections/<connection-slug>/` directories are **not** collisions.
+   Existing connector and connection package directories are **not**
+   collisions.
    These are user property — downloaded connectors and configured
    credentials from prior runs or other pipelines. The orchestrator
    reuses them in phases 2, 4, and 5 rather than asking the user to
@@ -179,12 +183,11 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
    `PipelineFacts` (discriminated by each side's `kind`).
    If the user did not supply required inputs, halt and ask.
 
-2. **Connectors** — for each side, check whether
-   `connectors/<connector-slug>/definition/connector.json` already exists
-   and parses as valid JSON:
+2. **Connectors** — for each side, check whether the connector's root
+   document already exists and parses as valid JSON:
    - **If present and parses** → reuse it. Read it directly; do not
      re-fetch from the registry. Record "Reused existing connector
-     at `connectors/<connector-slug>/`" in the final summary. Connector
+     at `<package directory>`" in the final summary. Connector
      files are registry-owned inputs; a stale shape surfaces as a
      downstream creator failure.
    - **If present but does not parse** → halt and ask the user to
@@ -193,8 +196,8 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
      will refuse with `target_exists` and the user will get an
      unhelpful error.
    - **If absent** → invoke `registry-browser` to fetch it, with
-     `target_dir` the absolute path of `connectors/<connector-slug>/`
-     under the workspace root.
+     `target_dir` the absolute path of the connector's package directory
+     and `package_schema` the connector-package schema.
 
    When both sides need fetching, invoke `registry-browser` twice in
    parallel.
@@ -228,34 +231,35 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
    `references/io-contracts.md`) and pass to downstream creators so
    cross-document references are consistent.
 
-4. **Connections** — for each side, check whether
-   `connections/<connection-slug>/connection.json` already exists:
+4. **Connections** — for each side, check whether the connection
+   document already exists:
    - **If yes** and its `connector_id` matches the side's
      connector slug → reuse it. Validate the existing file (a `document`
      request: its absolute path under the workspace root, document kind
      `connection`) so a stale shape is caught early. If validation
      passes, record its `connection_id` UUID for downstream use, leave
-     the user's `.secrets/credentials.json` untouched, and record
-     "Reused existing connection at `connections/<connection-slug>/`"
+     the connection's credentials document untouched, and record
+     "Reused existing connection at `<package directory>`"
      in the final summary. If validation **fails**, halt and surface
      the validator's findings (`path`, `message`) verbatim — the user
      needs to see what's broken to fix it. The orchestrator does not
-     re-author the file (that would overwrite the user's `.secrets/`);
-     the user must fix `connection.json` or remove it themselves before
-     re-running.
+     re-author the file (that would overwrite the user's secrets);
+     the user must fix the connection document or remove it themselves
+     before re-running.
    - **If yes** but its `connector_id` does **not** match the
      side's connector → halt and ask the user to either pick a
      different `connection_slug` for this pipeline or confirm they
      want to remove the existing connection themselves first. Do not
      overwrite.
    - **If no** → invoke `connection-creator`. It writes:
-     - `connections/<connection-slug>/connection.json` — validates as
+     - the connection document — validates as
        document kind `connection`. Authors `connection_id` as the
        orchestrator-minted UUID, `connector_id` as the connector slug,
        and routes each connector-contract input into the
        `parameters` / `selections` / `secret_refs` maps by its
        `storage` (secrets as `env:` pointers).
-     - `connections/<connection-slug>/.secrets/credentials.json` —
+     - the connection's credentials document — its `credentials_template`,
+       written at the connection-package schema's `x-secret` location: a
        template the user fills in with the real secret values (keyed by
        the env-var names the `secret_refs` pointers resolve).
 
@@ -271,9 +275,9 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
    are sequential per connection but parallel across connections
    (except the `author-new-table` ordering constraint below).
 
-   For each table the user selects, check whether an endpoint file for
-   it already exists under `connections/<connection-slug>/definition/endpoints/`.
-   The filename is the endpoint's **derived** `endpoint_id`; compute it
+   For each table the user selects, check whether the connection already
+   carries an endpoint document for it. Its filename stem is the endpoint's
+   **derived** `endpoint_id` (`RULE-PKG-031`); compute it
    for the table with `derive_endpoint_identity` (the `analitiq-validator` MCP
    server) to know the filename —
    never hand-write one (see `endpoint-spec/spec-database-object.md`); a call
@@ -345,8 +349,8 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
      `arrow_type` to — then re-invoke `create-endpoints` for the same tables with
      `write_render_choices` (`{arrow_type: native_type}`). The re-run must return no
      ambiguities.
-   - Write a non-null `type_map.document` to
-     `connections/<connection-slug>/definition/type-map.json` and validate it
+   - Write a non-null `type_map.document` as the connection's type map and
+     validate it
      (document kind `type-map`) through the same fix-and-revalidate loop as other
      artifacts.
      `null` means write nothing — never create an empty map file, and never
@@ -356,7 +360,7 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
 6. **Pipeline shell** — invoke `pipeline-creator`. Receives the minted
    `pipeline_id` UUID, the `connections.source` / `connections.destinations[]`
    UUIDs, schedule classification, and engine/runtime defaults. Writes
-   `pipelines/<pipeline-slug>/pipeline.json` with `streams: []` (filled
+   the pipeline document with `streams: []` (filled
    in phase 8). Validates as document kind `pipeline`.
 
 7. **Streams** — invoke `stream-creator` once per selected endpoint, in
@@ -365,11 +369,10 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
    connection-scoped endpoints), source + destination `connection_id`
    UUIDs, the minted `stream_id` UUID, replication method, write mode,
    and the parent `pipeline_id` UUID (written into stream `pipeline_id`).
-   Writes `pipelines/<pipeline-slug>/streams/<stream-slug>.json` and
-   validates as document kind `stream`.
+   Writes a stream document and validates as document kind `stream`.
 
 8. **Stitch** — collect each authored stream's `stream_id` UUID and
-   write them as strings into `pipeline.json#/streams`. Validate the
+   write them as strings into the pipeline document's `streams`. Validate the
    workspace (the workspace root) so the cross-document
    checks run.
 
@@ -401,7 +404,7 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
 Editing is **surgical and in place** — never a regenerate. Authored documents
 carry user-entered values, `secret_refs`, and minted UUIDs that are not
 reproducible from inputs, so the orchestrator changes only what the user asked
-and leaves everything else — including `.secrets/` — untouched.
+and leaves everything else — including credentials documents — untouched.
 
 1. **Locate** the target document(s). The user names the artifact (a path, or a
    `pipeline_slug` + which entity); read the on-disk file(s). If the target does
@@ -432,7 +435,7 @@ and leaves everything else — including `.secrets/` — untouched.
    validate its **referenced closure** — every connection the pipeline references
    (public and private), every connection-scoped private endpoint those
    connections own (document kinds `connection` / `database-endpoint`), and any
-   connection-scoped `type-map.json` beside them
+   connection's type map
    (document kind `type-map`) — which catches a stale or broken
    referenced artifact; plus the workspace, the request that resolves
    cross-document references and the on-disk endpoint file names
@@ -483,14 +486,14 @@ Report to the user:
   request, transport, auth, pagination, replication, resource-discovery
   or lifecycle rule, do not guess one — surface the gap to the user
   instead of inventing a shape the engine will not honor.
-- Never overwrite an existing `pipelines/<pipeline-slug>/` directory in
+- Never overwrite an existing pipeline package directory in
   build mode. The pre-flight check (phase 0) halts and asks the user to
   pick a different slug or remove the directory themselves.
 - In **edit** mode, change only what the user asked; preserve all other
-  fields, identities, and `.secrets/`. Never regenerate a document from
+  fields, identities, and credentials documents. Never regenerate a document from
   scratch and never alter an identity field (that is a new artifact).
-- Reuse existing `connectors/<connector-slug>/` and
-  `connections/<connection-slug>/` directories when they are valid for
+- Reuse existing connector and connection package directories when they
+  are valid for
   the requested connector — these are user property (downloaded
   connectors, configured credentials, prior endpoint selections). Never
   ask the user to delete them, and never delete files on the user's

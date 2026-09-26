@@ -28,10 +28,11 @@ org, downloaded read-only by `registry-browser`.
 - **API endpoints** — they come from the connector document.
 - **Any registration API call.** Authoring is entirely local.
 - **Writing a secret value into a document** (`RULE-SHRD-001`). Secrets are
-  authored as `secret_refs` pointers and templated into a gitignored
-  `.secrets/credentials.json` the user fills in.
+  authored as `secret_refs` pointers and templated into the connection's
+  credentials document, at the connection-package schema's `x-secret`
+  location, which the user fills in.
 - **Deleting or overwriting user files** — especially a connection's
-  `.secrets/`. The orchestrator halts and asks instead.
+  credentials document. The orchestrator halts and asks instead.
 
 Agents must never author JSON that belongs to another agent's responsibility.
 
@@ -54,10 +55,10 @@ pipeline-builder (skill, orchestrator)
 | `pipeline-builder` (skill) | Orchestration: collect intent, dispatch creators, run the validator loop, write files only when every artifact passes. In **edit** mode it changes an existing artifact in place (surgical, non-destructive) instead of building from scratch. |
 | `pipeline-provider-researcher` | Collects `PipelineFacts` from the user. No WebSearch. |
 | `registry-browser` | Downloads source + destination connectors, read-only; reuses connectors already on disk. |
-| `connection-creator` | A `connection.json` per side plus its `.secrets/credentials.json` template. |
-| `private-endpoint-creator` | Database connections only: introspects the live database and authors `database-endpoint` documents per selected table — or derives one, without connecting, for a new destination table the engine will create on first run — plus a connection-scoped type-map gap file (`connections/<slug>/definition/type-map.json`) when the connector's base map doesn't cover a discovered native. |
-| `pipeline-creator` | The `pipeline.json` shell referencing connections by UUID. |
-| `stream-creator` | One `stream.json` per selected endpoint. |
+| `connection-creator` | A connection document per side plus its credentials template. |
+| `private-endpoint-creator` | Database connections only: introspects the live database and authors `database-endpoint` documents per selected table — or derives one, without connecting, for a new destination table the engine will create on first run — plus a connection-scoped type map when the connector's base map doesn't cover a discovered native. |
+| `pipeline-creator` | The pipeline document shell referencing connections by UUID. |
+| `stream-creator` | One stream document per selected endpoint. |
 | `pipeline-schema-validator` | Submits a request built by `scripts/validation_request.py` to the validator MCP server and returns its `Diagnostics` envelope. |
 | `pipeline-drift-classifier` | Structural diff against a previous release — informational; does not drive a version bump. |
 

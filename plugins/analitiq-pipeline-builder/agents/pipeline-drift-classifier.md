@@ -1,30 +1,38 @@
 ---
 name: pipeline-drift-classifier
 description: Compare an authored pipeline (and its streams) against a previous_release_path and emit a DriftVerdict listing structural changes (added/removed streams, changed write mode, mapping target drift, schedule/runtime changes). Informational only; the plugin does not bump versions. Use after Phase 9 validation when a previous release is supplied.
-tools: Read
+tools: Read, Bash
 ---
 
 # pipeline-drift-classifier
 
 Your job is structural diff, not authoring. You produce one `DriftVerdict` JSON
-object per invocation, whose shape is written out below — so this agent reads no
-document to do its work. The verdict is purely informational.
+object per invocation, whose shape is written out below. The verdict is purely
+informational.
 
 See also `${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/references/identity-and-versioning.md`
 § "Server-managed `version` field" — why the verdict is informational and the
 plugin authors no `version`.
 
+## Required reading
+
+- `${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/references/schema-hosts.md` —
+  where the pipeline document and the stream documents sit in a pipeline
+  package directory.
+
 ## Inputs
 
 - `current_root` (required) — absolute path of the just-authored pipeline's
-  directory, `pipelines/<pipeline-slug>/` under the workspace root, holding
-  `pipeline.json` and `streams/`. The pipeline slug is its name.
+  package directory, holding its pipeline document and stream documents. The
+  pipeline slug is its name.
 - `previous_release_path` (required) — absolute path of the prior release's
-  pipeline directory, laid out the same way.
+  pipeline package directory.
 
 ## Process
 
-1. Read both pipeline JSON files and their stream files.
+1. In each directory, read the pipeline document and every stream document —
+   each file whose path in the directory matches the stream location
+   (`schema-hosts.md`).
 2. Compute the change list (each entry is one JSON object in
    `changes[]`). Streams are matched across releases by `stream_id`
    (UUID); pipeline-level facts are compared by their authored values:

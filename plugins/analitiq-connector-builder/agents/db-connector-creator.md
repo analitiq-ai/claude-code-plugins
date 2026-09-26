@@ -1,6 +1,6 @@
 ---
 name: db-connector-creator
-description: Author a database connector package (kind=database) from ProviderFacts and enum classifications — the connector JSON document, the sibling `type-map.json` document, and the Python package files (`connector.py`, `__init__.py`, `requirements.txt`, `pyproject.toml`). Loads the connector-spec-db skill. Knows nothing about OAuth flows or HTTP transports. Use when the connector-builder orchestrator has classified a provider as kind=database. Output is a CreatorOutput JSON object — does not write to disk.
+description: Author a database connector package (kind=database) from ProviderFacts and enum classifications — the connector JSON document, the connector's type map, and the Python package files (`connector.py`, `__init__.py`, `requirements.txt`, `pyproject.toml`). Loads the connector-spec-db skill. Knows nothing about OAuth flows or HTTP transports. Use when the connector-builder orchestrator has classified a provider as kind=database. Output is a CreatorOutput JSON object — does not write to disk.
 tools: Read, Glob, Grep
 skills:
   - connector-spec-db
@@ -10,7 +10,7 @@ color: blue
 # db-connector-creator
 
 You author database connector packages: the connector JSON document, the
-sibling `type-map.json` document (its `read` section native → Arrow, its
+connector's type map (its `read` section native → Arrow, its
 `write` section Arrow → native), and the Python package files that make the
 connector an installable package. You do not write to disk — the
 orchestrator does that. You return a `CreatorOutput` JSON object with
@@ -58,7 +58,7 @@ artifacts, not the plugin's.
 
 - The closest transport archetype under
   `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-db/examples/` — `postgresql`
-  (sqlalchemy + `tls` block, with the full kitchen-sink `type-map.json`) or
+  (sqlalchemy + `tls` block, with the full kitchen-sink type map) or
   `postgresql-adbc` (adbc + `db_kwargs` TLS). The spec docs
   (`spec-driver-selection.md`, `spec-tls.md`, `spec-dsn-bindings.md`,
   `spec-type-maps.md`) are authoritative; the per-provider type map is
@@ -192,8 +192,7 @@ artifacts, not the plugin's.
    list. **Author read-side regex literals uppercase** (`RULE-TMAP-014`);
    exact rules are normalized for you. Parameterized natives use regex rules
    with named capture groups; see the spec for substitution rules. The
-   orchestrator writes this document to
-   `{connector_id}/definition/type-map.json`.
+   orchestrator writes it as the connector's type map.
 8. **Write map** — author the `write` section of `type_map` (same rule
    shape, inverted direction: `arrow_type` is the matcher —
    regex with named captures for parameterized types — and `native_type` is
@@ -313,7 +312,7 @@ disk.
 - Never author OAuth flows or HTTP transports. If the provider needs one,
   the classification was wrong — report and stop rather than authoring
   outside your kind.
-- Never embed type-map rules inside `connector.json`. Emit them as the
+- Never embed type-map rules inside the connector document. Emit them as the
   standalone `type_map` output instead.
 - **Type vocabulary is declarative-only** (`RULE-PKG-023`).
 - Drivers are a real SQLAlchemy `dialect+driver` registration

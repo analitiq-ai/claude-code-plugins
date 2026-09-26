@@ -27,10 +27,10 @@ Exactly one of:
   name of the published schema it is written against (the resource segment of
   its `$schema` URL). Graded alone: no check that needs a second document runs.
 - `package` — absolute path to a connector package's own directory, the one
-  holding `definition/connector.json`. The only request that runs the package-level checks.
+  holding its connector document. The only request that runs the package-level checks.
   <!-- PROBE: type-map-standalone-no-package-check, type-map-section-missing -->
   Validating a type map on its own runs no package-level check — those run when
-  the **connector package** is validated, off the `type-map.json` beside it, and
+  the **connector package** is validated, off the connector's type map, and
   a direction the `kind` requires that the map carries no section for surfaces
   there as a missing section (`RULE-PKG-030`). So validate the package where it
   sits, not copies re-serialized elsewhere: what ships is then what was graded.
@@ -50,7 +50,7 @@ Validation runs on the `analitiq-validator` MCP server this plugin ships.
    ```
 
    It prints `{"tool", "arguments"}`; its docstring states which files a
-   package request carries, and `.secrets/` is never one.
+   package request carries.
 2. Call the server's tool named by `tool` with `arguments`, verbatim.
 
 ## Findings

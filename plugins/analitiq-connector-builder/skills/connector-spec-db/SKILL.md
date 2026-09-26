@@ -10,9 +10,7 @@ This skill is loaded by `db-connector-creator` when authoring a database
 connector. It carries the DB-specific vocabulary and examples needed to
 populate `transports`, `auth`, `connection_contract`,
 `resource_discovery`, and `sql_capabilities` for `kind: "database"`,
-plus the standalone
-`type-map.json` shipped alongside the
-connector and the package files (`connector.py`, `__init__.py`,
+plus the connector's type map and the package files (`connector.py`, `__init__.py`,
 `requirements.txt`, `pyproject.toml`) that make the connector an
 installable Python package.
 
@@ -25,21 +23,21 @@ installable Python package.
 - This skill's `spec-tls.md` — TLS declaration mechanics.
 - This skill's `spec-resource-discovery.md` — schema/table enumeration at
   connection time.
-- This skill's `spec-type-maps.md` — `type-map.json`: its `read` section
+- This skill's `spec-type-maps.md` — the type map: its `read` section
   (native → Arrow) and its `write` section (Arrow → native DDL, covering the
   canonical vocabulary — `RULE-TMAP-017`), incl. the uppercase-pattern rule and the direction
   inversion.
 - This skill's `spec-connector-package.md` — package layout,
   `pyproject.toml` + entry points, dialect hooks, CDK import rules.
 - This skill's `spec-sql-write-path.md` — the stage-then-merge write
-  path: the `sql_capabilities` declaration in `connector.json` and the
+  path: the `sql_capabilities` declaration in the connector document and the
   dialect renderers it obliges, which are checked against each other.
 - `auth.type: "db"` — credentials live in `connection_contract.inputs`;
   `auth.test` is the connection test operation. No sub-document: the
   connection contract is
   `connector-builder/references/connection-contract.md`.
 - The closest transport archetype under `examples/<name>/`: `postgresql`
-  (sqlalchemy + `tls` block, with the full kitchen-sink `type-map.json`) or
+  (sqlalchemy + `tls` block, with the full kitchen-sink type map) or
   `postgresql-adbc` (adbc + `db_kwargs` TLS, map trimmed to an illustrative
   stub). The per-provider type map is **derived
   from research** (`spec-type-maps.md`), not copied per provider.

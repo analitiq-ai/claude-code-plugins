@@ -85,8 +85,7 @@ generated from. It runs:
    <!-- PROBE: type-map-rule-graded-by-section, type-map-section-missing -->
    The kind a request names selects the model, never the document's content,
    and inside a type map the section a rule sits under — `read` or `write` — is its direction. A
-   connector package's map is its one `definition/type-map.json`, which carries
-   the sections its `kind` calls for (`RULE-PKG-030`). Each kind is graded against the model behind this
+   connector package's type map carries the sections its `kind` calls for (`RULE-PKG-030`). Each kind is graded against the model behind this
    schema:
    - Connector → `https://schemas.analitiq.ai/connector/latest.json`
    - Type map → `https://schemas.analitiq.ai/type-map/latest.json`
@@ -138,11 +137,6 @@ For each successfully built connector:
 
 ```
 {connector_id}/
-├── definition/
-│   ├── connector.json              # the connector body
-│   ├── type-map.json               # `read`: native → Arrow; `write`: Arrow → native DDL (which kinds carry which: RULE-PKG-030)
-│   └── endpoints/                  # api connectors only
-│       └── {endpoint_id}.json      # filename matches the document's endpoint_id
 ├── __init__.py                     # database only
 ├── connector.py                    # database only — {Name}Dialect + {Name}Connector
 ├── requirements.txt                # database only — this connector's driver(s)
@@ -150,8 +144,13 @@ For each successfully built connector:
 └── README.md
 ```
 
+Beside these sit the connector document, its type map (`RULE-PKG-030`) and,
+for api connectors, its endpoint documents (`RULE-PKG-031`), each where the
+connector-package schema locates its kind
+(`skills/connector-builder/references/package-locations.md`).
+
 `connector_id` is the stable connector slug; the plugin authors it into
-`connector.json` (`RULE-CTOR-042`). Registry-stamped fields (`created_at`,
+the connector document (`RULE-CTOR-042`). Registry-stamped fields (`created_at`,
 `updated_at`) are NEVER written to disk.
 
 ### Existing directories (build vs. update)
@@ -161,7 +160,7 @@ In **`build` mode**, if a directory matching the connector's
 orchestrator halts and asks the user to remove it manually before
 re-running. The plugin does not migrate legacy-shape connectors —
 pre-existing files (with `placeholders` arrays or an embedded
-`type_maps` block inside `connector.json`) must be deleted first so the
+`type_maps` block inside the connector document) must be deleted first so the
 rebuild can produce a clean schema-aligned connector from scratch. The
 orchestrator never deletes files on the user's behalf.
 

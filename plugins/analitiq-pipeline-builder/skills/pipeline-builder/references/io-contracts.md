@@ -28,7 +28,7 @@ guess to make.
   "description": "…",
   "source": {
     "connector_id": "wise",                     // connector slug; resolves in DIP registry
-    "connection_slug": "wise",                  // directory name for connections/<slug>/
+    "connection_slug": "wise",                  // its package directory name
     "kind": "api",                              // "api" or "database"; a connector of any
                                                 // other kind is refused, not recorded (RULE-CTOR-037)
     "selected_endpoints": ["transfers"],        // endpoint_id list; required
@@ -76,7 +76,7 @@ so creator agents can cross-reference consistently.
 ```
 
 Reused on-disk connections contribute their **existing** `connection_id`
-UUID (read from the on-disk `connection.json`) instead of a freshly
+UUID (read from the on-disk connection document) instead of a freshly
 minted one.
 
 ## `CreatorOutput` (output of every creator agent)
@@ -88,11 +88,9 @@ The orchestrator handles disk I/O.
 ```jsonc
 {
   "entity": "pipeline",                       // "pipeline" | "stream" | "connection" | "database-endpoint"
-  "directory_slug": "wise_to_postgresql",     // matching directory name under pipelines/ etc.
+  "directory_slug": "wise_to_postgresql",     // names the location: package directory or filename stem
   "document": { /* the authored JSON, $schema set, no server-managed fields */ },
-  "secondary_files": [                        // optional — e.g., .secrets templates
-    {"path": ".secrets/credentials.json", "content": { /* … */ }}
-  ],
+  "credentials_template": { /* … */ },        // connection only — the env-var template
   "notes": []                                 // human-readable rationale / caveats
 }
 ```
@@ -145,7 +143,7 @@ document's path from the directory submitted, percent-encoded.
       "message_id": "missing",
       "kind": "fail",
       "severity": "error",
-      "path": "pipelines/wise_to_postgresql/pipeline.json#/schedule/interval_minutes",
+      "path": "<pipeline document key>#/schedule/interval_minutes",
       "message": "Field required"
     },
     {
@@ -153,7 +151,7 @@ document's path from the directory submitted, percent-encoded.
       "message_id": "schema-url-missing",
       "kind": "fail",
       "severity": "warning",
-      "path": "connections/wise/connection.json#/$schema",
+      "path": "<connection document key>#/$schema",
       "message": "document declares no `$schema`; declare it with the published canonical URL for this family."
     }
   ]

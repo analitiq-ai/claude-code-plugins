@@ -56,7 +56,7 @@ shared core.
   (the both-directions-first-class *capability* principle) — scope was
   not cut to source-only or destination-only. This means the connector's
   read/write capability, not a `write` section of the type map: an API
-  connector realizes the write direction through endpoints/operations (and
+  connector realizes the write direction through its endpoints' operations (and
   its type map carries no `write` section), a database connector through its `pyproject.toml`
   entry-point registrations (`RULE-PKG-008`).
 - [ ] **Version is consistent**: first release → `RULE-CTOR-032`; otherwise
