@@ -443,11 +443,12 @@ def invoke(scenario: dict, workdir: Path, timeout: int) -> tuple[bool, str]:
     if not plugin_dir.is_dir():
         raise SystemExit(f"{scenario['id']}: no plugin at {plugin_dir}")
     try:
-        proc = subprocess.run(
+        # From PATH on purpose: the agent is the user's own `claude`, found as they find it.
+        proc = subprocess.run(  # skipcq: BAN-B607
             ["claude", "-p", "--plugin-dir", str(plugin_dir),
              "--permission-mode", "bypassPermissions", scenario["prompt"]],
             cwd=workdir, stdin=subprocess.DEVNULL, capture_output=True, text=True,
-            timeout=timeout,
+            check=False, timeout=timeout,
         )
     except subprocess.TimeoutExpired as exc:
         partial = "".join(part.decode(errors="replace") if isinstance(part, bytes) else (part or "")
@@ -510,7 +511,7 @@ def check_assertions(scenario: dict, docs: dict) -> list[str]:
         if item["doc"] not in docs:
             failures.append(f"{item['rule']}: document {item['doc']!r} was not resolved")
             continue
-        op = next(op for op in OPS if op in item)
+        (op,) = [op for op in OPS if op in item]
         got = dig(docs[item["doc"]], item["path"])
         if item.get("pluck"):
             if not isinstance(got, list):
