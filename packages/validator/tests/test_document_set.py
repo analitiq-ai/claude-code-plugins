@@ -1137,6 +1137,18 @@ def test_a_ref_the_stream_model_refuses_is_the_models_finding_alone(validator):
                 if f.get("rule") == "RULE-STRM-034" or f["message_id"] == "check-crashed"]
 
 
+def test_a_connector_scoped_ref_the_stream_model_refuses_is_the_models_finding_alone(validator):
+    """An empty `endpoint_id` is refused by the connector ref's model; the
+    connector-scoped endpoint check does not also report it unresolved."""
+    documents = _workspace_documents()
+    documents[_STREAM_KEY]["source"]["endpoint_ref"]["endpoint_id"] = ""
+    result = validator.validate_workspace(_workspace_request(documents))
+    assert [f["path"] for f in result["findings"] if f["message_id"] == "string_too_short"] == [
+        f"{_STREAM_KEY}#/source/endpoint_ref/endpoint_id"]
+    assert not [f for f in result["findings"]
+                if f["message_id"] in {"connector-endpoint-ref-unresolved", "check-crashed"}]
+
+
 def test_a_ref_omitting_endpoint_id_still_needs_its_endpoint_document(validator):
     documents = _workspace_documents()
     del documents[_STREAM_KEY]["destinations"][0]["endpoint_ref"]["endpoint_id"]

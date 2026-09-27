@@ -5,9 +5,11 @@ Each `_check_*` function takes documents by kind (`_Doc`s) and returns findings
 keyed to the document they concern. `document_set` routes them to a package or
 a workspace by the kinds they read.
 
-A check does NOT assume each document was already contract-validated: a missing
-reference field (a connection naming no connector, a stream slot with no
-endpoint_ref) is an unresolved reference, not a skip.
+A check does NOT assume each document was already contract-validated. A
+reference read through a contract model skips what the model refuses — that
+refusal is the document model's finding alone. A field no model reads (a
+missing ref slot, a missing `connection_id`) is an unresolved reference, not a
+skip.
 
 Which statuses a pipeline may carry is the pipeline model's answer, so no check
 here reads `status` to decide that a pipeline is authorable. A status does decide
@@ -43,7 +45,7 @@ from .connectors import _ALL_WRITE_FAMILY_PROBES
 with contract_model_domain():
     from pydantic import TypeAdapter, ValidationError
     from analitiq.contracts.pipelines.config import PipelineInput
-    from analitiq.contracts.stream import ConnectionEndpointRef
+    from analitiq.contracts.stream import ConnectionEndpointRef, ConnectorEndpointRef
     from analitiq.contracts.type_map import TypeResolver
     from analitiq.contracts.pipeline_manifest import PipelineManifest
 
@@ -552,16 +554,23 @@ def _check_connection_scoped_endpoints(documents: _Documents) -> list[tuple[str,
 def _check_connector_scoped_endpoints(documents: _Documents) -> list[tuple[str, dict]]:
     """Every `scope='connector'` endpoint_ref resolves to an endpoint document
     in the package of the connector its connection names. A connection that is
-    not present is `_check_connections_present`'s to report."""
+    not present is `_check_connections_present`'s to report.
+
+    The ref is read through its contract model. A ref the model refuses is the
+    stream model's finding, not this check's."""
     connector_of = {_base_id(doc.package_id): _content(doc).get("connector_id")
                     for doc in documents["connection"]}
     present = {(doc.package_id, _content(doc).get("endpoint_id")) for doc in documents["api-endpoint"]}
     findings: list[tuple[str, dict]] = []
     for doc in documents["stream"]:
         for path, ref in _stream_endpoint_refs(_content(doc)):
-            cid, eid = ref.get("connection_id"), ref.get("endpoint_id")
-            if ref.get("scope") != "connector" or not isinstance(cid, str) or not isinstance(eid, str):
+            if ref.get("scope") != "connector":
                 continue
+            try:
+                parsed = ConnectorEndpointRef.model_validate(ref)
+            except ValidationError:
+                continue
+            cid, eid = parsed.connection_id, parsed.endpoint_id
             connector_id = connector_of.get(_base_id(cid))
             if isinstance(connector_id, str) and (connector_id, eid) not in present:
                 findings.append((doc.key, finding(
