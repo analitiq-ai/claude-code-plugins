@@ -49,6 +49,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # `analitiq.contracts.shared.common` reads os.environ["DOMAIN"] at import.
 os.environ.setdefault("DOMAIN", "analitiq.ai")
 
+import package_location_docs  # noqa: E402 — needs the scripts directory on the path
+
 # Docs the generator is allowed to rewrite: everything under the pipeline
 # plugin. A block id may appear in more than one file; every occurrence is
 # rendered identically.
@@ -918,6 +920,7 @@ def render_arrow_types() -> str:
 
 
 RENDERERS = {
+    **package_location_docs.RENDERERS,
     "arrow-types": render_arrow_types,
     "schema-urls": render_schema_urls,
     "shared-vocabulary": render_shared_vocabulary,

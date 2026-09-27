@@ -416,3 +416,19 @@ def test_probe_expectations_are_well_formed() -> None:
         else:
             assert probe.expect in ("clean", "silent"), f"{probe.id}: bad expect"
             assert not probe.message_re, f"{probe.id}: message_re without expect='error'"
+
+
+@pytest.mark.parametrize("extra_keys", [(), ("x-secret", "x-other")])
+def test_package_location_lookup_needs_exactly_one_secret_marker(monkeypatch, extra_keys) -> None:
+    """The secret marker the lookup names is read off the package schemas.
+
+    A render with no marker or with competing ones would round-trip green
+    through the sync check, so the guard is proven to fire here.
+    """
+    import render_schemas
+
+    locations = {f"^loc{i}$": {"$ref": "x", key: True} for i, key in enumerate(extra_keys)}
+    locations["^plain$"] = {"$ref": "x"}
+    monkeypatch.setattr(render_schemas, "rendered_latest", lambda name: {"patternProperties": locations})
+    with pytest.raises(RuntimeError, match="secret-location marker"):
+        _REGISTRY.package_location_docs.render_package_location_lookup()

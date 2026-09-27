@@ -128,6 +128,7 @@ def _authored_docs() -> list[Path]:
 # Plugin policy (which doc shows what), not a contract fact, and asserted against
 # reality in both directions so it cannot rot.
 REQUIRED_BLOCKS = {
+    "agents/registry-browser.md": {"package-location-lookup"},
     "skills/connection-spec/SKILL.md": {
         "fields-connection", "schema-urls"},
     "skills/connection-spec/spec-envelope.md": {"secret-ref-grammar"},
@@ -138,7 +139,8 @@ REQUIRED_BLOCKS = {
     "skills/pipeline-builder/references/enum-mappers.md": {"enum-vocabulary"},
     "skills/pipeline-builder/references/identity-and-versioning.md": {"shared-vocabulary"},
     "skills/pipeline-builder/references/io-contracts.md": {"validator-ids"},
-    "skills/pipeline-builder/references/schema-hosts.md": {"schema-urls"},
+    "skills/pipeline-builder/references/schema-hosts.md": {
+        "package-location-lookup", "schema-urls"},
     "skills/pipeline-spec/SKILL.md": {"fields-pipeline", "schema-urls"},
     "skills/pipeline-spec/spec-connections.md": {"fields-pipeline-connections"},
     "skills/pipeline-spec/spec-engine-runtime.md": {
