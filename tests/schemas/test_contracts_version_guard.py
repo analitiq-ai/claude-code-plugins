@@ -70,6 +70,19 @@ def _fake_clock(guard, monkeypatch):
     monkeypatch.setattr(guard, "_sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
 
 
+@pytest.fixture(autouse=True)
+def _pyproject_at_the_stamp(guard, monkeypatch, tmp_path):
+    """Point the package version at the committed stamp's.
+
+    The live pyproject runs ahead of the stamp between a package release and
+    the schema release that re-stamps it, and a verdict test grading the
+    publish half must not flip in that window. The stamp-lag tests override
+    this with a version of their own."""
+    at_stamp = tmp_path / "pyproject.toml"
+    at_stamp.write_text(f'[project]\nversion = "{guard.read_committed_stamp()}"\n')
+    monkeypatch.setattr(guard, "PYPROJECT_PATH", at_stamp)
+
+
 def _fact(guard, version: str) -> bytes:
     return json.dumps({guard.CONTRACTS_VERSION_KEY: version}).encode()
 
