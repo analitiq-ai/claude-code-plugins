@@ -5749,7 +5749,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The engine resolves an endpoint by id and reaches the file by its name, so a document whose filename and `endpoint_id` disagree is unreachable under the id every stream pins it by — and it is unreachable silently, because the file is present and valid and the id it declares is fine. Nesting fails the same way: the gate that walks the directory reads it flat, so a document one level down is not refused, it is simply never seen. Both are the kind of mistake a rename makes and a review does not catch, because the two halves of the identity are never on screen together.\n",
+   "rationale": "The engine resolves an endpoint by id and reaches the file by its name, so a document whose filename and `endpoint_id` disagree is unreachable under the id every stream pins it by — and it is unreachable silently, because the file is present and valid and the id it declares is fine. Nesting fails the same way: no location of the package schema matches a document one level down, so the validator never grades it and reports nothing. Nothing enforces that half; the filename half is checked on every endpoint document a package locates. Both are the kind of mistake a rename makes and a review does not catch, because the two halves of the identity are never on screen together.\n",
    "status": "active",
    "superseded_by": null
   },
