@@ -1,7 +1,6 @@
-"""Guards the stage-then-build sequence build_local.py and both release
-workflows delegate to: staging always runs before the build, the sdist/wheel
-choice passes straight through to `python -m build`, and a build that
-produces nothing fails loud instead of returning an empty list silently.
+"""Guards every guarantee `wheel_build.stage_and_build`'s own docstring states,
+plus its command-line entry point. `subprocess.run` is mocked, so the staging
+script and `python -m build` never actually run here.
 """
 import importlib.util
 import sys
@@ -93,6 +92,25 @@ def test_stage_and_build_refuses_when_build_produces_nothing(tmp_path):
         pytest.raises(SystemExit, match="produced nothing"),
     ):
         wheel_build.stage_and_build(tmp_path / "pkg", tmp_path / "staged", dist_dir, wheel_only=True)
+
+
+def test_stage_and_build_refuses_a_dist_dir_already_holding_files(tmp_path):
+    """The bug this guards: the return value is a listing of `dist_dir`, so a
+    stale artifact already there would be returned — and installed or
+    published — as if this build had produced it."""
+    wheel_build = _module()
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    (dist_dir / "pkg-0.9.0-py3-none-any.whl").write_bytes(b"stale")
+    calls: list = []
+
+    with (
+        patch.object(wheel_build.subprocess, "run", side_effect=_fake_build(["pkg-1.0.0-py3-none-any.whl"], calls)),
+        pytest.raises(SystemExit, match="already holds files"),
+    ):
+        wheel_build.stage_and_build(tmp_path / "pkg", tmp_path / "staged", dist_dir, wheel_only=True)
+
+    assert calls == []
 
 
 def test_main_prints_every_built_artifact(tmp_path, capsys):

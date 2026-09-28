@@ -33,7 +33,13 @@ def stage_and_build(
     only ever installs the result — `build_local.py`, and the companion
     package a release's own smoke test installs beside it — has no use for an
     sdist it never uploads.
+
+    What was built is read back as the whole of `dist_dir`, so a `dist_dir`
+    already holding files is refused before anything runs: a stale artifact
+    there would otherwise be returned, installed and published as this build's.
     """
+    if dist_dir.exists() and any(dist_dir.iterdir()):
+        raise SystemExit(f"wheel_build: {dist_dir} already holds files; pass an empty or new directory")
     subprocess.run(
         [sys.executable, str(package_dir / "scripts" / "build.py"), "--dist", str(staged_dir)],
         check=True,
