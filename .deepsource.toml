@@ -1,11 +1,14 @@
 version = 1
 
 # Test code — held to different rules than production (fixtures, asserts,
-# broad imports are fine here). Covers the per-plugin suites at the repo root
-# and each package's own suite.
+# broad imports are fine here). Covers every suite under tests/ (each
+# tests/<name>/ is the suite for the surface named <name>, plugin or
+# otherwise), each package's own suite, the suite for scripts living directly
+# under packages/, and any conftest.py fixture module.
 test_patterns = [
   "tests/**",
   "packages/*/tests/**",
+  "packages/tests/**",
   "conftest.py",
 ]
 

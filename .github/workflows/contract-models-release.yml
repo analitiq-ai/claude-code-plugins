@@ -89,11 +89,8 @@ jobs:
       - name: Build guards (version match, minimal, no alq/private leak, boto3-free)
         run: python packages/contract-models/scripts/build.py --check --expect-version "${{ steps.ver.outputs.version }}"
 
-      - name: Stage the public package
-        run: python packages/contract-models/scripts/build.py --dist "${{ runner.temp }}/cm-src"
-
-      - name: Build sdist + wheel
-        run: python -m build --outdir "${{ runner.temp }}/cm-dist" "${{ runner.temp }}/cm-src"
+      - name: Stage and build sdist + wheel
+        run: python packages/wheel_build.py packages/contract-models --staged "${{ runner.temp }}/cm-src" --outdir "${{ runner.temp }}/cm-dist"
 
       - name: Smoke-test the built wheel (install + read every shipped data file)
         # `wheel_smoke.py` proves the wheel kept every staged data file and
