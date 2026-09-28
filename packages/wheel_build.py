@@ -11,8 +11,8 @@ without a caller needing its own Python glue:
     python packages/wheel_build.py packages/contract-models \\
         --staged /tmp/cm-src --outdir /tmp/cm-dist [--wheel-only]
 
-Needs `build` importable under this interpreter; every caller already installs
-it before reaching this script.
+Needs `build` importable under this interpreter; making it so is the caller's
+job, not this script's.
 """
 
 from __future__ import annotations

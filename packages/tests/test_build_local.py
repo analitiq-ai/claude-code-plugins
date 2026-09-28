@@ -182,8 +182,7 @@ def test_main_reports_only_the_wheels_this_run_built(tmp_path, capsys):
 
 def test_main_prints_a_shell_safe_command_for_an_outdir_with_a_space(tmp_path, capsys):
     """The bug this guards: a naive space-join prints a command a shell splits
-    into nonexistent paths whenever --outdir (or a package's staged version)
-    contains a space."""
+    into nonexistent paths whenever --outdir contains a space."""
     build_local = _module()
     outdir = tmp_path / "my wheel house"
 
