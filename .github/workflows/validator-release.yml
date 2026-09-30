@@ -93,19 +93,14 @@ jobs:
       - name: Validator tests — never ship a validator that fails its own suite
         run: python -m pytest -q packages/validator/tests
 
-      - name: Stage the public package
-        run: python packages/validator/scripts/build.py --dist "${{ runner.temp }}/v-src"
-
-      - name: Build sdist + wheel
-        run: python -m build --outdir "${{ runner.temp }}/v-dist" "${{ runner.temp }}/v-src"
+      - name: Stage and build sdist + wheel
+        run: python packages/wheel_build.py packages/validator --staged "${{ runner.temp }}/v-src" --outdir "${{ runner.temp }}/v-dist"
 
       - name: Build the contract-models wheel the smoke test installs beside it
         # The validator pins `analitiq-contract-models` exactly, so the smoke
         # test installs the one built from this same commit rather than
         # resolving it from PyPI.
-        run: |
-          python packages/contract-models/scripts/build.py --dist "${{ runner.temp }}/cm-src"
-          python -m build --wheel --outdir "${{ runner.temp }}/cm-dist" "${{ runner.temp }}/cm-src"
+        run: python packages/wheel_build.py packages/contract-models --staged "${{ runner.temp }}/cm-src" --outdir "${{ runner.temp }}/cm-dist" --wheel-only
 
       - name: Smoke-test the built wheel (install + grade every shipped rule case)
         # `wheel_smoke.py` proves the wheel kept every staged data file and

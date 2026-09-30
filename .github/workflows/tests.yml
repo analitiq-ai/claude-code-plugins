@@ -1,8 +1,10 @@
 name: tests
 
 # One suite for the whole monorepo. `pytest.ini` sets `testpaths = tests packages`,
-# so a bare `pytest` runs every plugin's suite (tests/<plugin>/) AND each
-# package's own suite (packages/<pkg>/tests/).
+# so a bare `pytest` runs every suite under tests/ (each tests/<name>/ is the
+# suite for the surface named <name>, plugin or otherwise), each package's own
+# suite (packages/<pkg>/tests/), and the suite for scripts living directly
+# under packages/ (packages/tests/).
 #
 # What the suites gate:
 #   connector_builder/ - three parts, all reading the in-repo contract source so
