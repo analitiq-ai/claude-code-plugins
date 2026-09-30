@@ -28,6 +28,10 @@ def stage_and_build(
     """Stage `package_dir` into `staged_dir` via its own `scripts/build.py`,
     build from the staged tree into `dist_dir`, and return what was built.
 
+    `dist_dir` must be empty or absent: the return value is its listing, so
+    anything already in it would be reported, and published, as this build's
+    output. The caller owns that precondition; this function does not check it.
+
     `wheel_only` selects `python -m build`'s own `--wheel` flag: a release
     publishes both the sdist and the wheel it built from, while a caller that
     only ever installs the result — `build_local.py`, and the companion
@@ -55,7 +59,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("package_dir", type=Path, help="Package root containing scripts/build.py.")
     ap.add_argument("--staged", required=True, type=Path, help="Directory the package is staged into.")
-    ap.add_argument("--outdir", required=True, type=Path, help="Directory python -m build writes into.")
+    ap.add_argument("--outdir", required=True, type=Path, help="Empty or absent directory python -m build writes into.")
     ap.add_argument(
         "--wheel-only",
         action="store_true",
