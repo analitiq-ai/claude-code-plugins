@@ -1,0 +1,17 @@
+name: pr-gate-probe
+
+# Throwaway: a PR-branch workflow requesting the pr-gate environment must be
+# refused by the environment's main-only branch policy. It never reads the key.
+on:
+  pull_request:
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    environment:
+      name: pr-gate
+      deployment: false
+    steps:
+      - run: echo "pr-gate environment was granted to a PR branch"
