@@ -3,9 +3,9 @@
 Read first, in this order:
 
 - **`README.md`** — what this repo is, install, layout, and the development loop.
-- **`CLAUDE.md`** — the drift policy, who runs the validator, the PR review
-  loop, and the release model. It is the authority on all of those; nothing here
-  restates them.
+- **`CLAUDE.md`** — what the repo is, who runs the validator, and the stores of
+  record; it indexes `.claude/rules/`, which holds the drift policy, the release
+  model and the PR review additions. Nothing here restates them.
 - **`contributing/<plugin-name>.md`** — the authoring rules for the plugin you
   are working inside. It sits here rather than in `plugins/<name>/` because that
   directory ships verbatim to every user who installs the plugin.
@@ -149,9 +149,9 @@ wide. This binds it to say what it took.
 
 ## Where these bind in the PR loop
 
-`CLAUDE.md` → **PR Review Process** is the loop.
+`.claude/rules/pr-review.md` is what this repo adds to the PR review loop.
 
-- **Filing** — step 3b. A finding out of scope becomes a new issue only after
+- **Filing** — an out-of-scope finding. A finding out of scope becomes a new issue only after
   checking whether it is the third leak from a mechanism already filed. If it
   is, file the consolidation issue instead: name the invariant, enumerate every
   site, and close the earlier instance issues into it.

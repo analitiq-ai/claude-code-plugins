@@ -10,7 +10,7 @@ name: Publish analitiq-validator
 # analitiq-validator`.
 #
 # Runbook — the tag is pushed at the PR head, BEFORE the merge, so main is only
-# ever updated to a version already on PyPI. Root CLAUDE.md "Releases" owns the
+# ever updated to a version already on PyPI. `.claude/rules/releases-and-credentials.md` owns the
 # full sequence; the short form:
 #   1. One PR bumps every coupled value (this pyproject's `version`, the
 #      contract-models `==` dep).

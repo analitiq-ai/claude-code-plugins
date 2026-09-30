@@ -158,138 +158,36 @@ contributor must do while editing this repo is `.claude/rules/`. A sentence adde
 a contract field description is a census site whether or not you catalogue it — the
 lint finds it either way.
 
-## Single source of truth (drift policy)
-
-The published schema is the single source of truth. **Never restate what it
-defines — reference or load it.** Carry only craft the schema can't express
-(judgment, idioms, gotchas, workflow). That splits everything into **contract**
-(don't duplicate — field shapes, enums, vocabularies, `$schema` URLs) and **craft**
-(keep — *how* to choose, the "why", provider gotchas). The mechanisms:
-
-- **The live schema is the contract — enforce it, don't restate it.** The validator
-  checks each document against the contract models **offline**, no runtime schema
-  fetch, so authoring and validation agree on one contract.
-- **The rule registry is the source of truth.** One machine-readable record per rule
-  in `rules/records/*.yaml` (schema in `rules/SCHEMA.md`), with an immutable id;
-  docs, rendered references and prose citations are generated from or validated
-  against it, never the reverse. A record answers independently: `tier` (shape,
-  coherence, reference, process, choice), `validator` (what rejects a
-  violation, absent when nothing does) and `severity`. Enforcement is ordinary
-  Python: a rule one document settles alone is a `@model_validator` raising through
-  `rules.violation`; a rule needing a second document in hand is a check in
-  `analitiq.validator`, which is why that package exists. Nothing is dispatched from
-  the record, so a rule is applied by a symbol that exists or by nothing at all.
-  `scripts/render_rules.py` validates every record, resolves every `validator`
-  against the live models and validator, and compiles the `rules.json` the wheel
-  ships; `render_rule_reference.py` renders one reference file per artifact kind
-  into each plugin, and `gen_pipeline_docs.py` renders the remaining contract-owned
-  facts into its prose blocks. An obligation with no record is a missing record, not
-  a sentence to hand-write.
-- **Fetch-once, pass-down** — an orchestrator hands the live contract schema URLs to
-  its researcher, and the creators read the same schemas as vocabulary.
-- **Drift-check CI** for anything that must stay duplicated as decision logic (the
-  `enum-mappers`, say): `tests/connector_builder/test_schema_drift.py` reads the enum
-  sets from the pinned contract package and fails on divergence. The pipeline plugin
-  solves the same problem by *generating* contract-owned facts into its prose. Prose
-  about **what the validator does or does not check** is pinned by executable probes
-  in `scripts/render_validator_claims.py`.
-
-Enum lists in this file or in skill prose are **illustrative**; the authoritative
-definition is always the live schema, or the vendored grammar for Arrow types.
-Craft the schema never defined (the `ssl_mode` vocabulary, driver-selection order,
-datetime naive/tz judgment) is not drift-exposed and stays.
-
-## Authoring rules
-
-**Never name a ticket or a pull request in anything this repo tracks** — comments,
-docstrings, field descriptions, prose. Not a bare number, not a keyword-prefixed
-one, not the cross-repo `org/repo` form, not a tracker URL, and not "the pull
-request you are in", "this commit", or a review round. The exception is a surface
-that IS a tracker surface: commit message bodies, PR descriptions and issue threads,
-plus `CONTRIBUTING.md`, the two release-please changelogs, and
-`.github/pull_request_template.md`.
-
-**State what is true, never when it became true.** The file outlives the change that
-wrote it, and the reader has the file, not the change — "creators are routed to their
-spec skill", not "the wiring this change extended".
-
-**A check may match text to LOCATE something. It may never match text to DECIDE
-something.** Locating is lexical — a backticked identifier, a fenced block, a named
-heading, a generated-block marker. Deciding is semantic: does this sentence assert
-that the validator checks X. If the verdict needs to know what the English means, it
-belongs in `.claude/rules/`, applied by a reader, not in a test. Hand-curated English
-regexes and phrase lists are banned outright, whatever property they claim to
-measure; `.claude/rules/guards.md` carries the argument.
-
-`.claude/rules/` holds the invariants this policy implies, tracked so they reach
-anyone with a clone (the rest of `.claude/` is local state). Read the one that
-matches what you are editing:
-
-- `no-drift-surfaces.md` — before hardcoding a value another source owns.
-- `no-cardinality-restatements.md` — before writing how many members a shape has.
-  Also owns closure claims — the "and nothing else" a set's enumeration ends with.
-- `plugin-prose.md` — before editing any `.md` under `plugins/`, which ships verbatim
-  to users and is executed by agents.
-- `contract-prose.md` — before writing a field description or docstring under
-  `analitiq.contracts`, which renders into an immutable published schema.
-- `resolvable-referents.md` — before writing any pointer: a ticket, a path, a count,
-  "the rule above".
-- `guards.md` — before writing any check that reads prose this repo tracks.
-- `engine-behaviour-claims.md` — before writing any sentence about what the engine
-  does at run time, and before resting a check on one.
-- `reachability-dispositions.md` — before writing or re-affirming a `FieldDisposition`
-  under `census/consumption/`.
-- `validator-verdict-stability.md` — before any change that can alter what an
-  installed validator accepts.
-
-`plugin-prose.md`, `contract-prose.md`, `reachability-dispositions.md` and
-`validator-verdict-stability.md` are keyed to the surface you are editing;
-`no-drift-surfaces.md`, `resolvable-referents.md`, `engine-behaviour-claims.md`
-and `no-cardinality-restatements.md` to a class of sentence that rots on any
-surface; `guards.md` to the mechanism that reads them.
-
-## Conventions
+## Gotchas
 
 - JSON Schema Draft 2020-12 throughout.
 - Test org_id: `d7a11991-2795-49d1-a858-c7e58ee5ecc6`.
-- Agents must never author JSON that belongs to another agent's responsibility.
 - The connector drift guards honour `DRIFT_REQUIRE_CONTRACT_MODELS=1`, which turns a
   missing contract package into a hard failure instead of an all-skipped green run.
   CI sets it.
 
-## Releases and credentials
+## Rules
 
-Each publishable artifact has its own tag prefix. The plugins are
-release-please-managed — never bump a `plugin.json` version by hand. The packages are
-released by hand as ONE PR, merged with a merge commit, never a squash. Publishing to
-PyPI and the schemas bucket is OIDC only — never add a static credential for either as
-a repo or environment secret (the `pypi` / `schemas` environments), and never use
-`pull_request_target` with a checkout of PR code.
+`.claude/rules/` holds the obligations on a contributor here, tracked so they reach
+anyone with a clone (the rest of `.claude/` is local state). Read the ones that
+match what you are editing:
 
-Full procedure, commit-type rules and the `pypi` / `schemas` environment settings live
-in the `releasing` skill (Claude Code tooling under an ignored directory, so it ships
-with the maintainer's checkout and not with a clone). If you have it, invoke it by
-name; if you do not, the environment settings are on the GitHub settings pages and the
-rest is the four rules above.
-
-## PR Review Process
-
-After creating a PR, follow these steps. Continue invoking the PR review process until
-no more errors are raised.
-
-1. Use `/pr-review-toolkit` to review the PR after implementing all changes.
-2. Wait for feedback from the review executor.
-3. Determine whether each raised issue is legitimate.
-   a. Legitimate and in scope — fix it.
-   b. Out of scope — check the GitHub issue tracker for a related issue; if none, ask
-      whether to file one, applying the **consolidation rule** in `CONTRIBUTING.md`
-      first (three findings sharing one mechanism become one abstraction issue, and
-      the instances close into it). Then move on.
-   c. Not a real problem — summarize your thinking on the point and move on.
-4. Commit the fixes and push to the branch.
-5. Review again, and repeat until the review executor approves.
-6. Run the tests and make sure they all pass.
-
-`CONTRIBUTING.md` owns the consolidation rule and **close against the class, not the
-instances** (what a PR must satisfy before it closes an issue). Read it before filing
-an issue out of a review, and before closing one.
+- `single-source-of-truth.md` — the drift policy: never restate what the schema defines.
+- `no-drift-surfaces.md` — before hardcoding a value another source owns.
+- `no-cardinality-restatements.md` — before writing how many members a shape has;
+  also owns closure claims.
+- `plugin-prose.md` — before editing any `.md` under `plugins/`.
+- `contract-prose.md` — before writing a field description or docstring under
+  `analitiq.contracts`.
+- `resolvable-referents.md` — before writing any pointer: a ticket, a path, a count,
+  "the rule above". Owns the surfaces exempt from the ticket-reference ban.
+- `guards.md` — before writing any check that reads prose this repo tracks.
+- `engine-behaviour-claims.md` — before writing a sentence about what the engine
+  does at run time.
+- `reachability-dispositions.md` — before writing or re-affirming a `FieldDisposition`.
+- `validator-verdict-stability.md` — before any change that can alter what an
+  installed validator accepts.
+- `releases-and-credentials.md` — before touching a release workflow, a version or a
+  publish credential.
+- `agent-boundaries.md` — before changing which agent authors which document.
+- `pr-review.md` — what this repo adds to the PR review loop.

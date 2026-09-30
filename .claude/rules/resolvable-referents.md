@@ -24,8 +24,10 @@ it: almost always shorter, and it cannot rot.
   cross-repo `analitiq-engine#406`, a tracker URL. These resolve only for
   someone with a login, and often not even then — the tracker outlives neither
   the argument nor the decision. State the mechanism the ticket stood in for.
-  The exempt surfaces are the ones whose subject IS the tracker; the root
-  `CLAUDE.md` lists them.
+  The exempt surfaces are the ones whose subject IS the tracker, plus the specs:
+  commit message bodies, PR descriptions and issue threads, `CONTRIBUTING.md`, the
+  two release-please changelogs, `.github/pull_request_template.md`, and every file
+  under `specs/` (a spec belongs to one issue and names it).
 - **A path the reader's clone does not contain.** A `.claude/` path that
   `.gitignore` does not re-include (most of that tree is local state, so the
   citation resolved only on the machine that wrote it), or any path
