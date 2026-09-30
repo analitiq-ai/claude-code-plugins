@@ -4,7 +4,7 @@ Contributor guidance for `plugins/analitiq-connector-builder/`. It lives here
 rather than inside the plugin because that directory is copied verbatim into
 every user's plugin cache, and a contributor guide is not something they
 install. Repo-wide concerns — layout, tests, the contract pin, releases,
-credentials, drift policy — live in the root `CLAUDE.md` and are not repeated
+credentials, drift policy — live in the root `CLAUDE.md` and `.claude/rules/` and are not repeated
 here.
 
 Paths below are repo-relative. A bare `skills/…` or `agents/…` is under
@@ -122,7 +122,7 @@ convention" defines the markers for both plugins. This tree's gate is
 
 Every rule about *how* to author lives in `skills/`, loaded by the agent that
 needs it. **This file deliberately does not restate any of it** — a second copy
-is a drift surface (root `CLAUDE.md` → drift policy).
+is a drift surface (`.claude/rules/single-source-of-truth.md`).
 
 | Topic | Skill |
 |---|---|

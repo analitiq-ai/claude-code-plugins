@@ -9,7 +9,7 @@ paths:
 Governs every `.md` under `plugins/` — agent definitions, skills, references,
 READMEs. These are distribution artifacts: agents execute them verbatim, so a
 wrong sentence ships wrong authoring behavior to every user. The *why* is the
-root `CLAUDE.md` → "Single source of truth (drift policy)"; the general
+`single-source-of-truth.md` (the drift policy); the general
 invariant is `no-drift-surfaces.md`. The failure class this rule prevents:
 prose restating validator behavior, falsified by a validator release.
 

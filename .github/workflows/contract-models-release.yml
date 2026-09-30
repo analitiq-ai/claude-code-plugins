@@ -9,7 +9,7 @@ name: Publish analitiq-contract-models
 # no `alq` codename leak, no private path leak, boto3-free, minimal surface.
 #
 # Runbook — the tag is pushed at the PR head, BEFORE the merge, so main is only
-# ever updated to a version already on PyPI. Root CLAUDE.md "Releases" owns the
+# ever updated to a version already on PyPI. `.claude/rules/releases-and-credentials.md` owns the
 # full sequence; the short form:
 #   1. One PR bumps every coupled value (this pyproject's `version`, the
 #      validator pyproject's `version` and its `==` dep on this package).

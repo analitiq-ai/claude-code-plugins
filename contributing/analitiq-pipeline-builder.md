@@ -4,7 +4,7 @@ Contributor guidance for `plugins/analitiq-pipeline-builder/`. It lives here
 rather than inside the plugin because that directory is copied verbatim into
 every user's plugin cache, and a contributor guide is not something they
 install. Repo-wide concerns — layout, tests, the contract pin, releases,
-credentials, drift policy — live in the root `CLAUDE.md` and are not repeated
+credentials, drift policy — live in the root `CLAUDE.md` and `.claude/rules/` and are not repeated
 here.
 
 Paths below are repo-relative. A bare `skills/…` or `agents/…` is under
