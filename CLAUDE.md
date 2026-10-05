@@ -190,4 +190,6 @@ match what you are editing:
 - `releases-and-credentials.md` — before touching a release workflow, a version or a
   publish credential.
 - `agent-boundaries.md` — before changing which agent authors which document.
+- `plugin-runtime.md` — before making a plugin depend on anything Claude Code does not
+  provide: a script, a shell command, a CLI, a local MCP server.
 - `pr-review.md` — what this repo adds to the PR review loop.
