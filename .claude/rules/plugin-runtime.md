@@ -16,21 +16,48 @@ language runtime, package manager, CLI or library — Python, `uv`, `pip`, Node,
 ## What a plugin may use
 
 - Claude Code's own primitives: agents, skills, commands, rules, other plugins.
-- Claude Code's built-in tools that do not hand off to a shell: file read, write,
-  edit, glob, grep, and web fetch.
+- Hooks whose handler runs no shell — `prompt`, `agent`, `http` and `mcp_tool`
+  handlers, for example.
+- Claude Code's built-in file, search and web tools.
 - MCP servers declared in the plugin's `.mcp.json` that need no local install.
-  A remote `http` server is the default; a local `stdio` server needs a runtime
-  on the user's machine and is therefore out.
+  A remote `http` server is the default. Who operates it does not matter, and a
+  sign-in the server asks for is not an install.
 
 ## What it may not
 
-- **A shipped script.** A file a plugin tells an agent to execute needs an
-  interpreter Claude Code does not provide. Logic a script would carry belongs in
-  agent or skill prose, a built-in tool, or a tool on the plugin's MCP server.
-- **A shell command in prose.** The shell itself is not portable: on Windows
-  Claude Code runs Git Bash when it is installed and PowerShell when it is not,
-  so even a command naming only POSIX utilities fails on a supported platform.
-  An agent that needs no shell command does not list `Bash` in its `tools:`.
+- **Anything that runs a command or a local binary on the user's machine.** A
+  shipped script an agent is told to execute, a `command` hook, a monitor, an
+  executable under `bin/`, an LSP server, a local `stdio` MCP server — each needs
+  something on the machine beyond Claude Code.
+- **A shell command as a step the plugin needs in order to work**, whether an
+  agent runs it or the user is asked to. Claude Code documents its Windows shell
+  as Git Bash when Git for Windows is installed and PowerShell when it is not, so
+  even a command naming only POSIX utilities fails on a supported platform. A
+  generator's "run … to regenerate" comment and optional advice to the user, such
+  as reviewing a result with `git diff`, are not such steps.
+- **An agent that can run a shell**, among those the plugin defines or
+  dispatches. A granted shell lets the model improvise the command the prose is
+  barred from writing. So every plugin agent declares `tools:`, since an agent
+  without it inherits every tool; no tool grant — an agent's `tools:`, a skill's
+  or command's `allowed-tools` — includes a tool that runs a shell command, `Bash`
+  among them; and plugin prose dispatches only agents the plugin defines, never a
+  built-in agent type that has a shell, such as `general-purpose`. A skill's
+  `allowed-tools` pre-approves tools rather than restricting them, so keeping a
+  shell out of it is not a sandbox; the ban on shell steps carries the rest.
+
+## No exception path
+
+The ban is absolute: no ADR, README or install step admits a runtime dependency.
+A capability built-in tools cannot provide is split — a remote MCP tool returns
+what they cannot compute, and built-in tools act on it locally. A remote server
+cannot write the user's disk; it returns a file's contents and `Write` lands
+them.
+
+## Not covered
+
+Portability only. Where data is sent is a separate question: a permitted `http`
+hook or third-party server is not thereby approved as a destination for the
+user's data.
 
 ## Scope
 
