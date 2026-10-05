@@ -1,25 +1,21 @@
 # Research: Track the plugin-runtime rule
 
-Claude Code facts below were read from its published docs on 2026-10-05: the tools reference,
-the hooks reference and the plugin components reference at `code.claude.com/docs`.
+Claude Code facts below were read from its published docs on 2026-10-05: the setup guide, the
+hooks reference and the plugin components reference at `code.claude.com/docs`.
 
-## R1: Rewrite the committed rule once, from the spec
+## R1: Write the rule body in one pass, from the spec
 
-- **Decision**: Replace the body of `.claude/rules/plugin-runtime.md` (commit `45c34f20`) in one
-  rewrite against FR-002–FR-013. Keep its frontmatter, title, invariant and "Why".
-- **Rationale**: The committed file came before the spec's Clarifications and misses several of
-  them: no absolute-ban clause and no MCP-tool escape route (FR-010), no hook clause (FR-011), a
-  `Bash` clause conditional on "an agent that needs no shell command", where FR-012 says no grant
-  at all and also covers skills' and commands' `allowed-tools`, nothing on third-party servers or
-  sign-in (FR-005), and no search tools in the permitted list (FR-002). Patching each gap one at a
-  time leaves a file built from half-decisions; one rewrite from the settled spec is cheaper.
-- **Existing tools**: The committed rule is the base; its invariant, scope and "Why" sections
-  already meet FR-003, FR-006 and the rationale, so they are kept word for word wherever they
-  still hold.
+- **Decision**: The body of `.claude/rules/plugin-runtime.md` is written whole against
+  FR-002–FR-006 and FR-010–FR-013. A change to the criterion means another whole-file rewrite,
+  never an appended clause.
+- **Rationale**: A rule patched one gap at a time ends up built from half-decisions, and each
+  patch leaves the earlier wording beside its replacement.
+- **Existing tools**: Sibling rules under `.claude/rules/` give the form: an `# Rule:` title, an
+  invariant paragraph, short sections.
 
 ## R2: Load trigger is the `paths:` frontmatter
 
-- **Decision**: `paths: ["plugins/**"]`, already in the committed file. No other trigger map.
+- **Decision**: `paths: ["plugins/**"]`. No other trigger map.
 - **Rationale**: Claude Code's native rules loader and the `rules-audit` skill both select rules
   from this frontmatter. A second map would be a drift surface (`no-drift-surfaces.md`). A
   diff touching only repo-root `tests/`, `scripts/` or `.github/` does not match, which meets US2
@@ -27,73 +23,60 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
 - **Existing tools**: `rules-audit` (it selects rules by `paths:` and says never to add a
   file→rule map); sibling rules such as `plugin-prose.md` use the same form.
 
-## R3: State what is forbidden by mechanism, not by listing component types
+## R3: A step is judged by what the user must install
 
-- **Decision**: A primitive is judged by everything it **reaches** at run time, not only what it
-  runs. The rule forbids any plugin component that runs a command or a local binary on the user's
-  machine or calls a service that must be running there, and gives examples. It permits any hook
-  whose handler reaches neither a shell nor anything beyond Claude Code on the user's machine: an `http` hook only to a remote URL, an
-  `mcp_tool` hook only to a server declared in the plugin's own `.mcp.json`. Other plugins are
-  permitted only when they satisfy the rule. Neither set is written out as a closed list.
-- **Rationale**: Claude Code has more shell-running plugin components than the issue names.
-  Command hooks, monitors (`monitors/monitors.json`, a background shell command), executables in
-  `bin/` (put on the Bash tool's `PATH`), shipped scripts, LSP servers (`.lsp.json`, a local
-  binary) and `stdio` MCP servers all run something locally. Hook handler types that run no shell
-  are `prompt`, `agent`, `http` and `mcp_tool`; Claude Code documents the `agent` verifier as
-  using tools like Read, Grep and Glob. Running no shell is not enough: Claude Code places no
-  restriction on an `http` hook's URL (its own example uses `localhost`), so a handler that calls a
-  local service needs something beyond Claude Code exactly as a shell command does. So an `http`
-  hook is permitted only to a remote URL and an `mcp_tool` hook only to a server declared in the
-  plugin's own `.mcp.json`; the named hook types are examples, not a closed list. A closed list of hook types or components would go stale as soon as Claude Code adds one
-  (`no-cardinality-restatements.md`). The mechanism is what decides membership, and it stays true.
-  Monitors, `bin/` and LSP follow from FR-002 ("only what Claude Code provides") and FR-004, so
-  naming them as examples adds no new requirement (spec Assumptions).
+- **Decision**: One test decides every step, wherever it is written: what the user would have to
+  install for it to work on any OS Claude Code supports. A step that needs no install passes.
+  Separately, the rule bans a script or executable the plugin ships to be run (FR-004). It gives
+  examples of each ban, and neither set is written out as a closed list.
+- **Rationale**: The defect the test exists to stop is a plugin that fails, or asks for an
+  install, on a machine that has only Claude Code. Whether a step runs through a shell, a
+  hook or an agent says nothing about that; what it needs on the machine does. A shipped script
+  is banned outright because it runs as written and so needs its own interpreter: Python for a
+  `.py`, a POSIX shell for a `.sh`. Neither is on every machine Claude Code supports (R10 quotes
+  the setup docs on the shell). A list of forbidden
+  component types would go stale as soon as Claude Code adds one
+  (`no-cardinality-restatements.md`), and it would ban things that need no install. The examples
+  follow from the test: a local `stdio` MCP server needs a runtime, an LSP server needs a local
+  binary, an `http` hook or server at `localhost` needs a service running there, and a
+  hook or a step calling an MCP server the plugin does not declare works only where the user has
+  set that server up.
 - **Existing tools**: Claude Code hooks reference (handler types); plugin components reference
-  (monitors, executables, LSP servers). None of them gives a portable way to run a command.
+  (executables, LSP servers, MCP servers).
 
-## R4: Shell-tool grants are a class, with `Bash` named
+## R4: Everything that ships with Claude Code is permitted
 
-- **Decision**: No `tools:`, `allowed-tools` or other tool grant a plugin declares may include a
-  tool that runs a shell command. The rule names `Bash` and gives `PowerShell` and `Monitor` as
-  examples of the same class. The ban is stated by mechanism — no agent a plugin defines or
-  dispatches can run a shell — so it also covers an agent with no `tools:` line (it inherits every
-  tool), a dispatched built-in agent type such as `general-purpose`, and a grant of a tool that
-  starts another agent (`Agent`, `Task` as examples): Claude Code documents that listing `Agent`
-  in a subagent's `tools` allows spawning any subagent type. Every plugin agent
-  therefore declares `tools:`, and prose dispatches only plugin-defined agents.
-- **Rationale**: The tools reference marks `Bash`, `PowerShell` and `Monitor` as the tools that
-  execute commands. Banning only `Bash` would leave the same hole open under another tool name, and banning only
-  declared grants would leave it open through inheritance. The ban takes no search capability
-  away: the tools reference documents that a subagent listing `Glob`/`Grep` and leaving out `Bash`
-  has both. That is craft for writing a compliant agent, not part of the rule — it is a Claude Code
-  default that can change without any sentence here going red — so it goes into the agent
-  definitions and `contributing/<plugin>.md` the compliance PR touches. For skills the effect is weaker. A skill's `allowed-tools` pre-approves tools;
-  it does not restrict them. Keeping a shell out of that grant stops pre-approved improvisation,
-  and the prose ban (FR-004) carries the rest. The rule states this split so nobody reads
-  `allowed-tools` as a sandbox.
-- **Existing tools**: Agent `tools:` frontmatter (restricts); skill/command `allowed-tools`
-  (pre-approves). No existing rule covers either one.
+- **Decision**: The rule permits Claude Code's built-in tools in any tool grant, the shell tool
+  among them, its built-in agent types, and agents dispatching agents. It sets no requirement on
+  `tools:` or `allowed-tools`.
+- **Rationale**: These need no install: they arrive with Claude Code. A ban on shell grants or on
+  built-in agents would restrict what a plugin may use without removing a shipped script or an
+  install, which are what the rule bans.
+- **Existing tools**: Agent `tools:` frontmatter; skill and command `allowed-tools`; Claude
+  Code's built-in agent types.
 
 ## R5: The escape route splits work between a remote MCP tool and built-in tools
 
 - **Decision**: The ban is absolute. A capability built-in tools cannot provide is split: a remote
   MCP tool returns what they cannot compute, and built-in tools act on it locally. A remote server
   cannot write the user's disk, so "move it to the MCP server" alone is false for a step that
-  changes local state. `registry-browser`'s download is the first instance: GitHub's hosted MCP
-  server returns the connector's files at its pinned version and `Write` lands them. A remote `http` server is the default. Who
-  operates it does not matter, and a sign-in the server asks for is not an install.
+  changes local state. `registry-browser`'s download, which today runs `gh`, is the first case
+  for this route: the compliance PR is to read the connector's files through GitHub's hosted MCP
+  server at the pinned version and land them with `Write`. A remote
+  `http` server is the default. Who operates it does not matter, and a sign-in the server asks
+  for is not an install.
 - **Rationale**: This is the spec's Clarifications applied directly. It matches ADR-0002, which
   already moved validation to MCP tools behind the backend. Both plugins' `.mcp.json` already
   declare a remote `http` server, so the escape route exists today.
 - **Existing tools**: `docs/adr/0002-…` (the decision that already took this route);
   `plugins/*/.mcp.json`; GitHub's hosted MCP server (file-contents tools at a ref).
 
-## R6: Keep the `CLAUDE.md` Rules entry as committed
+## R6: The `CLAUDE.md` Rules entry names what sends a contributor to the rule
 
-- **Decision**: No change to the entry added in `45c34f20`.
-- **Rationale**: It already has the sibling form (`` `file` — before <trigger> ``) and names a
-  script, a shell command, a CLI and a local MCP server, which is what US1 scenario 1 asks for. If
-  it named the rest of R3's class, it would turn into the enumeration R3 avoids.
+- **Decision**: One bullet in the sibling form (`` `file` — before <trigger> ``), naming a script
+  of the plugin's own, a CLI or runtime the user installs, and a local MCP server.
+- **Rationale**: Those are the changes US1 scenario 1 says must reach the rule. Naming every
+  example the rule gives would turn the entry into a second copy of it.
 - **Existing tools**: The `CLAUDE.md` Rules section.
 
 ## R7: No mechanical guard
@@ -104,36 +87,39 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
   read-only reviewer pass over a matrix with a row on each side of every clause, which grades
   wording `rules-audit` would take one run per case to cover. The branch's own `rules-audit` run
   (SC-003) and the unchanged suite complete it.
-- **Rationale**: Whether prose *instructs* a shell command is a semantic verdict. `guards.md` puts
-  that with a reader, not a regex. A guard would also be a governing check landing beside the
-  rule it serves, which Principle VI forbids. A lexical check, such as `Bash` in a `tools:` line or
-  `"type": "command"` in a `hooks.json`, is possible later. It would land as its own PR after the
+- **Rationale**: Whether prose makes a step depend on an installed program is a semantic verdict.
+  `guards.md` puts that with a reader, not a regex. A guard would also be a governing check
+  landing beside the rule it serves, which Principle VI forbids. A lexical check, such as a
+  program file under `plugins/`, is possible later. It would land as its own PR after the
   compliance PR, because today's plugins would fail it.
 - **Existing tools**: `rules-audit` (it is a reader and selects this rule by path).
 
 ## R8: The local constitution is re-pointed after merge
 
 - **Decision**: Once the PR merges, the untracked constitution's R14 Source line points at
-  `.claude/rules/plugin-runtime.md`, and its gate wording is amended to match the rule (no CLI, no
-  shell-running hooks or tool grants). This happens outside the PR.
-
+  `.claude/rules/plugin-runtime.md`, and its gate wording is amended to match the rule (no
+  shipped script, nothing the user installs). This happens outside the PR.
 - **Rationale**: Constitution Governance says the source file wins and the constitution is amended
   after it. The constitution is untracked, so no PR can carry the edit.
 - **Existing tools**: the Governance section of the maintainer's local, untracked constitution.
 
 ## R9: Data egress is out of scope, and the rule says so
 
-- **Decision**: The rule states it governs portability only; a permitted `http` hook or
+- **Decision**: The rule lists data egress under "Not covered": a permitted `http` hook or
   third-party server is not thereby approved as a data destination.
 - **Rationale**: Permitting `http` hooks and any remote server lets a plugin post tool inputs to
   an endpoint. That is a separate question from portability; silence would read as permission.
 - **Existing tools**: none — no rule covers egress today.
 
-## R10: Shell stays banned although bash is common
+## R10: The rule does not grade which shell a command is written for
 
-- **Decision**: Keep the shell ban (FR-004, FR-012).
+- **Decision**: The rule lists shell dialect under "Not covered". It says the shell behind the
+  shell tool differs by machine, that a command needing only a shell and the utilities that come
+  with it is not graded on which shell that is, and how an author writes a step that works under
+  either (FR-012).
 - **Rationale**: Claude Code's setup docs: "Installing Git for Windows is optional. It provides
   Git Bash, which the Bash tool needs. Without it, Claude Code uses PowerShell as the shell tool
-  instead." Allowing shell would make Git for Windows an install for some Windows users, which
-  FR-010 forbids; every shell use the plugins have today also needs `python3`, `gh` or `jq`.
+  instead." The shell tool itself ships with Claude Code and stays permitted (R4). Grading
+  dialect would turn the rule back into a rule about shell use, when what it bans is shipped
+  scripts and installs. The note tells an author where the difference is.
 - **Existing tools**: Claude Code setup docs.

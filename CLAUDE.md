@@ -191,5 +191,5 @@ match what you are editing:
   publish credential.
 - `agent-boundaries.md` — before changing which agent authors which document.
 - `plugin-runtime.md` — before making a plugin depend on anything Claude Code does not
-  provide: a script, a shell command, a CLI, a local MCP server.
+  ship: a script of its own, a CLI or runtime the user installs, a local MCP server.
 - `pr-review.md` — what this repo adds to the PR review loop.
