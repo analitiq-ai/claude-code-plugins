@@ -20,6 +20,7 @@ Plugins are installed on machines this repo does not control. The requirement th
 
 - Q: Can a plugin ever ask the user to install something when a capability cannot be built from Claude Code's tools plus a remote MCP server? → A: No. The ban is absolute, with no exception path.
 - Q: Which plugin hooks does the rule allow? → A: Any hook that runs no shell (`prompt`, `agent`, `http`, `mcp_tool` as examples); a `command` hook is a violation.
+- Q: (PR review) Is a primitive judged by what it runs or by what it reaches? → A: By what it reaches. An `http` hook to `localhost`, an `mcp_tool` hook calling an undeclared server, a dependency plugin that breaks the rule, and `Agent` in a plugin agent's `tools:` (Claude Code documents it as allowing any subagent type) are violations.
 - Q: May a plugin agent list `Bash` in its `tools:`? → A: No. No tool grant a plugin declares includes `Bash`.
 - Q: May a plugin declare a remote MCP server Analitiq does not operate? → A: Yes, if it is remote and needs no local install; a sign-in is not an install.
 - Q: Since bash is widely available, should plugin agents be allowed shell access? → A: No, keep the ban. Claude Code's setup docs make Git for Windows optional and fall back to PowerShell without it, so bash is not on every supported machine.
@@ -60,7 +61,8 @@ A reviewer sees a PR that has a plugin agent run `python`, `uv`, `npx` or a shel
 - A local `stdio` MCP server → a violation: it needs a runtime on the user's machine. A remote `http` server is the default.
 - Python under repo-root `packages/`, `scripts/`, `tests/` → out of scope; contributor tooling.
 - `Bash`, or any tool that runs a shell command, in an agent's `tools:` or a skill's `allowed-tools`, even with no shell command in the prose → a violation (FR-012).
-- A `command` hook → a violation: it runs through the shell. A hook that runs no shell (`prompt`, `agent`, `http`, `mcp_tool`) is permitted.
+- A `command` hook → a violation: it runs through the shell. A hook that reaches neither a shell nor anything local (`prompt`, `agent`, an `http` hook to a remote URL, an `mcp_tool` hook calling a declared server) is permitted; an `http` hook to `localhost` is a violation (FR-011).
+- `Agent` in a plugin agent's `tools:` → a violation: it can start a built-in agent that has a shell (FR-012).
 - A plugin agent with no `tools:` line, or plugin prose dispatching a built-in agent type such as `general-purpose` → a violation: both inherit a shell tool without declaring it (FR-012).
 - A generator's provenance comment ("run `python scripts/…` to regenerate") or optional advice to the user ("review the result with `git diff`") → outside FR-004: neither is a step the plugin needs in order to work.
 - A step that changes the user's disk with input no built-in tool can compute (a registry download) → a remote MCP tool returns the content and the built-in `Write` lands it (FR-010).
@@ -79,8 +81,8 @@ A reviewer sees a PR that has a plugin agent run `python`, `uv`, `npx` or a shel
 - **FR-008**: The PR MUST change no file under `plugins/`.
 - **FR-009**: The rule MUST satisfy the repo's prose rules: no ticket or PR references (`resolvable-referents.md`), no cardinality restatements, no named-symbol claims about engine behaviour.
 - **FR-010**: The rule MUST state the ban is absolute: no exception path, no ADR or README install step that admits a runtime dependency. A capability built-in tools cannot provide is split: a remote MCP tool returns what they cannot compute, and built-in tools act on it locally.
-- **FR-011**: The rule MUST permit every hook whose handler runs no shell (`prompt`, `agent`, `http`, `mcp_tool` as examples, not a closed list) and forbid `command` hooks, for the same reason it forbids a shell command in prose.
-- **FR-012**: The rule MUST state that no agent a plugin defines or dispatches can run a shell, because a granted shell lets the model improvise the command the prose is barred from writing. Consequences it states: every plugin agent declares `tools:` (an agent without it inherits every tool), no tool grant — an agent's `tools:`, a skill's or command's `allowed-tools` — includes a tool that runs a shell command, `Bash` among them, and plugin prose dispatches only plugin-defined agents, never a built-in agent type that has a shell.
+- **FR-011**: The rule MUST judge every primitive by what it reaches at run time. It permits a hook whose handler reaches neither a shell nor a local service (`prompt`, `agent`, an `http` hook to a remote URL, an `mcp_tool` hook calling a server the plugin may declare — examples, not a closed list), permits other plugins only when they satisfy the rule, and forbids `command` hooks and anything pointed at a local service.
+- **FR-012**: The rule MUST state that no agent a plugin defines or dispatches can run a shell, because a granted shell lets the model improvise the command the prose is barred from writing. Consequences it states: every plugin agent declares `tools:` (an agent without it inherits every tool), no tool grant — an agent's `tools:`, a skill's or command's `allowed-tools` — includes a tool that runs a shell command, `Bash` among them, no plugin agent's `tools:` includes `Agent`, and plugin prose dispatches only plugin-defined agents, never a built-in agent type that has a shell.
 - **FR-013**: The rule MUST state that it governs portability only, not where data is sent: a permitted `http` hook or third-party server is not thereby approved as a data destination.
 
 ## Success Criteria *(mandatory)*

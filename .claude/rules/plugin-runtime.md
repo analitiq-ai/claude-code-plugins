@@ -13,11 +13,18 @@ that has Claude Code and nothing else. No step asks the user to install a
 language runtime, package manager, CLI or library — Python, `uv`, `pip`, Node,
 `npx`, `gh`, `jq`, or anything like them.
 
+A primitive is judged by everything it reaches at run time, not only by what it
+runs itself: one that can reach a shell or a local service breaks the invariant
+as surely as one that runs it.
+
 ## What a plugin may use
 
-- Claude Code's own primitives: agents, skills, commands, rules, other plugins.
-- Hooks whose handler runs no shell — `prompt`, `agent`, `http` and `mcp_tool`
-  handlers, for example.
+- Claude Code's own primitives: agents, skills, commands, rules, and other
+  plugins that themselves satisfy this rule.
+- Hooks whose handler reaches neither a shell nor anything local: a `prompt`
+  hook; an `agent` hook, whose verifier Claude Code documents as using tools like
+  Read, Grep and Glob; an `http` hook whose URL is a remote endpoint; an
+  `mcp_tool` hook calling a server the plugin may declare under the next bullet.
 - Claude Code's built-in file, search and web tools.
 - MCP servers declared in the plugin's `.mcp.json` that need no local install.
   A remote `http` server is the default. Who operates it does not matter, and a
@@ -25,10 +32,11 @@ language runtime, package manager, CLI or library — Python, `uv`, `pip`, Node,
 
 ## What it may not
 
-- **Anything that runs a command or a local binary on the user's machine.** A
-  shipped script an agent is told to execute, a `command` hook, a monitor, an
-  executable under `bin/`, an LSP server, a local `stdio` MCP server — each needs
-  something on the machine beyond Claude Code.
+- **Anything that runs a command or a local binary on the user's machine, or
+  calls a service that must be running there.** A shipped script an agent is
+  told to execute, a `command` hook, a monitor, an executable under `bin/`, an
+  LSP server, a local `stdio` MCP server, an `http` hook or server pointed at
+  `localhost` — each needs something on the machine beyond Claude Code.
 - **A shell command as a step the plugin needs in order to work**, whether an
   agent runs it or the user is asked to. Claude Code's setup documentation
   (<https://code.claude.com/docs/en/setup>) makes Git for Windows optional and
@@ -36,13 +44,16 @@ language runtime, package manager, CLI or library — Python, `uv`, `pip`, Node,
   utilities fails on a supported platform. A generator's "run … to regenerate"
   comment and optional advice to the user, such as reviewing a result with
   `git diff`, are not such steps.
-- **An agent that can run a shell**, among those the plugin defines or
+- **An agent that can reach a shell**, among those the plugin defines or
   dispatches. A granted shell lets the model improvise the command the prose is
-  barred from writing. So every plugin agent declares `tools:`, since an agent
-  without it inherits every tool; no tool grant — an agent's `tools:`, a skill's
-  or command's `allowed-tools` — includes a tool that runs a shell command, such
-  as `Bash`, `PowerShell` or `Monitor`; and plugin prose dispatches only agents
-  the plugin defines, never a built-in agent type that has a shell, such as
+  barred from writing, and a grant that can start another agent hands over that
+  agent's tools. So every plugin agent declares `tools:`, since an agent without
+  it inherits every tool; no tool grant — an agent's `tools:`, a skill's or
+  command's `allowed-tools` — includes a tool that runs a shell command, such as
+  `Bash`, `PowerShell` or `Monitor`; no plugin agent's `tools:` includes
+  `Agent`, because Claude Code documents that listing it in a subagent's `tools`
+  allows spawning any subagent type; and plugin prose dispatches only agents the
+  plugin defines, never a built-in agent type that has a shell, such as
   `general-purpose`. A skill's `allowed-tools` pre-approves tools rather than
   restricting them, so keeping a shell out of it is not a sandbox; the ban on
   shell steps carries the rest.
