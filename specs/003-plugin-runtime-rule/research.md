@@ -98,8 +98,12 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
 
 ## R7: No mechanical guard
 
-- **Decision**: No test or CI check is added. Verification is `rules-audit` and the existing
-  suite.
+- **Decision**: No test or CI check is added. The rule is verified in two parts, both recorded in
+  quickstart §4: one real `/rules-audit` run over a seeded plugin diff, which exercises path
+  selection and the rule's reviewer and is the evidence for US2's Independent Test; and one
+  read-only reviewer pass over a matrix with a row on each side of every clause, which grades
+  wording `rules-audit` would take one run per case to cover. The branch's own `rules-audit` run
+  (SC-003) and the unchanged suite complete it.
 - **Rationale**: Whether prose *instructs* a shell command is a semantic verdict. `guards.md` puts
   that with a reader, not a regex. A guard would also be a governing check landing beside the
   rule it serves, which Principle VI forbids. A lexical check, such as `Bash` in a `tools:` line or

@@ -28,7 +28,7 @@ read `paths:` frontmatter.
 
 **Storage**: N/A
 
-**Testing**: `rules-audit` over the branch diff; existing `pytest` suite unchanged.
+**Testing**: research R7.
 
 **Target Platform**: Contributors' Claude Code sessions in this repo. The rule governs plugins
 on every OS Claude Code supports.
@@ -50,7 +50,7 @@ on every OS Claude Code supports.
 | I Contract-first | Pass. No data shape, validator or type list. |
 | II Ownership & trust | Pass. Nothing internal or cloud-specific; the rule names no host. No cross-link to a private repo. |
 | III Fail loud, no workarounds | Pass. The ban is absolute, with no exception path (FR-010). |
-| IV Test-first & verified | Pass with a note. A prose rule has no red test. Per R7, verification is `rules-audit` grading a seeded violation (quickstart §4) plus the unchanged suite. |
+| IV Test-first & verified | Pass with a note. No mechanical guard; a reader verifies the rule against seeded violations, per R7, recorded in quickstart §4. |
 | V Smallest complete change | Pass. One file rewritten. The class is stated by mechanism, which covers every instance. |
 | VI Governing rule apart | Pass. No file under `plugins/` changes (FR-008). The compliance PR follows separately. |
 | R1 Verdict stability | Pass. No validator or model change. |
@@ -112,5 +112,5 @@ None.
 - Portability-only scope, egress stated as not covered: R9
 - Shell ban kept despite common bash, from Claude Code's setup docs: R10
 - `CLAUDE.md` Rules index entry kept as committed: R6
-- Verification by `rules-audit` and the existing suite, with no new guard: R7
+- Verification without a new guard: R7
 - Local constitution R14 re-pointed after merge: R8

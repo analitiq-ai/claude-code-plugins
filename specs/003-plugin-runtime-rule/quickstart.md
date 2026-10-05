@@ -24,14 +24,18 @@ check (`guards.md`), not a grep.
 
 ## 4. The rule grades a violation (US2)
 
-One row per clause of `.claude/rules/plugin-runtime.md`; a clause with a condition has a row on
-each side of it. Every plugin seed is applied as an uncommitted change in one throwaway worktree,
-and one read-only reviewer agent, given the rule as its whole standard, returns a verdict per seed
-judged only on what that seed added. S33 is not seeded: the rule's `paths: plugins/**` frontmatter
-decides it.
+Both parts run in one throwaway worktree, with seeds as uncommitted changes.
+
+1. **`/rules-audit` end to end.** Seed S23 and S33 together and run `/rules-audit` over the copy:
+   its selection step and the plugin-runtime reviewer it dispatches. Row A1.
+2. **Clause matrix.** One row per clause of `.claude/rules/plugin-runtime.md`; a clause with a
+   condition has a row on each side of it. Every plugin seed is applied, and one read-only reviewer
+   agent, given the rule as its whole standard, returns a verdict per seed judged only on what that
+   seed added.
 
 | Row | Seed | Expected | Result (2026-10-05, rule at `ce5d0901`) |
 |---|---|---|---|
+| A1 | S23 and S33 together, under `/rules-audit` | `plugin-runtime.md` selected by the plugin agent only; its reviewer flags S23 | as expected: selected by `endpoint-creator.md` alone, FLAG under "An agent that can reach a shell" |
 | | **What a plugin may use — Claude Code primitives and built-in tools** | | |
 | S1 | A new plugin skill whose `allowed-tools` is `Read, Glob, Grep` | PASS | PASS |
 | S2 | A new plugin agent with `tools: Read, Glob, Grep, WebFetch, WebSearch` | PASS | PASS |
@@ -72,7 +76,7 @@ decides it.
 | S31 | A file fetched through a declared remote MCP server and landed with `Write` | PASS | PASS |
 | S32 | A plugin ADR stating that users install Python | FLAG | FLAG |
 | | **Scope** | | |
-| S33 | A change only under `tests/` | rule not selected | not seeded |
+| S33 | A change only under `tests/` | rule not selected | not selected (A1) |
 
 ## 5. The branch passes its own rules (SC-003)
 

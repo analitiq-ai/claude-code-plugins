@@ -9,7 +9,7 @@ description: "Task list for tracking the plugin-runtime rule"
 
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/rule-file.md, quickstart.md, critiques/critique-2026-10-05.md
 
-**Tests**: No test tasks are generated. The spec puts any mechanical guard out of scope (Assumptions; research R7), so a prose rule has no red test. Verification is the reader's mapping check (quickstart §2), seeded `rules-audit` runs (quickstart §4–5) and the unchanged `pytest` suite (quickstart §6).
+**Tests**: No test tasks are generated. The spec puts any mechanical guard out of scope (Assumptions; research R7). Verification is research R7, run as quickstart §2 and §4–6.
 
 **Organization**: Tasks are grouped by user story. Both stories are P1; US1 produces the rule, US2 proves it grades diffs.
 
@@ -76,7 +76,7 @@ All paths are relative to the repo root. The only tracked files this feature may
 
 ## Phase 4: User Story 2 — A reviewer can rule on a plugin change by citing the rule (Priority: P1)
 
-**Goal**: `rules-audit` selects `plugin-runtime.md` for `plugins/**` diffs, flags each forbidden mechanism, passes each permitted case, and does not select the rule for repo-root-only diffs.
+**Goal**: A reviewer citing the rule reaches the verdict the spec expects for every clause, on both sides of each condition.
 
 **Independent Test**: Quickstart §4 table — every row records the expected FLAG / PASS / not-selected result.
 
@@ -85,7 +85,7 @@ All paths are relative to the repo root. The only tracked files this feature may
 All seeds run in a throwaway copy, never in this worktree and never committed (subagents must not touch the tree). Depends on T009.
 
 - [ ] T010 [US2] Create the throwaway copy: `git worktree add <scratch dir>/504-audit-seeds HEAD --detach` from the worktree root.
-- [ ] T011 [US2] Apply every seed in quickstart §4's matrix to the copy as uncommitted changes, tagging each prose seed with its row id. Dispatch one read-only reviewer agent with `.claude/rules/plugin-runtime.md` as its whole standard; it judges each seed separately, on what that seed added, and returns one verdict line per row (FLAG with the quoted text and rule section, or PASS with the reason).
+- [ ] T011 [US2] Run both parts of quickstart §4 in the copy, as its method says.
 - [ ] T012 [US2] Record each returned verdict in quickstart §4's Result column. Any mismatch → the rule's wording is the defect; return to T005 for a whole-file rewrite, not an appended sentence. Then remove the copy: `git worktree remove --force <scratch dir>/504-audit-seeds`.
 
 **Checkpoint**: US2 complete — the rule grades seeded violations and permitted cases as specified.
