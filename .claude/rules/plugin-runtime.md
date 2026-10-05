@@ -21,10 +21,11 @@ as surely as one that runs it.
 
 - Claude Code's own primitives: agents, skills, commands, rules, and other
   plugins that themselves satisfy this rule.
-- Hooks whose handler reaches neither a shell nor anything local: a `prompt`
-  hook; an `agent` hook, whose verifier Claude Code documents as using tools like
-  Read, Grep and Glob; an `http` hook whose URL is a remote endpoint; an
-  `mcp_tool` hook calling a server the plugin may declare under the next bullet.
+- Hooks whose handler reaches neither a shell nor anything beyond Claude Code on
+  the user's machine, such as a `prompt` hook, an `agent` hook (Claude Code
+  documents its verifier as using tools like Read, Grep and Glob), an `http`
+  hook whose URL is a remote endpoint, and an `mcp_tool` hook calling a server
+  declared in the plugin's own `.mcp.json` that needs no local install.
 - Claude Code's built-in file, search and web tools.
 - MCP servers declared in the plugin's `.mcp.json` that need no local install.
   A remote `http` server is the default. Who operates it does not matter, and a
@@ -36,7 +37,10 @@ as surely as one that runs it.
   calls a service that must be running there.** A shipped script an agent is
   told to execute, a `command` hook, a monitor, an executable under `bin/`, an
   LSP server, a local `stdio` MCP server, an `http` hook or server pointed at
-  `localhost` — each needs something on the machine beyond Claude Code.
+  `localhost` — each needs something on the machine beyond Claude Code. An
+  `mcp_tool` hook calling a server the plugin does not declare is out too: it
+  works only where the user has set that server up, a step the plugin never
+  states.
 - **A shell command as a step the plugin needs in order to work**, whether an
   agent runs it or the user is asked to. Claude Code's setup documentation
   (<https://code.claude.com/docs/en/setup>) makes Git for Windows optional and
@@ -50,13 +54,14 @@ as surely as one that runs it.
   agent's tools. So every plugin agent declares `tools:`, since an agent without
   it inherits every tool; no tool grant — an agent's `tools:`, a skill's or
   command's `allowed-tools` — includes a tool that runs a shell command, such as
-  `Bash`, `PowerShell` or `Monitor`; no plugin agent's `tools:` includes
-  `Agent`, because Claude Code documents that listing it in a subagent's `tools`
-  allows spawning any subagent type; and plugin prose dispatches only agents the
-  plugin defines, never a built-in agent type that has a shell, such as
-  `general-purpose`. A skill's `allowed-tools` pre-approves tools rather than
-  restricting them, so keeping a shell out of it is not a sandbox; the ban on
-  shell steps carries the rest.
+  `Bash`, `PowerShell` or `Monitor`; no plugin agent's `tools:` includes a tool
+  that starts another agent, such as `Agent` or `Task`, because Claude Code
+  documents that listing `Agent` in a subagent's `tools` allows spawning any
+  subagent type; and plugin prose dispatches only agents the plugin defines,
+  never a built-in agent type that has a shell, such as `general-purpose`. A
+  skill's `allowed-tools` pre-approves tools rather than restricting them, so
+  keeping a shell out of it is not a sandbox; the ban on shell steps carries the
+  rest.
 
 ## No exception path
 

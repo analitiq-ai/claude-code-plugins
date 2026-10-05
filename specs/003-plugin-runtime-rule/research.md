@@ -29,14 +29,20 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
 
 ## R3: State what is forbidden by mechanism, not by listing component types
 
-- **Decision**: The rule forbids any plugin component that **runs a command or a local binary on
-  the user's machine**, and gives examples. It permits any hook whose handler **runs no shell**.
-  Neither set is written out as a closed list.
+- **Decision**: A primitive is judged by everything it **reaches** at run time, not only what it
+  runs. The rule forbids any plugin component that runs a command or a local binary on the user's
+  machine or calls a service that must be running there, and gives examples. It permits any hook
+  whose handler reaches neither a shell nor anything beyond Claude Code on the user's machine: an `http` hook only to a remote URL, an
+  `mcp_tool` hook only to a server declared in the plugin's own `.mcp.json`. Other plugins are
+  permitted only when they satisfy the rule. Neither set is written out as a closed list.
 - **Rationale**: Claude Code has more shell-running plugin components than the issue names.
   Command hooks, monitors (`monitors/monitors.json`, a background shell command), executables in
   `bin/` (put on the Bash tool's `PATH`), shipped scripts, LSP servers (`.lsp.json`, a local
   binary) and `stdio` MCP servers all run something locally. Hook handler types that run no shell
-  are `prompt`, `agent`, `http` and `mcp_tool`. The spec's "(`prompt`, `agent`)" is a set of
+  are `prompt`, `agent`, `http` and `mcp_tool`; Claude Code documents the `agent` verifier as
+  using tools like Read, Grep and Glob. Running no shell is not enough: Claude Code places no
+  restriction on an `http` hook's URL (its own example uses `localhost`), so a handler that calls a
+  local service needs something beyond Claude Code exactly as a shell command does. The spec's "(`prompt`, `agent`)" is a set of
   examples, not a closed list, and `http`/`mcp_tool` meet the same mechanism, so the rule permits
   them. A closed list of hook types or components would go stale as soon as Claude Code adds one
   (`no-cardinality-restatements.md`). The mechanism is what decides membership, and it stays true.
@@ -51,7 +57,10 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
   tool that runs a shell command. The rule names `Bash` and gives `PowerShell` and `Monitor` as
   examples of the same class. The ban is stated by mechanism — no agent a plugin defines or
   dispatches can run a shell — so it also covers an agent with no `tools:` line (it inherits every
-  tool) and a dispatched built-in agent type such as `general-purpose`. Every plugin agent
+  tool), a dispatched built-in agent type such as `general-purpose`, and a grant of a tool that
+  starts another agent (`Agent`, `Task` as examples): Claude Code documents that listing `Agent`
+  in a subagent's `tools` allows spawning any subagent type, and that `Agent(type)` filtering is
+  not honoured for plugin subagents, so no typed grant narrows it. Every plugin agent
   therefore declares `tools:`, and prose dispatches only plugin-defined agents.
 - **Rationale**: The tools reference marks `Bash`, `PowerShell` and `Monitor` as the tools that
   execute commands. Banning only `Bash` would leave the same hole open under another tool name, and banning only

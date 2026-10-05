@@ -27,7 +27,7 @@ check (`guards.md`), not a grep.
 Run `/rules-audit` against scratch diffs, in a throwaway copy of the repo and never committed,
 one per case. Record FLAG or PASS for each.
 
-| Scratch diff | Expected | Result (2026-10-05) |
+| Scratch diff | Expected | Result (2026-10-05, final rule text) |
 |---|---|---|
 | A `python3 …` step in a plugin agent's prose | FLAG | FLAG |
 | A `command` hook in `plugins/<name>/hooks/hooks.json` | FLAG | FLAG |
@@ -38,6 +38,11 @@ one per case. Record FLAG or PASS for each.
 | A generated "run `python scripts/…` to regenerate" comment | PASS | PASS |
 | Optional "review the result with `git diff`" advice in a README | PASS | PASS |
 | A change only under `tests/` | rule not selected | rule not selected |
+| An `http` hook to `localhost` | FLAG | FLAG |
+| An `http` hook to a remote URL | PASS | PASS |
+| An `mcp_tool` hook calling an undeclared server | FLAG | FLAG |
+| `Agent` in a plugin agent's `tools:` | FLAG | FLAG |
+| `Task` in a plugin agent's `tools:` | FLAG | FLAG |
 
 ## 5. The branch passes its own rules (SC-003)
 

@@ -106,8 +106,8 @@ None.
 
 - Rule body rewritten once against the spec: R1
 - Load and audit trigger via `paths: ["plugins/**"]` frontmatter: R2
-- Forbidden components and permitted hooks stated by mechanism (runs a command or local binary / runs no shell): R3
-- Shell ban by mechanism: every agent declares `tools:`, no grant includes a shell tool, no built-in agent type dispatched: R4
+- Every primitive judged by what it reaches; forbidden components and permitted hooks stated by that mechanism (reaches a shell or a local service / reaches neither): R3
+- Shell ban by mechanism: every agent declares `tools:`, no grant includes a shell tool or a tool that starts another agent, no built-in agent type dispatched: R4
 - Absolute ban with a split escape route (remote MCP tool computes, built-in tools act locally); third-party servers and sign-in allowed: R5
 - Portability-only scope, egress stated as not covered: R9
 - Shell ban kept despite common bash, from Claude Code's setup docs: R10
