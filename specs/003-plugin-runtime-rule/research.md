@@ -12,7 +12,7 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
   `Bash` clause conditional on "an agent that needs no shell command", where FR-012 says no grant
   at all and also covers skills' and commands' `allowed-tools`, nothing on third-party servers or
   sign-in (FR-005), and no search tools in the permitted list (FR-002). Patching each gap one at a
-  time is the accretion `pr-review-loop` forbids. One rewrite from the settled spec is cheaper.
+  time leaves a file built from half-decisions; one rewrite from the settled spec is cheaper.
 - **Existing tools**: The committed rule is the base; its invariant, scope and "Why" sections
   already meet FR-003, FR-006 and the rationale, so they are kept word for word wherever they
   still hold.
@@ -80,14 +80,6 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
 - **Existing tools**: `docs/adr/0002-…` (the decision that already took this route);
   `plugins/*/.mcp.json`; GitHub's hosted MCP server (file-contents tools at a ref).
 
-## R9: Data egress is out of scope, and the rule says so
-
-- **Decision**: The rule states it governs portability only; a permitted `http` hook or
-  third-party server is not thereby approved as a data destination.
-- **Rationale**: Permitting `http` hooks and any remote server lets a plugin post tool inputs to
-  an endpoint. That is a separate question from portability; silence would read as permission.
-- **Existing tools**: none — no rule covers egress today.
-
 ## R6: Keep the `CLAUDE.md` Rules entry as committed
 
 - **Decision**: No change to the entry added in `45c34f20`.
@@ -113,6 +105,18 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
   `.claude/rules/plugin-runtime.md`, and its gate wording is amended to match the rule (no CLI, no
   shell-running hooks or tool grants). This happens outside the PR.
 
+- **Rationale**: Constitution Governance says the source file wins and the constitution is amended
+  after it. The constitution is untracked, so no PR can carry the edit.
+- **Existing tools**: `.specify/memory/constitution.md` Governance section.
+
+## R9: Data egress is out of scope, and the rule says so
+
+- **Decision**: The rule states it governs portability only; a permitted `http` hook or
+  third-party server is not thereby approved as a data destination.
+- **Rationale**: Permitting `http` hooks and any remote server lets a plugin post tool inputs to
+  an endpoint. That is a separate question from portability; silence would read as permission.
+- **Existing tools**: none — no rule covers egress today.
+
 ## R10: Shell stays banned although bash is common
 
 - **Decision**: Keep the shell ban (FR-004, FR-012).
@@ -121,6 +125,3 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
   instead." Allowing shell would make Git for Windows an install for some Windows users, which
   FR-010 forbids; every shell use the plugins have today also needs `python3`, `gh` or `jq`.
 - **Existing tools**: Claude Code setup docs.
-- **Rationale**: Constitution Governance says the source file wins and the constitution is amended
-  after it. The constitution is untracked, so no PR can carry the edit.
-- **Existing tools**: `.specify/memory/constitution.md` Governance section.

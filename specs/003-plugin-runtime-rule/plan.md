@@ -66,7 +66,7 @@ on every OS Claude Code supports.
 | R11 Install and pin nothing | Pass. The rule generalises it. |
 | R12 Releases & credentials | N/A |
 | R13 Close against the class | Pass. The class is stated by mechanism. Known instances (shipped `validation_request.py`, `Bash` in agent `tools:`) are fixed by the compliance PR. |
-| R14 Run wherever Claude Code runs | Pass. This PR is R14's missing source file (R8 re-points it). |
+| R14 Run wherever Claude Code runs | Pass. This PR is R14's missing source file (research R8 re-points it). |
 
 ADR alignment: ADR-0002 (validation through MCP) is the precedent for FR-010's escape route.
 ADR-0001 is not affected.

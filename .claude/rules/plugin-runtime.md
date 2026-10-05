@@ -30,20 +30,22 @@ language runtime, package manager, CLI or library — Python, `uv`, `pip`, Node,
   executable under `bin/`, an LSP server, a local `stdio` MCP server — each needs
   something on the machine beyond Claude Code.
 - **A shell command as a step the plugin needs in order to work**, whether an
-  agent runs it or the user is asked to. Claude Code documents its Windows shell
-  as Git Bash when Git for Windows is installed and PowerShell when it is not, so
-  even a command naming only POSIX utilities fails on a supported platform. A
-  generator's "run … to regenerate" comment and optional advice to the user, such
-  as reviewing a result with `git diff`, are not such steps.
+  agent runs it or the user is asked to. Claude Code's setup documentation
+  (<https://code.claude.com/docs/en/setup>) makes Git for Windows optional and
+  falls back to PowerShell without it, so even a command naming only POSIX
+  utilities fails on a supported platform. A generator's "run … to regenerate"
+  comment and optional advice to the user, such as reviewing a result with
+  `git diff`, are not such steps.
 - **An agent that can run a shell**, among those the plugin defines or
   dispatches. A granted shell lets the model improvise the command the prose is
   barred from writing. So every plugin agent declares `tools:`, since an agent
   without it inherits every tool; no tool grant — an agent's `tools:`, a skill's
-  or command's `allowed-tools` — includes a tool that runs a shell command, `Bash`
-  among them; and plugin prose dispatches only agents the plugin defines, never a
-  built-in agent type that has a shell, such as `general-purpose`. A skill's
-  `allowed-tools` pre-approves tools rather than restricting them, so keeping a
-  shell out of it is not a sandbox; the ban on shell steps carries the rest.
+  or command's `allowed-tools` — includes a tool that runs a shell command, such
+  as `Bash`, `PowerShell` or `Monitor`; and plugin prose dispatches only agents
+  the plugin defines, never a built-in agent type that has a shell, such as
+  `general-purpose`. A skill's `allowed-tools` pre-approves tools rather than
+  restricting them, so keeping a shell out of it is not a sandbox; the ban on
+  shell steps carries the rest.
 
 ## No exception path
 

@@ -27,17 +27,17 @@ check (`guards.md`), not a grep.
 Run `/rules-audit` against scratch diffs, in a throwaway copy of the repo and never committed,
 one per case. Record FLAG or PASS for each.
 
-| Scratch diff | Expected |
-|---|---|
-| A `python3 …` step in a plugin agent's prose | FLAG |
-| A `command` hook in `plugins/<name>/hooks/hooks.json` | FLAG |
-| A `stdio` server in a plugin's `.mcp.json` | FLAG |
-| An executable under `plugins/<name>/bin/` | FLAG |
-| A `prompt` hook | PASS |
-| A third-party remote `http` server in `.mcp.json`, needing sign-in | PASS |
-| A generated "run `python scripts/…` to regenerate" comment | PASS |
-| Optional "review the result with `git diff`" advice in a README | PASS |
-| A change only under `tests/` | rule not selected |
+| Scratch diff | Expected | Result (2026-10-05) |
+|---|---|---|
+| A `python3 …` step in a plugin agent's prose | FLAG | FLAG |
+| A `command` hook in `plugins/<name>/hooks/hooks.json` | FLAG | FLAG |
+| A `stdio` server in a plugin's `.mcp.json` | FLAG | FLAG |
+| An executable under `plugins/<name>/bin/` | FLAG | FLAG |
+| A `prompt` hook | PASS | PASS |
+| A third-party remote `http` server in `.mcp.json`, needing sign-in | PASS | PASS |
+| A generated "run `python scripts/…` to regenerate" comment | PASS | PASS |
+| Optional "review the result with `git diff`" advice in a README | PASS | PASS |
+| A change only under `tests/` | rule not selected | rule not selected |
 
 ## 5. The branch passes its own rules (SC-003)
 

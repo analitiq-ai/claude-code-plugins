@@ -85,14 +85,14 @@ All paths are relative to the worktree root `/mnt/nvme/projects/analitiq/cto/cla
 All seeds run in a throwaway copy, never in this worktree and never committed (subagents must not touch the tree). Depends on T009.
 
 - [ ] T010 [US2] Create the throwaway copy: `git worktree add /tmp/504-audit-seeds HEAD --detach` from the worktree root. Every T011–T019 seed is made there as an uncommitted working-tree change on top of HEAD, audited, then reverted with `git -C /tmp/504-audit-seeds checkout -- . && git -C /tmp/504-audit-seeds clean -fd` before the next seed.
-- [ ] T011 [P] [US2] Seed: add a step "run `python3 scripts/foo.py`" to a plugin agent's prose, e.g. `/tmp/504-audit-seeds/plugins/connector-builder/agents/<any agent>.md`; run `/rules-audit` on the working tree; expect FLAG from the plugin-runtime reviewer.
-- [ ] T012 [P] [US2] Seed: add a `{"type": "command", "command": "echo hi"}` hook in `/tmp/504-audit-seeds/plugins/connector-builder/hooks/hooks.json`; expect FLAG.
-- [ ] T013 [P] [US2] Seed: add a `stdio` server (`"command": "npx", "args": ["some-mcp"]`) to `/tmp/504-audit-seeds/plugins/connector-builder/.mcp.json`; expect FLAG.
-- [ ] T014 [P] [US2] Seed: add an executable file `/tmp/504-audit-seeds/plugins/connector-builder/bin/tool`; expect FLAG.
-- [ ] T015 [P] [US2] Seed: add a `{"type": "prompt", …}` hook in `/tmp/504-audit-seeds/plugins/connector-builder/hooks/hooks.json`; expect PASS (no plugin-runtime finding).
-- [ ] T016 [P] [US2] Seed: add a third-party remote `http` server needing sign-in to `/tmp/504-audit-seeds/plugins/pipeline-builder/.mcp.json`; expect PASS.
+- [ ] T011 [P] [US2] Seed: add a step "run `python3 scripts/foo.py`" to a plugin agent's prose, e.g. `/tmp/504-audit-seeds/plugins/analitiq-connector-builder/agents/<any agent>.md`; run `/rules-audit` on the working tree; expect FLAG from the plugin-runtime reviewer.
+- [ ] T012 [P] [US2] Seed: add a `{"type": "command", "command": "echo hi"}` hook in `/tmp/504-audit-seeds/plugins/analitiq-connector-builder/hooks/hooks.json`; expect FLAG.
+- [ ] T013 [P] [US2] Seed: add a `stdio` server (`"command": "npx", "args": ["some-mcp"]`) to `/tmp/504-audit-seeds/plugins/analitiq-connector-builder/.mcp.json`; expect FLAG.
+- [ ] T014 [P] [US2] Seed: add an executable file `/tmp/504-audit-seeds/plugins/analitiq-connector-builder/bin/tool`; expect FLAG.
+- [ ] T015 [P] [US2] Seed: add a `{"type": "prompt", …}` hook in `/tmp/504-audit-seeds/plugins/analitiq-connector-builder/hooks/hooks.json`; expect PASS (no plugin-runtime finding).
+- [ ] T016 [P] [US2] Seed: add a third-party remote `http` server needing sign-in to `/tmp/504-audit-seeds/plugins/analitiq-pipeline-builder/.mcp.json`; expect PASS.
 - [ ] T017 [P] [US2] Seed: add a generated-style `<!-- Run \`python scripts/render_rule_reference.py write\` to regenerate. -->` comment to a plugin reference `.md`; expect PASS.
-- [ ] T018 [P] [US2] Seed: add optional "review the result with `git diff`" advice to `/tmp/504-audit-seeds/plugins/connector-builder/README.md`; expect PASS.
+- [ ] T018 [P] [US2] Seed: add optional "review the result with `git diff`" advice to `/tmp/504-audit-seeds/plugins/analitiq-connector-builder/README.md`; expect PASS.
 - [ ] T019 [P] [US2] Seed: change only a file under `/tmp/504-audit-seeds/tests/`; expect the plugin-runtime rule not selected.
 - [ ] T020 [US2] Record each T011–T019 outcome (FLAG / PASS / not selected) in `specs/003-plugin-runtime-rule/quickstart.md` §4 as a result column. Any mismatch → the rule's wording is the defect; return to T005 for a whole-file rewrite, not an appended sentence. Then remove the copy: `git worktree remove --force /tmp/504-audit-seeds`.
 
