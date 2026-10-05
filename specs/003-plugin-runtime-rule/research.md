@@ -107,7 +107,7 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
 
 - **Rationale**: Constitution Governance says the source file wins and the constitution is amended
   after it. The constitution is untracked, so no PR can carry the edit.
-- **Existing tools**: `.specify/memory/constitution.md` Governance section.
+- **Existing tools**: the Governance section of the maintainer's local, untracked constitution.
 
 ## R9: Data egress is out of scope, and the rule says so
 

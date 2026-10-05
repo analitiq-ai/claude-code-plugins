@@ -20,7 +20,7 @@ description: "Task list for tracking the plugin-runtime rule"
 
 ## Path Conventions
 
-All paths are relative to the worktree root `/mnt/nvme/projects/analitiq/cto/claude-code-plugins/.claude/worktrees/504`. The only tracked files this feature may change are `.claude/rules/plugin-runtime.md`, `CLAUDE.md` and files under `specs/` (SC-002). No file under `plugins/` changes (FR-008).
+All paths are relative to the repo root. The only tracked files this feature may change are `.claude/rules/plugin-runtime.md`, `CLAUDE.md` and files under `specs/` (SC-002). No file under `plugins/` changes (FR-008).
 
 ---
 
@@ -28,7 +28,7 @@ All paths are relative to the worktree root `/mnt/nvme/projects/analitiq/cto/cla
 
 **Purpose**: Confirm the starting state the plan assumes.
 
-- [ ] T001 Run `git branch --show-current` and `pwd`; confirm branch `docs/504-plugin-runtime-rule` and the worktree root above. Run `git diff --name-only origin/main...HEAD` and confirm it lists only `.claude/rules/plugin-runtime.md` and `CLAUDE.md` (commit `45c34f20`).
+- [ ] T001 Run `git branch --show-current`; confirm branch `docs/504-plugin-runtime-rule`. Run `git diff --name-only origin/main...HEAD` and confirm it lists only `.claude/rules/plugin-runtime.md` and `CLAUDE.md` (commit `45c34f20`).
 - [ ] T002 Run `git var GIT_AUTHOR_IDENT` and `git var GIT_COMMITTER_IDENT`; both must be `Analitiq-bot <analitiq@analitiq.ai>`. If not, export `GIT_AUTHOR_NAME`, `GIT_COMMITTER_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_EMAIL` with those values before any commit.
 - [ ] T003 Commit the untracked `specs/003-plugin-runtime-rule/` tree (spec, plan, research, data-model, contracts, quickstart, critiques, this tasks.md) as one `docs(#504): …` commit. The message ends with the `alq-session-id: <current session uuid>` trailer and the `Co-Authored-By` line in one contiguous trailer block (no blank line between them).
 
@@ -108,7 +108,7 @@ All seeds run in a throwaway copy, never in this worktree and never committed (s
 - [ ] T024 Tripwire: `git log --name-only origin/main..HEAD | sort | uniq -c | sort -rn`; `.claude/rules/plugin-runtime.md` must not exceed ~3 commits — if it does, collapse to one rewrite before pushing.
 - [ ] T025 Commit T020's quickstart results (trailers per T003), push `docs/504-plugin-runtime-rule`, and open a DRAFT PR against `main` titled `docs(#504): track the plugin-runtime rule`, body stating scope (rule only; compliance in a separate PR) and ending with the Claude Code attribution line.
 - [ ] T026 Run the internal review loop: `Workflow(name='alq-review:review-round', args={worktree: '<worktree root>', stage: 'internal'})`, then `alq-review:assess-round` on findings, until clean or CONVERGED_PUSHBACK; then mark the PR ready and drive the Codex / DeepSource loop to the pre-merge checklist.
-- [ ] T027 After merge (outside the PR): re-point R14 in the untracked `.specify/memory/constitution.md` to `.claude/rules/plugin-runtime.md` and amend its gate wording to match (no CLI, no shell-running hooks or tool grants) — research R8.
+- [ ] T027 After merge (outside the PR): re-point R14 in the maintainer's local, untracked constitution to `.claude/rules/plugin-runtime.md` and amend its gate wording to match (no CLI, no shell-running hooks or tool grants) — research R8.
 
 ---
 
