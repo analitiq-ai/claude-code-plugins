@@ -42,9 +42,9 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
   are `prompt`, `agent`, `http` and `mcp_tool`; Claude Code documents the `agent` verifier as
   using tools like Read, Grep and Glob. Running no shell is not enough: Claude Code places no
   restriction on an `http` hook's URL (its own example uses `localhost`), so a handler that calls a
-  local service needs something beyond Claude Code exactly as a shell command does. The spec's "(`prompt`, `agent`)" is a set of
-  examples, not a closed list, and `http`/`mcp_tool` meet the same mechanism, so the rule permits
-  them. A closed list of hook types or components would go stale as soon as Claude Code adds one
+  local service needs something beyond Claude Code exactly as a shell command does. So an `http`
+  hook is permitted only to a remote URL and an `mcp_tool` hook only to a server declared in the
+  plugin's own `.mcp.json`; the named hook types are examples, not a closed list. A closed list of hook types or components would go stale as soon as Claude Code adds one
   (`no-cardinality-restatements.md`). The mechanism is what decides membership, and it stays true.
   Monitors, `bin/` and LSP follow from FR-002 ("only what Claude Code provides") and FR-004, so
   naming them as examples adds no new requirement (spec Assumptions).
@@ -59,8 +59,7 @@ the hooks reference and the plugin components reference at `code.claude.com/docs
   dispatches can run a shell — so it also covers an agent with no `tools:` line (it inherits every
   tool), a dispatched built-in agent type such as `general-purpose`, and a grant of a tool that
   starts another agent (`Agent`, `Task` as examples): Claude Code documents that listing `Agent`
-  in a subagent's `tools` allows spawning any subagent type, and that `Agent(type)` filtering is
-  not honoured for plugin subagents, so no typed grant narrows it. Every plugin agent
+  in a subagent's `tools` allows spawning any subagent type. Every plugin agent
   therefore declares `tools:`, and prose dispatches only plugin-defined agents.
 - **Rationale**: The tools reference marks `Bash`, `PowerShell` and `Monitor` as the tools that
   execute commands. Banning only `Bash` would leave the same hole open under another tool name, and banning only

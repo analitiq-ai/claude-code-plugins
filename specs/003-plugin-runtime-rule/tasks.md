@@ -84,7 +84,7 @@ All paths are relative to the repo root. The only tracked files this feature may
 
 All seeds run in a throwaway copy, never in this worktree and never committed (subagents must not touch the tree). Depends on T009.
 
-- [ ] T010 [US2] Create the throwaway copy: `git worktree add /tmp/504-audit-seeds HEAD --detach` from the worktree root. Every T011–T019 seed is made there as an uncommitted working-tree change on top of HEAD, audited, then reverted with `git -C /tmp/504-audit-seeds checkout -- . && git -C /tmp/504-audit-seeds clean -fd` before the next seed.
+- [ ] T010 [US2] Create the throwaway copy: `git worktree add /tmp/504-audit-seeds HEAD --detach` from the worktree root. Every T011–T019i seed is made there as an uncommitted working-tree change on top of HEAD, audited, then reverted with `git -C /tmp/504-audit-seeds checkout -- . && git -C /tmp/504-audit-seeds clean -fd` before the next seed.
 - [ ] T011 [P] [US2] Seed: add a step "run `python3 scripts/foo.py`" to a plugin agent's prose, e.g. `/tmp/504-audit-seeds/plugins/analitiq-connector-builder/agents/<any agent>.md`; run `/rules-audit` on the working tree; expect FLAG from the plugin-runtime reviewer.
 - [ ] T012 [P] [US2] Seed: add a `{"type": "command", "command": "echo hi"}` hook in `/tmp/504-audit-seeds/plugins/analitiq-connector-builder/hooks/hooks.json`; expect FLAG.
 - [ ] T013 [P] [US2] Seed: add a `stdio` server (`"command": "npx", "args": ["some-mcp"]`) to `/tmp/504-audit-seeds/plugins/analitiq-connector-builder/.mcp.json`; expect FLAG.
@@ -97,7 +97,13 @@ All seeds run in a throwaway copy, never in this worktree and never committed (s
 - [ ] T019a [P] [US2] Seed: an `http` hook to `http://localhost:8080/hook` in a plugin `hooks/hooks.json`; expect FLAG. An `http` hook to a remote `https://` URL; expect PASS.
 - [ ] T019b [P] [US2] Seed: an `mcp_tool` hook calling a server the plugin's `.mcp.json` does not declare; expect FLAG.
 - [ ] T019c [P] [US2] Seed: `Agent` in a plugin agent's `tools:`; expect FLAG. `Task` in a plugin agent's `tools:`; expect FLAG.
-- [ ] T020 [US2] Record each T011–T019c outcome (FLAG / PASS / not selected) in `specs/003-plugin-runtime-rule/quickstart.md` §4 as a result column. Any mismatch → the rule's wording is the defect; return to T005 for a whole-file rewrite, not an appended sentence. Then remove the copy: `git worktree remove --force /tmp/504-audit-seeds`.
+- [ ] T019d [P] [US2] Seed: a step naming only POSIX utilities ("run `ls docs/ | grep -i auth`") in a plugin agent's prose; expect FLAG.
+- [ ] T019e [P] [US2] Seed: `Bash` appended to a plugin agent's `tools:`; expect FLAG. `allowed-tools: Read, Bash` in a plugin skill's frontmatter; expect FLAG.
+- [ ] T019f [P] [US2] Seed: a new plugin agent with no `tools:` line; expect FLAG. Plugin prose dispatching a `general-purpose` agent; expect FLAG.
+- [ ] T019g [P] [US2] Seed: an `agent` hook; expect PASS. An `mcp_tool` hook calling the server the plugin's `.mcp.json` declares; expect PASS.
+- [ ] T019h [P] [US2] Seed: plugin prose requiring a third-party plugin whose `stdio` MCP server runs Python; expect FLAG.
+- [ ] T019i [P] [US2] Seed: plugin prose fetching a file through a declared remote MCP server and landing it with `Write`; expect PASS.
+- [ ] T020 [US2] Record each T011–T019i outcome (FLAG / PASS / not selected) in `specs/003-plugin-runtime-rule/quickstart.md` §4 as a result column. Any mismatch → the rule's wording is the defect; return to T005 for a whole-file rewrite, not an appended sentence. Then remove the copy: `git worktree remove --force /tmp/504-audit-seeds`.
 
 **Checkpoint**: US2 complete — the rule grades seeded violations and permitted cases as specified.
 
@@ -122,7 +128,7 @@ All seeds run in a throwaway copy, never in this worktree and never committed (s
 - **Setup (T001–T003)**: no dependencies.
 - **Foundational (T004)**: after Setup; blocks T005.
 - **US1 (T005–T009)**: sequential — one file, each step depends on the previous.
-- **US2 (T010–T020)**: depends on T009 (the committed rewrite is what the copy audits). T011–T019 are independent seeds.
+- **US2 (T010–T020)**: depends on T009 (the committed rewrite is what the copy audits). T011–T019i are independent seeds.
 - **Polish (T021–T027)**: after US2. T027 only after merge.
 
 ### User Story Dependencies
@@ -132,7 +138,7 @@ All seeds run in a throwaway copy, never in this worktree and never committed (s
 
 ### Parallel Opportunities
 
-- T011–T019: each seed can run in its own throwaway copy (one copy per seed if run concurrently, not the shared `/tmp/504-audit-seeds`).
+- T011–T019i: each seed can run in its own throwaway copy (one copy per seed if run concurrently, not the shared `/tmp/504-audit-seeds`).
 - T023 can run alongside T021–T022.
 
 ---

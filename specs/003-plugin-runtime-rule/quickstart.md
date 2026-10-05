@@ -30,19 +30,28 @@ one per case. Record FLAG or PASS for each.
 | Scratch diff | Expected | Result (2026-10-05, final rule text) |
 |---|---|---|
 | A `python3 …` step in a plugin agent's prose | FLAG | FLAG |
+| A step naming only POSIX utilities in a plugin agent's prose | FLAG | FLAG |
 | A `command` hook in `plugins/<name>/hooks/hooks.json` | FLAG | FLAG |
+| An `http` hook to `localhost` | FLAG | FLAG |
+| An `mcp_tool` hook calling an undeclared server | FLAG | FLAG |
 | A `stdio` server in a plugin's `.mcp.json` | FLAG | FLAG |
 | An executable under `plugins/<name>/bin/` | FLAG | FLAG |
+| `Bash` in a plugin agent's `tools:` | FLAG | FLAG |
+| `Bash` in a plugin skill's `allowed-tools` | FLAG | FLAG |
+| A plugin agent with no `tools:` line | FLAG | FLAG |
+| Plugin prose dispatching a `general-purpose` agent | FLAG | FLAG |
+| `Agent` in a plugin agent's `tools:` | FLAG | FLAG |
+| `Task` in a plugin agent's `tools:` | FLAG | FLAG |
+| Plugin prose requiring a third-party plugin that runs a `stdio` MCP server | FLAG | FLAG |
 | A `prompt` hook | PASS | PASS |
+| An `agent` hook | PASS | PASS |
+| An `http` hook to a remote URL | PASS | PASS |
+| An `mcp_tool` hook calling the server the plugin's `.mcp.json` declares | PASS | PASS |
 | A third-party remote `http` server in `.mcp.json`, needing sign-in | PASS | PASS |
+| A file fetched through a declared remote MCP server and landed with `Write` | PASS | PASS |
 | A generated "run `python scripts/…` to regenerate" comment | PASS | PASS |
 | Optional "review the result with `git diff`" advice in a README | PASS | PASS |
 | A change only under `tests/` | rule not selected | rule not selected |
-| An `http` hook to `localhost` | FLAG | FLAG |
-| An `http` hook to a remote URL | PASS | PASS |
-| An `mcp_tool` hook calling an undeclared server | FLAG | FLAG |
-| `Agent` in a plugin agent's `tools:` | FLAG | FLAG |
-| `Task` in a plugin agent's `tools:` | FLAG | FLAG |
 
 ## 5. The branch passes its own rules (SC-003)
 
